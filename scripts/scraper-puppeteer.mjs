@@ -3033,7 +3033,14 @@ async function scraperSodreVeiculos(browser) {
     // não reaproveita lot_city/lot_neighborhood/lot_street do segmento imóvel. Guarda REGEX como
     // reforço só para o que a API não confirmou ter (nenhum campo de UF na lista de 11/09).
     for (const r of lotes) {
-      if ((r.auction_status || '').toLowerCase() !== 'aberto') continue; // só ativos
+      // 21/10: era `auction_status === 'aberto'` — só o leilão do DIA SEGUINTE vem assim; os futuros
+      // (o site tinha 1.214 veículos em 2 leilões) eram descartados, e cada rodada gravava ~46 que
+      // venciam em horas: 1.236 no histórico, 0 ativos. Agora entra o que não está encerrado/cancelado
+      // E cuja data ainda não passou (sem data, só 'aberto', como antes).
+      const stLeilao = String(r.auction_status || '').toLowerCase();
+      if (/encerr|finaliz|cancel|suspens|vendid|arrematad|retirad|sustad/.test(`${stLeilao} ${String(r.lot_status || '').toLowerCase()}`)) continue;
+      const dataRef = parseData(r.auction_date_end || r.auction_date_init);
+      if (dataRef ? new Date(dataRef) < new Date() : stLeilao !== 'aberto') continue;
       const valMin = Number(r.bid_initial) || Number(r.bid_actual) || 0;
       if (!valMin) continue;
       const titulo = String(r.lot_title || r.lot_description?.slice(0, 180) || 'Veículo Sodré').slice(0, 180);

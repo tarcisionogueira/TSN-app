@@ -15,8 +15,11 @@ export default {
   fetch: 'dom',
   dom: { esperaMs: 3000 },
   catalogo: '/leiloes/imoveis',
-  paginaParam: 'pagina',
-  maxPages: 5,
+  // 21/10: `pagina` era ignorado (o site devolve a pág. 1) e o laço parava em 12 — enumerados = 12
+  // em 29 de 29 rodadas, com 48 imóveis no site. O parâmetro real é `page` (medido: page=2 traz
+  // outros 12). 4 páginas hoje; teto 6 de folga.
+  paginaParam: 'page',
+  maxPages: 6,
   tenants: Object.values(TENANTS),
   parse: { extrairUrlsDeLote, idDaUrl, parseDetalhe, montarRow, checarQualidade },
   conhecimento: {

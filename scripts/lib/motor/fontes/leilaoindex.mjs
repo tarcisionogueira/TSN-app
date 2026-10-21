@@ -20,8 +20,11 @@ export default {
   fetch: 'dom',
   dom: { esperaMs: 3000 },
   catalogo: '/',
-  paginaParam: 'pagina',
-  maxPages: 1,
+  // 21/10: a home pagina por `?pg=N` (Giordano: 3 páginas, a 3ª com 34 cards) — com `pagina` e
+  // teto 1 só a 1ª entrava (Giordano ~55 imóveis no site × 17 aqui; Rigolon 5; Thais 9). O laço
+  // do motor para na 1ª página sem lote novo, então o teto 6 é folga, não custo.
+  paginaParam: 'pg',
+  maxPages: 6,
   tenants: Object.values(TENANTS),
   parse: { extrairUrlsDeLote, idDaUrl, parseDetalhe, montarRow, checarQualidade },
   conhecimento: {
