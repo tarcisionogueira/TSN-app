@@ -256,6 +256,11 @@ h2{font-size:20px;font-weight:800;margin:32px 0 12px}
 .busca-hero button{padding:14px 26px;background:var(--azul);color:#fff;border:none;border-radius:12px;font-weight:800;font-size:15px;cursor:pointer;box-shadow:0 8px 24px rgba(13,99,219,.42);font-family:inherit}
 .busca-hero button:hover{background:var(--azul-fundo)}
 .busca-hero .dica{margin:10px 2px 0;font-size:12.5px;color:#9fb6d0}
+/* Imóveis | Veículos como o 1º filtro da busca (21/10, dono) — mesmo seletor do app (SeletorAcervo.jsx). */
+.acervo{display:flex;gap:4px;padding:4px;margin:0 0 12px;max-width:420px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);border-radius:14px}
+.acervo a{flex:1;min-width:0;text-align:center;padding:10px 12px;border-radius:10px;font-weight:800;font-size:14px;color:#cbd5e1}
+.acervo a.on{background:var(--azul);color:#fff}
+.acervo a:hover{text-decoration:none}
 /* Estado/cidade como CARTÃO com peso visual, não pílula chapada em fila. */
 .ufs{list-style:none;padding:0;margin:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(196px,1fr));gap:10px}
 .ufs a{display:flex;align-items:center;justify-content:space-between;gap:8px;background:#fff;border:1px solid var(--linha);border-radius:12px;padding:13px 15px;font-weight:700;font-size:14.5px;color:var(--tinta);transition:box-shadow .15s,border-color .15s,transform .15s}
@@ -626,6 +631,7 @@ function cardImovel(im) {
 // sem JS, funciona no robô e no celular ruim, e a URL do resultado é compartilhável.
 function caixaBuscaHero(valor = '', dica = 'Ou escolha o estado logo abaixo.') {
   return `<div class="busca-hero">
+    <nav class="acervo" aria-label="Tipo de leilão"><a class="on" href="${SITE}/leiloes" aria-current="page">🏠 Imóveis</a><a href="${SITE}/#/veiculos">🚗 Veículos</a></nav>
     <form action="${SITE}/leiloes/buscar" method="get">
       <input name="cidade" value="${esc(valor)}" placeholder="Digite a sua cidade — ex.: Campinas, Rio de Janeiro, Goiânia" aria-label="Cidade" autocomplete="off"/>
       <button type="submit">Ver imóveis</button>

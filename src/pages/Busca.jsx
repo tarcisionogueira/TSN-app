@@ -22,6 +22,7 @@ import { scoreBidPro, scoreLabel } from '../utils/score';
 import { fotoCandidatos } from '../utils/foto';
 import { registrarEvento } from '../utils/tracker.js';
 import { carregarLeaflet } from '../utils/leafletSeguro';
+import SeletorAcervo from '../components/SeletorAcervo';
 
 function haversine(lat1, lon1, lat2, lon2) {
   const R = 6371;
@@ -1648,6 +1649,8 @@ export default function Busca() {
 
       {/* FILTROS (dropdown no topo, libera a largura toda para lista/mapa) */}
       <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+
+        <SeletorAcervo ativo="imoveis" logado={!!user} role={effectiveRole || role} />
 
         {/* Filtros */}
         <div style={{ background:'white', borderRadius:14, border:'1px solid #e2e8f0', overflow:'hidden' }}>

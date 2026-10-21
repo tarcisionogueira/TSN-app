@@ -9,6 +9,7 @@ import { parseDataLocal } from '../utils/format';
 import { useIsMobile } from '../utils/useIsMobile';
 import { lerSessao, gravarSessao, useRolagemDaLista } from '../utils/estadoLista';
 import { useAuth } from '../contexts/AuthContext';
+import SeletorAcervo from '../components/SeletorAcervo';
 import { ehEquipeVeiculos, fonteVeiculos, rotaVeiculo, dadosRestritosVeiculos, useAcessoVeiculos, CHECKOUT_VEICULOS } from '../utils/veiculosAcesso';
 
 // Card da busca SÓ mostra o veículo e leva à página dele (30/09, dono): FIPE sob demanda, link do
@@ -521,6 +522,8 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
           <Filter size={14} /> Filtros
         </button>
       </div>
+
+      {!embutido && <SeletorAcervo ativo="veiculos" logado={!!user} role={role} />}
 
       {/* Convite do plano (20/10, dono): toda a comunicação aponta para gerar o relatório e desbloquear o leiloeiro. */}
       {!embutido && acesso === false && (
