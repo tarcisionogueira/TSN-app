@@ -3,12 +3,13 @@ import { useAuth } from '../contexts/AuthContext';
 import CapaCurso from '../components/CapaCurso';
 import ServicosCartorio from '../components/ServicosCartorio';
 import { usePlanos, PlanosProvider } from '../contexts/PlanosContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
 import { AZUL } from '../utils/marca';
 import { apiCall } from '../utils/apiCall';
 import { extrairDadosDeArquivo, textoDeArquivo, consolidarDocsImovel } from '../utils/claude';
 import { FinanceiroCaixa, AbaAssinaturas, SinteseFinanceira, AbaRecusas } from './AdminFinanceiro';
+import AdminChargebacks from '../components/AdminChargebacks';
 import ExtratoUnificado from '../components/ExtratoUnificado';
 import ConciliacaoBancaria from '../components/ConciliacaoBancaria';
 import MonitorFinanceiro from '../components/MonitorFinanceiro';
@@ -5338,7 +5339,7 @@ function DashboardTab({ irParaTab }) {
   const diagnosticos = {
     'Supabase — conexão': { causa: 'Banco de dados inacessível ou credenciais inválidas.', acoes: ['Verificar SUPABASE_SERVICE_KEY no Vercel', 'Checar status em status.supabase.com', 'Verificar se o projeto Supabase está ativo'] },
     'Supabase — chamados presos': { causa: 'Existem chamados de suporte abertos há mais de 7 dias sem resolução.', acoes: ['Acessar aba Suporte no Admin', 'Filtrar chamados por status "aberto" mais antigos', 'Atribuir ou finalizar manualmente'] },
-    'Comercial — clientes sem consultor': { causa: 'Clientes novos aguardam atribuição de consultor há mais de 3 dias.', acoes: ['Acessar aba Comercial no Admin', 'Filtrar por “Sem consultor”', 'Atribuir manualmente a um consultor disponível'] },
+    'Comercial — clientes sem consultor': { causa: 'Clientes novos aguardam atribuição de consultor há mais de 3 dias.', acoes: ['Acessar aba Comercial no Admin', 'Na coluna “Indicado por”, as linhas com borda âmbar são as sem vínculo', 'Atribuir manualmente a um consultor disponível'] },
     'Daily.co — API': { causa: 'API de videochamadas não está respondendo.', acoes: ['Verificar DAILY_API_KEY no Vercel', 'Checar status em status.daily.co', 'Confirmar que a chave não expirou'] },
     'Claude — API': { causa: 'API da Anthropic não está respondendo.', acoes: ['Verificar CLAUDE_KEY no Vercel', 'Checar status em status.anthropic.com', 'Confirmar que há créditos na conta Anthropic'] },
     'API interna — /api/system-status': { causa: 'O próprio servidor da aplicação não está respondendo.', acoes: ['Verificar deployments no Vercel', 'Checar logs de erro no Vercel → Logs', 'Fazer redeploy se necessário'] },
@@ -6114,7 +6115,8 @@ function ScrapersTab() {
   const [geocRegiao, setGeocRegiao] = useState({});
   const [ultimoDebug, setUltimoDebug] = useState(null);
   const [puppeteerStatus, setPuppeteerStatus] = useState(null);
-  const [abaAtiva, setAbaAtiva] = useState(() => { const a = sessionStorage.getItem('scraper_aba'); return (a === 'caixa' || a === 'leiloeiros') ? 'fontes' : (a || 'fontes'); });
+  // Só abas que existem: 'roadmap' (removida 21/10) salvo na sessão abria a tela vazia.
+  const [abaAtiva, setAbaAtiva] = useState(() => { const a = sessionStorage.getItem('scraper_aba'); return ['fontes', 'parceiros', 'geocod'].includes(a) ? a : 'fontes'; });
   const mudarAba = (a) => { setAbaAtiva(a); sessionStorage.setItem('scraper_aba', a); };
   const [estadosExpandidos, setEstadosExpandidos] = useState({ caixa: false, geocod: false });
   const toggleExpandir = (aba) => setEstadosExpandidos(e => ({ ...e, [aba]: !e[aba] }));
@@ -6966,7 +6968,7 @@ function ComercialTab() {
   return (
     <div>
       <h2 style={{ fontSize: 18, fontWeight: 700, color: '#111111', margin: '0 0 4px' }}>Comercial</h2>
-      <div style={{ fontSize: 12, color: '#64748b', marginBottom: 18 }}>Todos os clientes (pagantes e não pagantes), por consultor. Quem entrou por link de consultor já vem vinculado; os demais aparecem em “sem consultor” para você atribuir.</div>
+      <div style={{ fontSize: 12, color: '#64748b', marginBottom: 18 }}>Todos os clientes (pagantes e não pagantes), por consultor. Quem entrou por link de consultor já vem vinculado; os demais ficam com a borda âmbar na coluna “Indicado por” para você atribuir.</div>
 
       {/* ── APLICAÇÕES DE CONSÓRCIO & HOME EQUITY (F3) ──────────────────────────────
           Leads de alavancagem com dono, trilha e NPS (admin_comercial_visao). A
@@ -8005,6 +8007,7 @@ function FinanceiroHub() {
     { key: 'saques',          label: '💸 Saques da equipe' },
     { key: 'notas',           label: '🧾 Notas fiscais de saque' },
     { key: 'conferencia',     label: '⚖️ Pagamentos a conferir' },
+    { key: 'chargebacks',     label: '⚠️ Chargebacks' },
   ];
   const [sub, setSub] = React.useState(() => {
     let s = sessionStorage.getItem('admin_fin_sub') || 'mp';
@@ -8040,6 +8043,7 @@ function FinanceiroHub() {
       {sub === 'saques'          && <PrestacaoContasTab />}
       {sub === 'notas'           && <NotasFiscaisSaqueAdmin />}
       {sub === 'conferencia'     && <PagamentosConferenciaAdmin />}
+      {sub === 'chargebacks'     && <AdminChargebacks />}
     </div>
   );
 }
@@ -11590,11 +11594,11 @@ const ROLES_SIMULAVEIS = [
 export default function Admin() {
   const { role, loading, simularRole, roleSimulado } = useAuth();
   const navigate = useNavigate();
-  const [tab, setTab] = useState(() => {
-    // `?aba=Equipe&sub=casos` permite LINKAR direto para uma aba. Sem isto, qualquer tela que
-    // quisesse mandar o admin para a Central da Equipe só conseguia dizer "vá lá e clique" —
-    // foi o que deixou o bloqueio do /caso sem saída (11/08). A URL ganha da sessão.
-    const q = new URLSearchParams(window.location.search);
+  const location = useLocation();
+  // Aba pedida pela URL → aba válida (migra as antigas). Uma função só, usada na abertura e quando a URL muda
+  // com o Admin já aberto (nav('/admin?aba=X') não remonta o componente).
+  const abaDaUrl = (search) => {
+    const q = new URLSearchParams(search);
     const daUrl = q.get('aba');
     const subUrl = q.get('sub');
     if (subUrl) sessionStorage.setItem('admin_equipe_sub', subUrl);
@@ -11607,8 +11611,19 @@ export default function Admin() {
     if (t === 'Central da Equipe') { sessionStorage.setItem('admin_equipe_sub', 'casos'); sessionStorage.setItem('admin_tab', 'Equipe'); t = 'Equipe'; }
     if (t === 'Veiculos') { sessionStorage.setItem('admin_tab', 'Scrapers'); t = 'Scrapers'; } // aba removida em 21/10
     if (t === 'Agenda') { sessionStorage.setItem('admin_equipe_sub', 'agenda'); sessionStorage.setItem('admin_tab', 'Equipe'); t = 'Equipe'; } // Agenda virou sub-aba
+    // Aba que não existe mais (removida na limpeza de 21/10) = tela em branco: cai no Dashboard.
+    if (!GRUPOS_ADMIN.some(g => g.tabs.includes(t))) { sessionStorage.setItem('admin_tab', 'Dashboard'); t = 'Dashboard'; }
     return t;
+  };
+  const [tab, setTab] = useState(() => {
+    // `?aba=Equipe&sub=casos` permite LINKAR direto para uma aba (bloqueio do /caso sem saída, 11/08).
+    // HashRouter: a query mora DEPOIS do # (`#/admin?aba=X`) — `window.location.search` vem vazio, e foi
+    // assim que o link nunca funcionou (bug bounty 21/10). Lê do router; o search real fica de reserva.
+    return abaDaUrl(location.search || window.location.search);
   });
+  useEffect(() => {
+    if (new URLSearchParams(location.search).get('aba')) setTab(abaDaUrl(location.search));
+  }, [location.search]); // eslint-disable-line react-hooks/exhaustive-deps
   const mudarTab = (t) => { setTab(t); sessionStorage.setItem('admin_tab', t); };
   // A família aberta é DERIVADA da aba atual — não é estado paralelo. Assim voltar de outra tela
   // (ou o F5) cai sempre na família certa, sem um segundo lugar para dessincronizar.

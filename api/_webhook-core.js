@@ -966,7 +966,7 @@ export async function processarVencido({ gatewayCustomerId, email, gateway, serv
 // pagamento), registra em `chargebacks`, suspende o acesso e alerta a equipe.
 // TODO (pendência): submissão AUTOMÁTICA da defesa via API de disputas do MP.
 // Adiado até poder validar contra a API real — ver docs/PENDENCIAS_PAGAMENTOS.md.
-// Hoje o dossiê fica pronto e copiável em /admin/chargebacks (envio manual).
+// Hoje o dossiê fica pronto e copiável em Admin › Financeiro › Chargebacks (envio manual).
 export async function processarChargeback({ valor, descricao, email, gatewayCustomerId, gatewayPaymentId, gatewaySubscriptionId, gateway, evento, motivo, raw, servico = false, planoReferencia = null }) {
   const cliente = await buscarCliente({ gatewayCustomerId, email, gateway });
 
