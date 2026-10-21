@@ -482,6 +482,9 @@ function MainLayout() {
 // o de baixo ainda tapava a barra de ações do imóvel.
 const TEM_VOLTAR_PROPRIO = ['/imovel/', '/analise', '/caso'];
 
+// Para onde o "Voltar" leva quando a volta do navegador não tira a pessoa da tela (ver BotaoVoltar).
+const destinoSemVolta = (rota) => (rota.startsWith('/checkout') ? '/planos' : rota.startsWith('/veiculo/') ? '/veiculos' : '/');
+
 function BotaoVoltar() {
   const nav = useNavigate();
   const loc = useLocation();
@@ -489,7 +492,15 @@ function BotaoVoltar() {
   if (idx <= 0 || ['/', '/login'].includes(loc.pathname)) return null;
   if (TEM_VOLTAR_PROPRIO.some((r) => loc.pathname.startsWith(r))) return null;
   return (
-    <button onClick={() => nav(-1)} aria-label="Voltar à tela anterior"
+    <button onClick={() => {
+      // VOLTA QUE "QUICA" (21/10, dono: "clico em voltar e não consigo sair da página — é recorrente"). Quando a
+      // tela anterior redireciona sozinha para cá (login de quem já está logado → checkout; link de plano que
+      // reabre o checkout), o history.back() volta e é empurrado de novo — a pessoa fica presa. Se depois da
+      // volta a rota é a MESMA, cai num destino fixo, com replace para não alongar o histórico.
+      const antes = window.location.hash;
+      nav(-1);
+      setTimeout(() => { if (window.location.hash === antes) nav(destinoSemVolta(loc.pathname), { replace: true }); }, 700);
+    }} aria-label="Voltar à tela anterior"
       // `--barra-acoes-altura` é declarada pela tela que tem barra fixa embaixo (hoje o imóvel,
       // no celular). Sem ela a variável não existe e o fallback 0px mantém o botão onde estava.
       // Assim o flutuante SOBE em vez de tapar a barra, e qualquer tela futura com barra fixa
