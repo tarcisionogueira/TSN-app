@@ -20,7 +20,10 @@ export const TENANTS_POR_CHAVE = TENANTS;
 
 export default {
   chave: 'leje',
-  fetch: 'firecrawl',
+  // 21/10: Firecrawl só onde há chave (GitHub). O runner RESIDENCIAL não tem FIRECRAWL_API_KEY — com 'firecrawl'
+  // fixo cada rodada de casa falhava sem tentar; de IP residencial o site abre direto (é por isso que o LEJE está
+  // no runner-residencial.sh), então lá vai pelo DOM, sem custo.
+  fetch: (process.env.FIRECRAWL_API_KEY || '').trim() ? 'firecrawl' : 'dom',
   catalogo: '/',
   paginaParam: 'page',
   maxPages: 1,

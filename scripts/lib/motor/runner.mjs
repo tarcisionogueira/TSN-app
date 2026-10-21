@@ -426,7 +426,9 @@ export async function rodarFonte(cfg, opts) {
           // outra). Quando o CATÁLOGO foi recusado, o motivo diz isso.
           : /^dom-\d{3}$/.test(String(viaCatalogo || '')) || viaCatalogo === 'bloqueado'
             ? `catálogo recusado (${viaCatalogo === 'bloqueado' ? 'bloqueado também via Bright Data' : `HTTP ${String(viaCatalogo).slice(4)}`}) — acesso negado ao runner, não parser`
-            : String(viaCatalogo || '').startsWith('sem-bd')
+            : String(viaCatalogo || '').startsWith('sem-bd') || String(viaCatalogo || '').startsWith('firecrawl-')
+              // 21/10: `firecrawl-sem-chave` (runner sem FIRECRAWL_API_KEY) caía no genérico abaixo — o LEJE gravou
+              // "sem nenhum lote pronto" 4×/dia por 9 dias apontando para o parser, que estava certo.
               ? `catálogo não abriu: ${viaCatalogo} — acesso do runner, não parser`
               : (encerrados ? `sem lote pronto (${encerrados} encerrados)` : 'sem nenhum lote pronto'),
       });
