@@ -1,6 +1,6 @@
 /**
  * FONTE (config) — FREITAS LEILOEIRO (freitasleiloeiro.com.br). Site próprio ASP.NET MVC, sem
- * Cloudflare. Catálogo de imóveis numa página só (`/Leiloes/Pesquisar?Categoria=2`); detalhe em
+ * Cloudflare. Catálogo de imóveis pelo ajax `/Leiloes/PesquisarLotes` (TopRows=200; a página só traz 12); detalhe em
  * `/Leiloes/LoteDetalhes?leilaoId=<L>&loteNumero=<N>`. Parser puro em lib/freitas-parse.mjs.
  *
  * `fetch: 'fetch'` = via grátis (fetch direto) e, só se ela falhar, Bright Data. O wrapper
@@ -21,7 +21,11 @@ export default {
   // bloqueio nem anti-robô (o site não tem): é o cliente HTTP que não busca o intermediário.
   fetch: 'dom',
   dom: { esperaMs: 1500 },
-  catalogo: '/Leiloes/Pesquisar?Categoria=2',
+  // 21/10: `/Leiloes/Pesquisar?Categoria=2` traz só os 12 primeiros no HTML; o resto chega por
+  // rolagem infinita (ajax `/Leiloes/PesquisarLotes`, 12 por vez). O navegador não rola, então
+  // `enumerados` foi 12 em toda rodada contra ~130 no site — 6 leilões inteiros nunca entraram
+  // (8099 Bradesco, 8113, 8127, 8129…). Mesmo endpoint do site, `TopRows=200`: tudo numa chamada.
+  catalogo: '/Leiloes/PesquisarLotes?Categoria=2&ClienteSclId=0&PageNumber=1&TopRows=200',
   paginaParam: 'pagina',
   maxPages: 1,
   tenants: Object.values(TENANTS),
@@ -29,7 +33,7 @@ export default {
   conhecimento: {
     plataforma: 'Própria (ASP.NET MVC)', acesso: 'dom-puppeteer (grátis; certificado sem cadeia intermediária)',
     custo: 'gratis', anti_bot: 'nenhum (sem Cloudflare)',
-    enumeracao: '/Leiloes/Pesquisar?Categoria=2 (página única)',
+    enumeracao: '/Leiloes/PesquisarLotes?Categoria=2&TopRows=200 (ajax do catálogo, chamada única)',
     url_lote: '/Leiloes/LoteDetalhes?leilaoId=<L>&loteNumero=<N>',
     scraper: 'scraper-freitas.mjs',
   },

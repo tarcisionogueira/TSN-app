@@ -120,6 +120,11 @@ export default async function handler(req, res) {
         if (item.expirado) {
           const d = decidirEnvio({ item, texto: null, persona });
           Object.assign(linha, { acao: d.acao, motivo: d.motivo });
+        } else if (!String(item.texto || '').trim()) {
+          // Sem texto (foto, figurinha, reação, áudio): não há o que classificar nem a que
+          // responder por escrito, e a redação ia com `content` vazio — HTTP 400 do Anthropic
+          // (21/10). Rascunho com o motivo à vista: o dono vê no painel e responde pelo app.
+          Object.assign(linha, { acao: 'rascunho', motivo: 'sem_texto: mídia, figurinha ou reação — responder pelo app' });
         } else {
           const cl = await classificar({ texto: item.texto || '', origem: item.origem, classes: classes || [] });
           Object.assign(linha, { classe: cl.classe, classe_conf: cl.confianca });

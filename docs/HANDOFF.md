@@ -7,6 +7,25 @@
 
 
 
+## 21/10 (noite, 2) — diagnóstico de abertura + 3 consertos (Freitas, cidades em cache, ig-motor)
+- **Diagnóstico:** segurança/regras 0 achado, KYC 0, nenhum cliente travado, relatório 0 falha 7d, backup em dia,
+  documental discriminando (6/9 células, n=25). Atenção: 4 pagantes sem relatório em 14 d; 0 gclid em 1.269
+  cliques pagos (#28/#68); LEFFA sem medição desde 08/10; LEILOTECH com 3 lotes `estado=''`.
+- **#143/#188 (honorário Marcos) TRAVADAS por desenho:** `honorarios-liquidar-cron` só entra em arrematação com
+  `advogado_id` (ou finalizada) — e a do Marcos não tem. O cartão Asaas (R$ 33.001,09) nunca teve o líquido lido.
+  **O convite do Dr. José Roberto (#198) EXPIROU em 19/10 sem uso** → dono precisa gerar convite novo.
+- **FREITAS lia 12 de ~135 lotes.** O catálogo `/Leiloes/Pesquisar?Categoria=2` traz 12 no HTML e o resto por
+  rolagem infinita (ajax `/Leiloes/PesquisarLotes`, 12 por vez); `enumerados` = 12 em TODA rodada, com status ok.
+  6 leilões nunca entraram (8099 Bradesco 18 imóveis, 8113, 8127, 8129, 8107, 8125…). Catálogo agora é o ajax com
+  `TopRows=200` (1 chamada, 135 lotes, extrator validado em HTML real); runner com `FREITAS_MAX_LOTES=150`.
+  Sinal que teria pego: `enumerados` constante e redondo (12 = TopRows do site) — tamanho de página, não de acervo.
+- **`acervo_cidades_top/_todas` em cache** (`20261021_acervo_cidades_em_cache.sql`, aplicada): 57014 na vitrine e no
+  sitemap. O índice de 18/10 existe mas o plano lê a heap; 114 ms calmo × 3,9 s sob carga (teto anon 8 s). Agora
+  `acervo_cidades_cache`, recalculado dentro de `live_plataforma_numeros_atualizar` (cron horário; o invariante
+  `live_numeros_congelados` cobre). 2 ms, resultado idêntico ao vivo, anon lê por policy (função segue INVOKER).
+- **ig-motor:** DM sem texto (foto/figurinha/reação) ia para a redação com `content` vazio → HTTP 400. Agora vira
+  rascunho `sem_texto` sem gastar IA.
+
 ## 21/10 (noite) — Vinco nunca entrou no acervo (pedido do dono: lote 7399, sala em Tamboré/Barueri)
 - **Estava na lista do cluster GESTÃO desde 26/07 e gravou ZERO lote, sem alarme** (a saúde é do cluster; os
   outros 4 domínios seguravam o total). Três defeitos empilhados, medidos com o parser real sobre HTML vivo

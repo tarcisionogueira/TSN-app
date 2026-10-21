@@ -2,7 +2,7 @@
  * Parser puro — FREITAS LEILOEIRO (freitasleiloeiro.com.br). Site próprio em ASP.NET MVC, sem
  * Cloudflare (recon Bright Data 26-27/09, HTML bruto em recon_dump origem='deep' ids 50-56).
  *
- * Catálogo de imóveis: `/Leiloes/Pesquisar?Categoria=2` (Categoria 1 = veículos, 3 = materiais).
+ * Catálogo de imóveis: `/Leiloes/PesquisarLotes?Categoria=2&TopRows=200` (ajax; a página `/Leiloes/Pesquisar` só traz 12) (Categoria 1 = veículos, 3 = materiais).
  * Página ÚNICA, sem paginação (27/09: 12 lotes em 5 leilões). Cada card traz o link
  * `/Leiloes/LoteDetalhes?leilaoId=<L>&loteNumero=<N>`, cidade/UF e o "Lance Inicial".
  *

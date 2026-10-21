@@ -248,7 +248,9 @@ rodar LEJE env LEJE_DRYRUN=0 node scripts/scraper-leje.mjs
 # direto, grátis (FREITAS_BD desligado por padrão).
 # 27/09: FREITAS_BD=1 — a via direta falhou também do PC (motivo agora vai para fonte_saude);
 # o Bright Data já coletou este site (recon 26-27/09). Custo limitado pelo teto `freitas` 25/sem.
-rodar FREITAS env FREITAS_DRYRUN=0 FREITAS_BD=1 node scripts/scraper-freitas.mjs
+# 21/10: catálogo via ajax traz ~135 lotes (eram 12); teto 150 p/ caber tudo — detalhe é grátis (DOM), e o
+# pago segue preso ao teto `freitas` (25/sem) do Bright Data.
+rodar FREITAS env FREITAS_DRYRUN=0 FREITAS_BD=1 FREITAS_MAX_LOTES=150 node scripts/scraper-freitas.mjs
 
 # UBERLANDIALEILOES (28/09) — Plataforma Leiloar (leiloesuberlandia.com.br). HTTP 403 ao IP do
 # GitHub (Azure); o servidor do banco (AWS) recebeu 200 no recon. Fetch direto, grátis (semBD —
