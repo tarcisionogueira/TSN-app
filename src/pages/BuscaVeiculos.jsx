@@ -38,6 +38,8 @@ const COLUNAS = [
   'status_patio',
   // Pátio (29/09): nome do pátio quando o leiloeiro tem vários na mesma cidade ("Guarulhos III").
   'patio',
+  // 2ª praça (22/10): o mesmo carro publicado como 2 lotes vira 1 card — ver 20261022_veiculos_gemeos.sql.
+  'valor_minimo_2', 'data_leilao_2',
 ].join(',');
 // PÚBLICO (20/10): a vitrine não tem o que leva ao leiloeiro — descrição, placa, nome e pátio chegam
 // por dadosRestritosVeiculos() só para quem tem o plano (ver utils/veiculosAcesso.js).
@@ -171,6 +173,14 @@ function calcularJanelaPrazo(opcao) {
   return { tipo: 'janela', de: iso(hoje), ate: iso(fim) };
 }
 
+// Nome do card (22/10): sem modelo (SUPERBID ~3,3 mil, LJUD todos) o card dizia só "CHEVROLET" — cinco
+// Spark diferentes pareciam o mesmo carro repetido. Sem modelo, usa o 1º trecho do título do leiloeiro.
+const nomeDoCard = (v) => {
+  const marca = v.marca ? (v.marca_busca || v.marca) : null;
+  if (v.modelo) return [marca, v.modelo].filter(Boolean).join(' ');
+  const t = String(v.titulo || '').split(/,|\s[–-]\s/)[0].trim();
+  return (t.length > 60 ? `${t.slice(0, 58)}…` : t) || marca || 'Veículo';
+};
 const fmtBRL = (v) => (v ? 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—');
 
 function fmtDataLeilao(d) {
@@ -752,7 +762,7 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
                 <div style={{ flex: 1, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 5 }}>
                   <div style={{ fontWeight: 700, color: '#111111', fontSize: isMobile ? 14 : 12, lineHeight: 1.3, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
                     {/* Marca da fonte no nome canônico ("VW" → VOLKSWAGEN) — a inferida do título não vira rótulo. */}
-                    {[v.marca ? (v.marca_busca || v.marca) : null, v.modelo].filter(Boolean).join(' ') || v.titulo || 'Veículo'}
+                    {nomeDoCard(v)}
                   </div>
                   <div style={{ fontSize: 10, color: '#64748b', display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                     {anoLabel && <span>{anoLabel}</span>}
@@ -812,6 +822,7 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
                   <div style={{ marginTop: 2 }}>
                     <div style={{ fontSize: 9, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.4 }}>Lance Mín.</div>
                     <div style={{ fontWeight: 900, color: '#111111', fontSize: isMobile ? 18 : 15 }}>{fmtBRL(v.valor_minimo)}</div>
+                    {v.valor_minimo_2 > 0 && <div style={{ fontSize: 10, color: '#0f766e', fontWeight: 700 }}>2ª praça {fmtBRL(v.valor_minimo_2)}{v.data_leilao_2 ? ` · ${new Date(v.data_leilao_2).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}` : ''}</div>}
                     {v.valor_fipe > 0 && <div style={{ fontSize: 10, color: '#64748b' }}>FIPE{v.fipe_status === 'aproximado' ? ' ~' : v.fipe_status === 'leiloeiro' ? ' (leiloeiro)' : ''} {fmtBRL(v.valor_fipe)}</div>}
                     {v.valor_avaliacao > 0 && <div style={{ fontSize: 10, color: '#64748b' }}>Aval. {fmtBRL(v.valor_avaliacao)}</div>}
                   </div>

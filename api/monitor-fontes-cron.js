@@ -201,6 +201,22 @@ async function handler(req) {
     const { data, error: eGe } = await supabase.rpc('reconciliar_gemeos_entre_leiloeiros');
     gemeosEntreLeiloeiros = eGe ? { erro: eGe.message } : data;
   }
+  // GÊMEOS POR MATRÍCULA (22/10): mesmo nº de matrícula na mesma cidade em leiloeiros diferentes — o
+  // agrupamento por preço/área acima descarta o grupo quando há lotes vizinhos iguais (CALIL × LEILOFY).
+  // Ver supabase/migrations/20261022_gemeos_imoveis_furos.sql.
+  let gemeosMatricula = null;
+  {
+    const { data, error: eGmat } = await supabase.rpc('reconciliar_gemeos_matricula');
+    gemeosMatricula = eGmat ? { erro: eGmat.message } : data;
+  }
+  // GÊMEOS DE VEÍCULO (22/10, dono: "os carros parecem repetidos"): mesma placa/chassi em 2+ lotes — 1ª e 2ª
+  // praça como itens separados, republicação, edital DJEN × lote. Fica 1; a 2ª praça vira valor_minimo_2.
+  // Ver supabase/migrations/20261022_veiculos_gemeos.sql.
+  let gemeosVeiculos = null;
+  {
+    const { data, error: eGv2 } = await supabase.rpc('reconciliar_gemeos_veiculos');
+    gemeosVeiculos = eGv2 ? { erro: eGv2.message } : data;
+  }
 
   // 15 dias: cobre TODAS as fontes que reportam saúde (não só uma allowlist de 8 —
   // BIASI/PESTANA/etc. degradavam e passavam batido). Última linha por fonte = estado.
@@ -234,6 +250,12 @@ async function handler(req) {
   // A4 (22/08): a falha da reconciliação de gêmeos precisa VIRAR problema — antes só saía no
   // corpo HTTP (que ninguém lê), então se a RPC sumisse/perdesse permissão a dedup ficava parada
   // e 539 duplicados voltavam SEM UM ÚNICO alarme. Agora entra na lista → dispara e-mail/assinatura.
+  if (gemeosMatricula?.erro) {
+    problemas.push({ fonte: 'GÊMEOS POR MATRÍCULA', tipo: 'reconciliação falhou', detalhe: `dedup parada — ${gemeosMatricula.erro}` });
+  }
+  if (gemeosVeiculos?.erro) {
+    problemas.push({ fonte: 'GÊMEOS DE VEÍCULO', tipo: 'reconciliação falhou', detalhe: `dedup parada — ${gemeosVeiculos.erro}` });
+  }
   if (gemeosEntreLeiloeiros?.erro) {
     problemas.push({ fonte: 'GÊMEOS ENTRE LEILOEIROS', tipo: 'reconciliação falhou', detalhe: `dedup parada — ${gemeosEntreLeiloeiros.erro}` });
   }
@@ -555,7 +577,7 @@ async function handler(req) {
     // condição limpa: zera o estado p/ que uma recorrência futura volte a avisar.
     const st = await lerEstadoAlerta(supabase, 'monitor_fontes');
     if (!st || st.assinatura !== '') await gravarEstadoAlerta(supabase, 'monitor_fontes', '', null);
-    return new Response(JSON.stringify({ ok: true, problemas: 0, fontes: Object.keys(ultima).length, gemeos, gemeosLeiloeiro, gemeosVlance, gemeosMesmaFonte, gemeosEntreLeiloeiros }), {
+    return new Response(JSON.stringify({ ok: true, problemas: 0, fontes: Object.keys(ultima).length, gemeos, gemeosLeiloeiro, gemeosVlance, gemeosMesmaFonte, gemeosEntreLeiloeiros, gemeosMatricula, gemeosVeiculos }), {
       headers: { 'Content-Type': 'application/json' },
     });
   }
@@ -616,7 +638,7 @@ async function handler(req) {
   // Uma fonte degradada perdia a única boca que tinha. Sem envio, não grava → re-tenta amanhã.
   if (enviar && emailEnviado) await gravarEstadoAlerta(supabase, 'monitor_fontes', assinatura, new Date().toISOString());
 
-  return new Response(JSON.stringify({ ok: true, problemas: problemas.length, enviado: emailEnviado, alerta_pendente: enviar && !emailEnviado, detalhes: problemas, gemeos, gemeosLeiloeiro, gemeosVlance, gemeosMesmaFonte, gemeosEntreLeiloeiros }), {
+  return new Response(JSON.stringify({ ok: true, problemas: problemas.length, enviado: emailEnviado, alerta_pendente: enviar && !emailEnviado, detalhes: problemas, gemeos, gemeosLeiloeiro, gemeosVlance, gemeosMesmaFonte, gemeosEntreLeiloeiros, gemeosMatricula, gemeosVeiculos }), {
     headers: { 'Content-Type': 'application/json' },
   });
 }

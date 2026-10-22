@@ -4257,7 +4257,9 @@ function mapLotePestana(lote, leilao, leiloesPorId, { tipoBem = PESTANA_TIPOBEM_
     link_matricula: primeiroDoc('matricula', docsLote) || null, // só por-lote (nunca do leilão)
     link_regras_venda: primeiroDoc('regras', anexos) || null,
     anexos,
-    url_lote: agenda,
+    // Página DO LOTE (22/10): era a do leilão — 154 lotes do leilão 6312 com o mesmo link. Rota do app do
+    // site: `/agenda-de-leiloes/:id/:loteId/:slug?` (o slug é opcional).
+    url_lote: lote.id ? `${agenda}/${lote.id}` : agenda,
     link_foto: foto,
     ...(fotosPestana.length > 1 ? { fotos: fotosPestana } : {}),
     leiloeiro: String(leilao.leiloeiro || 'Pestana Leilões').slice(0, 120),
