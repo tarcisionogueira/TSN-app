@@ -88,8 +88,10 @@ export function ehProducao(href) {   // exportada para scripts/testes/erro-so-de
 // "Failed to fetch (analytics.google.com)" — o domínio vem na própria mensagem, o stack é do nosso
 // wrapper de fetch, então `ehStackDeTerceiro` não pegava. Era o único erro aberto em erros_cliente
 // (12 linhas, health-check em aviso todo dia) e não há nada a corrigir: bloqueador de anúncio.
-const FETCH_DE_TERCEIRO = /failed to fetch \((?:[a-z0-9-]+\.)*(?:google-analytics\.com|analytics\.google\.com|googletagmanager\.com|doubleclick\.net|googleadservices\.com|facebook\.(?:com|net)|clarity\.ms)\)/i;
-export function ehFetchDeTerceiro(msg = '') { return FETCH_DE_TERCEIRO.test(String(msg)); }
+const FETCH_DE_TERCEIRO = /failed to fetch \((?:[a-z0-9-]+\.)*(?:google-analytics\.com|analytics\.google\.com|googletagmanager\.com|doubleclick\.net|googleadservices\.com|facebook\.(?:com|net)|clarity\.ms|posthog\.com)\)/i;
+// PostHog (22/10, Sentry TSN-APP-A/B): o SDK de analytics rejeita a própria promessa ao estourar 60 s.
+const ANALYTICS_PROPRIO = /posthog request timed out/i;
+export function ehFetchDeTerceiro(msg = '') { return FETCH_DE_TERCEIRO.test(String(msg)) || ANALYTICS_PROPRIO.test(String(msg)); }
 
 export async function reportarErroCliente({ msg, stack = '', url } = {}) {
   try {

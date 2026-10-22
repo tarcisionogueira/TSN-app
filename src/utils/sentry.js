@@ -17,6 +17,14 @@ export function initSentry() {
     // Sem tracing de performance por ora — o objetivo aqui é captura de erro, não APM;
     // manter a cota do plano gratuito (5k erros/mês) só para o que já era investigado.
     tracesSampleRate: 0,
+    // UM caminho só (22/10, #201). O SDK, por padrão, liga os PRÓPRIOS ouvintes de window.onerror /
+    // unhandledrejection (GlobalHandlers) — e eles mandam tudo, sem o filtro de reportarErroCliente.
+    // Com o filtro de entrada do Sentry desligado (13/10), 6 das 9 issues abertas eram "Failed to fetch"
+    // do Analytics/PostHog dentro de uma extensão do Chrome (frame_ant.js). Os ouvintes do app
+    // (utils/reportarErro.js) já capturam o mesmo erro e chamam capturarNoSentry depois de filtrar.
+    integrations: (padrao) => padrao.filter((i) => i.name !== 'GlobalHandlers'),
+    // Reforço: frame de extensão nunca é nosso.
+    denyUrls: [/^chrome-extension:\/\//i, /^moz-extension:\/\//i, /^safari(-web)?-extension:\/\//i],
   });
 }
 

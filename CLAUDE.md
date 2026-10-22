@@ -102,7 +102,9 @@ curto (5–8 linhas) antes de seguir:
    > 22/09** (worker do pdf.js fora do pacote): o banco não acusava nada porque os outros pontos
    > engoliam o erro e caíam na leitura por IA. Leia o motivo de cada grupo; ruído conhecido
    > (`DEP0169 url.parse`, `sem cota Bright Data`) não é achado. E o Sentry só cobre o NAVEGADOR —
-   > enquanto o filtro "browser-extensions" estiver ligado (#201), ele descarta tudo.
+   > o filtro "browser-extensions" foi desligado em 13/10 (#201, conferido em 22/10 por `find_dropped_events`). Erro do
+   > navegador entra por UM caminho só: `utils/reportarErro.js` filtra extensão/terceiro e chama `capturarNoSentry`
+   > (os ouvintes globais do próprio SDK ficam desligados em `utils/sentry.js`).
    > **Duas checagens automáticas convivem, e elas NÃO são a mesma coisa:**
    > `/api/health-check` (2×/dia, **custo zero** — não usa IA; só manda e-mail quando há
    > problema) **continua ligado e deve continuar**. A auditoria do Claude
