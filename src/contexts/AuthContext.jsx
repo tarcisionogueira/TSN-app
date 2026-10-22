@@ -183,24 +183,48 @@ export function AuthProvider({ children }) {
     const ehRecovery = typeof window !== 'undefined' && (
       /type=recovery/.test(window.location.href) || /redefinir-senha|recuperar|reset/i.test(window.location.hash)
     );
+    // VIGIA DO CARREGAMENTO (22/10, dono no celular: app parado no círculo da tela inicial com a internet OK).
+    // `getSession()` renova o token pela rede quando ele venceu, e nem a renovação nem o fetch têm prazo: com o
+    // 5G oscilando (ou o lock do auth preso depois de o app voltar do segundo plano), a promessa não resolve e
+    // `loading` fica `true` para sempre — sem erro nenhum, então nada chegava a erros_cliente. Em 8 s: libera a
+    // tela com a sessão GRAVADA neste aparelho + perfil em cache (o que o app já usaria se a rede respondesse),
+    // e registra o travamento para medir. Quando a rede responder, o fluxo normal abaixo corrige o estado.
+    let resolvido = false;
+    const vigia = setTimeout(() => {
+      if (resolvido) return;
+      let uGravado = null;
+      try {
+        const k = Object.keys(localStorage).find((x) => /^sb-.*-auth-token$/.test(x));
+        uGravado = k ? (JSON.parse(localStorage.getItem(k) || 'null')?.user ?? null) : null;
+      } catch { /* storage bloqueado: segue como visitante */ }
+      const cachedV = uGravado?.id ? loadPerfilCache(uGravado.id) : null;
+      if (uGravado && cachedV && !isSessionExpired()) { setUser(uGravado); aplicarPerfil(cachedV); }
+      setLoading(false);
+      import('../utils/reportarErro.js')
+        .then((m) => m?.reportarErroCliente?.({ msg: `auth: sessão não respondeu em 8s (${uGravado ? (cachedV ? 'liberado com cache' : 'sessão gravada sem cache') : 'sem sessão gravada'})` }))
+        .catch(() => {});
+    }, 8000);
+    // O vigia só se desarma quando a tela é LIBERADA (sessão e, no 1º acesso, perfil) — o perfil sem cache
+    // também é uma ida à rede que pode não voltar.
+    const liberar = () => { resolvido = true; clearTimeout(vigia); setLoading(false); };
     supabase.auth.getSession().then(({ data }) => {
       const u = data.session?.user ?? null;
       if (u && isSessionExpired() && !ehRecovery) {
         supabase.auth.signOut();
         try { localStorage.removeItem(LAST_ACTIVITY_KEY); localStorage.removeItem(PERFIL_CACHE_KEY); } catch { /* storage bloqueado */ }
-        setLoading(false);
+        liberar();
         return;
       }
       if (u) updateActivity();
       setUser(u);
-      if (!u) { setLoading(false); return; }
+      if (!u) { liberar(); return; }
       // Hidrata do cache NA HORA (se houver) e já libera a UI — sem esperar a rede.
       const cached = loadPerfilCache(u.id);
-      if (cached) { aplicarPerfil(cached); setLoading(false); }
+      if (cached) { aplicarPerfil(cached); liberar(); }
       // Revalida em 2º plano; só o 1º acesso (sem cache) espera a query.
-      fetchPerfil(u.id).then((p) => { aplicarPerfil(p); if (podeCachear(p)) savePerfilCache(u.id, p); setLoading(false); })
-        .catch(() => setLoading(false));
-    });
+      fetchPerfil(u.id).then((p) => { aplicarPerfil(p); if (podeCachear(p)) savePerfilCache(u.id, p); liberar(); })
+        .catch(() => liberar());
+    }).catch(() => liberar());
 
     // Atualiza atividade em cliques e teclas
     const onActivity = () => updateActivity();
@@ -466,6 +490,7 @@ export function AuthProvider({ children }) {
     document.addEventListener('visibilitychange', onVisible);
 
     return () => {
+      clearTimeout(vigia);
       subscription.unsubscribe();
       window.removeEventListener('focus', refetchPerfil);
       document.removeEventListener('visibilitychange', onVisible);
