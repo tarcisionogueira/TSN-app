@@ -20,6 +20,7 @@ export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 import { isCronAuthorized } from './_auth.js';
 import { enviarEmail } from './_email.js';
+import { processarFimDePromocoes } from './_promo-reajuste.js';
 
 const MP_TOKEN     = (process.env.MP_ACCESS_TOKEN || '').trim();
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -244,5 +245,10 @@ async function handler(req) {
   // `sem_email` é REPORTADO, não engolido: foi um skip invisível que segurou 100% dos avisos
   // por semanas. Assinante dentro da janela e sem e-mail resolvível tem que aparecer no retorno.
   if (semEmail) console.error(`[renovacao-avisos] ${semEmail} assinante(s) na janela SEM e-mail resolvível`);
-  return new Response(JSON.stringify({ ok: !paginacaoInterrompida, verificados, avisados, sem_email: semEmail, paginacao_interrompida: paginacaoInterrompida }), { headers: { 'Content-Type': 'application/json' } });
+  // Fim da promoção de plano (12 meses → preço cheio, aviso 15 dias antes) — api/_promo-reajuste.js (22/10).
+  let promocoes;
+  try { promocoes = await processarFimDePromocoes(); }
+  catch (e) { promocoes = { erros: [String(e?.message || e).slice(0, 200)] }; }
+  if (promocoes?.erros?.length) console.error('[renovacao-avisos] fim de promoção:', promocoes.erros);
+  return new Response(JSON.stringify({ ok: !paginacaoInterrompida, verificados, avisados, sem_email: semEmail, paginacao_interrompida: paginacaoInterrompida, promocoes }), { headers: { 'Content-Type': 'application/json' } });
 }
