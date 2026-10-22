@@ -113,7 +113,7 @@ async function coletarTenant(cfg, fetchFonte, tenant) {
     const r = detPronto ? { html: null } : await fetchFonte(url, { semBD: SEM_BD });
     if (r?.semCota) { cota = alvo.length - rows.length; console.log(`💰 [${tenant.fonte}] teto de orçamento — parei (não é regressão da fonte)`); break; }
     if (!r?.html && !detPronto) { sem++; continue; }
-    const det = detPronto || await cfg.parse.parseDetalhe(r.html, url, { fetchFonte, tenant });
+    const det = detPronto || await (v.parseDetalhe || cfg.parse.parseDetalhe)(r.html, url, { fetchFonte, tenant });
     if (!det) { sem++; continue; }
     if (det.encerrado) { motivos.set('encerrado', (motivos.get('encerrado') || 0) + 1); continue; }
     const imo = cfg.parse.montarRow(url, det, tenant);

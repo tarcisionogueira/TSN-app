@@ -6750,7 +6750,10 @@ async function main() {
     // 20/09: assim como SBID9/SBID21 (09/09), estas duas saíam sem { enrich: true } — mesmo
     // portal/template de oferta que SUPERBID/SOLD (74%/100% de matrícula com enrich ligado).
     if (bSbid && rodar('TOTALLEILOES')) await coletarFonte('TOTALLEILOES', () => scraperSuperbidNet(bSbid, { stores: '16091', fonte: 'TOTALLEILOES', leiloeiro: 'Total Leilões', prefix: 'totall', baseSite: 'https://www.totalleiloes.com.br' }), { enrich: true, enrichCap: 120, browser: bSbid });
-    if (bSbid && rodar('CREPALDI')) await coletarFonte('CREPALDI', () => scraperSuperbidNet(bSbid, { stores: '16139', fonte: 'CREPALDI', leiloeiro: 'Crepaldi Leilões', prefix: 'crep', baseSite: 'https://www.crepaldileiloes.com.br' }), { enrich: true, enrichCap: 120, browser: bSbid });
+    // CREPALDI FORA (22/10, #288): a loja 16139 da Superbid deu 0 lote nas 90 rodadas desde 30/07, e o site da
+    // leiloeira virou página institucional que manda para o portal mybid.com.br (pendência de fonte nova).
+    // Rodar aqui só gravava "falhou" todo dia. Religar: CREPALDI_SBID=1.
+    if (bSbid && process.env.CREPALDI_SBID === '1' && rodar('CREPALDI')) await coletarFonte('CREPALDI', () => scraperSuperbidNet(bSbid, { stores: '16139', fonte: 'CREPALDI', leiloeiro: 'Crepaldi Leilões', prefix: 'crep', baseSite: 'https://www.crepaldileiloes.com.br' }), { enrich: true, enrichCap: 120, browser: bSbid });
     // KRONLEILOES (16/09): candidato do EDITAL_DJEN, site próprio (kronleiloes.com.br)
     // bloqueia Cloudflare direto (403 em fetch puro) — parecia exigir Bright Data pago. Recon
     // com Chromium real (recon-crepaldi.mjs, que passa o Cloudflare) mostrou que o site é só

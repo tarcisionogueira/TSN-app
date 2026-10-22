@@ -92,7 +92,11 @@ export function valoresDoTexto(texto) {
   // o mínimo vem com o PERCENTUAL — a avaliação sai dele quando o edital não a escreve.
   const ref = t.match(new RegExp(RS + String.raw`[^%]{0,120}?referente\s+a\s+(\d{2,3}(?:,\d+)?)\s*%[^.]{0,40}?avalia`, 'i'));
   if (ref) { minimo = minimo || plaus(reais(ref[1])); if (!avaliacao && minimo) avaliacao = plaus(Math.round(minimo * 100 / reais(ref[2]) * 100) / 100); }
-  const pct = t.match(/(?:n[ãa]o\s+inferior\s+a|m[íi]nimo\s+de|correspondente\s+a)\s*(\d{2,3}(?:,\d+)?)\s*%[^.]{0,60}?avalia/i);
+  // "vedada a alienação por valor inferior a 50% (cinquenta por cento) da avaliação, correspondente a R$ 145.000,00"
+  // (SANCHES 2255/2260, 22/10): sem "não" na frente e com o valor já calculado depois do percentual.
+  const veda = t.match(/inferior\s+a\s*(\d{2,3}(?:,\d+)?)\s*%[^.]{0,80}?avalia[çc][ãa]o[^.\d]{0,40}?correspondente\s+a\s+(?:R\$\s*)?([\d.]{1,15},\d{2})/i);
+  if (veda && !minimo) minimo = plaus(reais(veda[2]));
+  const pct = t.match(/(?:inferior\s+a|m[íi]nimo\s+de|correspondente\s+a)\s*(\d{2,3}(?:,\d+)?)\s*%[^.]{0,60}?avalia/i);
   if (!minimo && pct && avaliacao) minimo = Math.round(avaliacao * reais(pct[1]) / 100 * 100) / 100;
   // "1º leilão … por valor igual ou superior ao de sua avaliação": na 1ª praça o mínimo É a avaliação.
   if (!minimo && avaliacao && /1[ºo°]\s*leil[ãa]o[\s\S]{0,200}?igual\s+ou\s+superior\s+ao\s+de\s+sua\s+avalia/i.test(t)) minimo = avaliacao;

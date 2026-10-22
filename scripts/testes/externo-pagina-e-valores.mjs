@@ -32,6 +32,10 @@ const s2241 = valoresDoTexto('II-o imóvel foi avaliado em 3.500.000,00 (três m
 assert.deepEqual([s2241.avaliacao, s2241.minimo], [3500000, 1750000]);
 assert.equal(valoresDoTexto('avaliado em R$ 1.080,00 de custas; valor da avaliação R$ 250.000,00').avaliacao, 250000, 'primeiro valor plausível');
 
+// SANCHES 2260 (22/10): "inferior a 50% … da avaliação, correspondente a R$ 145.000,00" — sem "não", valor já calculado.
+const veda = valoresDoTexto('2- O imóvel foi reavaliado em R$ 290.000,00 (duzentos e noventa mil reais), sendo vedada a alienação por valor inferior a 50% (cinquenta por cento) da avaliação, correspondente a R$ 145.000,00 (cento e quarenta e cinco mil reais).');
+assert.deepEqual(veda, { avaliacao: 290000, minimo: 145000, pctMinimo: 50 }, 'vedada abaixo de X% = mínimo');
+
 const urls = extrairUrlsDeLote('<a href="/externo/leilao/2255">x</a><a href="/externo/leilao/2251">y</a>', 'https://www.sanchesleiloes.com.br');
 assert.deepEqual([...urls.keys()], ['2255', '2251']);
 console.log('✓ externo-pagina-e-valores: página do leilão, arquivos nomeados, cidade/UF e valores do edital');

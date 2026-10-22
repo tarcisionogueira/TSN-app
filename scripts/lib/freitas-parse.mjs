@@ -149,6 +149,15 @@ export function parseDetalhe(html, url) {
   };
 }
 
+// VEÍCULO (22/10, #288): o `encerrado` acima é de IMÓVEL — tipo diferente do 19 conta como fora. Para o
+// lote de veículo isso marcava TODOS como encerrados ("702 enumerados e nenhum gravado (encerrado: 150)").
+// Aqui só o status escrito na página encerra.
+export function parseDetalheVeiculo(html, url) {
+  const d = parseDetalhe(html, url);
+  if (d) d.encerrado = RE_ENCERRADO.test(d._status || '');
+  return d;
+}
+
 export const montarRow = (url, det, tenant) => montarRowDom(url, det, tenant, idDaUrl(url), inferirTipo);
 export { checarQualidade };
 
