@@ -63,7 +63,7 @@ import { fotoServivel, refererExigido } from './_foto-hotlink.js';
 import { utmEmail } from './_utm.js';
 import { ALLOWED_HOSTS } from './_allowed-hosts.js';
 import { enviarWebPush } from './_webpush.js';
-import { encerradoPorDatas } from './_leilao-encerrado.js';
+import { encerradoPorDatas, FILTRO_DISPUTAVEL_QS } from './_leilao-encerrado.js';
 import { CIDADES_TEMPORADA } from './_temporada.js';
 import { cabecalhoEmailHTML } from './_email-header.js';
 import { ajustarFiltrosPorIntencao } from '../src/lib/intencao.js';
@@ -609,7 +609,7 @@ async function handler(req) {
     // 1) O recorte que o cliente desenhou: o círculo dele (__raio) ou a lista de cidades.
     const porRaio = await buscarPorRaio(f, lim, tetoFaixa);
     if (porRaio) juntar(porRaio);
-    else juntar(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true${condFiltro(f, tetoFaixa)}&order=desconto_percentual.desc&limit=${lim}`));
+    else juntar(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true${FILTRO_DISPUTAVEL_QS()}${condFiltro(f, tetoFaixa)}&order=desconto_percentual.desc&limit=${lim}`));
     if (achados.size >= lim) return [...achados.values()].sort(porDesconto);
 
     // 2) Não fechou — abre o raio. Centro: o círculo do cliente, senão a 1ª cidade do
@@ -838,7 +838,7 @@ async function handler(req) {
       if (pool.size < CANDIDATOS) {
         for (const cid of cidadesRef.slice(0, 3)) {
           if (pool.size >= CANDIDATOS) break;
-          despejar(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true${uf ? `&estado=eq.${encodeURIComponent(uf)}` : ''}&cidade=ilike.*${encodeURIComponent(cid)}*&desconto_percentual=gte.${DESC_MIN}${tetoPerfil ? `&valor_minimo_ref=lte.${tetoPerfil}` : ''}${tiposFixosDoPerfil ? `&tipo=in.(${tiposPref.map(encodeURIComponent).join(',')})` : ''}&order=desconto_percentual.desc&limit=24`), CANDIDATOS - pool.size, 'regiao', tipoPreferido);
+          despejar(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true${FILTRO_DISPUTAVEL_QS()}${uf ? `&estado=eq.${encodeURIComponent(uf)}` : ''}&cidade=ilike.*${encodeURIComponent(cid)}*&desconto_percentual=gte.${DESC_MIN}${tetoPerfil ? `&valor_minimo_ref=lte.${tetoPerfil}` : ''}${tiposFixosDoPerfil ? `&tipo=in.(${tiposPref.map(encodeURIComponent).join(',')})` : ''}&order=desconto_percentual.desc&limit=24`), CANDIDATOS - pool.size, 'regiao', tipoPreferido);
         }
       }
 
@@ -853,7 +853,7 @@ async function handler(req) {
         const tipos = [...new Set(meus.map(i => arremInfo[i]?.tipo).filter(Boolean))];
         for (const t of tipos.slice(0, 2)) {
           if (pool.size >= CANDIDATOS) break;
-          despejar(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true&tipo=eq.${encodeURIComponent(t)}${uf ? `&estado=eq.${uf}` : ''}&desconto_percentual=gte.${DESC_MIN}${tetoPerfil ? `&valor_minimo_ref=lte.${tetoPerfil}` : ''}&order=desconto_percentual.desc&limit=8`), CANDIDATOS - pool.size);
+          despejar(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true${FILTRO_DISPUTAVEL_QS()}&tipo=eq.${encodeURIComponent(t)}${uf ? `&estado=eq.${uf}` : ''}&desconto_percentual=gte.${DESC_MIN}${tetoPerfil ? `&valor_minimo_ref=lte.${tetoPerfil}` : ''}&order=desconto_percentual.desc&limit=8`), CANDIDATOS - pool.size);
         }
       }
 
@@ -863,7 +863,7 @@ async function handler(req) {
       //    menos que mandar imóvel de outro estado (push/e-mail seguem cidade+filtros).
       const temRegiao = !!(uf || (cidadesRef && cidadesRef.length));
       if (pool.size < CANDIDATOS && !temRegiao) {
-        despejar(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true&desconto_percentual=gte.${DESC_MIN}${tetoPerfil ? `&valor_minimo_ref=lte.${tetoPerfil}` : ''}&order=desconto_percentual.desc&limit=40`), CANDIDATOS - pool.size);
+        despejar(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true${FILTRO_DISPUTAVEL_QS()}&desconto_percentual=gte.${DESC_MIN}${tetoPerfil ? `&valor_minimo_ref=lte.${tetoPerfil}` : ''}&order=desconto_percentual.desc&limit=40`), CANDIDATOS - pool.size);
       }
 
       // Rede de segurança: só oportunidade ATRATIVA (desconto ≥ DESC_MIN) entra no e-mail,

@@ -15,7 +15,7 @@ export const config = { runtime: 'nodejs', maxDuration: 300 };
 import { tituloSemLeiloeiro } from './_leiloeiro-acesso.js';
 import { isCronAuthorized } from './_auth.js';
 import { escapeHtml } from './_sanitize.js';
-import { encerradoPorDatas } from './_leilao-encerrado.js';
+import { encerradoPorDatas, FILTRO_DISPUTAVEL_QS } from './_leilao-encerrado.js';
 import { lanceVitrine } from './_lance-vitrine.js';
 import { cabecalhoEmailHTML } from './_email-header.js';
 
@@ -61,7 +61,7 @@ async function handler(req) {
       const sentSet = new Set((sent || []).map((s) => s.imovel_id));
 
       const filtroLocal = al.cidade_norm ? `&cidade_norm=eq.${encodeURIComponent(al.cidade_norm)}` : '';
-      const rows = await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true&estado=eq.${encodeURIComponent(al.uf)}${filtroLocal}&order=desconto_percentual.desc.nullslast&limit=30`);
+      const rows = await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true${FILTRO_DISPUTAVEL_QS()}&estado=eq.${encodeURIComponent(al.uf)}${filtroLocal}&order=desconto_percentual.desc.nullslast&limit=30`);
       const frescos = (rows || []).filter((im) => im && im.id && !sentSet.has(String(im.id)) && !encerradoPorDatas(im).encerrado).slice(0, POR_ENVIO);
       if (!frescos.length) continue;
 

@@ -317,9 +317,9 @@ function aplicarFiltrosImoveis(base, f, cidadesFiltro, raioAtivo) {
   else if (f.resultadoLeilao) q = q.eq('resultado_leilao', f.resultadoLeilao);
   // SÓ O QUE DÁ PARA DISPUTAR (22/10, dono): "na busca aberta e com os demais filtros devemos encontrar
   // leilões que possamos disputar"; o vencido sem lance aparece SÓ no filtro "Sem lance". `data_fim` é o
-  // último prazo (2ª praça inclusa); sem data (venda direta, ~60% do acervo) continua disputável.
+  // último prazo (2ª praça inclusa); sem data e venda direta (que nunca vence: data velha da CEF) continuam.
   // Mesma regra na RPC buscar_por_raio_v2 (migração 20261022_busca_so_disputaveis.sql).
-  if (f.resultadoLeilao !== 'sem_lance') q = q.or(`data_fim.gte.${hojeBrasilia()},data_fim.is.null`);
+  if (f.resultadoLeilao !== 'sem_lance') q = q.or(`data_fim.gte.${hojeBrasilia()},data_fim.is.null,modalidade.eq.venda_direta`);
   // Intenção da busca — filtra DE FATO pelo objetivo (combina em AND com os demais filtros).
   if (f.intencao === 'revenda')        q = q.in('tipo', TIPOS_LIQUIDOS).gte('desconto_percentual', REVENDA_DESCONTO_MIN);
   else if (f.intencao === 'locacao')   q = q.in('tipo', TIPOS_RESIDENCIAL).gte('desconto_percentual', LOCACAO_DESCONTO_MIN);

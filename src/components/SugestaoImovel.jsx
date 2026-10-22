@@ -86,7 +86,10 @@ export default function SugestaoImovel() {
           let q = supabase.from('imoveis_leilao_mascarado')
             .select('id,titulo,cidade,estado,valor_minimo,desconto_percentual,link_foto,fonte,fonte_id')
             .eq('ativo', true).gt('valor_minimo', 0).not('link_foto', 'is', null)
-            .gte('desconto_percentual', descMin);
+            .gte('desconto_percentual', descMin)
+            // Só o que ainda dá para disputar (regra busca.so_disputaveis, 22/10): último prazo de hoje
+            // em diante (dia de Brasília) ou sem data (venda direta).
+            .or(`data_fim.gte.${new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })},data_fim.is.null,modalidade.eq.venda_direta`);
           if (uf) q = q.eq('estado', uf);                       // trava geográfica: nunca sai do estado
           if (tipos.length) q = q.in('tipo', [...tipos, 'imovel']);
           return q;

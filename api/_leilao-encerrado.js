@@ -47,6 +47,18 @@ function limite(v) {
   return { fim, dia };
 }
 
+/** Dia de hoje em Brasília (AAAA-MM-DD) — `data_fim` é data local. */
+export const hojeBrasilia = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+
+/**
+ * PRÉ-FILTRO na consulta (querystring PostgREST) — regra busca.so_disputaveis (22/10, dono). Os e-mails
+ * pegam os maiores descontos com `limit`, e vencido sem lance tem desconto alto: filtrar só DEPOIS
+ * (encerradoPorDatas) deixava o e-mail sair com menos lotes. Mesma régua da busca: último prazo de hoje
+ * em diante, sem data, ou venda direta (que nunca vence — ver o cabeçalho). Não substitui
+ * `encerradoPorDatas`, que olha também a hora do pregão.
+ */
+export const FILTRO_DISPUTAVEL_QS = () => `&or=(data_fim.gte.${hojeBrasilia()},data_fim.is.null,modalidade.eq.venda_direta)`;
+
 /**
  * Versão PURA: decide a partir de uma linha já em mãos (sem ida ao banco). Usada por quem já
  * carregou o lote — o e-mail de oportunidades, por exemplo, que avalia dezenas de lotes por

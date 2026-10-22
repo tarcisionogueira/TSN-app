@@ -39,6 +39,7 @@ import { assinarUnsub } from './cancelar-alertas.js';
 import { linkRastreado } from './_link-email.js';
 import { utmEmail } from './_utm.js';
 import { lanceVitrine } from './_lance-vitrine.js';
+import { FILTRO_DISPUTAVEL_QS } from './_leilao-encerrado.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -60,7 +61,8 @@ const SEL = 'id,titulo,cidade,estado,tipo,valor_minimo,valor_minimo_2,valor_aval
  * mensagem possível para quem ainda não conhece a plataforma.
  */
 async function escolherImoveis(cidade, uf) {
-  const base = `imoveis_leilao?select=${SEL}&ativo=eq.true&desconto_percentual=gte.25&order=desconto_percentual.desc&limit=3`;
+  // Só o que dá para disputar (busca.so_disputaveis): eram os 3 maiores descontos, e vencido sem lance ganhava.
+  const base = `imoveis_leilao?select=${SEL}&ativo=eq.true${FILTRO_DISPUTAVEL_QS()}&desconto_percentual=gte.25&order=desconto_percentual.desc&limit=3`;
   const tentativas = [
     cidade ? `${base}&cidade=ilike.${encodeURIComponent(cidade)}` : null,
     uf ? `${base}&estado=eq.${encodeURIComponent(uf)}` : null,
