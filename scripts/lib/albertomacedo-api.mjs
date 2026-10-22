@@ -65,16 +65,77 @@ export function aplicarLocalizacao(rows, lotesApi, cidades, estados) {
   return { preenchidos, semDado };
 }
 
-/** Gancho do motor: só age nos itens de pacote (`/lote/`) sem cidade/UF válida. */
+/**
+ * PURO (testável sem rede). DOCUMENTOS do lote pela tabela `lot_documents` da API (22/10).
+ * O site desenha a lista de documentos com onClick (sem <a href>), e o parser de DOM nunca os achou:
+ * 28 lotes ativos com 0 documento, com 722 documentos publicados na API (113 edital, 65 matrícula,
+ * 56 avaliação). `/lote/<slug>` casa por `public_lots.slug`; `/leilao/<uuid>` é o id do EVENTO e
+ * casa por `public_lots.auction_id` — só quando o evento tem UM lote (pacote não tem como saber qual).
+ * `.bin` fica de fora (não é arquivo legível). Nunca apaga documento que o row já tenha.
+ */
+const TIPO_DOC = { edital: 'edital', matricula: 'matricula', avaliacao: 'laudo' };
+export function aplicarDocumentos(rows, lotesApi, docsApi) {
+  const porSlug = new Map(lotesApi.map(l => [l.slug, l]));
+  const porEvento = new Map();
+  for (const l of lotesApi) if (l.auction_id) (porEvento.get(l.auction_id) || porEvento.set(l.auction_id, []).get(l.auction_id)).push(l);
+  const docsPorLote = new Map();
+  for (const d of docsApi) {
+    const url = String(d.file_url || '');
+    if (!/^https?:\/\//i.test(url) || /\.bin(\?|#|$)/i.test(url)) continue;
+    (docsPorLote.get(d.lot_id) || docsPorLote.set(d.lot_id, []).get(d.lot_id)).push({
+      tipo: TIPO_DOC[String(d.document_type || '').toLowerCase()] || 'outro',
+      nome: String(d.title || d.document_type || 'Documento').trim().slice(0, 120), url,
+    });
+  }
+  let comDoc = 0;
+  for (const row of rows) {
+    const id = idDaUrl(row.url_lote);
+    const doEvento = porEvento.get(id);
+    const lote = porSlug.get(id) || (doEvento && doEvento.length === 1 ? doEvento[0] : null);
+    const docs = lote && docsPorLote.get(lote.id);
+    if (!docs?.length) continue;
+    const atuais = Array.isArray(row.anexos) ? row.anexos : [];
+    const novos = docs.filter(d => !atuais.some(a => a?.url === d.url));
+    row.anexos = [...atuais, ...novos];
+    const ed = row.anexos.find(a => a.tipo === 'edital'), mat = row.anexos.find(a => a.tipo === 'matricula');
+    if (ed) row.link_edital = ed.url;
+    if (mat) row.link_matricula = mat.url;
+    comDoc++;
+  }
+  return { comDoc };
+}
+
+const ehUuid = (v) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v || ''));
+
+/**
+ * Gancho do motor. (1) Localização dos itens de pacote (`/lote/`) sem cidade/UF válida.
+ * (2) Documentos de TODOS os lotes pela `lot_documents` (22/10). Uma chave, capturada uma vez.
+ */
 export async function enriquecerLocalizacao(rows) {
-  const alvo = rows.filter(r => /\/lote\//.test(r.url_lote || '') && !(r.cidade && ufValida(r.estado)));
-  if (!alvo.length) return 'localização pela API: nenhum item de pacote sem cidade';
-  const slugs = [...new Set(alvo.map(r => idDaUrl(r.url_lote)).filter(Boolean))];
-  const chave = await capturarChave(`/lote/${slugs[0]}`);
-  const lotes = await getApi(`public_lots?select=slug,city_id,state_id&slug=in.(${slugs.map(encodeURIComponent).join(',')})`, chave);
-  const ids = (k) => [...new Set(lotes.map(l => l[k]).filter(Boolean))];
-  const cidades = ids('city_id').length ? await getApi(`cities?select=id,name&id=in.(${ids('city_id').join(',')})`, chave) : [];
-  const estados = ids('state_id').length ? await getApi(`states?select=id,code&id=in.(${ids('state_id').join(',')})`, chave) : [];
-  const { preenchidos, semDado } = aplicarLocalizacao(alvo, lotes, cidades, estados);
-  return `localização pela API: ${preenchidos}/${alvo.length} item(ns) de pacote com cidade${semDado ? ` · ${semDado} sem dado na API` : ''}`;
+  const ids = [...new Set(rows.map(r => idDaUrl(r.url_lote)).filter(Boolean))];
+  if (!ids.length) return 'API: nenhum lote';
+  const chave = await capturarChave(`/${/\/lote\//.test(rows[0].url_lote || '') ? 'lote' : 'leilao'}/${idDaUrl(rows[0].url_lote)}`);
+  const slugs = ids.filter(i => !ehUuid(i)), eventos = ids.filter(ehUuid);
+  const lotes = [];
+  const enc = (xs) => xs.map(encodeURIComponent).join(',');
+  for (let i = 0; i < slugs.length; i += 50) lotes.push(...await getApi(`public_lots?select=id,slug,auction_id,city_id,state_id&slug=in.(${enc(slugs.slice(i, i + 50))})`, chave));
+  for (let i = 0; i < eventos.length; i += 50) lotes.push(...await getApi(`public_lots?select=id,slug,auction_id,city_id,state_id&auction_id=in.(${enc(eventos.slice(i, i + 50))})`, chave));
+
+  // (1) localização — só itens de pacote sem cidade/UF
+  const alvoLoc = rows.filter(r => /\/lote\//.test(r.url_lote || '') && !(r.cidade && ufValida(r.estado)));
+  let msgLoc = 'nenhum item de pacote sem cidade';
+  if (alvoLoc.length) {
+    const idsDe = (k) => [...new Set(lotes.map(l => l[k]).filter(Boolean))];
+    const cidades = idsDe('city_id').length ? await getApi(`cities?select=id,name&id=in.(${idsDe('city_id').join(',')})`, chave) : [];
+    const estados = idsDe('state_id').length ? await getApi(`states?select=id,code&id=in.(${idsDe('state_id').join(',')})`, chave) : [];
+    const { preenchidos, semDado } = aplicarLocalizacao(alvoLoc, lotes, cidades, estados);
+    msgLoc = `${preenchidos}/${alvoLoc.length} item(ns) de pacote com cidade${semDado ? ` · ${semDado} sem dado na API` : ''}`;
+  }
+
+  // (2) documentos
+  const loteIds = [...new Set(lotes.map(l => l.id).filter(Boolean))];
+  const docs = [];
+  for (let i = 0; i < loteIds.length; i += 50) docs.push(...await getApi(`lot_documents?select=lot_id,title,file_url,document_type&lot_id=in.(${enc(loteIds.slice(i, i + 50))})`, chave));
+  const { comDoc } = aplicarDocumentos(rows, lotes, docs);
+  return `API: localização ${msgLoc} · documentos em ${comDoc}/${rows.length} lote(s) (${docs.length} na API)`;
 }
