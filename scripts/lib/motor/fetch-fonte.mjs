@@ -86,7 +86,10 @@ export function criarMotorFetch(proposito) {
     else try {
       const c = new AbortController();
       const t = setTimeout(() => c.abort(), 20000);
-      const r = await fetch(url, { signal: c.signal, headers: { 'User-Agent': UA, 'Accept-Language': 'pt-BR,pt;q=0.9', Accept: 'text/html,application/xhtml+xml' } });
+      let r = await fetch(url, { signal: c.signal, headers: { 'User-Agent': UA, 'Accept-Language': 'pt-BR,pt;q=0.9', Accept: 'text/html,application/xhtml+xml' } });
+      // 22/10 (#292): servidores IIS (Baston, Nova Serrana, PW, Milan) respondem 400 a UA de navegador e abrem
+      // sem cabeçalho nenhum — uma 2ª tentativa "pelada" antes de desistir do grátis.
+      if (r.status === 400) r = await fetch(url, { signal: c.signal });
       clearTimeout(t);
       if (r.ok) {
         const html = await textoComCharset(r);

@@ -43,19 +43,24 @@ export async function enumerar(fetchFonte, tenant, cfg, { maxPages, debug, semBD
   // e a página do lote só se preenche por JS/sessão PHP, `parse.detalhesDoCatalogo(html, base)` devolve
   // Map url→det e o laço de coleta usa o det daqui, sem abrir o detalhe. Fonte sem o gancho: intacta.
   const detCatalogo = new Map();
+  const eventosPaginas = new Map();
   let fetchOk = false, via = null, eventosCount = null, htmlPagina1 = null, htmlEvento1 = null, eventosDeclaramVazio = false;
   for (let p = 1; p <= maxPages; p++) {
-    const url = `${tenant.base}${tenant.catalogo ?? cfg.catalogo}${p > 1 ? `?${cfg.paginaParam}=${p}` : ''}`; // tenant.catalogo: id de categoria varia por site (Viva, 10/10)
+    // `paginaOffset` (22/10, Baston): site que numera a partir de 0 (`?page=1` é a 2ª página) usa -1.
+    const url = `${tenant.base}${tenant.catalogo ?? cfg.catalogo}${p > 1 ? `?${cfg.paginaParam}=${p + (cfg.paginaOffset || 0)}` : ''}`; // tenant.catalogo: id de categoria varia por site (Viva, 10/10)
     const r = await fetchFonte(url, { semBD });
     // Página 1 recusada: guarda o `via` da FALHA (ex.: 'dom-403') para o motivo em fonte_saude.
     if (!r.html) { if (p === 1) via = r.via || null; break; }
     fetchOk = true; via = via || r.via;
     if (p === 1) htmlPagina1 = r.html;
-    const antes = urls.size;
+    const antes = urls.size, antesEv = eventosPaginas.size;
     for (const [id, u] of cfg.parse.extrairUrlsDeLote(r.html, tenant.base)) urls.set(id, u);
+    // `eventosEmTodasPaginas` (22/10, Baston): o catálogo PAGINADO lista leilões, não lotes — sem isto o
+    // nível 2 só via os eventos da página 1 e a paginação parava nela (nenhum lote novo).
+    if (cfg.eventosEmTodasPaginas && cfg.parse.extrairUrlsDeEvento) for (const [id, u] of cfg.parse.extrairUrlsDeEvento(r.html, tenant.base)) eventosPaginas.set(id, u);
     if (cfg.parse.detalhesDoCatalogo) for (const [u, det] of cfg.parse.detalhesDoCatalogo(r.html, tenant.base)) detCatalogo.set(u, det);
     if (debug) console.log(`   [${tenant.fonte}] pág ${p} (${r.via}): +${urls.size - antes} (total ${urls.size})`);
-    if (urls.size === antes) break;
+    if (urls.size === antes && eventosPaginas.size === antesEv) break;
     await sleep(400);
   }
 
@@ -74,7 +79,7 @@ export async function enumerar(fetchFonte, tenant, cfg, { maxPages, debug, semBD
   // mesmo assim o nível 2 saía sem número nenhum, porque só a 2ª busca (esta, agora removida)
   // podia falhar por conta própria.
   if (cfg.parse.extrairUrlsDeEvento && fetchOk) {
-    const eventos = [...cfg.parse.extrairUrlsDeEvento(htmlPagina1, tenant.base).values()]
+    const eventos = [...(cfg.eventosEmTodasPaginas ? eventosPaginas : cfg.parse.extrairUrlsDeEvento(htmlPagina1, tenant.base)).values()]
       .slice(0, cfg.maxEventos ?? 12);
     eventosCount = eventos.length;
     if (debug) console.log(`   [${tenant.fonte}] nível 2: ${eventos.length} evento(s)`);
