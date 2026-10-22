@@ -12,10 +12,8 @@
  *    Valor de 2º leilão: R$ 124.000,00
  *    Matrícula nº: 106.698
  *    Processo nº: 0100309-16.2016.5.01.0034"
- * Cidade/UF vem do texto livre da descrição ("Rio de Janeiro/RJ"). NENHUM link .pdf apareceu
- * no HTML cru dos 2 lotes testados — "Edital"/"Documentos" são ABAS na página, prováveis de
- * carregar por clique/AJAX; `anexos` provavelmente sai vazio até um recon confirmar a URL real
- * dos arquivos — melhor não ter documento do que inventar um link que não existe.
+ * Cidade/UF vem do texto livre da descrição ("Rio de Janeiro/RJ"). Documentos: ver documentosLeje
+ * (22/10) — estão no HTML, em listas escondidas, com link docs.php?doc=N.
  */
 import { inferirTipo, extrairArea, proximaData, checarQualidade } from './leilaopro-parse.mjs';
 import { num, plaus, textoDe, textoComLinhas, titleCase, anexosDeHtml, montarRowDom, cidadeUFBare } from './dom-parse-util.mjs';
@@ -145,6 +143,12 @@ export function parseDetalhe(html, url) {
   const modalidade = /extrajudicial/i.test(txt) ? 'extrajudicial' : 'judicial';
   const mat = (txt.match(/Matr[íi]cula\s*n[º°]?\s*:?\s*([\d.]{3,})/i) || [])[1] || null;
   const docs = anexosDeHtml(html, url);
+  const docsLeje = documentosLeje(html, url);
+  if (docsLeje.length) {
+    docs.anexos = [...docsLeje, ...(docs.anexos || []).filter(a => !docsLeje.some(d => d.url === a.url))];
+    docs.link_edital = docsLeje.find(d => d.tipo === 'edital')?.url || docs.link_edital;
+    docs.link_matricula = docsLeje.find(d => d.tipo === 'matricula')?.url || docs.link_matricula;
+  }
 
   // FOTO (20/10): a genérica (fotoDeHtml, dentro de `docs`) pegava o LOGO DO TRIBUNAL (`tribunais/...png`) — a
   // galeria do lote é a dos `swiper-slide`; o resto da página são cartões de OUTROS leilões, que nunca podem
@@ -160,6 +164,32 @@ export function parseDetalhe(html, url) {
     numero_matricula: mat, ...docs, link_foto: galeria[0] || null, fotos: galeria,
     encerrado: /\b(arrematado|vendido|deserto|cancelad[oa]|suspens[oa])\b/i.test(txt.slice(0, 1500)),
   };
+}
+
+/**
+ * DOCUMENTOS DO LOTE (22/10, #284). Não são carregados por AJAX, como este cabeçalho supunha: vêm no
+ * próprio HTML, em listas escondidas `<div id="ab_anexos">` / `<div id="ab_edital">` (as abas só as
+ * mostram). O link é `docs.php?doc=<n>` — SEM .pdf no endereço (o ".pdf" está só no nome), e por isso
+ * o anexosDeHtml genérico, que exige .pdf no href, nunca os viu: 42 lotes ativos com 0 documento.
+ * Conferido pelo Firecrawl no lote 18670: relação de imóveis e avaliações, termo de constrição,
+ * certidão de valor venal, extrato de débitos municipais e MATRÍCULA 110.036.
+ */
+export function documentosLeje(html, urlBase) {
+  const anexos = [];
+  for (const bloco of ['ab_edital', 'ab_anexos']) {
+    const m = String(html || '').match(new RegExp(`<div[^>]+id=["']${bloco}["'][^>]*>([\\s\\S]*?)</div>`, 'i'));
+    if (!m) continue;
+    for (const a of m[1].matchAll(/<a[^>]+href=["']([^"']*docs\.php\?doc=\d+[^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
+      let url; try { url = new URL(a[1].replace(/&amp;/g, '&'), urlBase).href; } catch { continue; }
+      if (anexos.some(x => x.url === url)) continue;
+      const nome = textoDe(a[2]).replace(/\.pdf$/i, '').trim().slice(0, 120) || 'Documento';
+      const tipo = bloco === 'ab_edital' || /edital/i.test(nome) ? 'edital'
+        : /matr[íi]cula/i.test(nome) ? 'matricula'
+        : /laudo|avalia[çc]/i.test(nome) ? 'laudo' : 'outro';
+      anexos.push({ tipo, nome, url });
+    }
+  }
+  return anexos;
 }
 
 export const montarRow = (url, det, tenant) => montarRowDom(url, det, tenant, idDaUrl(url), inferirTipo);

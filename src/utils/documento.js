@@ -36,8 +36,10 @@ export const ehUrl = (v) => typeof v === 'string' && /^https?:\/\//i.test(v.trim
 // com o arquivo no banco e o selo aceso. Mesma régua do `doc_arquivo()` do banco.
 // Pestana (22/10): documento por endpoint de API sem extensão (.../edital/20683019) — mesmo padrão do banco.
 const DOC_API_PESTANA = /^https?:\/\/api\.pestanaleiloes\.com\.br\/sgl\/v1\/leiloes\/\d+\/(lotes\/\d+\/)?(edital|editallote|matricula|laudo|regulamento|anexos?|documentos?)\/\d+\/?(\?|#|$)/i;
+// LEJE (22/10): docs.php?doc=N — o ".pdf" está só no nome do link.
+const DOC_LEJE = /^https?:\/\/(www\.)?leje\.com\.br\/docs\.php\?doc=\d+$/i;
 export const ehDocArquivo = (v) => ehUrl(v)
-  && (/\.(pdf|docx?|odt|rtf)(\?|#|$)/i.test(v.trim()) || /\/storage\/v1\/object\/(sign|public)\//i.test(v) || DOC_API_PESTANA.test(v.trim()));
+  && (/\.(pdf|docx?|odt|rtf)(\?|#|$)/i.test(v.trim()) || /\/storage\/v1\/object\/(sign|public)\//i.test(v) || DOC_API_PESTANA.test(v.trim()) || DOC_LEJE.test(v.trim()));
 
 /**
  * Matrícula: além de ser arquivo, não pode ser o `matricula.asp` da Caixa — aquela

@@ -327,7 +327,13 @@ function parseDetalhe(html, url) {
   const docs = [];
   for (const m of html.matchAll(/<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
     const href = m[1]; const label = decodificarEntidades((m[2] || '').replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
-    if (/\.pdf(\?|#|$)/i.test(href) || /edital|matr[íi]cula|laudo/i.test(label)) {
+    // FERREIRA (22/10, #284): o bloco "Documentos" leva a uma pasta do Google Drive ou à página do
+    // processo no portal da PGFN/Caixa (venda direta), e "Processo" vem com download="…pdf" — o filtro
+    // só via .pdf e 32 lotes ficavam sem nada. Entram como 'outro' (link útil; não é PDF legível, então
+    // não acende selo). O "Arquivos" da Purcena (/leiloes/N/arquivos) leva ao LOGIN e fica fora.
+    const docExterno = /(drive|docs)\.google\.com|comprei\.pgfn\.gov\.br|compreicaixa\.com\.br/i.test(href)
+      || (/\sdownload\s*=/i.test(m[0]) && !/^javascript:/i.test(href));
+    if (/\.pdf(\?|#|$)/i.test(href) || /edital|matr[íi]cula|laudo/i.test(label) || docExterno) {
       let abs; try { abs = new URL(href, url).href; } catch { continue; }
       docs.push({ url: abs, label: label.slice(0, 60) });
     }
