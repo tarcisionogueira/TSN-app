@@ -90,7 +90,9 @@ const MAX_EVENTOS = Number(process.env.GESTAO_MAX_EVENTOS || (process.env.GESTAO
 // `-escopo-reduzido` em `estrategia` e excluem essas linhas da comparação/aprendizado.
 const ESCOPO_REDUZIDO = !!process.env.GESTAO_DOMINIOS || MAX_EVENTOS < MAX_EVENTOS_PADRAO;
 const ESTRATEGIA = ESCOPO_REDUZIDO ? 'principal-escopo-reduzido' : 'principal';
-const DOC_CAP = Number(process.env.GESTAO_DOC_CAP || 30);
+// 22/10: 30 era o teto pensado para o Bright Data (pago). No runner residencial a busca é grátis
+// (2 páginas por lote, o edital do evento em cache) — o teto de 30 deixava o Vinco inteiro sem doc.
+const DOC_CAP = Number(process.env.GESTAO_DOC_CAP || (process.env.GESTAO_HEADLESS === '1' ? 400 : 30));
 const DRYRUN = process.env.GESTAO_DRYRUN !== '0';
 const DEBUG = process.env.GESTAO_DEBUG === '1';
 const RESIDENCIAL = process.env.GESTAO_HEADLESS === '1';
@@ -487,7 +489,8 @@ function extrairAnexosCarregar(html, urlBase) {
     const label = decodificarEntidades((m[3] || '').replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
     let abs; try { abs = new URL(caminho, urlBase); } catch { continue; }
     if (abs.protocol !== 'http:' && abs.protocol !== 'https:') continue;
-    const tipo = /matr[íi]cula/i.test(label) ? 'matricula' : (/edital/i.test(label) ? 'edital' : (/laudo/i.test(label) ? 'laudo' : 'outro'));
+    // "Auto de Penhora e Avaliação" (Vinco, 22/10) é o laudo do processo judicial.
+    const tipo = /matr[íi]cula/i.test(label) ? 'matricula' : (/edital/i.test(label) ? 'edital' : (/laudo|avalia[çc][ãa]o/i.test(label) ? 'laudo' : 'outro'));
     docs.push({ tipo, nome: (label || 'Documento').slice(0, 80), url: abs.href });
   }
   return docs;
@@ -535,7 +538,32 @@ function extrairDocsDoHtml(html, urlBase) {
 // duas páginas separadas (ver extrairAnexosCarregar acima). `leilaoAnexos.php` é por EVENTO
 // (idLeilao), não por lote: cacheado aqui pra não pagar 1 request por lote do mesmo leilão.
 async function enriquecerDocumentos(rows) {
-  const alvo = rows.filter(r => !(r.anexos && r.anexos.length)).slice(0, DOC_CAP);
+  // DOCUMENTO JÁ LIDO NÃO SE PERDE (22/10, Vinco 7399 sem edital/matrícula na tela de relatório).
+  // Dois defeitos somados: (1) o filtro "sem documento" olhava o lote RECÉM-LIDO, que nunca tem
+  // anexo — eram sempre os MESMOS 30 primeiros da lista (o Vinco nunca chegava); (2) o row sai do
+  // parser com link_edital = página do evento, e o upsert devolvia esse placeholder (e anexos/
+  // matrícula nulos) por cima do documento gravado na rodada anterior. Agora o que o banco já tem
+  // volta para o row antes de gravar, e só quem está SEM documento entra na fila — os de leilão
+  // mais próximo primeiro.
+  const ja = new Map();
+  const ids = rows.map(r => r.fonte_id);
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data, error } = await supabase.from('imoveis_leilao').select('fonte_id,anexos,link_edital,link_matricula')
+      .in('fonte_id', ids.slice(i, i + 200));
+    if (error) { console.warn(`  documentos já gravados ilegíveis (${error.message}) — busca todos`); ja.clear(); break; }
+    for (const r of data || []) if (Array.isArray(r.anexos) && r.anexos.length) ja.set(r.fonte_id, r);
+  }
+  for (const row of rows) {
+    const a = ja.get(row.fonte_id);
+    if (!a) continue;
+    row.anexos = a.anexos;
+    if (a.link_matricula) row.link_matricula = a.link_matricula;
+    if (a.link_edital && !/leilao\.php\?idLeilao=/.test(a.link_edital)) row.link_edital = a.link_edital;
+  }
+  const alvo = rows.filter(r => !(r.anexos && r.anexos.length))
+    .sort((x, y) => String(x.data_leilao || '9999').localeCompare(String(y.data_leilao || '9999')))
+    .slice(0, DOC_CAP);
+  console.log(`\n📄 ${ja.size} lote(s) já com documento (mantidos) · ${rows.length - ja.size} sem`);
   if (!alvo.length) return;
   console.log(`\n📄 Buscando documento (loteAnexos/leilaoAnexos) pra ${alvo.length}/${rows.length} sem doc, cap ${DOC_CAP}...`);
   const cacheEdital = new Map(); // idLeilao -> docs[] (edital/regras), evita refetch por lote
@@ -735,8 +763,14 @@ async function main() {
   // Depois do DRYRUN de propósito: busca de documento gasta Bright Data por lote, e não
   // faz sentido pagar isso numa execução que não vai gravar nada mesmo.
   await enriquecerDocumentos(prontos);
-  const { error } = await supabase.from('imoveis_leilao').upsert(prontos, { onConflict: 'fonte_id', ignoreDuplicates: false });
-  if (error) { console.error('erro ao gravar:', error.message); process.exit(1); }
+  // Upsert em GRUPOS de mesmo conjunto de colunas (22/10): num lote misto o PostgREST grava NULL na
+  // coluna que falta — e o lote sem anexo nesta rodada apagava o de quem tinha (mesma regra dos outros coletores).
+  const grupos = new Map();
+  for (const r of prontos) { const k = Object.keys(r).sort().join(','); (grupos.get(k) || grupos.set(k, []).get(k)).push(r); }
+  for (const g of grupos.values()) {
+    const { error } = await supabase.from('imoveis_leilao').upsert(g, { onConflict: 'fonte_id', ignoreDuplicates: false });
+    if (error) { console.error('erro ao gravar:', error.message); process.exit(1); }
+  }
   console.log(`✅ ${prontos.length} imóveis do cluster Gestão de Leilões gravados/atualizados.`);
   // SAÚDE DA FONTE (08/08): entra no monitor de regressão junto das demais. Antes esta fonte
   // não escrevia em `fonte_saude`, então nunca ganhava piso aprendido e uma quebra passaria batido.
