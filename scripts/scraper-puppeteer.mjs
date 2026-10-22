@@ -826,19 +826,42 @@ async function scraperMegaLeiloes(browser) {
   const imoveis = [];
   const seen = new Set();
   const MAX_PAGINAS = 300; // trava de segurança (não-silenciosa)
+  // PAGINAR ATÉ A ÚLTIMA QUE O SITE DIZ TER (22/10, #275). O laço parava no 1º erro de navegação ou
+  // página vazia e devolvia o que tinha como se fosse tudo: em 22/10 saíram 397 de 610 ("Exibindo
+  // 1 - 48 de 610 itens. Página 1 de 13"), saúde ok. Agora o total vem do próprio rodapé, a página
+  // que falha é tentada de novo, e o que faltar vira coletaParcial — trava o sweep e a saúde.
+  let totalSite = null, totalPaginas = null;
+  const abrir = async (url) => {
+    for (let t = 0; t < 2; t++) {
+      try {
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        try { await page.waitForSelector('div[data-key] .card', { timeout: 8000 }); } catch { /* página vazia: quem decide é a contagem de cards */ }
+        const cards = await coletarMegaPagina(page);
+        if (cards.length || t === 1) return { cards };
+      } catch (e) { if (t === 1) return { erro: e.message.slice(0, 60) }; }
+      await new Promise(r => setTimeout(r, 5000));
+    }
+    return { cards: [] };
+  };
   try {
     let p = 1;
     for (; p <= MAX_PAGINAS; p++) {
       const url = `https://www.megaleiloes.com.br/imoveis?pagina=${p}`;
-      try {
-        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-        try { await page.waitForSelector('div[data-key] .card', { timeout: 8000 }); } catch {}
-      } catch (e) {
-        console.log(`    Mega p${p}: erro de navegação (${e.message.slice(0, 50)}) — parando`);
+      const { cards = [], erro } = await abrir(url);
+      if (p === 1 || totalSite == null) {
+        const resumo = await page.evaluate(() => document.querySelector('.summary')?.textContent || '').catch(() => '');
+        const m = String(resumo).replace(/\s+/g, ' ').match(/de\s+([\d.]+)\s+itens.*?P[áa]gina\s+\d+\s+de\s+(\d+)/i);
+        if (m) { totalSite = Number(m[1].replace(/\./g, '')); totalPaginas = Number(m[2]); console.log(`    Mega: site diz ${totalSite} itens em ${totalPaginas} páginas`); }
+      }
+      if (erro) {
+        console.log(`    Mega p${p}: erro de navegação 2× (${erro}) — parando`);
+        if (!totalPaginas || p <= totalPaginas) imoveis.coletaParcial = `MEGA: navegação falhou na p${p}${totalPaginas ? ` de ${totalPaginas}` : ''}`;
         break;
       }
-      const cards = await coletarMegaPagina(page);
-      if (!cards.length) { console.log(`    Mega p${p}: 0 cards — fim da paginação`); break; }
+      if (!cards.length) {
+        if (totalPaginas && p <= totalPaginas) imoveis.coletaParcial = `MEGA: p${p} de ${totalPaginas} veio vazia 2×`;
+        console.log(`    Mega p${p}: 0 cards — fim da paginação`); break;
+      }
 
       let novos = 0;
       for (const c of cards) {
@@ -848,9 +871,13 @@ async function scraperMegaLeiloes(browser) {
         if (im) { imoveis.push(im); novos++; }
       }
       console.log(`    Mega p${p}: ${cards.length} ativos (${novos} novos, acumulado ${imoveis.length})`);
-      if (novos === 0) { console.log('    Mega: página sem novos — fim da paginação'); break; }
+      if (totalPaginas && p >= totalPaginas) break;
+      if (novos === 0 && !totalPaginas) { console.log('    Mega: página sem novos — fim da paginação'); break; }
       await new Promise(r => setTimeout(r, 1000));
     }
+    // Cards VISTOS (não os mapeados: mapearMega recusa lote sem valor, e isso não é falha de coleta).
+    if (totalSite && seen.size < totalSite * 0.95 && !imoveis.coletaParcial) imoveis.coletaParcial = `MEGA: viu ${seen.size} de ${totalSite} itens do site`;
+    if (imoveis.coletaParcial) console.log(`    ⚠️ ${imoveis.coletaParcial}`);
     if (p > MAX_PAGINAS) console.log(`    ⚠️ Mega atingiu o limite de ${MAX_PAGINAS} páginas — pode haver mais imóveis`);
     console.log(`  Mega Leilões: ${imoveis.length} imóveis ativos coletados`);
     return imoveis;
@@ -3587,6 +3614,17 @@ async function scraperLeiloesJudiciais(browser) {
       await new Promise(r => setTimeout(r, 150));
     }
     console.log(`    LJUD: ${bensMap.size} bens colhidos (${vistos200} páginas 200)`);
+    // #275 (22/10): só statuslote_id=1 ("Aberto para Lance") entra. O site soma ~1.352 e a rodada ~1.259 —
+    // este log mostra quantos dos que ficam de fora são "em breve" (que talvez devessem entrar) e quantos
+    // estão encerrados/suspensos, antes de mexer na regra.
+    {
+      const porStatus = new Map();
+      for (const it of bensMap.values()) {
+        const k = `${it.statuslote_id ?? '?'}${it.nm_statuslote || it.statuslote ? ` ${it.nm_statuslote || it.statuslote}` : ''}`;
+        porStatus.set(k, (porStatus.get(k) || 0) + 1);
+      }
+      console.log(`    LJUD por status: ${[...porStatus].sort((x, y) => y[1] - x[1]).map(([k, n]) => `${k}: ${n}`).join(' · ')}`);
+    }
 
     const imoveis = [...bensMap.values()].map(it => {
       if (Number(it.statuslote_id) !== 1) return null; // só "Aberto para Lance"
