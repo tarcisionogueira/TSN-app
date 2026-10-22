@@ -932,6 +932,11 @@ export default function Checkout() {
 
   // Tenta pagar via Asaas (backup) com dados já preenchidos
   const pagarAsaas = async () => {
+    // O preço promocional de plano recorrente só existe no Mercado Pago (api/mp.js → promo_plano_preco).
+    if (promoCode && ['top2', 'veiculos', 'combo'].includes(planoApiKey)) {
+      setErro('O pagamento com o preço promocional está indisponível agora. Tente de novo em alguns minutos.');
+      return;
+    }
     setLoading(true);
     setErro('');
     setOfertandoFallback(false);
@@ -986,9 +991,13 @@ export default function Checkout() {
         const res = await apiCall('/api/mp', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action, plano: planoApiKey, email: user.email, nome: nomeUsuario, cpf: cpfUsuario }),
+          // promo (22/10): o servidor confere o link e cobra o preço promocional; sem o código ia o preço cheio.
+          body: JSON.stringify({ action, plano: planoApiKey, email: user.email, nome: nomeUsuario, cpf: cpfUsuario, ...(promoCode && planoRecorrente ? { promo: promoCode } : {}) }),
         });
         const data = await res.json();
+        // Link promocional recusado pelo servidor (vencido, já usado, benefício perdido…): mostra o motivo e PARA —
+        // cair no Asaas cobraria o preço cheio de quem clicou numa oferta.
+        if (!res.ok && promoCode && planoRecorrente) { setErro(data.error || 'Este link promocional não vale para a sua conta.'); setLoading(false); return; }
         if (!res.ok) throw new Error(data.error || 'MP indisponível');
         const link = data.initPoint || data.init_point;
         setGatewayUsado('mp');
@@ -1006,6 +1015,13 @@ export default function Checkout() {
         // webhook que confirmar por último cancela o outro (api/_recorrencia-unica.js, 04/10).
         console.warn('[checkout] MP falhou, tentando Asaas:', mpErr.message);
       }
+    }
+
+    // Link promocional de plano recorrente: o preço promocional só existe no Mercado Pago — o Asaas cobraria o cheio.
+    if (promoCode && ['top2', 'veiculos', 'combo'].includes(planoApiKey)) {
+      setErro('O pagamento com o preço promocional está indisponível agora. Tente de novo em alguns minutos.');
+      setLoading(false);
+      return;
     }
 
     // ── Asaas (backup automático) ─────────────────────────────────────

@@ -365,20 +365,47 @@ async function criarPreferenciaProduto({ produto_tipo, produto_id, ref, email, n
   return { preferenceId: pref.id, initPoint: pref.init_point, sandboxPoint: pref.sandbox_init_point, compra_id: ini.compra_id, valor: ini.valor };
 }
 
+// PREÇO PROMOCIONAL DE PLANO (22/10, dono). O link de plano (`/promo/<código>` → checkout?promo=) só MOSTRAVA o
+// desconto: o preapproval saía com o preço de planos_config. Agora o servidor confere o código (RPC
+// promo_plano_preco: link ativo, do MESMO plano, no prazo, reservado a este usuário, só explorador, e benefício
+// não perdido por assinatura promocional cancelada/pausada) e cobra o valor do link. Código inválido NÃO cai no
+// preço cheio calado — erra com o motivo: a pessoa clicou numa oferta e tem de saber que ela não vale.
+const MOTIVO_PROMO = {
+  link_inativo: 'Este link promocional não está mais ativo.',
+  link_nao_e_deste_plano: 'Este link promocional não vale para este plano.',
+  link_vencido: 'Este link promocional venceu.',
+  link_ja_usado: 'Este link promocional já foi usado por outra pessoa.',
+  so_para_explorador: 'Este link promocional é só para quem ainda não tem plano pago.',
+  beneficio_perdido: 'O preço promocional foi perdido porque a assinatura anterior com ele foi interrompida. A nova contratação é pelo preço normal.',
+};
+async function precoPromocional(promo, userId, planoKey) {
+  if (!promo) return null;
+  const r = await fetch(`${SB_URL}/rest/v1/rpc/promo_plano_preco`, {
+    method: 'POST',
+    headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ p_codigo: String(promo), p_user_id: userId, p_plano: planoKey }),
+  });
+  if (!r.ok) throw new Error(`Não foi possível conferir o link promocional (HTTP ${r.status}). Tente de novo em instantes.`);
+  const j = await r.json();
+  if (!j?.ok) throw new Error(MOTIVO_PROMO[j?.motivo] || 'Este link promocional não vale para a sua conta.');
+  return { preco: Number(j.preco), codigo: j.codigo };
+}
+
 /**
  * Cria assinatura recorrente (Preapproval) para planos mensais.
  * MP cobra automaticamente todo mês no cartão salvo.
  */
-async function criarAssinatura({ plano: planoKey, email, nome, cpf, userId }) {
+async function criarAssinatura({ plano: planoKey, email, nome, cpf, userId, promo }) {
   const cfg = (await carregarPrecos())[planoKey];
   if (!cfg || !cfg.recorrente) throw new Error(`Plano ${planoKey} não é recorrente`);
+  const pr = await precoPromocional(promo, userId, planoKey);
 
   const body = {
-    reason:            cfg.nome,
+    reason:            pr ? `${cfg.nome} — condição promocional` : cfg.nome,
     auto_recurring: {
       frequency:       cfg.frequency ?? 1,
       frequency_type:  cfg.frequency_type ?? 'months',
-      transaction_amount: cfg.valor,
+      transaction_amount: pr ? pr.preco : cfg.valor,
       currency_id:     'BRL',
     },
     payer_email:       email,
@@ -386,14 +413,14 @@ async function criarAssinatura({ plano: planoKey, email, nome, cpf, userId }) {
     notification_url:  WEBHOOK,
     external_reference: `${userId}|${planoKey}`,
     status:            'pending',
-    metadata:          { userId, planoKey, cpf },
+    metadata:          { userId, planoKey, cpf, ...(pr ? { promo: pr.codigo } : {}) },
     // Assinaturas: somente cartão de crédito
     payment_methods_allowed: [
       { payment_type: 'credit_card' },
     ],
   };
 
-  const sub = await mpPost('/preapproval', body, `tsn-assinatura-${userId}-${planoKey}`);
+  const sub = await mpPost('/preapproval', body, `tsn-assinatura-${userId}-${planoKey}${pr ? `-${pr.codigo}` : ''}`);
   return {
     assinaturaId: sub.id,
     initPoint:    sub.init_point,
@@ -406,14 +433,15 @@ async function criarAssinatura({ plano: planoKey, email, nome, cpf, userId }) {
  * tokenizado no browser (SDK do MP) e cria o preapproval já autorizado. O cliente
  * nunca sai do BidPro. Preço SEMPRE do servidor (PLANOS_CONFIG), nunca do cliente.
  */
-async function criarAssinaturaTransparente({ plano: planoKey, email, cardTokenId, userId, deviceId }) {
+async function criarAssinaturaTransparente({ plano: planoKey, email, cardTokenId, userId, deviceId, promo }) {
   const cfg = (await carregarPrecos())[planoKey];
   if (!cfg || !cfg.recorrente) throw new Error(`Plano ${planoKey} não é recorrente`);
+  const pr = await precoPromocional(promo, userId, planoKey);
   if (!cardTokenId) throw new Error('Token do cartão ausente');
   if (!email) throw new Error('E-mail do pagador ausente');
 
   const body = {
-    reason:             cfg.nome,
+    reason:             pr ? `${cfg.nome} — condição promocional` : cfg.nome,
     external_reference: `${userId}|${planoKey}`,
     payer_email:        email,
     card_token_id:      cardTokenId,
@@ -426,7 +454,7 @@ async function criarAssinaturaTransparente({ plano: planoKey, email, cardTokenId
     auto_recurring: {
       frequency:          cfg.frequency ?? 1,
       frequency_type:     cfg.frequency_type ?? 'months',
-      transaction_amount: Number(cfg.valor), // servidor manda no preço
+      transaction_amount: pr ? pr.preco : Number(cfg.valor), // servidor manda no preço (o promocional também vem do banco)
       currency_id:        'BRL',
     },
   };
