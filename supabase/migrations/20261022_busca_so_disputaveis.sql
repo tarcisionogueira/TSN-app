@@ -33,6 +33,7 @@ AS $function$
             and (data_ate is null or (i.data_leilao is not null and i.data_leilao <= data_ate))))
       and (coalesce(resultado_filtro, '') = '' or (resultado_filtro = 'nao_apurado' and i.resultado_leilao is null)
            or (resultado_filtro not in ('', 'nao_apurado') and i.resultado_leilao = resultado_filtro))
+      -- regra busca.so_disputaveis (regra_negocio): vencido só no filtro sem_lance
       and (resultado_filtro = 'sem_lance' or i.data_fim is null
            or i.data_fim >= (now() at time zone 'America/Sao_Paulo')::date)
   ),
