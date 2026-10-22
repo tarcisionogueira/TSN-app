@@ -19,8 +19,24 @@ import { tipoVeiculo, marcaModeloAno, RE_MARCA } from './nordeste-veiculo.mjs';
 // É veículo? Palavra de tipo, documento de veículo, ou "MARCA modelo" de marca conhecida no começo.
 const RE_PALAVRA_VEICULO = /\b(ve[íi]culo|autom[óo]vel|carro|motocicleta|motoneta|ciclomotor|moto|caminh[ãa]o|caminhonete|camioneta|[ôo]nibus|micro-?[ôo]nibus|utilit[áa]rio|furg[ãa]o|reboque|semi-?reboque|carreta|placa\s*:?\s*[a-z]{3}-?\d|chassi|renavam)\b/i;
 // Não é veículo inteiro (fica fora mesmo com marca no título).
-const RE_NAO_VEICULO = /\b(sucata|carca[çc]a|pe[çc]as?\s+(avulsas|usadas|diversas)|lote\s+de\s+pe[çc]as|trator|colheitadeira|empilhadeira|retroescavadeira|escavadeira|motoniveladora|p[áa]\s+carregadeira|m[áa]quina|equipamento|implemento|embarca[çc][ãa]o|barco|lancha|jet-?ski|aeronave|avi[ãa]o|helic[óo]ptero|bicicleta|patinete|gerador|compressor)\b/i;
+const RE_NAO_VEICULO = /\b(sucata|carreta\s+(?:agr[íi]cola|graneleira)|carca[çc]a|pe[çc]as?\s+(avulsas|usadas|diversas)|lote\s+de\s+pe[çc]as|trator|colheitadeira|empilhadeira|retroescavadeira|escavadeira|motoniveladora|p[áa]\s+carregadeira|m[áa]quina|equipamento|implemento|embarca[çc][ãa]o|barco|lancha|jet-?ski|aeronave|avi[ãa]o|helic[óo]ptero|bicicleta|patinete|gerador|compressor)\b/i;
 const RE_IMOVEL_FORTE = /\b(im[óo]vel|terreno|apartamento|matr[íi]cula\s+n|casa\s+(t[ée]rrea|residencial)|sala\s+comercial|galp[ãa]o|fazenda|ch[áa]cara|s[íi]tio)\b/i;
+
+/**
+ * Pré-filtro pelo SLUG da URL (21/10, Leilão Brasil/Luthero: a home lista ~290 anúncios de tudo e o
+ * slug é o título — "/eventos/leilao/4399/i-lr-freelander-2-hse-i6-2007-2007/lote"). Só decide quem
+ * ABRIR; quem grava continua sendo `veiculoDoLote` com a ficha lida. Na dúvida, abre.
+ */
+export function slugPareceVeiculo(url) {
+  let t = '';
+  try { t = decodeURIComponent(new URL(url).pathname); } catch { t = String(url || ''); } // padrao-ok: URL inválida = usa o texto cru
+  t = t.replace(/[-_/]+/g, ' ');
+  if (RE_NAO_VEICULO.test(t) || RE_IMOVEL_FORTE.test(t)) return false;
+  if (RE_PALAVRA_VEICULO.test(t)) return true;
+  if (/\b(?:19[5-9]|20[0-4])\d\s+(?:19[5-9]|20[0-4])\d\b/.test(t)) return true; // ano/modelo "2007-2007"
+  if (/\b(?:19[5-9]|20[0-4])\d\s*$/.test(t.replace(/\s*lote\s*$/, ''))) return true; // "monza-sl-1993": ano no fim (abrir é barato)
+  return t.split(/\s+/).some((w) => RE_MARCA.test(w));
+}
 
 export function ehVeiculoInteiro(titulo, descricao = '') {
   const t = String(titulo || '');
@@ -49,7 +65,7 @@ function marcaAnoDoTitulo(titulo) {
     const i = palavras.findIndex((p) => RE_MARCA.test(p));
     if (i >= 0) {
       r.marca = palavras[i].toUpperCase().replace(/^M\.?\s*BENZ$/, 'MERCEDES-BENZ').replace(/^VW$/, 'VOLKSWAGEN').replace(/^GM$/, 'CHEVROLET');
-      r.modelo = palavras.slice(i + 1).join(' ').split(/,/)[0].trim().slice(0, 80) || r.modelo;
+      r.modelo = palavras.slice(i + 1).join(' ').split(/,/)[0].replace(/^modelo\s+/i, '').replace(/\s+(?:19|20)\d\d$/, '').trim().slice(0, 80) || r.modelo;
     }
   }
   if (!r.ano_modelo) {

@@ -8,6 +8,7 @@
 import {
   TENANTS, extrairUrlsDeLote, idDaUrl, parseDetalhe, montarRow, checarQualidade,
 } from '../../leilaobrasil-parse.mjs';
+import { slugPareceVeiculo } from '../../veiculo-do-lote.mjs';
 
 export const TENANTS_POR_CHAVE = TENANTS;
 
@@ -20,6 +21,9 @@ export default {
   paginaParam: 'page',
   maxPages: 1,
   tenants: Object.values(TENANTS),
+  // VEÍCULOS (21/10): a MESMA home lista os veículos junto (~55 no Leilão Brasil, ~19 no Luthero) e o
+  // slug é o título — só abre o que parece veículo; quem decide se grava é veiculoDoLote, com a ficha.
+  veiculos: { catalogo: '/', maxPages: 1, listaCompleta: true, urlCandidata: slugPareceVeiculo },
   parse: { extrairUrlsDeLote, idDaUrl, parseDetalhe, montarRow, checarQualidade },
   conhecimento: {
     plataforma: 'Suporte Leilões (3º template — /eventos/leilao/<id>/<slug>/lote, JSON embutido em <script>)',
