@@ -438,6 +438,31 @@ exatamente o que o nome dele diz, ou mede o que foi mais fácil de coletar?* E o
 funcionou nas quatro: **rodar em seco sobre dado real antes de gravar** — nenhuma delas apareceria
 em revisão de código.
 
+## 💳 Ferramentas com franquia grátis — NÃO gerar custo novo (dono, 22/10)
+
+**Regra:** nada de custo novo de uso. Toda ferramenta com franquia tem freio que lê o consumo REAL e,
+quando não consegue ler, **não gasta** (falha fechada). O que parar por franquia volta sozinho quando
+ela renova — ninguém precisa religar.
+
+| Ferramenta | Franquia | Freio | Onde ver |
+|---|---|---|---|
+| Firecrawl | 1.000 créditos/mês (plano grátis, renova no período) | `fetch-firecrawl.mjs` lê `GET /v2/team/credit-usage` e usa só a fatia da semana; reserva 100 (veículos MGL: 400, último da fila) | `uso_integracoes` provedor `firecrawl` / painel Custos & Uso |
+| Google Geocoding | 10.000/mês | `_geo.js` para em 9.900; contador ilegível = não chama (até 22/10 lia como 0 e liberava) | `uso_integracoes` `google_geocode` |
+| Bright Data | teto semanal pago (`BRIGHTDATA_MAX_REQ_SEMANA`) | ledger `brightdata_uso` + `brightdata_decisao()` | item 1b |
+| Gemini / Resend / LocationIQ | grátis por dia/mês | painel Custos & Uso | `uso_integracoes` |
+
+**Na SESSÃO do Claude:** o conector Firecrawl sai do MESMO saldo do coletor (scrape = 1 crédito,
+formato `query` = 5, a busca do Firecrawl também cobra). Ordem obrigatória: `pagina_pedir`/`json_pedir`
+(pg_net, grátis — inclusive com `?apikey=` em PostgREST de terceiros) → WebFetch → só então Firecrawl,
+e só para a fila abaixo. Antes de gastar, confira o saldo:
+`select dia, requests, unidades from uso_integracoes where provedor='firecrawl' order by dia desc limit 8;`
+
+**Fila do que vale crédito Firecrawl (usar quando sobrar no período, nesta ordem):**
+1. Fonte que REGREDIU atrás de Cloudflare e que o pg_net não abre (ofensiva de captura, item 2).
+2. Validar ao vivo `PESTANA_VEICULOS` (publicado sem validação em 21/10 — o conector caiu na API v2).
+3. Emílio Matos: conferir se os ~86 veículos já vêm pelo portal SUPERBID antes de coletar (#282).
+4. Recon das fontes pequenas restantes de veículo (Sublime, Uberlândia, Hasta, Leilotech/Topo).
+
 ## 🔒 As duas travas automáticas (custo zero, sem IA)
 
 | Trava | Onde roda | O que pega |

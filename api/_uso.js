@@ -73,17 +73,21 @@ export async function registrarUso(provedor, operacao, dados = {}) {
 // (ex.: teto diário de geocodes pagos do Google). Best-effort: retorna 0 se o
 // Supabase estiver indisponível (falha ABERTO — nunca bloqueia o fluxo por erro de
 // medição; a trava só age quando consegue LER um número acima do limite).
+// `null` = NÃO CONSEGUI LER (22/10). Devolvia 0 em qualquer falha — e a trava do Google lia "0 usadas"
+// e liberava gasto justamente quando o banco estava em statement timeout (visto no log de 21/10).
+// Contador ilegível tratado como "pode gastar" é a forma nº 5 do CLAUDE.md; quem chama decide, e a
+// trava de custo trata `null` como "não gasta".
 async function somaUnidades(provedor, filtroDia) {
-  if (!SUPABASE_URL || !SERVICE_KEY) return 0;
+  if (!SUPABASE_URL || !SERVICE_KEY) return null;
   try {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/uso_integracoes?provedor=eq.${encodeURIComponent(provedor)}&${filtroDia}&select=unidades`, {
       headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
       signal: AbortSignal.timeout(4000),
     });
-    if (!r.ok) return 0;
+    if (!r.ok) { console.warn(`[uso] contador de ${provedor} ilegível: HTTP ${r.status}`); return null; }
     const rows = await r.json();
-    return Array.isArray(rows) ? rows.reduce((s, x) => s + (Number(x.unidades) || 0), 0) : 0;
-  } catch { return 0; }
+    return Array.isArray(rows) ? rows.reduce((s, x) => s + (Number(x.unidades) || 0), 0) : null;
+  } catch (e) { console.warn(`[uso] contador de ${provedor} ilegível: ${e?.message || e}`); return null; }
 }
 
 // Unidades usadas HOJE (UTC) — trava diária opcional (anti-spike).

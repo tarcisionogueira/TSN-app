@@ -5,6 +5,9 @@ name: Scraper Firecrawl (semanal) — LEJE + Fernando/Jonas/Lucas + Emílio Mato
 # LEJE ~4 + MGL ~13 + Viva ~18 ≈ 35 créditos/semana. 15/10: Viva e Jinkings enumeram pelo feed
 # /sitemap.xml (lib/degrau-feed.mjs) — mais lotes (Viva 40 imóveis abertos), ainda sob o mesmo teto. FIRECRAWL_MAX_PAGINAS é o teto por fonte e execução —
 # estourado, a fonte grava 'sem_cota' (orçamento), não regressão.
+# 22/10: plano GRÁTIS (1.000 créditos/mês, renova no período). Cada passo lê o saldo real da conta
+# antes de gastar e usa só a sua fatia até a renovação (lib/motor/fetch-firecrawl.mjs) — o mês nunca
+# passa do grátis, e o que parar por saldo volta sozinho no período seguinte.
 on:
   schedule:
     - cron: '41 9 * * 1'   # segunda, 09:41 UTC (depois do scraper-dom das 8h)
@@ -73,6 +76,9 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
           FIRECRAWL_MAX_PAGINAS: '60'
+          # 22/10 (dono: sem custo novo): veículo é o ÚLTIMO da fila — reserva maior, só gasta o que
+          # sobra do grátis depois dos imóveis. Saldo baixo = pula (sem_cota) e volta quando renovar.
+          FIRECRAWL_RESERVA: '400'
           VEIC_FONTES: mgl
           VEIC_DRYRUN: ${{ env.DRYRUN_PADRAO }}
           VEIC_MAX_LOTES: '55'

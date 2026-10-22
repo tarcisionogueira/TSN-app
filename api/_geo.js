@@ -286,14 +286,18 @@ export async function googleGeocode(enderecoCompleto) {
   // `permitirPago:false` (Google só on-demand na página do imóvel), o consumo mensal fica
   // bem abaixo do teto. GOOGLE_GEOCODE_MAX_DIA (default 0/desligado) é um sub-teto DIÁRIO
   // opcional anti-spike/smoothing; 0 em qualquer um = sem aquele teto.
-  const LIMITE_MES = Number(process.env.GOOGLE_GEOCODE_MAX_MES ?? 10000);
+  // 9.900 e não 10.000 (22/10): chamadas simultâneas leem o mesmo total antes de gravar a sua — a
+  // folga de 100 absorve a corrida sem passar do grátis.
+  const LIMITE_MES = Number(process.env.GOOGLE_GEOCODE_MAX_MES ?? 9900);
   // Lido SEMPRE, não só quando há teto: este número é o que diz se a PRÓXIMA chamada cai
   // dentro do tier grátis ou já é paga. Sem ele, o custo só podia ser gravado como 0 — e foi
   // exatamente o que aconteceu (ver `custoGeocodeMicro` abaixo).
   const usadasMes = await unidadesUsadasMes('google_geocode');
+  // Contador ilegível (null) = não sei se a próxima é paga → não chama; a cascata segue nas grátis.
+  if (usadasMes === null) return null;
   if (LIMITE_MES > 0 && usadasMes >= LIMITE_MES) return null;
   const LIMITE_DIA = Number(process.env.GOOGLE_GEOCODE_MAX_DIA ?? 0);
-  if (LIMITE_DIA > 0 && (await unidadesUsadasHoje('google_geocode')) >= LIMITE_DIA) return null;
+  if (LIMITE_DIA > 0) { const hoje = await unidadesUsadasHoje('google_geocode'); if (hoje === null || hoje >= LIMITE_DIA) return null; }
   const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(enderecoCompleto)}&region=br&language=pt-BR&key=${key}`;
   try {
     const res = await fetchGeo(url, { signal: AbortSignal.timeout(8000) });

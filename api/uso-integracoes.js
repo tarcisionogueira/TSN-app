@@ -145,6 +145,19 @@ export default async function handler(req) {
         nota: `Grátis até ~${resFree.toLocaleString('pt-BR')}/mês. Contagem parcial (envios centrais).` } });
   }
 
+  // FIRECRAWL — plano GRÁTIS de 1.000 créditos/mês (22/10). O coletor lê o saldo REAL da conta antes
+  // de gastar (scripts/lib/motor/fetch-firecrawl.mjs); aqui é o que ele registrou. Não conta o que a
+  // sessão do Claude gasta pelo conector — por isso o teto do coletor guarda uma reserva.
+  {
+    const fc = get('firecrawl');
+    const fcFree = num(process.env.FIRECRAWL_FREE_MES, 1000);
+    const pct = fcFree > 0 ? Math.round((fc.mes.uni / fcFree) * 100) : 0;
+    provedores.push({ chave: 'firecrawl', label: 'Firecrawl — sites com Cloudflare (coleta semanal)',
+      mes: { unidades: fc.mes.uni, custo_usd: fc.mes.usd, custo_brl: brl(fc.mes.usd) },
+      teto: { tipo: 'creditos_mes', limite: fcFree, usado: fc.mes.uni, pct, status: status(pct),
+        nota: `Grátis até ${fcFree.toLocaleString('pt-BR')} créditos/mês. Saldo baixo: a coleta pula e volta quando renovar.` } });
+  }
+
   // DAILY / LOCATIONIQ — volume (sem teto rígido; marcador informativo).
   provedores.push({ chave: 'daily', label: 'Daily.co — salas de vídeo',
     mes: { unidades: daily.mes.uni, custo_usd: daily.mes.usd, custo_brl: brl(daily.mes.usd) },
