@@ -464,7 +464,6 @@ e só para a fila abaixo. Antes de gastar, confira o saldo:
 2. Validar ao vivo `PESTANA_VEICULOS` (publicado sem validação em 21/10 — o conector caiu na API v2).
 3. Emílio Matos: conferir se os ~86 veículos já vêm pelo portal SUPERBID antes de coletar (#282).
 4. Recon das fontes pequenas restantes de veículo (Sublime, Uberlândia, Hasta, Leilotech/Topo).
-5. MILAN: achar o endpoint do botão "Matricula" (chunks JS da página do lote; o HTML/RSC não tem a URL — #286).
 
 ## 🔒 As duas travas automáticas (custo zero, sem IA)
 

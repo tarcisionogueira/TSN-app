@@ -19,6 +19,7 @@ import { createClient } from '@supabase/supabase-js';
 import { buscarViaBrightData, brightDataDisponivel, ErroBrightData } from '../api/_brightdata.js';
 import { registrarSaude } from './_saude-fonte.mjs';
 import { TENANTS, extrairEventosImoveis, parseEvento, montarRow, checarQualidade, ehDesafio } from './lib/milan-parse.mjs';
+import { confirmarMatriculas, copiarMatriculas } from './lib/milan-docs.mjs';
 
 const T = TENANTS.milan;
 const DRYRUN = process.env.MILAN_DRYRUN !== '0';
@@ -126,6 +127,10 @@ async function main() {
     return { gravados: 0, enumerados };
   }
 
+  // Matrícula pelo repositório de arquivos (fetch direto, grátis — ver lib/milan-docs.mjs).
+  const { achados, placar } = await confirmarMatriculas(prontos, { supabase });
+  console.log(`  ${placar}`);
+
   if (DRYRUN) {
     console.log('DRY-RUN: não gravei. Amostra:');
     console.log(JSON.stringify(prontos.slice(0, 3), null, 2));
@@ -133,10 +138,11 @@ async function main() {
   }
 
   const { data, error } = await supabase.from('imoveis_leilao')
-    .upsert(prontos, { onConflict: 'fonte_id', ignoreDuplicates: false }).select('fonte_id');
+    .upsert(prontos, { onConflict: 'fonte_id', ignoreDuplicates: false }).select('id,fonte_id');
   if (error) throw new FalhaDeAcesso('supabase', `upsert: ${error.message}`);
   if (!data?.length) throw new FalhaDeAcesso('supabase', 'upsert não devolveu nenhuma linha');
   console.log(`✅ ${data.length} imóvel(is) MILAN gravados/atualizados.`);
+  console.log(`  ${await copiarMatriculas(supabase, data, achados)}`);
 
   const parcial = eventosFalhos > 0;
   await registrarSaude(supabase, T.fonte, prontos, 'milan', parcial
