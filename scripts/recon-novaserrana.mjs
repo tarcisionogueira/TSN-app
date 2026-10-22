@@ -46,12 +46,13 @@ for (const status of ['aberto', 'breve']) {
   const l = await get(`leilao?pageSize=100&pageNumber=1&status=${status}`);
   console.log(`\n== leilões ${status}: ${l.data?.length} (total ${l.totalRecords}, nextPage ${l.nextPage})`);
   console.log(JSON.stringify(l.data?.[0] || l).slice(0, 2500));
-  for (const lei of (l.data || []).slice(0, 1)) {
+  console.log((l.data || []).map((x) => `${x.id} · ${x.nome} · ${x.categoria} · ${x.qtdLotes} lotes · ${x.dataLeilao}`).join('\n'));
+  for (const lei of (l.data || []).filter((x) => /im[óo]v/i.test(`${x.categoria} ${x.titulo} ${x.nome}`)).slice(0, 2)) {
     const lotes = await get(`lote?LeilaoId=${lei.id}&PageSize=100&PageNumber=1&RemoverEncerrados=true`);
     console.log(`-- lotes do leilão ${lei.id}: ${lotes.data?.length} (total ${lotes.totalRecords})`);
     console.log(JSON.stringify(lotes.data?.[0] || lotes).slice(0, 3000));
     const um = lotes.data?.[0];
-    if (um) console.log('-- Lote/<id>:', JSON.stringify((await get(`Lote/${um.id}`)).data).slice(0, 5000));
+    if (um) console.log('-- Lote/<id>:', JSON.stringify((await get(`Lote/${um.loteId}`)).data).slice(0, 5000));
   }
   console.log('categorias por leilão:', (l.data || []).map((x) => `${x.id}:${x.titulo || x.nome || x.descricao || ''}`.slice(0, 80)).join(' | ').slice(0, 2000));
 }
