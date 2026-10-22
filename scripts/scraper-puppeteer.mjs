@@ -1408,6 +1408,39 @@ async function scraperSuperbidNet(browser, { portalId, stores, fonte, leiloeiro,
       if (aid) Object.defineProperty(im, '_leilaoId', { value: String(aid), enumerable: false });
     }
 
+    // EDITAL DO LEILÃO PELA API DE EVENTOS (22/10). A offer-query não traz `officialNoticeUrl` dentro de
+    // `auction`, e o edital só chegava pelo HTML no enriquecimento (teto por rodada) ou por um lote irmão
+    // que já o tivesse. Medido em 22/10: dos 263 lotes SUPERBID antigos sem documento, 149 dos 155 ainda
+    // abertos têm o edital publicado no EVENTO (41 de 45 eventos). Uma chamada por bloco de 50 leilões.
+    // Falha aqui não derruba a coleta: o lote segue como estava.
+    try {
+      const ids = [...new Set(imoveis.map((im) => im._leilaoId).filter(Boolean))];
+      const editalPorLeilao = new Map();
+      for (let i = 0; i < ids.length; i += 50) {
+        const urlEv = `https://event-query.superbid.net/events/?filter=id:[${ids.slice(i, i + 50).join(',')}]&portalId=[2,15]&pageSize=100&locale=pt_BR`;
+        const data = await page.evaluate(async (u) => {
+          try { const r = await fetch(u); if (!r.ok) return { __status: r.status }; return await r.json(); }
+          catch (e) { return { __err: String((e && e.message) || e) }; }
+        }, urlEv).catch(() => null);
+        const evs = (data && (data.events || data.items || data.data || (Array.isArray(data) ? data : []))) || [];
+        if (!evs.length) console.log(`    ${leiloeiro}: eventos sem resposta (${data?.__status || data?.__err || 'vazio'}) — edital do leilão fica para o enriquecimento`);
+        for (const ev of evs) {
+          const u = String(ev?.officialNoticeUrl || '');
+          if (ev?.id && /^https?:\/\//i.test(u)) editalPorLeilao.set(String(ev.id), u);
+        }
+      }
+      let n = 0;
+      for (const im of imoveis) {
+        const url = im._leilaoId && editalPorLeilao.get(im._leilaoId);
+        if (!url) continue;
+        const atuais = Array.isArray(im.anexos) ? im.anexos : [];
+        if (atuais.some((a) => a?.url === url)) continue;
+        im.anexos = [...atuais, { tipo: 'edital', nome: 'Edital do leilão', url }];
+        n++;
+      }
+      console.log(`    ${leiloeiro}: edital do leilão (API de eventos) em ${n} lote(s) · ${editalPorLeilao.size}/${ids.length} leilões com edital`);
+    } catch (e) { console.log(`    ${leiloeiro}: edital do leilão pela API falhou (${String(e?.message || e).slice(0, 80)}) — segue sem`); }
+
     console.log(`    ${leiloeiro}: ${imoveis.length} imóveis mapeados`);
     // Contato de CADA leiloeiro da plataforma (28/09) — o `store` publica o e-mail dele.
     if (storeAsLeiloeiro) {
