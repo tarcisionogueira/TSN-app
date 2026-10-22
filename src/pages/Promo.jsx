@@ -106,6 +106,10 @@ export default function Promo() {
   let precoPromo = precoOriginal;
   if (descontoValido && link.desconto_pct > 0)   precoPromo = precoOriginal * (1 - link.desconto_pct / 100);
   if (descontoValido && link.desconto_valor > 0) precoPromo = Math.max(0, precoOriginal - link.desconto_valor);
+  // Preço mensal GARANTIDO pelo servidor (links_promo.recorrente_preco, 22/10) — é o que o Mercado Pago cobra; a tela
+  // mostra exatamente esse valor, não uma conta de desconto que poderia divergir.
+  const precoGarantido = ehPlano && descontoValido && Number(link.recorrente_preco) > 0 ? Number(link.recorrente_preco) : null;
+  if (precoGarantido) precoPromo = precoGarantido;
   const temDesconto = precoPromo < precoOriginal;
   const pctDesconto = precoOriginal > 0 ? Math.round((1 - precoPromo / precoOriginal) * 100) : 0;
 
@@ -360,13 +364,21 @@ export default function Promo() {
         <div style={{ background: 'white', borderRadius: 20, padding: '32px 36px', display: 'inline-block', minWidth: 320, boxShadow: '0 24px 60px rgba(0,0,0,0.4)' }}>
           {temDesconto ? (
             <>
-              <div style={{ fontSize: 13, color: '#94a3b8', textDecoration: 'line-through', fontWeight: 600, marginBottom: 4 }}>
-                De R$ {fmtPreco(precoOriginal)}{plano.periodicidade}
+              <div style={{ fontSize: 13, color: '#94a3b8', fontWeight: 600, marginBottom: 4 }}>
+                Valor cheio: <span style={{ textDecoration: 'line-through' }}>R$ {fmtPreco(precoOriginal)}{plano.periodicidade}</span>
               </div>
+              <div style={{ fontSize: 13, color: '#059669', fontWeight: 800, marginBottom: 2 }}>Você paga</div>
               <div style={{ fontSize: 48, fontWeight: 900, color: '#059669', lineHeight: 1 }}>
                 R$ {fmtPreco(precoPromo)}
               </div>
               <div style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>{plano.periodicidade}</div>
+              {precoGarantido && (
+                <div style={{ marginTop: 14, padding: '10px 14px', background: '#ecfdf5', borderRadius: 10, fontSize: 13, color: '#065f46', fontWeight: 600, textAlign: 'left', lineHeight: 1.5 }}>
+                  ✅ Promoção válida por 12 meses, enquanto a assinatura estiver ativa e com o pagamento em dia.
+                  Se o pagamento falhar e a assinatura for interrompida, o benefício é perdido e uma nova
+                  contratação será pelo valor cheio (R$ {fmtPreco(precoOriginal)}{plano.periodicidade}).
+                </div>
+              )}
               {link.descricao_condicoes && (
                 <div style={{ marginTop: 14, padding: '10px 14px', background: '#fef9c3', borderRadius: 10, fontSize: 13, color: '#a16207', fontWeight: 600, textAlign: 'left' }}>
                   📋 {link.descricao_condicoes}

@@ -1409,15 +1409,17 @@ export default function Checkout() {
           {promoInfo ? (() => {
             const orig = temModalidade && modalidade === 'vista' ? (plano.precoVista || plano.preco)
               : temToggleAnual && modalidade === 'anual' ? (plano.precoAnual || plano.preco * 12) : plano.preco;
-            const promo = promoInfo.desconto_pct > 0
+            // Preço garantido do link (recorrente_preco) é o que o servidor cobra — a tela mostra o mesmo número.
+            const promo = Number(promoInfo.recorrente_preco) > 0 && modalidade !== 'anual' && modalidade !== 'vista' ? Number(promoInfo.recorrente_preco)
+              : promoInfo.desconto_pct > 0
               ? orig * (1 - promoInfo.desconto_pct / 100)
               : promoInfo.desconto_valor > 0 ? Math.max(0, orig - promoInfo.desconto_valor) : orig;
             const fmtR = v => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             return (
               <div style={{ marginBottom: 20 }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 14, color: '#94a3b8', textDecoration: 'line-through' }}>R$ {fmtR(orig)}</span>
-                  <strong style={{ color: '#059669', fontSize: 28 }}>R$ {fmtR(promo)}</strong>
+                  <span style={{ fontSize: 14, color: '#94a3b8' }}>Valor cheio: <span style={{ textDecoration: 'line-through' }}>R$ {fmtR(orig)}</span></span>
+                  <strong style={{ color: '#059669', fontSize: 28 }}>Você paga R$ {fmtR(promo)}</strong>
                   <span style={{ color: '#64748b', fontSize: 15 }}>{plano.periodicidade}</span>
                 </div>
                 <div style={{ marginTop: 8, padding: '8px 12px', background: '#fef9c3', borderRadius: 8, fontSize: 13, color: '#a16207', fontWeight: 700 }}>
