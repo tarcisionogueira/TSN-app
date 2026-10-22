@@ -51,7 +51,7 @@ function cidadeUf(...textos) {
   for (const t of textos) {
     const ms = [...String(t || '').matchAll(/([A-Za-zÀ-ÿ'][A-Za-zÀ-ÿ' .]{1,40}?)\s*\/\s*([A-Z]{2})\b/g)];
     const m = ms[ms.length - 1];
-    if (m) return { cidade: titleCase(m[1].replace(/^.*\s-\s/, '').trim()), estado: m[2] };
+    if (m) return { cidade: titleCase(m[1].replace(/^.*\s-\s/, '').replace(/^.*\s(?:em|no|na|,)\s+/i, '').replace(/^.*,\s*/, '').trim()), estado: m[2] };
   }
   return { cidade: null, estado: null };
 }
@@ -62,10 +62,14 @@ export function parseDetalhe(html, url) {
   // virariam /detalhe-lote/2982/1/arquivos/… (404).
   const raiz = `${new URL(url).origin}/`;
   const txt = decodificarEntidades(textoDe(h));
-  const titulos = [...h.matchAll(/<h2[^>]*>([\s\S]*?)<\/h2>/gi)].map((m) => limpo(m[1])).filter((t) => t && !/^LOTE\s+\d/i.test(t));
-  const titulo = (titulos[0] || '').replace(/^[\s\-–]+/, '').replace(/\s*CEP\s*:?\s*[\d.\-]+\s*$/i, '').slice(0, 180) || null;
+  // Flex: o título do lote é o <h2 class="texto-titulo3">; antes dele vem o menu ("Leilões Finalizados") e depois
+  // um carrossel com os <h2> de OUTROS lotes (medido no 2940/1). Luiz: o <h2> perto de "LOTE 001".
+  const proprio = limpo((h.match(/<h2[^>]*class=["'][^"']*texto-titulo3[^"']*["'][^>]*>([\s\S]*?)<\/h2>/i) || [])[1]);
+  const titulos = [...h.matchAll(/<h2[^>]*>([\s\S]*?)<\/h2>/gi)].map((m) => limpo(m[1]))
+    .filter((t) => t && !/^LOTE\s+\d/i.test(t) && !/^(?:Leil[õo]es\b|Acesso R[áa]pido|Localiza[çc][ãa]o|Informativo|Contato)/i.test(t));
+  const titulo = (proprio || titulos[0] || '').replace(/^[\s\-–]+/, '').replace(/\s*CEP\s*:?\s*[\d.\-]+\s*$/i, '').slice(0, 180) || null;
   const endereco = (txt.match(/ENDERE[ÇC]O DO BEM\s*:\s*(.{5,200}?)(?:CEP|DESCRI[ÇC][ÃA]O|$)/i) || [])[1] || '';
-  const { cidade, estado } = cidadeUf(titulo, endereco).cidade ? cidadeUf(titulo, endereco) : cidadeUFBare(txt);
+  const { cidade, estado } = cidadeUf(titulo, endereco).cidade ? cidadeUf(titulo, endereco) : cidadeUFBare(`${titulo || ''} ${endereco}`);
 
   const avaliacao = valor(txt, /Avalia[çc][ãa]o\s*:?/);
   const minimo = valor(txt, /Lance\s+Inicial\s*:?/) || valor(txt, /Lance\s+M[íi]nimo[^:R]{0,60}:?/) || valor(txt, /Valor\s+M[íi]nimo\s+de\s+Venda\s*:?/);

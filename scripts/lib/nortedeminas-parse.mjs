@@ -28,6 +28,8 @@ const dataBr = (s) => { const m = String(s || '').match(/(\d{2})\/(\d{2})\/(\d{4
 
 // Ordem medida no lote 73: "…, Belo Horizonte, Minas Gerais" (descrição) vem antes; "Cidade/UF" do título; e só
 // então a PRIMEIRA "X/UF" da descrição — a última era a vara ("Jef Adjunto de Belo Horizonte/MG").
+// "Imóveis da Comarca de Sete Lagoas", "Município de Uberlândia": o prefixo não é a cidade.
+const semPrefixo = (c) => String(c || '').replace(/^.*?\b(?:comarca|munic[íi]pio|cidade|distrito)\s+de\s+/i, '').trim();
 const semAcento = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 function cidadeUf(titulo, descricao) {
   const nomes = Object.keys(UF_POR_NOME).map((k) => k.replace(/-/g, '[ -]')).sort((a, b) => b.length - a.length).join('|');
@@ -35,11 +37,11 @@ function cidadeUf(titulo, descricao) {
   if (ext) {
     const ini = semAcento(descricao).indexOf(ext[0]);
     const cidade = String(descricao).slice(ini, ini + ext[1].length);
-    return { cidade: titleCase(cidade.trim()), estado: UF_POR_NOME[ext[2].replace(/ /g, '-')] || null };
+    return { cidade: titleCase(semPrefixo(cidade)), estado: UF_POR_NOME[ext[2].replace(/ /g, '-')] || null };
   }
   for (const t of [titulo, descricao]) {
     const m = String(t || '').match(/([A-ZÀ-Ý][A-Za-zÀ-ÿ' ]{2,40}?)\s*\/\s*([A-Z]{2})\b/);
-    if (m) return { cidade: titleCase(m[1].trim()), estado: m[2] };
+    if (m) return { cidade: titleCase(semPrefixo(m[1])), estado: m[2] };
   }
   return cidadeUFBare(`${titulo || ''} ${descricao || ''}`);
 }
