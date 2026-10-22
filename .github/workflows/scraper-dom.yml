@@ -223,7 +223,6 @@ jobs:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           BASTON_DRYRUN: ${{ env.DRYRUN_PADRAO }}
-          BASTON_DEBUG: ${{ github.event_name == 'workflow_dispatch' && '1' || '0' }}
         run: node scripts/scraper-baston.mjs
 
       - name: Glener Brasil Cassiano
@@ -232,7 +231,6 @@ jobs:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           CASSIANO_DRYRUN: ${{ env.DRYRUN_PADRAO }}
-          CASSIANO_DEBUG: ${{ github.event_name == 'workflow_dispatch' && '1' || '0' }}
         run: node scripts/scraper-cassiano.mjs
 
       - name: Arnaldo
@@ -241,7 +239,6 @@ jobs:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           ARNALDO_DRYRUN: ${{ env.DRYRUN_PADRAO }}
-          ARNALDO_DEBUG: ${{ github.event_name == 'workflow_dispatch' && '1' || '0' }}
         run: node scripts/scraper-arnaldo.mjs
 
       # Recon em seco do portal Nova Serrana (#292) — só por dispatch; vira coletor depois de medir o JSON.
