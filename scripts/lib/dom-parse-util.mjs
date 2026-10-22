@@ -332,15 +332,19 @@ export function fotoDeHtml(html, urlBase) {
 // "Áreas"/"Ônibus" no início de palavra nunca casavam (1º teste: o complexo industrial da Rontan
 // — "Áreas - Máquinas" — saía como não-imóvel).
 const P = (alt) => new RegExp(`(?<!\\p{L})(?:${alt})(?!\\p{L})`, 'iu');
-const RE_BEM_MOVEL_PALAVRA = P('ve[ií]culos?|motos?|sucatas?|renavam|chassi|motocicletas?|motoneta|ciclomotor|autom[oó]vel|caminh[aã]o|caminhonete|semirreboque|reboque|trator(?:es)?|carretas?|empilhadeira|retroescavadeira|colheitadeira|[oô]nibus|embarca[çc][aã]o|jet ?ski|semoventes?|bovinos?|m[aá]quinas?|equipamentos?');
+const RE_BEM_MOVEL_PALAVRA = P('ve[ií]culos?|motos?|sucatas?|renavam|chassi|motocicletas?|motoneta|ciclomotor|autom[oó]vel|caminh[aã]o|caminhonete|semirreboque|reboque|trator(?:es)?|carretas?|empilhadeira|retroescavadeira|colheitadeira|[oô]nibus|embarca[çc][aã]o|jet ?ski|semoventes?|bovinos?|m[aá]quinas?|equipamentos?|dobradeiras?|tornos? mec[aâ]nicos?|prensas?|guilhotinas?|ferramentas?|compressor(?:es)?|geradores?|mobili[aá]rios?|eletrodom[eé]sticos?|sucata de');
 // Marca SEM barra, com modelo e ANO ("Renault Megane 1.6 B - 99/00", "I/PEUGEOT 206 SOLEIL - 2000")
 // — o 1º seco real (25/09) deixou passar esses dois; a barra não é regra, o ano é.
 const RE_MARCA_ANO = /\b(honda|yamaha|suzuki|fiat|volkswagen|chevrolet|ford|renault|toyota|hyundai|scania|iveco|mercedes|citroen|peugeot|nissan|mitsubishi|kia|jeep|bmw|audi|volvo)\b[^\n]{0,60}?(\b(19|20)\d{2}\b|\b\d{2}\s*\/\s*\d{2}\b)/i;
 const RE_MARCA_MODELO = /\b(honda|yamaha|suzuki|fiat|vw|volkswagen|chevrolet|gm|ford|renault|toyota|hyundai|scania|iveco|mercedes|reb|citroen|peugeot|nissan|mitsubishi)\s*\/\s*[a-z0-9]|\bplacas?[:\s]+[a-z]{3}[-\s]?\d/i;
 const RE_IMOVEL = P('im[oó]veis|im[oó]vel|terrenos?|casas?|apartamentos?|galp[aã]o|barrac[aã]o|sala comercial|pr[eé]dio|fazenda|s[ií]tio|ch[aá]cara|gleba|[aá]reas?|lotes? urbanos?|edifica[çc][aã]o|edif[ií]cio|garagem|vagas?|box|complexo industrial|m²|m2');
-export function naoEhImovel(texto) {
+const movel = (t) => RE_BEM_MOVEL_PALAVRA.test(t) || RE_MARCA_MODELO.test(t) || RE_MARCA_ANO.test(t);
+// `titulo` (opcional) decide sozinho quando é bem móvel SEM palavra de imóvel: a descrição de máquina cita
+// o "galpão"/"área" onde ela está (Flex 2940/1, "01 Dobradeira Manual", 22/10) e o texto todo passava.
+export function naoEhImovel(texto, titulo) {
   const t = String(texto || '');
-  return (RE_BEM_MOVEL_PALAVRA.test(t) || RE_MARCA_MODELO.test(t) || RE_MARCA_ANO.test(t)) && !RE_IMOVEL.test(t);
+  if (titulo && movel(String(titulo)) && !RE_IMOVEL.test(String(titulo))) return true;
+  return movel(t) && !RE_IMOVEL.test(t);
 }
 
 // Puro (testável): a MESMA foto em 3+ lotes DIFERENTES da mesma rodada não é foto do lote — é

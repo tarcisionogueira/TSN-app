@@ -311,7 +311,7 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
         if (gal.length > 1) row.fotos = gal;
       }
       // Catálogo misto (25/09): veículo/máquina/trator não é imóvel — não entra em imoveis_leilao.
-      if (naoEhImovel(`${row.titulo || ''} ${row.descricao || ''}`)) { naoImovel++; naoImovelIds.push(row.fonte_id); if (i < iReleitura) recusas.push({ fonte_id: row.fonte_id, motivo: 'nao_imovel', dias: 30 }); continue; }
+      if (naoEhImovel(`${row.titulo || ''} ${row.descricao || ''}`, row.titulo)) { naoImovel++; naoImovelIds.push(row.fonte_id); if (i < iReleitura) recusas.push({ fonte_id: row.fonte_id, motivo: 'nao_imovel', dias: 30 }); continue; }
       const q = cfg.parse.checarQualidade(row, { estrito: false });
       if (q.descartar) {
         reprov++;
