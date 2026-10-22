@@ -3846,6 +3846,8 @@ function ConvitesTab() {
   const [convites, setConvites] = useState([]);
   const [loading, setLoading] = useState(true);
   const [copiado, setCopiado] = useState('');
+  const [finalidade, setFinalidade] = useState('');
+  const [erroConvite, setErroConvite] = useState('');
 
   const carregar = useCallback(async () => {
     setLoading(true);
@@ -3865,14 +3867,30 @@ function ConvitesTab() {
 
   useEffect(() => { carregar(); }, [carregar]);
 
+  // FINALIDADE (22/10, dono: "não tem descrição, só o link"): rótulo obrigatório ao gerar — sem ele os 22 links
+  // eram cartões idênticos e ninguém sabia de onde vinha cada cadastro. Só rótulo: a regra de indicação não muda.
   const gerarLink = async () => {
+    const f = finalidade.trim();
+    if (!f) { setErroConvite('Diga para que serve o link (ex.: "Instagram outubro", "Parceiro João").'); return; }
     const codigo = Math.random().toString(36).substring(2, 10).toUpperCase();
-    await supabase.from('links_convite').insert({ codigo, criado_por: user.id });
+    const { error } = await supabase.from('links_convite').insert({ codigo, criado_por: user.id, finalidade: f });
+    if (error) { setErroConvite(`Não foi possível gerar o link: ${error.message}`); return; }
+    setFinalidade(''); setErroConvite('');
+    await carregar();
+  };
+
+  const editarFinalidade = async (c) => {
+    const f = window.prompt('Para que serve este link?', c.finalidade || '');
+    if (f === null) return;
+    const { data, error } = await supabase.from('links_convite').update({ finalidade: f.trim() || null }).eq('id', c.id).select('id');
+    if (error || !data?.length) { setErroConvite(`Não foi possível salvar: ${error?.message || 'sem permissão'}`); return; }
+    setErroConvite('');
     await carregar();
   };
 
   const toggleAtivo = async (c) => {
-    await supabase.from('links_convite').update({ ativo: !c.ativo }).eq('id', c.id);
+    const { data, error } = await supabase.from('links_convite').update({ ativo: !c.ativo }).eq('id', c.id).select('id');
+    if (error || !data?.length) { setErroConvite(`Não foi possível alterar: ${error?.message || 'sem permissão'}`); return; }
     await carregar();
   };
 
@@ -3885,19 +3903,30 @@ function ConvitesTab() {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <h2 style={{ fontSize: 18, fontWeight: 700, color: '#111111', margin: 0 }}>Links de Convite</h2>
-        <button style={S.btn('primary')} onClick={gerarLink}>+ Gerar novo convite</button>
+        <h2 style={{ fontSize: 18, fontWeight: 700, color: '#111111', margin: 0 }}>Links de Indicação</h2>
       </div>
-      <p style={{ fontSize: 13, color: '#64748b', marginBottom: 20 }}>
-        Links de convite vinculam o novo usuário à equipe que o convidou, sem prazo de expiração.
+      <p style={{ fontSize: 13, color: '#64748b', marginBottom: 12 }}>
+        Quem se cadastrar por um destes links fica registrado como indicado por quem criou o link (conta para comissão de indicação).
+        Não dá acesso à equipe, plano nem desconto. Sem prazo de expiração.
       </p>
+      <div style={{ display: 'flex', gap: 8, marginBottom: erroConvite ? 6 : 20, flexWrap: 'wrap' }}>
+        <input value={finalidade} onChange={e => { setFinalidade(e.target.value); setErroConvite(''); }}
+          onKeyDown={e => { if (e.key === 'Enter') gerarLink(); }} maxLength={120}
+          placeholder='Finalidade (ex.: "Instagram outubro", "Parceiro João")'
+          style={{ flex: 1, minWidth: 220, padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13 }} />
+        <button style={S.btn('primary')} onClick={gerarLink}>+ Gerar link</button>
+      </div>
+      {erroConvite && <p style={{ fontSize: 12, color: '#dc2626', marginBottom: 14 }}>{erroConvite}</p>}
       <div style={S.card}>
         {loading ? <p style={{ color: '#94a3b8', textAlign: 'center', padding: 32 }}>Carregando...</p>
-          : convites.length === 0 ? <p style={{ color: '#94a3b8', textAlign: 'center', padding: 32 }}>Nenhum convite gerado ainda.</p>
+          : convites.length === 0 ? <p style={{ color: '#94a3b8', textAlign: 'center', padding: 32 }}>Nenhum link de indicação gerado ainda.</p>
           : convites.map(c => (
             <div key={c.id} style={{ padding: '14px 16px', border: `1px solid ${c.ativo ? '#e2e8f0' : '#fee2e2'}`, borderRadius: 12, marginBottom: 10, background: c.ativo ? 'white' : '#fff5f5', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <div style={{ flex: 1, minWidth: 200 }}>
-                <div style={{ fontWeight: 700, fontSize: 14, color: '#111111' }}>{c.codigo}</div>
+                <div style={{ fontWeight: 700, fontSize: 14, color: c.finalidade ? '#111111' : '#94a3b8' }}>
+                  {c.finalidade || 'Sem finalidade (link antigo)'}
+                  <span style={{ fontWeight: 600, fontSize: 12, color: '#64748b', marginLeft: 8 }}>{c.codigo}</span>
+                </div>
                 <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
                   Por: {c.perfis?.nome || '—'} · {c.usos} uso{c.usos !== 1 ? 's' : ''} · {new Date(c.criado_em).toLocaleDateString('pt-BR')}
                 </div>
@@ -3908,6 +3937,9 @@ function ConvitesTab() {
                 </span>
                 <button onClick={() => copiar(c.codigo)} style={{ padding: '5px 10px', background: copiado === c.codigo ? '#dcfce7' : '#f1f5f9', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer', color: copiado === c.codigo ? '#166534' : '#374151' }}>
                   {copiado === c.codigo ? '✓ Copiado' : 'Copiar link'}
+                </button>
+                <button onClick={() => editarFinalidade(c)} style={{ padding: '5px 10px', background: '#f1f5f9', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer', color: '#374151' }}>
+                  Editar finalidade
                 </button>
                 <button onClick={() => toggleAtivo(c)} style={{ padding: '5px 10px', background: c.ativo ? '#fee2e2' : '#dcfce7', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, color: c.ativo ? '#dc2626' : '#166534', cursor: 'pointer' }}>
                   {c.ativo ? 'Desativar' : 'Ativar'}
