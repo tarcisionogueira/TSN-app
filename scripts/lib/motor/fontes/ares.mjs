@@ -13,6 +13,7 @@ export default {
   fetch: 'api',
   catalogo: CATALOGO,
   paginaParam: 'offset', // não usado: maxPages 1 e limit=1000 na consulta (Picelli tem ~160 lotes vivos)
+  paginarPostgrest: true, // 22/10: Savoy passa de 1.000 — o motor API pede as páginas seguintes (offset)
   maxPages: 1,
   tenants: Object.values(TENANTS),
   // VEÍCULOS (21/10): mesma consulta, categoria `veiculos`; o det sai do catálogo (o site tem Cloudflare).

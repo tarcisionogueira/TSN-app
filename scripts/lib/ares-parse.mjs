@@ -39,6 +39,12 @@ export const TENANTS = {
     fonte: 'CUNHA', leiloeiro: 'Cunha Leiloeiro', site: 'https://www.cunhaleiloeiro.com.br',
     base: 'https://api.cunhaleiloeiro.com.br', headers: { apikey: 'sb_publishable_-9Hgjbq1X_N614naMFSPHA_h1LMqujK' },
   },
+  // 22/10 (triagem, #292): Savoy — "Agência Ares" no rodapé do bundle, mesma API e mesmo SELECT (testado pelo
+  // banco: 2.391 lotes vivos, 994 de cada 1.000 veículos de pátio/Detran). Rota do site: /lote/:lotId.
+  savoy: {
+    fonte: 'SAVOY', leiloeiro: 'Savoy Leilões', site: 'https://www.savoyleiloes.com.br',
+    base: 'https://api.savoyleiloes.com.br', headers: { apikey: 'sb_publishable__NGN6fHZ_XB-PWeVqYDgjA_nHEmpnNB' },
+  },
 };
 const SITE_POR_API = new Map(Object.values(TENANTS).map(t => [t.base, t.site]));
 

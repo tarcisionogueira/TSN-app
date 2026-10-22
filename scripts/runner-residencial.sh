@@ -160,6 +160,9 @@ rodar PECINI env PECINI_HEADLESS=1 PECINI_DRYRUN=0 node scripts/scraper-pecini.m
 # sem 3ª praça) e apartamentos barrados como "fração ideal" (cláusula de condomínio em outra
 # ordem). Os dois corrigidos e conferidos em dry-run no PC (lote 3427: 40%, praças 19/10 e 22/10).
 rodar SUBLIME env PECINI_TENANT=SUBLIME PECINI_HEADLESS=1 PECINI_DRYRUN=0 node scripts/scraper-pecini.mjs
+# PW (22/10, triagem #292) — PW Leilões, mesma plataforma DefaultClean (lance renderizado por JS, como o Sublime).
+# Gate próprio em coleta_cliente (PW, 72 h). Responde 400 a alguns clientes HTTP fora do navegador — aqui é Chromium.
+rodar PW env PECINI_TENANT=PW PECINI_HEADLESS=1 PECINI_DRYRUN=0 node scripts/scraper-pecini.mjs
 
 # Vlance (verdeamarelo/sudeste/capitalvalor) — API JSON que dá 403 em datacenter, mas do IP
 # RESIDENCIAL o fetch DIRETO funciona e é GRÁTIS. VLANCE_NO_BD=1 = 100% residencial (sem Bright

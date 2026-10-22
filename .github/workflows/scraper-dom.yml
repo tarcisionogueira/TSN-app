@@ -34,6 +34,10 @@ on:
       - 'scripts/lib/jeleiloes-parse.mjs'
       - 'scripts/lib/leilaoindex-parse.mjs'
       - 'scripts/lib/rocha-parse.mjs'
+      - 'scripts/lib/softgt-parse.mjs'
+      - 'scripts/lib/nortedeminas-parse.mjs'
+      - 'scripts/scraper-softgt.mjs'
+      - 'scripts/scraper-nortedeminas.mjs'
       - 'scripts/lib/albertomacedo-parse.mjs'
       - 'scripts/lib/francoleiloes-parse.mjs'
       - 'scripts/lib/simon-parse.mjs'
@@ -69,7 +73,7 @@ on:
   workflow_dispatch:
     inputs:
       fontes:
-        description: 'csv: alfa,hasta,nordeste,nordeste_veiculos,jeleiloes,leilaoindex,rocha,albertomacedo,francoleiloes,simon,globo,leje,freitas,leiloar,lgcorretor,nakakogue,astavero,suporteoferta,comprei'
+        description: 'csv: softgt,nortedeminas,alfa,hasta,nordeste,nordeste_veiculos,jeleiloes,leilaoindex,rocha,albertomacedo,francoleiloes,simon,globo,leje,freitas,leiloar,lgcorretor,nakakogue,astavero,suporteoferta,comprei'
         required: false
         default: 'alfa,nordeste'
       gravar:
@@ -188,6 +192,24 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           ROCHA_DRYRUN: ${{ env.DRYRUN_PADRAO }}
         run: node scripts/scraper-rocha.mjs
+
+      # 22/10 (triagem #292): FLEX + LUIZ CARVALHO (plataforma SoftGT) e NORTE DE MINAS (WebAjato) — HTML do
+      # servidor, sem Cloudflare; só via grátis (semBD nos wrappers). Medido pelo banco (AWS) com 200.
+      - name: SoftGT (Flex, Luiz Carvalho)
+        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'softgt')) }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          SOFTGT_DRYRUN: ${{ env.DRYRUN_PADRAO }}
+        run: node scripts/scraper-softgt.mjs
+
+      - name: Norte de Minas
+        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'nortedeminas')) }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          NORTEDEMINAS_DRYRUN: ${{ env.DRYRUN_PADRAO }}
+        run: node scripts/scraper-nortedeminas.mjs
 
       - name: Albertomacedo
         if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'albertomacedo')) }}

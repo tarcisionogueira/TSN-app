@@ -130,6 +130,8 @@ const RE_KM = /\b(?:km|quilometragem|hod[ôo]metro)\s*:?\s*([\d.]{1,9})\b/i;
  * id   = id do lote na fonte (o mesmo do imóvel) · fonte = rótulo da fonte (ex.: 'FREITAS')
  * Devolve { row } pronto para `veiculos_leilao`, ou { motivo } explicando por que ficou fora.
  */
+const RE_SO_EMPRESA = /\b(?:apenas|somente|exclusivo)\s+(?:para\s+)?(?:firmas|empresas)\b|\b(?:firmas|empresas)\s+(?:credenciadas|cadastradas)\s+(?:no|junto\s+ao|pelo)\s+detran/i;
+
 export function veiculoDoLote(row, { id, fonte }) {
   if (!row) return { motivo: 'lote sem leitura' };
   // "1 (UM) AUTOMÓVEL CHEVROLET PRISMA…" (SOLEON): a quantidade no começo esconde tipo e marca.
@@ -141,6 +143,10 @@ export function veiculoDoLote(row, { id, fonte }) {
   if (!titulo || /^im[óo]vel\b/i.test(titulo) && (/\d\s*$/.test(titulo) || titulo.length < 12)) titulo = tituloDoVeiculo(descricao, row.url_lote) || titulo;
   // A URL também conta: no Simon a sucata só aparece no slug ("sucata-de-veiculo-inservivel-…").
   if (!ehVeiculoInteiro(titulo, descricao) || RE_NAO_VEICULO.test(String(row.url_lote || '').replace(/[-_/]/g, ' '))) return { motivo: 'não é veículo inteiro' };
+  // SÓ PARA EMPRESA CREDENCIADA (22/10, triagem Savoy): "Situação Sucata - Apenas Firmas Cadastradas no Detran"
+  // — 983 de 1.000 lotes do Savoy. Pessoa física não arremata, então não é oportunidade para o cliente; gravar
+  // só pesaria o acervo com lote que a busca esconde. Nenhuma fonte ativa tinha esse texto (medido 22/10).
+  if (RE_SO_EMPRESA.test(`${titulo} ${descricao}`)) return { motivo: 'só para empresa credenciada (pessoa física não arremata)' };
   const vMin = Number(row.valor_minimo) || 0, vAval = Number(row.valor_avaliacao) || 0;
   if (!vMin && !vAval) return { motivo: 'sem valor' };
   const texto = `${titulo} ${descricao}`;

@@ -48,10 +48,14 @@ async function gravar(rows) {
   const grupos = new Map();
   for (const r of rows) { const k = Object.keys(r).sort().join(','); (grupos.get(k) || grupos.set(k, []).get(k)).push(r); }
   let n = 0;
+  // Blocos de 200 (22/10, Savoy ~2.400 de uma vez): o upsert inteiro passa pelos gatilhos de FIPE/motor/
+  // pátio e estouraria o statement_timeout — o mesmo defeito que travou o coletor de imóveis em 22/10.
   for (const g of grupos.values()) {
-    const { data, error } = await supabase.from('veiculos_leilao').upsert(g, { onConflict: 'fonte,fonte_id' }).select('id');
-    if (error) throw new Error(`upsert veiculos: ${error.message}`);
-    n += data?.length || 0;
+    for (let i = 0; i < g.length; i += 200) {
+      const { data, error } = await supabase.from('veiculos_leilao').upsert(g.slice(i, i + 200), { onConflict: 'fonte,fonte_id' }).select('id');
+      if (error) throw new Error(`upsert veiculos: ${error.message}`);
+      n += data?.length || 0;
+    }
   }
   return n;
 }

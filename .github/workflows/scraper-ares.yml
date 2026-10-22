@@ -49,5 +49,8 @@ jobs:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           VEIC_FONTES: ares
+          # 22/10: o detalhe sai do catálogo da API (grátis, sem abrir página) — o teto de 80/rodada só
+          # atrasaria a Savoy (~2.400) em um mês. 3000 cobre todos os tenants.
+          VEIC_MAX_LOTES: '3000'
           VEIC_DRYRUN: ${{ github.event.inputs.dryrun || '0' }}
         run: node scripts/scraper-veiculos-motor.mjs

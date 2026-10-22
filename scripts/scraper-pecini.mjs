@@ -48,6 +48,9 @@ const TENANTS = {
   // 72-74). Por isso `renderizar`: no runner residencial a página de lote só serve depois que o
   // Chromium roda o JS e o valor aparece. Pelo Web Unlocker (CI) não há lance → não roda lá.
   SUBLIME: { base: 'https://www.sublimeleiloes.com.br', leiloeiro: 'Sublime Leilões', renderizar: true },
+  // PW (22/10, triagem #292 — patricialeiloeira e wsleiloes redirecionam para cá): mesma plataforma, feed
+  // /sitemap.xml no formato <listings> (134 lotes medidos) e lance em template JS → `renderizar`, como o Sublime.
+  PW: { base: 'https://www.pwleiloes.com.br', leiloeiro: 'PW Leilões', renderizar: true },
 };
 const FONTE = (process.env.PECINI_TENANT || 'PECINI').toUpperCase();
 if (!TENANTS[FONTE]) { console.error(`PECINI_TENANT desconhecido: ${FONTE} (conhecidos: ${Object.keys(TENANTS).join(', ')})`); process.exit(1); }
