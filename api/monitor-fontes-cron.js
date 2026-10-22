@@ -264,6 +264,17 @@ async function handler(req) {
   if (gemeosCoanuncio?.erro) {
     problemas.push({ fonte: 'GÊMEOS DE CO-ANÚNCIO', tipo: 'reconciliação falhou', detalhe: `dedup parada — ${gemeosCoanuncio.erro}` });
   }
+  // SAÚDE POR TENANT (22/10, #278): os clusters (VLANCE, GESTÃO, SUPORTE, LEILOTECH) gravam UMA saúde para vários
+  // domínios — a soma esconde o domínio que zerou. tenant_parado() lê o rastro no acervo: tenant com lote nos
+  // últimos 60 dias e parado há 72 h+ enquanto o cluster roda. Explicado em fonte_regressao_explicada
+  // ('<CLUSTER>:<leiloeiro>') fica de fora até a validade. Ver supabase/migrations/20261022_tenant_parado.sql.
+  {
+    const { data: tp, error: eTp } = await supabase.rpc('tenant_parado', { p_horas: 72 });
+    if (eTp) problemas.push({ fonte: 'SAÚDE POR TENANT', tipo: 'checagem falhou', detalhe: `tenant_parado: ${eTp.message}` });
+    else for (const t of (tp || []).filter((x) => !x.explicacao)) {
+      problemas.push({ fonte: `${t.fonte} · ${t.tenant}`, tipo: 'tenant parado', detalhe: `${t.lotes_60d} lote(s) em 60 dias, nenhum tocado há ${t.horas_parado} h enquanto o resto do ${t.fonte} roda — site mudou ou ficou sem imóvel?` });
+    }
+  }
   if (gemeosVeiculos?.erro) {
     problemas.push({ fonte: 'GÊMEOS DE VEÍCULO', tipo: 'reconciliação falhou', detalhe: `dedup parada — ${gemeosVeiculos.erro}` });
   }
