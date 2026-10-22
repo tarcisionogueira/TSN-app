@@ -3448,31 +3448,59 @@ async function scraperFrazao(browser) {
 
   try {
     await page.goto('https://www.frazaoleiloes.com.br/', { waitUntil: 'networkidle2', timeout: 45000 });
-    // Links de leilão de imóveis (/leilao/{id}/...imoveis...)
+    // TODOS os leilões, e o filtro por LOTE (22/10, #276). O filtro era `/imove/` no slug do evento: 7 eventos
+    // de imóvel ficavam de fora porque o slug diz "apartamento", "casas", "predio-comercial", "escritorio"…
+    // O que não é imóvel (ex.: 3752, capinhas de celular) sai pelo tipo/título de cada card, abaixo.
     const auctions = await page.evaluate(() => {
       const set = new Set();
       document.querySelectorAll('a[href^="/leilao/"]').forEach(a => {
         const h = (a.getAttribute('href') || '').split('?')[0];
-        if (/\/leilao\/\d+\//.test(h) && /imove/i.test(h)) set.add(h);
+        if (/\/leilao\/\d+\//.test(h)) set.add(h);
       });
       return [...set];
     });
-    console.log(`    Frazão: ${auctions.length} leilões de imóveis`);
+    console.log(`    Frazão: ${auctions.length} leilões na home`);
 
     // A home já traz lotes; visita cada leilão para pegar todos (cap de segurança).
+    // Os cards do leilão chegam por ajax (/Sale/LotIndex → /Sale/SearchLotResult), DEPOIS do networkidle:
+    // sem esperar o seletor, o evento 3733 (16 lotes) era lido vazio. `?pagina=N` pagina a lista.
+    // ENCERRAMENTO DO EVENTO (22/10, #276): a data do card ("Leilão: 14/10 às 11h00") é a ABERTURA dos lances;
+    // o lote segue "Liberado para Lance" até o encerramento do evento ("Encerramento para Habilitação:
+    // 09/11/2026"). Gravar a abertura como data do leilão fazia a limpeza por data desligar lote à venda —
+    // 105 de 141 coletados em 22/10.
+    const encerramentoDe = new Map(); // lote id → 'AAAA-MM-DD' do encerramento do evento
     const urls = ['/', ...auctions].slice(0, 60);
     for (const u of urls) {
       try {
-        if (u !== '/') await page.goto(`https://www.frazaoleiloes.com.br${u}`, { waitUntil: 'networkidle2', timeout: 45000 });
-        const cards = await parseCards();
-        for (const c of cards) if (c.id && !imoveisMap.has(c.id)) imoveisMap.set(c.id, c);
+        let total = null, vistos = 0;
+        for (let pag = 1; pag <= 10; pag++) {
+          if (u !== '/' || pag > 1) await page.goto(`https://www.frazaoleiloes.com.br${u}${pag > 1 ? `?pagina=${pag}` : ''}`, { waitUntil: 'networkidle2', timeout: 45000 });
+          if (u !== '/') await page.waitForSelector('a.visualizar_lote[data-lote-id]', { timeout: 15000 }).catch(() => {});
+          const ev = u === '/' ? {} : await page.evaluate(() => {
+            const t = document.body.innerText.replace(/\s+/g, ' ');
+            const m = t.match(/Encerramento\s+para\s+Habilita[çc][ãa]o:\s*(\d{2})\/(\d{2})\/(\d{4})/i);
+            return { fim: m ? `${m[3]}-${m[2]}-${m[1]}` : null, total: Number(document.querySelector('#total_leilao_lotes')?.value) || null };
+          });
+          if (total == null) total = ev.total;
+          const cards = await parseCards();
+          let novos = 0;
+          for (const c of cards) {
+            if (!c.id) continue;
+            if (ev.fim && !encerramentoDe.has(c.id)) encerramentoDe.set(c.id, ev.fim);
+            if (!imoveisMap.has(c.id)) { imoveisMap.set(c.id, c); novos++; }
+          }
+          vistos += cards.length;
+          if (u === '/' || !novos || !total || vistos >= total) break;
+        }
+        if (total && vistos < total) console.log(`    Frazão ${u.split('/')[2]}: ${vistos} de ${total} lotes lidos`);
         await new Promise(r => setTimeout(r, 300));
-      } catch { /* pula leilão que falhar */ }
+      } catch (e) { console.log(`    Frazão ${u}: falhou (${String(e?.message || e).slice(0, 80)}) — pulado`); }
     }
 
     const imoveis = [...imoveisMap.values()].map(c => {
       const valMin = parseBRL(c.priceLine);
       if (!valMin) return null;
+      if (!c.tipo && !LT_IMOVEL.test(`${c.titulo} ${c.href}`)) return null; // lote que não é imóvel (evento misto)
       // título "Tipo na Bairro, Cidade, UF" → UF/cidade nos 2 últimos campos;
       // fallback no endereço (data-addr) e no nome do estado por extenso — antes
       // só ~25% traziam UF (título sem a sigla), reprovando a qualidade.
@@ -3485,7 +3513,10 @@ async function scraperFrazao(browser) {
       let cidade = ufTitulo && parts.length >= 2 ? parts[parts.length - 2] : '';
       if (!cidade) cidade = extrairCidadeTexto(c.addr, uf) || extrairCidadeTexto(c.titulo, uf);
       const dm = c.cal.match(/(\d{2})\/(\d{2})\/(\d{4})/);
-      const data_leilao = dm ? `${dm[3]}-${dm[2]}-${dm[1]}T00:00:00-03:00` : null;
+      const abertura = dm ? `${dm[3]}-${dm[2]}-${dm[1]}` : null;
+      const fimEvento = encerramentoDe.get(c.id) || null;
+      const dia = fimEvento && (!abertura || fimEvento > abertura) ? fimEvento : abertura;
+      const data_leilao = dia ? `${dia}T00:00:00-03:00` : null;
       const href = c.href.startsWith('http') ? c.href : `https://www.frazaoleiloes.com.br${c.href}`;
       return {
         fonte: 'FRAZAO',
