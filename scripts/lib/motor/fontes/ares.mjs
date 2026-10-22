@@ -4,7 +4,7 @@
  * cabeçalho `apikey` público de cada site; o det sai pronto do catálogo, sem abrir página.
  * Custo Bright Data ZERO (a API não tem Cloudflare; o site do Picelli tem, mas não é usado).
  */
-import { TENANTS, CATALOGO, extrairUrlsDeLote, detalhesDoCatalogo, idDaUrl, parseDetalhe, montarRow, checarQualidade, apurarAusentes } from '../../ares-parse.mjs';
+import { TENANTS, CATALOGO, extrairUrlsDeLote, detalhesDoCatalogo, idDaUrl, parseDetalhe, montarRow, checarQualidade, apurarAusentes, extrairUrlsDeVeiculo, detalhesDoCatalogoVeiculo } from '../../ares-parse.mjs';
 
 export const TENANTS_POR_CHAVE = TENANTS;
 
@@ -15,6 +15,8 @@ export default {
   paginaParam: 'offset', // não usado: maxPages 1 e limit=1000 na consulta (Picelli tem ~160 lotes vivos)
   maxPages: 1,
   tenants: Object.values(TENANTS),
+  // VEÍCULOS (21/10): mesma consulta, categoria `veiculos`; o det sai do catálogo (o site tem Cloudflare).
+  veiculos: { catalogo: CATALOGO, maxPages: 1, listaCompleta: true, extrairUrlsDeLote: extrairUrlsDeVeiculo, detalhesDoCatalogo: detalhesDoCatalogoVeiculo },
   parse: { extrairUrlsDeLote, detalhesDoCatalogo, idDaUrl, parseDetalhe, montarRow, checarQualidade },
   apurarAusentes, // lote vencido sem resultado → desfecho lido na própria API (20/10)
   conhecimento: {

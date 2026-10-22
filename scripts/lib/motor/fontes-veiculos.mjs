@@ -10,5 +10,6 @@ import jeleiloes from './fontes/jeleiloes.mjs';
 import nakakogue from './fontes/nakakogue.mjs';
 import globo from './fontes/globo.mjs';
 import leilaobrasil from './fontes/leilaobrasil.mjs';
+import ares from './fontes/ares.mjs';
 
-export const FONTES_VEICULOS = [freitas, globo, leilaobrasil, mgl, jeleiloes, simon, nakakogue];
+export const FONTES_VEICULOS = [freitas, globo, leilaobrasil, mgl, jeleiloes, simon, nakakogue, ares];

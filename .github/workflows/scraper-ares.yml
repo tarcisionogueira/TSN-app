@@ -42,3 +42,12 @@ jobs:
           ARES_MAX_LOTES: ${{ github.event.inputs.max_lotes || '300' }}
           ARES_DEBUG: ${{ github.event.inputs.debug || '0' }}
         run: node scripts/scraper-ares.mjs
+      # Veículos (21/10): a mesma consulta da API traz a categoria `veiculos` (Picelli ~10, Cunha ~1).
+      - name: Veículos ARES
+        if: ${{ !cancelled() }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          VEIC_FONTES: ares
+          VEIC_DRYRUN: ${{ github.event.inputs.dryrun || '0' }}
+        run: node scripts/scraper-veiculos-motor.mjs

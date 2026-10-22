@@ -109,6 +109,19 @@ export function detalhesDoCatalogo(txt, base) {
   return out;
 }
 
+// VEÍCULOS (21/10): o MESMO catálogo traz a categoria `veiculos` (Picelli 10, Cunha 1 — medido pelo banco).
+const ehVeiculoCat = slug => /^veicul/i.test(String(slug || ''));
+export function extrairUrlsDeVeiculo(txt, base) {
+  const urls = new Map();
+  for (const l of lotes(txt)) if (l?.id && ehVeiculoCat(l.categories?.slug)) urls.set(l.id, urlLote(base, l.id));
+  return urls;
+}
+export function detalhesDoCatalogoVeiculo(txt, base) {
+  const out = new Map();
+  for (const l of lotes(txt)) if (l?.id && ehVeiculoCat(l.categories?.slug)) out.set(urlLote(base, l.id), detalheDoLote(l));
+  return out;
+}
+
 const DIA = 864e5;
 const semAcento = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
 // Atributos ESTRUTURADOS do lote (category_attributes): "Matrícula", "Área privativa", "Área útil"…

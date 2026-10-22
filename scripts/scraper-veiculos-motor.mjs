@@ -79,7 +79,7 @@ async function coletarTenant(cfg, fetchFonte, tenant) {
   const v = cfg.veiculos;
   const cfgV = {
     ...cfg, catalogo: v.catalogo, paginaParam: v.paginaParam || cfg.paginaParam, maxPages: v.maxPages ?? cfg.maxPages ?? 3,
-    parse: { ...cfg.parse, extrairUrlsDeLote: v.extrairUrlsDeLote || cfg.parse.extrairUrlsDeLote, urlCandidata: v.urlCandidata },
+    parse: { ...cfg.parse, extrairUrlsDeLote: v.extrairUrlsDeLote || cfg.parse.extrairUrlsDeLote, detalhesDoCatalogo: v.detalhesDoCatalogo || cfg.parse.detalhesDoCatalogo, urlCandidata: v.urlCandidata },
   };
   // O `catalogo` do tenant é o de IMÓVEIS (ex.: Viva/Jinkings no feed): para veículo vale o do bloco.
   const tenantV = { ...tenant, catalogo: tenant.catalogoVeiculos ?? v.catalogo };
