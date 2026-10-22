@@ -6751,8 +6751,10 @@ async function main() {
     // portal/template de oferta que SUPERBID/SOLD (74%/100% de matrícula com enrich ligado).
     if (bSbid && rodar('TOTALLEILOES')) await coletarFonte('TOTALLEILOES', () => scraperSuperbidNet(bSbid, { stores: '16091', fonte: 'TOTALLEILOES', leiloeiro: 'Total Leilões', prefix: 'totall', baseSite: 'https://www.totalleiloes.com.br' }), { enrich: true, enrichCap: 120, browser: bSbid });
     // CREPALDI FORA (22/10, #288): a loja 16139 da Superbid deu 0 lote nas 90 rodadas desde 30/07, e o site da
-    // leiloeira virou página institucional que manda para o portal mybid.com.br (pendência de fonte nova).
-    // Rodar aqui só gravava "falhou" todo dia. Religar: CREPALDI_SBID=1.
+    // leiloeira virou página institucional que manda para o mybid.com.br — site da rede E-lance (franquia,
+    // sem catálogo). Os lotes da rede saem pela loja E-LANCE (16396) do portal Superbid, que a coleta
+    // SUPERBID já traz: recon de 22/10 (#295) achou 8 de 9 imóveis e 10 de 10 veículos no acervo (o 9º é
+    // nua-propriedade, barrado por regra). Rodar aqui só gravava "falhou" todo dia. Religar: CREPALDI_SBID=1.
     if (bSbid && process.env.CREPALDI_SBID === '1' && rodar('CREPALDI')) await coletarFonte('CREPALDI', () => scraperSuperbidNet(bSbid, { stores: '16139', fonte: 'CREPALDI', leiloeiro: 'Crepaldi Leilões', prefix: 'crep', baseSite: 'https://www.crepaldileiloes.com.br' }), { enrich: true, enrichCap: 120, browser: bSbid });
     // KRONLEILOES (16/09): candidato do EDITAL_DJEN, site próprio (kronleiloes.com.br)
     // bloqueia Cloudflare direto (403 em fetch puro) — parecia exigir Bright Data pago. Recon
