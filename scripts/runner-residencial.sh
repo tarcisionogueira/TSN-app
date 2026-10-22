@@ -285,6 +285,12 @@ rodar UBERLANDIALEILOES env LEILOAR_DRYRUN=0 node scripts/scraper-leiloar.mjs
 # 27/09 (2ª rodada): do PC o Milan também dá challenge do Cloudflare (recon_dump 62). O coletor
 # roda pelo GitHub com Bright Data (scraper-milan.yml) — recon daqui não tem mais o que ver.
 
+# RECON LEILOEIRO EDUARDO (22/10, #292, UMA VEZ) — leiloeiroeduardo.com.br (plataforma Roisoft) dá 403
+# ao IP do banco (AWS) e do GitHub. Daqui o navegador grava a home e as chamadas de API em recon_dump
+# para o coletor ser escrito. RECON_UMA_VEZ: não repete com dump útil < 30 dias. Falha não derruba nada.
+quer RECON_EDUARDO && { env RECON_BASE=https://www.leiloeiroeduardo.com.br RECON_ROTAS=/ RECON_DUMP=1 RECON_UMA_VEZ=1 \
+  node scripts/recon-dom-browser.mjs || echo "  (recon Leiloeiro Eduardo falhou — sem efeito no acervo)"; }
+
 # (27/09) O recon único de dilsonmoreira/jmfleiloes cumpriu o papel: eram lojas da rede Superbid
 # (recon_dump 75/76) e entraram no passo SUPERBID abaixo.
 
