@@ -235,6 +235,15 @@ function idDaUrl(url) {
 // Incremento/Comissão; fallbacks robustos; cidade/UF por "CIDADE/UF".
 function parseDetalhe(html, url) {
   const base = extrairGenerico(html, url) || {};
+  // DESCRIÇÃO INTEIRA (22/10): o genérico lê a og:description, que a plataforma CORTA em ~150 caracteres
+  // com "..." — 14 tenants (CERULI, AGOSTINHO, DANIELGARCIA, FERREIRA, PURCENA, ISAIAS, APICE…) gravavam
+  // a descrição pela metade. O texto completo está no corpo: `<b>Descrição: </b>…</div>`.
+  const descCorpo = decodificarEntidades(String((html.match(/<b>\s*Descri[çc][ãa]o:?\s*<\/b>([\s\S]*?)<\/div>/i) || [])[1] || '')
+    .replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, ' ')).replace(/[ \t]+/g, ' ').replace(/\s*\n\s*/g, '\n').trim();
+  if (descCorpo.length > 40 && (!base.descricao || /(\.\.\.|…)\s*$/.test(base.descricao) || descCorpo.length > base.descricao.length)) {
+    const praca = (String(base.descricao || '').match(/^Leil[ãa]o:[^,]{0,40},\s*/i) || [''])[0];
+    base.descricao = `${praca}${descCorpo}`;
+  }
   // Decodifica entidades antes de qualquer regex (18/08): `Leil&atilde;o`, `1&ordm;`,
   // `matr&iacute;cula` e `m&sup2;` nao casam com regex acentuada, e o resultado nao e erro —
   // e valor faltando com cara de ausencia. Ver `api/_texto-imovel.js`.
