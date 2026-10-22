@@ -702,8 +702,10 @@ async function coletarMegaPagina(page) {
     document.querySelectorAll('div[data-key]').forEach(cont => {
       const card = cont.querySelector('.card');
       if (!card) return;
-      // Somente ATIVOS: classe "open" e status sem "encerrad"
-      if (!card.classList.contains('open')) return;
+      // Somente ATIVOS: "open" (em praça) e "waiting" (leilão ainda por vir) — 22/10 (#275): só "open"
+      // entrava, e os 231 de 610 "waiting" (judicial com 1ª/2ª praça marcadas, valor, cidade) nunca chegavam
+      // ao acervo. Encerrado/arrematado/vendido continua fora pelo status escrito, abaixo.
+      if (!card.classList.contains('open') && !card.classList.contains('waiting')) return;
       const status = norm(card.querySelector('.card-status')?.textContent).toLowerCase();
       if (status.includes('encerrad') || status.includes('arrematad') || status.includes('vendido')) return;
 
@@ -830,14 +832,15 @@ async function scraperMegaLeiloes(browser) {
   // página vazia e devolvia o que tinha como se fosse tudo: em 22/10 saíram 397 de 610 ("Exibindo
   // 1 - 48 de 610 itens. Página 1 de 13"), saúde ok. Agora o total vem do próprio rodapé, a página
   // que falha é tentada de novo, e o que faltar vira coletaParcial — trava o sweep e a saúde.
-  let totalSite = null, totalPaginas = null;
+  let totalSite = null, totalPaginas = null, brutos = 0; // brutos = cards NA PÁGINA (abertos ou não) — é o que o rodapé conta
   const abrir = async (url) => {
     for (let t = 0; t < 2; t++) {
       try {
         await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
         try { await page.waitForSelector('div[data-key] .card', { timeout: 8000 }); } catch { /* página vazia: quem decide é a contagem de cards */ }
         const cards = await coletarMegaPagina(page);
-        if (cards.length || t === 1) return { cards };
+        const brutos = await page.evaluate(() => document.querySelectorAll('div[data-key] .card').length).catch(() => 0);
+        if (cards.length || t === 1) return { cards, brutos };
       } catch (e) { if (t === 1) return { erro: e.message.slice(0, 60) }; }
       await new Promise(r => setTimeout(r, 5000));
     }
@@ -847,7 +850,8 @@ async function scraperMegaLeiloes(browser) {
     let p = 1;
     for (; p <= MAX_PAGINAS; p++) {
       const url = `https://www.megaleiloes.com.br/imoveis?pagina=${p}`;
-      const { cards = [], erro } = await abrir(url);
+      const { cards = [], brutos: nBrutos = 0, erro } = await abrir(url);
+      brutos += nBrutos;
       if (p === 1 || totalSite == null) {
         const resumo = await page.evaluate(() => document.querySelector('.summary')?.textContent || '').catch(() => '');
         const m = String(resumo).replace(/\s+/g, ' ').match(/de\s+([\d.]+)\s+itens.*?P[áa]gina\s+\d+\s+de\s+(\d+)/i);
@@ -875,8 +879,9 @@ async function scraperMegaLeiloes(browser) {
       if (novos === 0 && !totalPaginas) { console.log('    Mega: página sem novos — fim da paginação'); break; }
       await new Promise(r => setTimeout(r, 1000));
     }
-    // Cards VISTOS (não os mapeados: mapearMega recusa lote sem valor, e isso não é falha de coleta).
-    if (totalSite && seen.size < totalSite * 0.95 && !imoveis.coletaParcial) imoveis.coletaParcial = `MEGA: viu ${seen.size} de ${totalSite} itens do site`;
+    // Cards BRUTOS da página contra o rodapé — os dois contam a mesma coisa. (A 1ª versão comparava os ACEITOS
+    // com o rodapé, que inclui encerrados: acusou "379 de 610" numa coleta completa — forma nº 10.)
+    if (totalSite && brutos < totalSite * 0.95 && !imoveis.coletaParcial) imoveis.coletaParcial = `MEGA: viu ${brutos} de ${totalSite} itens do site`;
     if (imoveis.coletaParcial) console.log(`    ⚠️ ${imoveis.coletaParcial}`);
     if (p > MAX_PAGINAS) console.log(`    ⚠️ Mega atingiu o limite de ${MAX_PAGINAS} páginas — pode haver mais imóveis`);
     console.log(`  Mega Leilões: ${imoveis.length} imóveis ativos coletados`);
