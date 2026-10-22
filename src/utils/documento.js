@@ -34,8 +34,10 @@ export const ehUrl = (v) => typeof v === 'string' && /^https?:\/\//i.test(v.trim
  */
 // Word/ODT/RTF contam (05/10): o edital do LEILAOBRASIL é `.doc` — a tela dizia "Edital no site"
 // com o arquivo no banco e o selo aceso. Mesma régua do `doc_arquivo()` do banco.
+// Pestana (22/10): documento por endpoint de API sem extensão (.../edital/20683019) — mesmo padrão do banco.
+const DOC_API_PESTANA = /^https?:\/\/api\.pestanaleiloes\.com\.br\/sgl\/v1\/leiloes\/\d+\/(lotes\/\d+\/)?(edital|editallote|matricula|laudo|regulamento|anexos?|documentos?)\/\d+\/?(\?|#|$)/i;
 export const ehDocArquivo = (v) => ehUrl(v)
-  && (/\.(pdf|docx?|odt|rtf)(\?|#|$)/i.test(v.trim()) || /\/storage\/v1\/object\/(sign|public)\//i.test(v));
+  && (/\.(pdf|docx?|odt|rtf)(\?|#|$)/i.test(v.trim()) || /\/storage\/v1\/object\/(sign|public)\//i.test(v) || DOC_API_PESTANA.test(v.trim()));
 
 /**
  * Matrícula: além de ser arquivo, não pode ser o `matricula.asp` da Caixa — aquela
