@@ -3259,9 +3259,27 @@ async function retencaoVeiculosVencidos() {
   }
 }
 
+// SAÚDE DOS VEÍCULOS (22/10, #281): MEGA/SUPERBID/ZUK/VIP/LJUD/SUPORTE/WEBLEILOES/CRLEILOES gravavam veículo sem
+// NENHUMA linha em fonte_saude — SUPERBID com 10.722 ativos podia zerar ou cair pela metade sem o monitor ver.
+// Centralizado aqui (todo piloto passa por salvarVeiculos); PESTANA já registra no próprio bloco.
+const metricasVeiculos = (vs) => {
+  const n = vs.length || 0, p = (x) => (n ? Number((x / n).toFixed(3)) : 0);
+  return { n, uf_pct: p(vs.filter(v => /^[A-Z]{2}$/.test(v.estado || '')).length), valor_pct: p(vs.filter(v => Number(v.valor_minimo) > 0).length),
+    link_pct: p(vs.filter(v => /^https?:\/\//.test(v.link_lote || '')).length), foto_pct: p(vs.filter(v => Array.isArray(v.fotos) ? v.fotos.length : v.fotos).length) };
+};
+async function saudeVeiculos(fonte, vs, { gravados, motivo } = {}) {
+  if (!fonte || fonte === 'PESTANA') return;
+  const parcial = vs?.coletaParcial;
+  const ok = vs.length > 0 && !parcial && (gravados == null || gravados === vs.length);
+  const mot = [parcial && `coleta parcial (${parcial})`, gravados != null && gravados < vs.length && `gravou ${gravados} de ${vs.length}`, motivo].filter(Boolean).join('; ');
+  try { await registrarSaude(`${fonte}_VEICULOS`, vs, 'principal', { ok, metricas: metricasVeiculos(vs), motivo: mot || (vs.length ? '' : 'nenhum veículo mapeado') }); }
+  catch (e) { console.log(`  ⚠️ ${fonte}_VEICULOS: saúde não gravada (${String(e?.message || e).slice(0, 80)})`); }
+}
+
 async function salvarVeiculos(registros, rotulo) {
   const nome = rotulo || (registros[0]?.fonte ? `${registros[0].fonte} veículos` : 'veículos');
-  if (!registros.length) { console.log(`    ${nome}: nada para salvar.`); return 0; }
+  // Lista vazia não diz de QUAL fonte é — quem chama com [] sem `fonte` não ganha saúde aqui (o rótulo é só texto).
+  if (!registros.length) { console.log(`    ${nome}: nada para salvar.`); await saudeVeiculos(registros.fonte, registros); return 0; }
   // Captura automática do e-mail do leiloeiro (17/09) — mesmo mecanismo de `salvarEFinalizar`
   // (imóvel, 11/09), centralizado aqui pra cobrir TODOS os pilotos de veículo de uma vez (só
   // SODRE fazia isso, hardcoded dentro do próprio scraper). Alimenta `leiloeiro_contato`,
@@ -3279,7 +3297,7 @@ async function salvarVeiculos(registros, rotulo) {
   const aptos = registros.filter((r) => r.status_patio !== 'excluido');
   const descartados = registros.length - aptos.length;
   if (descartados) console.log(`    ${nome}: ${descartados} descartado(s) — bem ainda com o executado/devedor (status_patio='excluido')`);
-  if (!aptos.length) { console.log(`    ${nome}: nada para salvar (tudo excluído).`); return 0; }
+  if (!aptos.length) { console.log(`    ${nome}: nada para salvar (tudo excluído).`); await saudeVeiculos(registros[0]?.fonte, registros, { motivo: 'todos com o executado/devedor' }); return 0; }
   // PÁTIO NÃO ESQUECE (23/09). A leitura da página do lote (que é de onde sai o sinal de pátio)
   // cobre ~120 lotes por rodada, em rodízio. O upsert gravava o status do DIA por cima: lote
   // confirmado ontem e não relido hoje voltava a 'indefinido' e sumia da busca — a cobertura
@@ -3324,6 +3342,7 @@ async function salvarVeiculos(registros, rotulo) {
     salvos += lote.length;
   }
   console.log(`    ${nome}: ${salvos} salvos em veiculos_leilao`);
+  await saudeVeiculos(fonteV, Object.assign(aptos, { coletaParcial: registros.coletaParcial }), { gravados: salvos });
   await desligarVeiculosSemDataSumidos(fonteV, aptos, salvos, nome);
   return salvos;
 }
