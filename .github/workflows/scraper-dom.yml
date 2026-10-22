@@ -247,6 +247,9 @@ jobs:
       # Recon em seco do portal Nova Serrana (#292) — só por dispatch; vira coletor depois de medir o JSON.
       - name: Recon Nova Serrana (em seco)
         if: ${{ !cancelled() && contains(github.event.inputs.fontes, 'novaserrana') }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         run: node scripts/recon-novaserrana.mjs
 
       - name: Albertomacedo

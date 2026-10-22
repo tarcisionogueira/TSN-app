@@ -5,6 +5,8 @@
  * credenciais de cliente PÚBLICAS do próprio bundle (`client_credentials`) — lidas do bundle a cada execução,
  * nunca gravadas no repositório. Imprime amostras do JSON para desenhar o parser.
  */
+import { viaBanco } from './lib/motor/fetch-fonte.mjs';
+
 const SITE = 'https://www.leiloesnovaserrana.com.br';
 const API = 'https://api.serranaleiloes.com.br/';
 const ID = 'https://id.serranaleiloes.com.br/';
@@ -16,10 +18,19 @@ async function texto(url, init) {
   return t;
 }
 
-const home = await texto(SITE);
+// O site (Cloudflare) dá 403 ao IP do GitHub e abre pelo banco (AWS): o bundle vem por lá. Só a API vai direto.
+async function doSite(url) {
+  try { return await texto(url); } catch (e) {
+    const b = await viaBanco(url);
+    if (!b.html) throw new Error(`${url}: direto (${String(e.message).slice(0, 60)}) e banco (${b.motivo}) falharam`, { cause: e });
+    console.log(`${url}: via banco`);
+    return b.html;
+  }
+}
+const home = await doSite(SITE);
 const app = (home.match(/\/js\/app\.[a-z0-9]+\.js/) || [])[0];
 if (!app) throw new Error('bundle app.js não encontrado na home');
-const js = await texto(SITE + app);
+const js = await doSite(SITE + app);
 const cid = (js.match(/"client_id","([^"]+)"/) || [])[1];
 const sec = (js.match(/"client_secret","([^"]+)"/) || [])[1];
 if (!cid || !sec) throw new Error('credenciais de cliente não encontradas no bundle');

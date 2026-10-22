@@ -185,6 +185,17 @@ const RE_TIPO_NAO_CIDADE = /^(Im[óo]vel|Direitos?|Rural|Urbano|Apartamento|Casa
 // `cidadeUFDeSlug`: se o regex não aceitar "de/do/da" DENTRO do nome, corta a cidade no
 // meio). `desde` permite pular um preâmbulo (menu, breadcrumb) antes de procurar.
 const RE_CIDADE_UF_BARE = /\b([A-ZÀ-Ÿ][A-Za-zÀ-ÿ]+(?:\s(?:d[aeo]s?|e|[A-ZÀ-Ÿ][A-Za-zÀ-ÿ]+)){0,3})\/([A-Z]{2})\b/;
+// PREFIXO ANTES DA CIDADE (22/10, #292): em "Casa em Campo Grande/MS", "Registro de Imóveis de São Paulo/SP" ou
+// "Lote de terreno de 450m² em Maracaju/MS" o trecho antes de "/UF" traz tipo e preposição. Tira palavras do
+// INÍCIO enquanto forem minúsculas, número ou do léxico abaixo — "São José do Rio Preto" fica inteira (cortar no
+// último " de " daria "Rio Preto").
+const PREFIXO_NAO_CIDADE = /^(?:casas?|apartamentos?|terrenos?|lotes?|im[óo]ve(?:l|is)|fazendas?|s[ií]tios?|ch[áa]caras?|salas?|galp[ãa]o|[áa]reas?|pr[ée]dios?|glebas?|registro|oficial|cart[óo]rio|comarca|munic[íi]pio|cidade|bairro|rua|avenida|situad[oa]|localizad[oa]|conjunto|comercial|residencial|rural|urbano|direitos?|fra[çc][ãa]o|ideal|n[º°o]?|em|no|na|de|da|do|dos|das)$/i;
+export function semPrefixoCidade(s) {
+  const p = String(s || '').trim().split(/\s+/);
+  while (p.length > 1 && (/^[a-zà-ÿ\d(]/.test(p[0]) || PREFIXO_NAO_CIDADE.test(p[0]))) p.shift();
+  return p.join(' ');
+}
+
 export function cidadeUFBare(txt, desde = 0) {
   const texto = String(txt || '');
   // Janela curta primeiro (rápido, evita casar algo errado num texto grande) — mas alguns

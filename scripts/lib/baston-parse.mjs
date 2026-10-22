@@ -4,7 +4,7 @@
  * (o motor tenta de novo sem cabeçalho).
  *
  * ESTRUTURA (medida pelo banco em 22/10):
- *   • catálogo `/leiloes/imoveis?page=N` (N a partir de 0, 20 cards por página): cada card é um LEILÃO,
+ *   • catálogo `/leiloes/imoveis?page=N` (20 cards por página): cada card é um LEILÃO,
  *     `<section class="leilao-card" data-url="/leilao/<vara>/<cidade>/<tribunal>/<id>">` (ou `/segundo-leilao/…`).
  *   • leilão: "Relação de Lotes" com `href=".../leilao/<id>/lote/<n>/<slug>"` (domínio www.bastonleiloes.com.br).
  *   • lote: `<h2 class="lote-title">Casa em Campo Grande/MS.</h2>`, "Lance Inicial: <b>R$ 295.192,55</b>",
@@ -13,7 +13,7 @@
  *     descrição em `.lote-descricao` (traz "VALOR DA AVALIAÇÃO … R$ …").
  */
 import { inferirTipo, extrairArea, checarQualidade } from './leilaopro-parse.mjs';
-import { num, plaus, textoDe, titleCase, montarRowDom, cidadeUFBare, RE_IMG_DESCARTA } from './dom-parse-util.mjs';
+import { num, plaus, textoDe, titleCase, montarRowDom, cidadeUFBare, semPrefixoCidade, RE_IMG_DESCARTA } from './dom-parse-util.mjs';
 import { decodificarEntidades } from '../../api/_texto-imovel.js';
 
 export const TENANTS = {
@@ -24,6 +24,8 @@ export const TENANTS = {
 export function extrairUrlsDeEvento(html, base) {
   const out = new Map();
   for (const m of String(html || '').matchAll(/data-url=["'](\/(?:segundo-)?leilao\/[^"']*?\/(\d+))["']/gi)) {
+    // O catálogo mistura leilões de DEMONSTRAÇÃO ("/simulacao/simulador/", "simulador-tjdft") com os reais.
+    if (/simula/i.test(m[1])) continue;
     try { out.set(m[2], new URL(m[1], base).href); } catch { /* url inválida: ignora */ }
   }
   return out;
@@ -46,7 +48,7 @@ function cidadeUf(...textos) {
   for (const t of textos) {
     const ms = [...String(t || '').matchAll(/([A-Za-zÀ-ÿ'][A-Za-zÀ-ÿ' .]{1,40}?)\s*\/\s*([A-Z]{2})\b/g)];
     const m = ms[0];
-    if (m) return { cidade: titleCase(m[1].replace(/^.*\s-\s/, '').replace(/^.*\s(?:em|no|na|de|da|do)\s+(?=\S)/i, '').trim()), estado: m[2] };
+    if (m) return { cidade: titleCase(semPrefixoCidade(m[1].replace(/^.*\s-\s/, ''))), estado: m[2] };
   }
   return { cidade: null, estado: null };
 }

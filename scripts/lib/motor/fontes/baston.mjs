@@ -1,7 +1,7 @@
 /**
  * FONTE (config) — BASTON LEILÕES (bastonleiloes.leilao.br). Triagem 22/10 (#292): HTML do servidor, via grátis.
- * Dois níveis com catálogo PAGINADO de leilões (`?page=` a partir de 0 → `paginaOffset: -1`, e os eventos vêm de
- * TODAS as páginas → `eventosEmTodasPaginas`): `/leiloes/imoveis` → leilão → `/leilao/<id>/lote/<n>/<slug>`.
+ * Dois níveis com catálogo PAGINADO de leilões (`?page=N`, 20 por página; os eventos vêm de TODAS as páginas →
+ * `eventosEmTodasPaginas`): `/leiloes/imoveis` → leilão → `/leilao/<id>/lote/<n>/<slug>`.
  * Parser em lib/baston-parse.mjs.
  */
 import {
@@ -15,7 +15,6 @@ export default {
   fetch: 'fetch',
   catalogo: '/leiloes/imoveis',
   paginaParam: 'page',
-  paginaOffset: -1,
   eventosEmTodasPaginas: true,
   maxPages: 8,
   maxPagesEvento: 1,

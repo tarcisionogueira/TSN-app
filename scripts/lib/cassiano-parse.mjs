@@ -12,7 +12,7 @@
  *     edital em `/media/arquivos/lote/…pdf` ("Regulamento - Edital"). Sem avaliação na página.
  */
 import { inferirTipo, extrairArea, checarQualidade } from './leilaopro-parse.mjs';
-import { num, plaus, textoDe, titleCase, montarRowDom, cidadeUFBare, RE_IMG_DESCARTA } from './dom-parse-util.mjs';
+import { num, plaus, textoDe, titleCase, montarRowDom, cidadeUFBare, semPrefixoCidade, RE_IMG_DESCARTA } from './dom-parse-util.mjs';
 import { decodificarEntidades } from '../../api/_texto-imovel.js';
 
 export const TENANTS = {
@@ -40,13 +40,13 @@ export const idDaUrl = (url) => { const m = String(url).match(/\/leiloes\/lote\/
 const limpo = (s) => decodificarEntidades(String(s || '').replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
 const dataBr = (s) => { const m = String(s || '').match(/(\d{2})\/(\d{2})\/(\d{4})/); return m ? `${m[3]}-${m[2]}-${m[1]}` : null; };
 
-// "Comarca de Uberlândia", "município de Prata", "Uberlândia/MG", "Uberlândia-MG".
+// "Comarca de Uberlândia.", "COMARCA DE TIROS (MG)", "SITUADO EM TIROS – MG", "Uberlândia/MG".
 function cidadeUf(desc) {
   const d = String(desc || '');
-  const m1 = d.match(/(?:Comarca|munic[íi]pio|cidade)\s+de\s+([A-ZÀ-Ý][A-Za-zÀ-ÿ']+(?:\s+(?:de|do|da|dos|das)?\s*[A-ZÀ-Ý][A-Za-zÀ-ÿ']+){0,3})(?:\s*[/-]\s*([A-Z]{2})\b)?/);
+  const m1 = d.match(/(?:comarca|munic[íi]pio|cidade)\s+de\s+([A-Za-zÀ-ÿ']+(?:\s+(?:de|do|da|dos|das)?\s*[A-Za-zÀ-ÿ']+){0,3}?)\s*(?:[/(–-]\s*([A-Z]{2})\b|[,.;)]|$)/i);
   if (m1) return { cidade: titleCase(m1[1].trim()), estado: m1[2] || 'MG' };
-  const m2 = d.match(/([A-ZÀ-Ý][A-Za-zÀ-ÿ' ]{2,40}?)\s*[/-]\s*(MG|GO|SP)\b/);
-  if (m2) return { cidade: titleCase(m2[1].trim()), estado: m2[2] };
+  const m2 = d.match(/([A-ZÀ-Ý][A-Za-zÀ-ÿ' ]{2,40}?)\s*[/–-]\s*(MG|GO|SP)\b/);
+  if (m2) return { cidade: titleCase(semPrefixoCidade(m2[1])), estado: m2[2] };
   return cidadeUFBare(d);
 }
 
@@ -57,7 +57,11 @@ export function parseDetalhe(html, url) {
   const descricao = limpo((h.match(/Descri[çc][ãa]o\s*<\/h1>\s*<div[^>]*>([\s\S]*?)<\/div>/i) || [])[1]).slice(0, 4000) || null;
   // Não há título do bem: a 1ª oração da descrição faz esse papel ("imóvel matrícula nº 45.699, situado na…").
   const frase = (descricao || '').split(/(?<=[a-zà-ÿ\d)])[.;](?:\s|$)/)[0] || '';
-  const titulo = frase ? (frase.charAt(0).toUpperCase() + frase.slice(1)).slice(0, 160) : null;
+  // Texto TODO em maiúsculas (comum nos editais) vira "Título Assim" — o card não grita.
+  const fr = frase && frase === frase.toUpperCase() ? titleCase(frase) : frase;
+  // Até a última vírgula antes de 90 caracteres: "Imóvel Rural Denominado Fazenda São Félix, Situado em Tiros – Mg".
+  const corte = fr && fr.length > 90 ? (fr.slice(0, 90).lastIndexOf(', ') > 30 ? fr.slice(0, fr.slice(0, 90).lastIndexOf(', ')) : fr.slice(0, 90)) : fr;
+  const titulo = corte ? (corte.charAt(0).toUpperCase() + corte.slice(1)).replace(/\s+[–-]\s+Mg\b/, '/MG') : null;
   const { cidade, estado } = cidadeUf(descricao);
   const minimo = plaus(num((txt.match(/Lan[çc]o Inicial\s*:?\s*R\$\s*([\d.]+,\d{2})/i) || [])[1]));
   const avaliacao = plaus(num((String(descricao || '').match(/avaliad[oa]s?\s+(?:em|por)\s*:?\s*R\$\s*([\d.]+,\d{2})/i) || [])[1]));

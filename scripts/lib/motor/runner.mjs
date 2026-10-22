@@ -46,8 +46,7 @@ export async function enumerar(fetchFonte, tenant, cfg, { maxPages, debug, semBD
   const eventosPaginas = new Map();
   let fetchOk = false, via = null, eventosCount = null, htmlPagina1 = null, htmlEvento1 = null, eventosDeclaramVazio = false;
   for (let p = 1; p <= maxPages; p++) {
-    // `paginaOffset` (22/10, Baston): site que numera a partir de 0 (`?page=1` é a 2ª página) usa -1.
-    const url = `${tenant.base}${tenant.catalogo ?? cfg.catalogo}${p > 1 ? `?${cfg.paginaParam}=${p + (cfg.paginaOffset || 0)}` : ''}`; // tenant.catalogo: id de categoria varia por site (Viva, 10/10)
+    const url = `${tenant.base}${tenant.catalogo ?? cfg.catalogo}${p > 1 ? `?${cfg.paginaParam}=${p}` : ''}`; // tenant.catalogo: id de categoria varia por site (Viva, 10/10)
     const r = await fetchFonte(url, { semBD });
     // Página 1 recusada: guarda o `via` da FALHA (ex.: 'dom-403') para o motivo em fonte_saude.
     if (!r.html) { if (p === 1) via = r.via || null; break; }
