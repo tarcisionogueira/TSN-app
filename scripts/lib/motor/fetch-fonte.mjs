@@ -31,16 +31,25 @@ export async function viaBanco(url, { json = false } = {}) {
     if (!r.ok) throw new Error(`${fn} HTTP ${r.status}: ${(await r.text().catch(() => '')).slice(0, 80)}`);
     return r.json();
   };
-  try {
-    const id = await rpc(json ? 'json_pedir' : 'pagina_pedir', { p_url: url });
+  const pedir = async (fn) => {
+    const id = await rpc(fn, { p_url: url });
     for (let i = 0; i < 30; i++) {
       await new Promise((r) => setTimeout(r, 1000));
       const [row] = await rpc('pagina_ler', { p_id: id });
       if (!row?.pronto) continue;
       if (row.status >= 200 && row.status < 300 && row.conteudo && !ehChallenge(row.conteudo)) return { html: row.conteudo };
-      return { html: null, motivo: row.erro ? String(row.erro).slice(0, 60) : (row.status >= 200 && row.status < 300 ? 'challenge' : `HTTP ${row.status}`) };
+      return { html: null, status: row.status, motivo: row.erro ? String(row.erro).slice(0, 60) : (row.status >= 200 && row.status < 300 ? 'challenge' : `HTTP ${row.status}`) };
     }
     return { html: null, motivo: 'sem resposta em 30s' };
+  };
+  try {
+    const r = await pedir(json ? 'json_pedir' : 'pagina_pedir');
+    // 22/10 (#292): IIS que dá 400 a UA de navegador abre sem cabeçalho — mesmo remédio do fetch direto.
+    if (!r.html && r.status === 400 && !json) {
+      const p = await pedir('pagina_pedir_pelada');
+      return p.html ? p : { html: null, motivo: `${r.motivo} · sem cabeçalho: ${p.motivo}` };
+    }
+    return r;
   } catch (e) { return { html: null, motivo: String(e?.message || e).slice(0, 80) }; }
 }
 

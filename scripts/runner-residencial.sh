@@ -163,6 +163,9 @@ rodar SUBLIME env PECINI_TENANT=SUBLIME PECINI_HEADLESS=1 PECINI_DRYRUN=0 node s
 # PW (22/10, triagem #292) — PW Leilões, mesma plataforma DefaultClean (lance renderizado por JS, como o Sublime).
 # Gate próprio em coleta_cliente (PW, 72 h). Responde 400 a alguns clientes HTTP fora do navegador — aqui é Chromium.
 rodar PW env PECINI_TENANT=PW PECINI_HEADLESS=1 PECINI_DRYRUN=0 node scripts/scraper-pecini.mjs
+# ARNALDO (22/10, #292) — arnaldoleiloes.com.br (BH) dá 403 ao GitHub na página E no AJAX que traz lance e datas;
+# daqui o fetch direto é grátis. Gate próprio em coleta_cliente (ARNALDO, 72 h).
+rodar ARNALDO env ARNALDO_DRYRUN=0 node scripts/scraper-arnaldo.mjs
 
 # Vlance (verdeamarelo/sudeste/capitalvalor) — API JSON que dá 403 em datacenter, mas do IP
 # RESIDENCIAL o fetch DIRETO funciona e é GRÁTIS. VLANCE_NO_BD=1 = 100% residencial (sem Bright

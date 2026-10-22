@@ -234,7 +234,8 @@ jobs:
         run: node scripts/scraper-cassiano.mjs
 
       - name: Arnaldo
-        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'arnaldo')) }}
+        # Só por dispatch: o GitHub leva 403 no AJAX de valores — a coleta de verdade é no runner residencial.
+        if: ${{ !cancelled() && contains(github.event.inputs.fontes, 'arnaldo') }}
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
