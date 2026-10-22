@@ -5264,13 +5264,28 @@ async function scraperLeilotechTenant(browser, tenant) {
   await page.setUserAgent(USER_AGENT);
   await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
   const itens = new Map(); // leilaoId|loteId → { lote, leilao }
+  // TODOS OS LOTES DO LEILÃO (22/10, #273). A home (leiloesHome) traz só o primaryLote de cada leilão:
+  // o evento 3231 da Topo tem 12 terrenos e entrava 1. A página /leilao/<id> da própria SPA consulta
+  // leilaoEntity { lotes(page, perPage: 15) { items: LoteCardFromEntity } } — mesmos campos do
+  // primaryLote (lanceAtual, avaliacao, location, coverImageUrl), então o mapLoteLeilotech serve igual.
+  // O HTML server-rendered lista os lotes mas sem o lance (20 de 72 ativos têm lance < avaliação).
+  const leiloes = new Map(); // leilaoId → leilão da home (imóvel)
   let amostraLogada = false;
+  const ehImovel = (leilao, lote) => LT_IMOVEL.test(`${leilao.title || ''} ${leilao.categoriaMascara || ''} ${lote.categoria?.nome || ''} ${lote.titulo || ''}`);
   page.on('response', async (resp) => {
     try {
       if (!/\/go\/graphql/.test(resp.url())) return;
       const t = await resp.text();
       if (t[0] !== '{') return;
       const j = JSON.parse(t);
+      const ent = j?.data?.leilaoEntity;
+      if (ent && Array.isArray(ent.lotes?.items)) {
+        const leilao = { ...(leiloes.get(String(ent.id)) || {}), ...ent, lotes: undefined };
+        for (const lote of ent.lotes.items) {
+          if (lote?.id && ehImovel(leilao, lote)) itens.set(`${leilao.id}|${lote.id}`, { lote, leilao });
+        }
+        return;
+      }
       const lista = j?.data?.leiloesHome?.items;
       if (!Array.isArray(lista)) return;
       for (const leilao of lista) {
@@ -5278,9 +5293,9 @@ async function scraperLeilotechTenant(browser, tenant) {
         if (!lote || !lote.id) continue;
         if (!amostraLogada) { console.log(`    [${tenant.domain}] amostra primaryLote: ${JSON.stringify(lote).slice(0, 400)}`); amostraLogada = true; }
         // só imóveis (título/categoria do leilão ou do lote)
-        const rotulo = `${leilao.title || ''} ${leilao.categoriaMascara || ''} ${lote.categoria?.nome || ''} ${lote.titulo || ''}`;
-        if (!LT_IMOVEL.test(rotulo)) continue;
+        if (!ehImovel(leilao, lote)) continue;
         itens.set(`${leilao.id}|${lote.id}`, { lote, leilao });
+        leiloes.set(String(leilao.id), leilao);
       }
     } catch { /* resposta não-JSON/parcial */ }
   });
@@ -5298,6 +5313,20 @@ async function scraperLeilotechTenant(browser, tenant) {
       }
       if (itens.size > 0) ok = true;
     }
+    // Leilão com mais de um lote: abre a página dele na MESMA aba (já passou pelo Cloudflare). Teto de
+    // 30 leilões por tenant para não estourar o job; a rolagem dispara as páginas seguintes (15 por vez).
+    const multi = [...leiloes.values()].filter((l) => Number(l.lotesAtivosCount ?? l.lotesCount) > 1).slice(0, 30);
+    let faltou = 0;
+    for (const l of multi) {
+      const antes = itens.size;
+      try { await page.goto(`${base}leilao/${l.id}${l.slug ? `/${l.slug}` : ''}`, { waitUntil: 'networkidle2', timeout: 30000 }); } catch { /* timeout parcial: usa o que já veio */ }
+      for (let s = 0; s < Math.ceil(Number(l.lotesAtivosCount ?? l.lotesCount) / 15); s++) {
+        try { await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)); } catch { /* */ }
+        await new Promise(r => setTimeout(r, 1500));
+      }
+      if (itens.size === antes) faltou++;
+    }
+    if (multi.length) console.log(`    [${tenant.domain}] ${multi.length} leilões com 2+ lotes abertos${faltou ? ` · ${faltou} sem lote novo (página não respondeu ou lotes não são imóvel)` : ''}`);
   } finally { await page.close().catch(() => {}); }
 
   const imoveis = [];
