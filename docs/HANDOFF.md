@@ -7,6 +7,25 @@
 
 
 
+## 22/10 — FRANQUIAS GRÁTIS SEM CUSTO NOVO + BUSCA SÓ COM O QUE DÁ PARA DISPUTAR
+
+**Franquias (dono: "inicialmente não quero novos custos de uso").** Regra e tabela no CLAUDE.md (seção 💳).
+- **Firecrawl** = plano grátis, 1.000 créditos/mês renovados (pricing conferido 22/10). Os tetos semanais
+  somavam ~950/mês sem contar a sessão. Agora `fetch-firecrawl.mjs` lê o saldo real
+  (`GET /v2/team/credit-usage`) antes da 1ª página e usa só a fatia da semana; saldo ilegível = não gasta;
+  renovou = volta sozinho. Veículos MGL com reserva 400 (último da fila). Consumo em `uso_integracoes`
+  (`firecrawl`) e card no painel Custos & Uso. Fila do que vale crédito: CLAUDE.md.
+- **Google Geocoding: 9.787 das 10.000 grátis em 22/10.** A trava existia, mas `somaUnidades` devolvia 0 quando
+  a leitura falhava e liberava gasto em statement timeout. Agora null = não chama; teto 9.900.
+- Windsor.ai: plano Free (conferido). PostHog/Sentry/Resend/Gemini/LocationIQ: franquia grátis, já no painel.
+- Conectores novos do diretório: nenhum que se pague hoje.
+
+**Busca (dono: "vencidos só os sem lance, só no filtro").** Regra `busca.so_disputaveis` em regra_negocio.
+Fora do filtro "Sem lance": imóvel com `data_fim` (2ª praça inclusa) >= hoje em Brasília ou sem data;
+veículo com `data_leilao` (encerramento) >= agora ou sem data. Aplicada em Busca.jsx (lista e mapa),
+`buscar_por_raio_v2` (migração 20261022_busca_so_disputaveis.sql) e BuscaVeiculos.jsx. Em 22/10: 2.081 imóveis
+vencidos ativos, 1.652 sem lance (só no filtro), 429 não apurados (somem até apurar).
+
 ## 21/10 (noite, 4) — VEÍCULOS, DO MAIOR BURACO PARA O MENOR (pedido do dono: "faça todos os veículos")
 
 **Desenho único:** `scripts/scraper-veiculos-motor.mjs` reaproveita a config do motor de cada fonte
