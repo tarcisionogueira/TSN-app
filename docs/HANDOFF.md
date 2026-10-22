@@ -7,6 +7,38 @@
 
 
 
+## 21/10 (noite, 4) — VEÍCULOS, DO MAIOR BURACO PARA O MENOR (pedido do dono: "faça todos os veículos")
+
+**Desenho único:** `scripts/scraper-veiculos-motor.mjs` reaproveita a config do motor de cada fonte
+(buscador, enumeração, parser) e só troca o catálogo pelo bloco `veiculos: {…}` da config; a
+conversão é `scripts/lib/veiculo-do-lote.mjs` (só veículo inteiro; pátio pelo classificador único;
+bem com o executado nunca gravado). Lista em `scripts/lib/motor/fontes-veiculos.mjs`.
+
+| Fonte | Como | Onde roda |
+|---|---|---|
+| FREITAS (~736) | ajax `PesquisarLotes?Categoria=1&TopRows=2000` | runner residencial (VEICULOS_MOTOR) |
+| SOLEON (16 tenants, ~300) | `/lotes/veiculo` no scraper-soleon | runner residencial |
+| GLOBOLEILOES (60) | `/leiloes-veiculos` (Inertia); ficha no `<meta description>` do parceiro Balbino | scraper-dom.yml |
+| LEILAOBRASIL + LUTHERO (~70) | mesma home; pré-filtro `slugPareceVeiculo` | scraper-leilaobrasil.yml |
+| MGL (Fernando, Lucas) | sitemap, filtro inverso | firecrawl-semanal |
+| JE · SIMON · NAKAKOGUE | catálogos de veículo | scraper-dom.yml |
+| PICELLI/CUNHA (Ares) | mesma consulta PostgREST, categoria `veiculos` | scraper-ares.yml |
+| VLANCE | `scraper_vlance.py` despeja os veículos (VLANCE_VEIC_JSON) → `vlance-veiculos.mjs`; gêmeo `ljud_veic_<lote_id>` não entra | runner residencial |
+| PESTANA · WEBLEILOES | scraper-puppeteer (veiculos-puppeteer.yml) | GitHub |
+
+**De brinde:** a categoria 5 ("Imóveis", 18 lotes) da Globo nunca era lida (`CATEGORIAS_IMOVEL`).
+**Regra de pátio estendida** (patio-veiculo.mjs): "Localização: <endereço>" = local informado (selo).
+**Ano/marca:** ano sozinho no fim do título e "Ano de fabricação/modelo:" da ficha; RE_MARCA ganhou
+Chrysler, Dodge, BYD, GWM, Troller etc.
+
+**Medido e NÃO é defeito:** MEGA (52 × ~97 no site) = 47 abertos, 8 com executado, 39 gravados — o
+resto é encerrado. Veículo ativo com leilão vencido (~3 mil) é a regra dos 15 dias do dono
+(proposta de compra, scraper-puppeteer.mjs ~3135).
+
+**Pendências:** #280 conferir 1ªs rodadas · #281 pilotos do puppeteer sem saúde + freio de sumidos
+travando LJUD/SUPORTE · #282 fontes pequenas restantes + Emílio Matos (provável cobertura pelo
+portal SUPERBID — conferir antes de gastar Firecrawl).
+
 ## 21/10 (noite, 3) — VARREDURA COMPLETA DE CAPTURA (site × banco, ~85 fontes, 5 agentes em paralelo)
 Pedido do dono depois de Vinco e Freitas. Método: sinais do banco (enumerados constante e redondo = página
 cortada; domínio de cluster sem ativo; veículo zerado) → contagem ao vivo no site (Firecrawl, ~150 chamadas).
