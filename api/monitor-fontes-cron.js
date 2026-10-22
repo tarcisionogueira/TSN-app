@@ -209,6 +209,14 @@ async function handler(req) {
     const { data, error: eGmat } = await supabase.rpc('reconciliar_gemeos_matricula');
     gemeosMatricula = eGmat ? { erro: eGmat.message } : data;
   }
+  // CO-ANÚNCIO (22/10, dono: o mesmo prédio de Salvador 5× na busca): no LJUD cada leiloeiro do pool publica o
+  // MESMO lote no próprio leilão, sem matrícula. Mesma fonte + título + descrição + preço + cidade + data, cada
+  // cópia de um leiloeiro diferente → fica 1. Ver supabase/migrations/20261022_gemeos_coanuncio.sql.
+  let gemeosCoanuncio = null;
+  {
+    const { data, error: eGco } = await supabase.rpc('reconciliar_gemeos_coanuncio');
+    gemeosCoanuncio = eGco ? { erro: eGco.message } : data;
+  }
   // GÊMEOS DE VEÍCULO (22/10, dono: "os carros parecem repetidos"): mesma placa/chassi em 2+ lotes — 1ª e 2ª
   // praça como itens separados, republicação, edital DJEN × lote. Fica 1; a 2ª praça vira valor_minimo_2.
   // Ver supabase/migrations/20261022_veiculos_gemeos.sql.
@@ -252,6 +260,9 @@ async function handler(req) {
   // e 539 duplicados voltavam SEM UM ÚNICO alarme. Agora entra na lista → dispara e-mail/assinatura.
   if (gemeosMatricula?.erro) {
     problemas.push({ fonte: 'GÊMEOS POR MATRÍCULA', tipo: 'reconciliação falhou', detalhe: `dedup parada — ${gemeosMatricula.erro}` });
+  }
+  if (gemeosCoanuncio?.erro) {
+    problemas.push({ fonte: 'GÊMEOS DE CO-ANÚNCIO', tipo: 'reconciliação falhou', detalhe: `dedup parada — ${gemeosCoanuncio.erro}` });
   }
   if (gemeosVeiculos?.erro) {
     problemas.push({ fonte: 'GÊMEOS DE VEÍCULO', tipo: 'reconciliação falhou', detalhe: `dedup parada — ${gemeosVeiculos.erro}` });
@@ -577,7 +588,7 @@ async function handler(req) {
     // condição limpa: zera o estado p/ que uma recorrência futura volte a avisar.
     const st = await lerEstadoAlerta(supabase, 'monitor_fontes');
     if (!st || st.assinatura !== '') await gravarEstadoAlerta(supabase, 'monitor_fontes', '', null);
-    return new Response(JSON.stringify({ ok: true, problemas: 0, fontes: Object.keys(ultima).length, gemeos, gemeosLeiloeiro, gemeosVlance, gemeosMesmaFonte, gemeosEntreLeiloeiros, gemeosMatricula, gemeosVeiculos }), {
+    return new Response(JSON.stringify({ ok: true, problemas: 0, fontes: Object.keys(ultima).length, gemeos, gemeosLeiloeiro, gemeosVlance, gemeosMesmaFonte, gemeosEntreLeiloeiros, gemeosMatricula, gemeosCoanuncio, gemeosVeiculos }), {
       headers: { 'Content-Type': 'application/json' },
     });
   }
@@ -638,7 +649,7 @@ async function handler(req) {
   // Uma fonte degradada perdia a única boca que tinha. Sem envio, não grava → re-tenta amanhã.
   if (enviar && emailEnviado) await gravarEstadoAlerta(supabase, 'monitor_fontes', assinatura, new Date().toISOString());
 
-  return new Response(JSON.stringify({ ok: true, problemas: problemas.length, enviado: emailEnviado, alerta_pendente: enviar && !emailEnviado, detalhes: problemas, gemeos, gemeosLeiloeiro, gemeosVlance, gemeosMesmaFonte, gemeosEntreLeiloeiros, gemeosMatricula, gemeosVeiculos }), {
+  return new Response(JSON.stringify({ ok: true, problemas: problemas.length, enviado: emailEnviado, alerta_pendente: enviar && !emailEnviado, detalhes: problemas, gemeos, gemeosLeiloeiro, gemeosVlance, gemeosMesmaFonte, gemeosEntreLeiloeiros, gemeosMatricula, gemeosCoanuncio, gemeosVeiculos }), {
     headers: { 'Content-Type': 'application/json' },
   });
 }
