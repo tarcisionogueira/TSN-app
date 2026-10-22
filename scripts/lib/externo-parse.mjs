@@ -79,9 +79,15 @@ export function cidadeUf(titulo, local) {
 const RS = String.raw`R\$\s*([\d.]{1,15},\d{2})`;
 export function valoresDoTexto(texto) {
   const t = String(texto || '').replace(/\s+/g, ' ');
-  const achar = (re) => { const m = t.match(re); return m ? plaus(reais(m[1])) : 0; };
-  let avaliacao = achar(new RegExp(String.raw`(?:avalia(?:do|da|ção|cao)(?:\s+total)?|valor\s+da\s+avalia(?:ção|cao))[^R]{0,80}?` + RS, 'i'));
-  let minimo = achar(new RegExp(String.raw`(?:lance|valor|pre[çc]o)\s+m[íi]nimo[^R]{0,80}?` + RS, 'i'));
+  // Primeiro valor PLAUSÍVEL, não o primeiro que casa: "avaliado em R$ 1.080,00 de custas" vinha antes da avaliação.
+  const achar = (re) => { for (const m of t.matchAll(new RegExp(re.source, 'gi'))) { const v = plaus(reais(m[1])); if (v) return v; } return 0; };
+  // 22/10: o vão entre a palavra e o número era `[^R]` com a flag `i` — que barra também o "r" minúsculo:
+  // "preço mínimo a seR aceito pelo Juízo é de R$ 1.750.000,00" nunca casava, e o SANCHES descartou TODOS
+  // os leilões desde 13/10 ("sem nenhum lote pronto"). E a avaliação desse edital vem sem "R$"
+  // ("avaliado em 3.500.000,00"). Vão = sem dígito; "R$" opcional (o piso de R$ 10 mil segura custas).
+  const VAO = String.raw`[^\d]{0,80}?(?:R\$\s*)?([\d.]{1,15},\d{2})`;
+  let avaliacao = achar(new RegExp(String.raw`(?:avalia(?:do|da|ção|cao)(?:\s+total)?|valor\s+da\s+avalia(?:ção|cao))` + VAO, 'i'));
+  let minimo = achar(new RegExp(String.raw`(?:lance|valor|pre[çc]o)\s+m[íi]nimo` + VAO, 'i'));
   // "Fixo o preço mínimo de R$ 600.000,00 (…), referente a 60% do valor da avaliação" (TRT-2, 13/10):
   // o mínimo vem com o PERCENTUAL — a avaliação sai dele quando o edital não a escreve.
   const ref = t.match(new RegExp(RS + String.raw`[^%]{0,120}?referente\s+a\s+(\d{2,3}(?:,\d+)?)\s*%[^.]{0,40}?avalia`, 'i'));

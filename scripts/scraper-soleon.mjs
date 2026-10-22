@@ -771,6 +771,11 @@ async function coletarVeiculosTenant(tenant) {
     await sleep(300);
   }
   console.log(`[${tenant.fonte}] veículos: enumerados ${urls.length} · lidos ${alvo.length} · prontos ${rows.length} · sem detalhe ${sem}${[...motivos].map(([m, n]) => ` · ${m}: ${n}`).join('')}`);
+  // Mesmo lote 2× na lista (22/10): upsert com fonte_id repetido no mesmo lote é recusado pelo Postgres
+  // ("cannot affect row a second time") e derrubava o tenant — DANIELGARCIA nunca gravou saúde de veículo.
+  const unicos = [...new Map(rows.map((r) => [r.fonte_id, r])).values()];
+  if (unicos.length < rows.length) console.log(`  [${tenant.fonte}] ${rows.length - unicos.length} veículo(s) repetido(s) na lista — gravado 1 de cada`);
+  rows.length = 0; rows.push(...unicos);
   if (!DRYRUN && rows.length) {
     // Em grupos de mesmas colunas: num upsert misto o PostgREST grava NULL na coluna ausente (fotos).
     const grupos = new Map();
@@ -783,6 +788,8 @@ async function coletarVeiculosTenant(tenant) {
   if (!DRYRUN) {
     await registrarSaude(supabase, `${tenant.fonte}_VEICULOS`, rows, 'soleon', {
       ok: respondeu && (rows.length > 0 || urls.length === 0), enumerados: urls.length,
+      // Respondeu e não tem veículo agora (CASAMARTILLO, INFINITY): 'vazio', não 'falhou' sem motivo.
+      vazio: respondeu && urls.length === 0,
       motivo: !respondeu ? 'catálogo de veículos não abriu' : (urls.length && !rows.length ? `${urls.length} enumerados e nenhum gravado` : ''),
     });
   }
@@ -794,7 +801,11 @@ async function mainVeiculos() {
   let total = 0, falhou = false;
   for (const tenant of TENANTS) {
     try { total += await coletarVeiculosTenant(tenant); }
-    catch (e) { falhou = true; console.error(`[${tenant.fonte}] veículos falhou: ${e?.message || e}`); }
+    catch (e) {
+      falhou = true; console.error(`[${tenant.fonte}] veículos falhou: ${e?.message || e}`);
+      // O motivo ia só para o log do PC (22/10): o banco não sabia por que o tenant não gravava.
+      if (!DRYRUN) await registrarSaude(supabase, `${tenant.fonte}_VEICULOS`, [], 'soleon', { ok: false, motivo: `erro: ${String(e?.message || e).slice(0, 200)}` }).catch(() => {});
+    }
   }
   console.log(`\nTotal: ${total} veículos prontos.`);
   if (falhou || !total) process.exitCode = 1;   // nada gravado não é sucesso (o gate do runner não carimba)

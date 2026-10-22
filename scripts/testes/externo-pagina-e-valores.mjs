@@ -27,6 +27,10 @@ assert.equal(ref.minimo, 600000); assert.equal(ref.avaliacao, 1000000);
 const primeiro = valoresDoTexto('Bem avaliado em R$ 690.000,00. No 1º leilão os bens somente poderão ser arrematados por valor igual ou superior ao de sua avaliação.');
 assert.deepEqual([primeiro.avaliacao, primeiro.minimo], [690000, 690000]);
 assert.equal(valoresDoTexto('custas de R$ 1.080,00 a título de avaliação').avaliacao, 0, 'piso de R$ 10 mil');
+// SANCHES 2241 (22/10): avaliação sem "R$" e "preço mínimo a seR aceito…" (o vão `[^R]` com flag i barrava o "r").
+const s2241 = valoresDoTexto('II-o imóvel foi avaliado em 3.500.000,00 (três milhões e quinhentos mil reais), sendo que o preço mínimo a ser aceito pelo Juízo é de R$\n\n1.750.000,00 (um milhão setecentos e cinquenta mil reais, correspondente a 50% do valor da avaliação de ID b3a3111);');
+assert.deepEqual([s2241.avaliacao, s2241.minimo], [3500000, 1750000]);
+assert.equal(valoresDoTexto('avaliado em R$ 1.080,00 de custas; valor da avaliação R$ 250.000,00').avaliacao, 250000, 'primeiro valor plausível');
 
 const urls = extrairUrlsDeLote('<a href="/externo/leilao/2255">x</a><a href="/externo/leilao/2251">y</a>', 'https://www.sanchesleiloes.com.br');
 assert.deepEqual([...urls.keys()], ['2255', '2251']);
