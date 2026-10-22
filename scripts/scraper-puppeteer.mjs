@@ -395,9 +395,13 @@ async function salvarImoveis(imoveis, fonte) {
   return { salvos: limpos.length, esperados: limpos.length };
 }
 
-// Salva em lotes de 500 e desativa os obsoletos da fonte (lotes que saíram do
+// Salva em blocos (ver BLOCO abaixo) e desativa os obsoletos da fonte (lotes que saíram do
 // ar). Trava de segurança: só desativa se a coleta foi saudável (>50), para um
 // erro de rede não zerar o acervo. Retorna a quantidade coletada.
+// O que a GRAVAÇÃO conseguiu por fonte nesta execução (22/10): a saúde media o COLETADO e carimbava
+// "ok" com 2 de 3 upserts caindo em timeout — o monitor nunca viu os 900 lotes congelados do SUPERBID.
+const gravacaoPorFonte = new Map();
+
 async function salvarEFinalizar(imoveis, fonte) {
   // Captura automática do e-mail do leiloeiro (11/09) — best-effort, usa qualquer URL real já
   // coletada nesta rodada; nunca lança e nunca atrasa a coleta por mais que o timeout interno
@@ -412,8 +416,24 @@ async function salvarEFinalizar(imoveis, fonte) {
     .eq('fonte', fonte).eq('ativo', true);
   if (eAtivos) console.error(`  ${fonte}: não consegui contar o acervo ativo (${eAtivos.message}) — sweep será pulado.`);
   let salvos = 0, esperados = 0;
-  for (let i = 0; i < imoveis.length; i += 500) {
-    const r = await salvarImoveis(imoveis.slice(i, i + 500), `${fonte} ${i + 1}-${Math.min(i + 500, imoveis.length)}`);
+  // BLOCOS DE 100, E O QUE ESTOURA SE DIVIDE (22/10). Eram blocos de 500: com ~35 gatilhos BEFORE por
+  // linha em imoveis_leilao, 500 linhas não cabem nos 8 s do statement_timeout — 2 de 3 blocos do
+  // SUPERBID caíam em 57014 todo dia e só o último gravava. Medido em 22/10: SUPERBID 902 de 1.027
+  // ativos sem regravar há 3+ dias (coletados 1.128), GRUPOLANCE 342 de 342, ZUK 672, MEGA 242,
+  // PESTANA 247 — preço, data e documento congelados, e o sweep pulado (gravouTudo falso) deixava
+  // lote vendido ativo. Bloco que ainda assim falhar é partido ao meio até 25 linhas.
+  const BLOCO = Math.max(25, Number(process.env.SALVAR_BLOCO || 100));
+  async function gravarBloco(lote, de) {
+    const r = await salvarImoveis(lote, `${fonte} ${de + 1}-${de + lote.length}`);
+    if (r.salvos === r.esperados || lote.length <= 25) return r;
+    const meio = Math.ceil(lote.length / 2);
+    console.log(`  ↻ ${fonte}: bloco de ${lote.length} não gravou — tentando em 2 de ${meio}`);
+    const a = await gravarBloco(lote.slice(0, meio), de);
+    const b = await gravarBloco(lote.slice(meio), de + meio);
+    return { salvos: a.salvos + b.salvos, esperados: a.esperados + b.esperados };
+  }
+  for (let i = 0; i < imoveis.length; i += BLOCO) {
+    const r = await gravarBloco(imoveis.slice(i, i + BLOCO), i);
     salvos += r.salvos; esperados += r.esperados;
   }
   // O GATE OLHA O GRAVADO, NÃO O COLETADO (18/08). `imoveis.length > 50` mede o que o scrape
@@ -425,6 +445,7 @@ async function salvarEFinalizar(imoveis, fonte) {
   // `esperados` exclui de propósito os lotes barrados por fração ideal — esses NÃO foram
   // gravados por decisão de negócio, e é correto que o sweep os aposente.
   const gravouTudo = salvos === esperados;
+  gravacaoPorFonte.set(fonte, { salvos, esperados });
   if (!gravouTudo) {
     console.error(`  🛑 ${fonte}: sweep PULADO — gravou ${salvos} de ${esperados}. Desativar aqui aposentaria lote por falha nossa.`);
   }
@@ -572,6 +593,11 @@ async function registrarSaude(fonte, imoveis, estrategia, validacao) {
   if (imoveis?.coletaParcial) {
     if (status === 'ok') status = 'degradado';
     motivo = [motivo, `coleta parcial (${imoveis.coletaParcial})`].filter(Boolean).join('; ');
+  }
+  const grav = gravacaoPorFonte.get(fonte);
+  if (grav && grav.salvos < grav.esperados) {
+    if (status === 'ok') status = 'degradado';
+    motivo = [motivo, `gravou ${grav.salvos} de ${grav.esperados} (upsert falhou — ver log)`].filter(Boolean).join('; ');
   }
   try {
     const { data: ant } = await supabase.from('fonte_saude')
