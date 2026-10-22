@@ -165,7 +165,11 @@ rodar SUBLIME env PECINI_TENANT=SUBLIME PECINI_HEADLESS=1 PECINI_DRYRUN=0 node s
 # RESIDENCIAL o fetch DIRETO funciona e é GRÁTIS. VLANCE_NO_BD=1 = 100% residencial (sem Bright
 # Data); se preferir BD como rede de segurança quando a casa também falhar, tire o VLANCE_NO_BD
 # e exporte BRIGHTDATA_API_TOKEN/ZONE no ~/.bidpro-runner.env.
-rodar VLANCE env VLANCE_NO_BD=1 python3 scripts/scraper_vlance.py --supabase --ignorar-robots
+VLANCE_VEIC_JSON="${TMPDIR:-/tmp}/bidpro-vlance-veiculos.json"; rm -f "$VLANCE_VEIC_JSON"
+rodar VLANCE env VLANCE_NO_BD=1 VLANCE_VEIC_JSON="$VLANCE_VEIC_JSON" python3 scripts/scraper_vlance.py --supabase --ignorar-robots
+# VEÍCULOS VLANCE (21/10): a mesma chamada acima já trouxe os veículos (antes jogados fora). Só
+# converte o arquivo que ELA escreveu agora (apagado antes) — gêmeo da LJUD não entra de novo.
+if quer VLANCE && [ -s "$VLANCE_VEIC_JSON" ]; then node scripts/vlance-veiculos.mjs "$VLANCE_VEIC_JSON" || echo "  (VLANCE veículos falhou — imóveis já gravados)"; fi
 
 # ── RADAR DE EDITAIS DO DJEN/CNJ (29/08) ────────────────────────────────────────────────────
 # Migrado do Bright Data para cá por decisão do dono: "vou rodar diariamente, migra o radar;

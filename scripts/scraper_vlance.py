@@ -627,6 +627,7 @@ def main():
     # (`coleta_cliente_concluir` corretamente recusa carimbar — falta é só o rastro em
     # fonte_saude pra dizer PORQUE, em vez do painel ficar sem nenhuma linha nova).
     motivos_dominio = {}
+    veiculos = []
 
     for dom in dominios:
         base = f"https://www.{dom.replace('www.', '')}"
@@ -661,6 +662,7 @@ def main():
             # ajustar foto_url()/montar_row() às cegas. Gated por env pra não poluir todo run.
             if os.environ.get("VLANCE_DEBUG_PAYLOAD") == "1":
                 print(f"    (1º lote, JSON completo: {json.dumps(lotes[0], ensure_ascii=False, default=str)[:4000]})")
+        lotes_todas = lotes
         if not args.todas:
             alvo = norm(args.categoria)
             lotes = [l for l in lotes if norm(l.get("nm_categoria")) == alvo]
@@ -668,12 +670,25 @@ def main():
         if not lotes:
             motivos_dominio[dom] = "API respondeu, mas 0 lote(s) (ver linhas 'página N/M' acima: pode ser pedir() sem resposta, paginação vazia, ou filtro de categoria)"
 
+        # VEÍCULOS (21/10): a MESMA chamada traz todas as categorias e o filtro acima jogava os
+        # veículos fora. Com VLANCE_VEIC_JSON, os ativos vão para um arquivo que
+        # scripts/vlance-veiculos.mjs converte (mesmo classificador de pátio dos outros coletores).
+        if os.environ.get("VLANCE_VEIC_JSON"):
+            for v in lotes_todas:
+                if norm(v.get("nm_categoria")).startswith("veic") and eh_ingerivel(v):
+                    veiculos.append({**v, "_dominio": dom, "_base": base,
+                                     "_pai": leiloes.get(str(v.get("leilao_id")), {})})
         for l in lotes:
             l["_dominio"] = dom
             todos_lotes.append(l)
             if args.supabase and eh_ingerivel(l):
                 rows_acervo.append(montar_row(l, leiloes.get(str(l.get("leilao_id")), {}), base, dom))
         time.sleep(args.delay)
+
+    if os.environ.get("VLANCE_VEIC_JSON"):
+        with open(os.environ["VLANCE_VEIC_JSON"], "w", encoding="utf-8") as f:
+            json.dump(veiculos, f, ensure_ascii=False, default=str)
+        print(f"\nVeículos: {len(veiculos)} lote(s) ativo(s) -> {os.environ['VLANCE_VEIC_JSON']}")
 
     if not todos_lotes:
         print("\nNenhum lote coletado.")
