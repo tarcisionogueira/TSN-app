@@ -27,7 +27,7 @@ import { assinarAnexos, chaveDocCanonica, ANEXO_COM_ARQUIVO } from '../utils/doc
 import TabelaAmortizacao from '../components/TabelaAmortizacao';
 import { gerarPDF } from '../components/RelatorioPDF';
 import { gerarLaudoPDF } from '../components/LaudoPDF';
-import { gerarDocumentalPDF } from '../components/DocumentalPDF';
+import { gerarDocumentalPDF, rotuloExecutado } from '../components/DocumentalPDF';
 import { gerarCombinadoPDF } from '../components/CombinadoPDF';
 import { scoreBidPro, scoreLabel } from '../utils/score';
 import { apiCall } from '../utils/apiCall';
@@ -2201,7 +2201,7 @@ export default function Analise() {
   // que houver). Um só objeto passado aos 3 relatórios.
   const cabPDF = {
     solicitante: { nome, role },
-    executado: parecerDocumental?.extracao?.executadoNome || '',
+    executado: rotuloExecutado(parecerDocumental?.extracao || {}),
     processo: parecerDocumental?.extracao?.numeroProcesso || cnjNumero || '',
     matricula: parecerDocumental?.extracao?.numeroMatricula || '',
   };

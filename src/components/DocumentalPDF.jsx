@@ -22,6 +22,19 @@ const OCUP = {
 };
 
 // CSS do documento (exportado para o PDF combinado reaproveitar).
+/**
+ * Executado com a situação de vida e a idade (22/10, pedido do dono — usufruto e eventualidades):
+ * "Fulano · falecido (espólio)" ou "Fulano · 72 anos". Só acrescenta o que o documental apurou.
+ */
+export function rotuloExecutado(ext = {}) {
+  const nome = String(ext.executadoNome || '').trim();
+  if (!nome) return '';
+  const extras = [];
+  if (ext.executadoSituacaoVital === 'falecido') extras.push('falecido');
+  if (Number(ext.executadoIdade) > 0 && ext.executadoSituacaoVital !== 'falecido') extras.push(`${ext.executadoIdade} anos`);
+  return extras.length ? `${nome} · ${extras.join(' · ')}` : nome;
+}
+
 export const ESTILOS_DOCUMENTAL = `
   body{font-family:'Inter',sans-serif;font-size:12px;color:#0f172a;padding:22px;line-height:1.65;background:white;margin:0;-webkit-font-smoothing:antialiased;}
   @media print{body{padding:0;}@page{margin:9mm;size:A4;}.av{page-break-inside:avoid;}}
@@ -173,7 +186,7 @@ ${cabecalhoBidPro({
   docSeq: 'Documento 2 de 3',
   imovel: d,
   matricula: cab.matricula || (P.extracao && P.extracao.numeroMatricula) || '',
-  executado: cab.executado || (P.extracao && P.extracao.executadoNome) || '',
+  executado: cab.executado || rotuloExecutado(P.extracao || {}),
   processo: cab.processo || (P.extracao && P.extracao.numeroProcesso) || '',
   solicitante: cab.solicitante || {},
   geradoEm: P.geradoEm,

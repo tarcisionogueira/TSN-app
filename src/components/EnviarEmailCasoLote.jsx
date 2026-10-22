@@ -4,7 +4,7 @@ import { garantirRelatorioVeiculo, relatoriosImovelFaltando } from '../utils/rel
 import { apiCall } from '../utils/apiCall';
 import CampoEmails from './CampoEmails';
 import RevisarTexto from './RevisarTexto';
-import { htmlDocumental } from './DocumentalPDF';
+import { htmlDocumental, rotuloExecutado } from './DocumentalPDF';
 import { htmlLaudo } from './LaudoPDF';
 
 /**
@@ -64,7 +64,7 @@ export default function EnviarEmailCasoLote({ casoId, imovelId, veiculoId, imove
     const imovel = rel.imovel || {};
     const nome = imovel.nome || imovel.endereco || 'Imovel';
     const ext = rel.documental?.result?.extracao || {};
-    const cab = { executado: ext.executadoNome || '', processo: ext.numeroProcesso || '', matricula: ext.numeroMatricula || '' };
+    const cab = { executado: rotuloExecutado(ext), processo: ext.numeroProcesso || '', matricula: ext.numeroMatricula || '' };
     const out = [];
     if (incluirRel.documental && rel.documental?.result) out.push({ nome: `Analise Documental - ${nome}`, html: htmlDocumental({ imovel, parecer: rel.documental.result, bidscore: null, cab }) });
     if (incluirRel.laudo && rel.laudo?.result) out.push({ nome: `Parecer Final - ${nome}`, html: htmlLaudo({ imovel, laudo: rel.laudo.result, cab }) });
