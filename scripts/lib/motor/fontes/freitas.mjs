@@ -20,7 +20,9 @@ export default {
   // UNABLE_TO_VERIFY_LEAF_SIGNATURE — o banco também (SSL peer certificate not OK). Não é
   // bloqueio nem anti-robô (o site não tem): é o cliente HTTP que não busca o intermediário.
   fetch: 'dom',
-  dom: { esperaMs: 1500 },
+  // 22/10: com 656 veículos o catálogo nunca chegava ao `networkidle2` (as fotos não param de carregar). Sem
+  // baixar imagem (o `src` continua no HTML) a rede silencia; a espera continua a mesma. Ver criarMotorDom.
+  dom: { esperaMs: 1500, bloquearMidia: true, timeoutMs: 90000 },
   // 21/10: `/Leiloes/Pesquisar?Categoria=2` traz só os 12 primeiros no HTML; o resto chega por
   // rolagem infinita (ajax `/Leiloes/PesquisarLotes`, 12 por vez). O navegador não rola, então
   // `enumerados` foi 12 em toda rodada contra ~130 no site — 6 leilões inteiros nunca entraram

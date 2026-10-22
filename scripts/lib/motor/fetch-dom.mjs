@@ -21,7 +21,11 @@ const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 // (HASTA e companhia) SEM depender do runner residencial. Se `usarProxyIsp` for true mas as env
 // vars não estiverem configuradas, cai em silêncio para o comportamento sem proxy (mesma regra
 // de `brightDataDisponivel()` em `_brightdata.js`).
-export function criarMotorDom({ esperaMs = 2500, timeoutMs = 45000, delayAntesMs = 0, isolarSessao = false, usarProxyIsp = false } = {}) {
+// `bloquearMidia` + `waitUntil` (22/10, FREITAS veículos): catálogo de 656 cards com foto nunca chegava ao
+// `networkidle2` — as imagens não param de carregar e o `goto` estourava os 45 s nas duas tentativas
+// ("catálogo de veículos não abriu" em 01:10 e 07:07). Para página que já vem pronta do servidor, sem
+// imagem (o `src` continua no HTML) e esperando só o DOM. Default: nada muda para as outras fontes.
+export function criarMotorDom({ esperaMs = 2500, timeoutMs = 45000, delayAntesMs = 0, isolarSessao = false, usarProxyIsp = false, bloquearMidia = false, waitUntil = 'networkidle2' } = {}) {
   const estado = { semCota: false };   // dom não usa Bright Data; campo existe pelo contrato
   const comProxy = usarProxyIsp && proxyIspDisponivel();
   let browser = null;
@@ -73,7 +77,11 @@ export function criarMotorDom({ esperaMs = 2500, timeoutMs = 45000, delayAntesMs
       ({ page, contexto } = await novaPagina());
       await page.setUserAgent(UA);
       await page.setViewport({ width: 1366, height: 900 });
-      const resp = await page.goto(url, { waitUntil: 'networkidle2', timeout: timeoutMs });
+      if (bloquearMidia) {
+        await page.setRequestInterception(true);
+        page.on('request', (r) => (['image', 'media', 'font'].includes(r.resourceType()) ? r.abort() : r.continue()));
+      }
+      const resp = await page.goto(url, { waitUntil, timeout: timeoutMs });
       // 4xx/5xx de verdade não é página: não entregar o corpo de erro como conteúdo.
       // E SEMPRE com log — o HASTA falhou mudo no 1º DRY-RUN e o "0 enumerados" não dizia porquê.
       if (resp && resp.status() >= 400) {
