@@ -41,6 +41,7 @@ import { cidadeBairroDoTitulo } from '../api/_cidade-do-titulo.js';
 import { capturarContatoSeAusente, lojaSuperbid, gravarContatosTenant } from './_contato-leiloeiro.mjs';
 import { localVeiculoZuk } from './lib/zuk-local-veiculo.mjs';
 import { galeriaDoHtml, montarFotos, fotosPreservadas } from './lib/galeria-veiculo.mjs';
+import { fotoDoMeta } from './lib/dom-parse-util.mjs';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -6352,7 +6353,9 @@ async function enriquecerDocumentosLote(browser, imoveis, { cap = 150, deadlineM
     const faltaGaleria = FONTES_GALERIA_DETALHE.has(im.fonte) && !(Array.isArray(im.fotos) && im.fotos.length > 1);
     // GRUPOLANCE: o endereço só existe na seção "Localização" da página (#88) — sem rua, visita.
     const faltaEndereco = (im.fonte === 'GRUPOLANCE' || im.fonte === 'HASTAPUBLICA') && !String(im.endereco || '').trim();
-    return !jaTemDocs || faltaAval || faltaArea || reconferirPreco || descEco || fotoOgGenerica || faltaGaleria || faltaEndereco;
+    // SEM FOTO (22/10, #289): WEBLEILOES 36 de 95 com o card "sem foto" e a foto real no og:image do lote.
+    const faltaFoto = !im.link_foto;
+    return !jaTemDocs || faltaAval || faltaArea || reconferirPreco || descEco || fotoOgGenerica || faltaGaleria || faltaEndereco || faltaFoto;
   });
   // 20/09 (2ª parte do achado ZUK): o `.slice(0, cap)` cru sempre pegava os MESMOS primeiros
   // `cap` alvos da lista, na mesma ordem que `imoveis` chega a cada rodada — se `alvos.length`
@@ -6374,6 +6377,12 @@ async function enriquecerDocumentosLote(browser, imoveis, { cap = 150, deadlineM
       try {
         await page.goto(url, { waitUntil: 'networkidle2', timeout: 20000 });
         const html = await page.content(); // DOM RENDERIZADO (docs montados por JS aparecem aqui)
+        // Foto do og:image da página do lote quando a listagem não deu (#289). O og:image de compartilhamento do site
+        // inteiro (`/og.jpg`, o caso HASTAPUBLICA de 22/09) não conta como foto.
+        if (!im.link_foto) {
+          const f = fotoDoMeta(html, url);
+          if (f && !/\/(og|opengraph|og-image)\.(jpe?g|png|webp)(?:[?#]|$)/i.test(f)) im.link_foto = f;
+        }
         // WEBLEILOES venda-direta: o preço da LISTAGEM pode estar desatualizado frente ao lance
         // vivo do lote (achado de 03/09). Sobrescreve com o valor autoritativo da página; a
         // avaliação anterior era DERIVADA desse mesmo preço (valor/(1-desc%)), então zera para

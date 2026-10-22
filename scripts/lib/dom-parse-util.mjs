@@ -280,6 +280,26 @@ export function anexosDeHtml(html, urlBase) {
 // de novo no próximo ciclo — o log mentia sobre o que a extração realmente achou. Trazer o
 // MESMO léxico pra cá deixa o log honesto E dá a `fotoDeHtml` uma chance real de achar outra
 // imagem da galeria quando a página tem um placeholder ANTES da foto de verdade.
+/**
+ * FOTO PELO META DA PÁGINA DO LOTE (22/10, #289): og:image / twitter:image / JSON-LD image, já com o filtro
+ * anti-logo. Só o meta — o fallback "primeira <img>" (fotoDeHtml) pegaria logo de comitente. Medido em 22/10:
+ * ALFA, HASTA, RJLEILOES e WEBLEILOES publicam a foto do lote no og:image e gravavam link_foto nulo.
+ */
+export function fotoDoMeta(html, base) {
+  const h = String(html || '');
+  const meta = (k) => (h.match(new RegExp(`<meta[^>]+(?:property|name)=["']${k}["'][^>]+content=["']([^"']+)["']`, 'i'))
+    || h.match(new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']${k}["']`, 'i')) || [])[1];
+  let ld = null;
+  const m = h.match(/<script[^>]+application\/ld\+json[^>]*>([\s\S]*?)<\/script>/i);
+  if (m) { try { const j = JSON.parse(m[1].trim()); ld = j?.image?.url || (Array.isArray(j?.image) ? j.image[0] : j?.image) || null; } catch { /* JSON-LD inválido: fica o og */ } }
+  for (const c of [meta('og:image'), meta('og:image:secure_url'), meta('twitter:image'), ld]) {
+    if (!c || typeof c !== 'string') continue;
+    let u; try { u = new URL(c.replace(/&amp;/g, '&'), base).href; } catch { continue; }
+    if (/^https?:/.test(u) && !RE_IMG_DESCARTA.test(u)) return u;
+  }
+  return null;
+}
+
 export const RE_IMG_DESCARTA = /logo|favico|sprite|avatar|placeholder|spinner|loading(?!=)|blank\.(?:gif|png)|pixel|[íi]cone?|banner-?topo|header|footer|whatsapp|selo|badge|social|sem[-_]?imagem|sem[-_]?foto|no[-_]?image|no[-_]?picture|cadastre[-_]?se\d*\.|\/banner[-_]?\d*\.|\/banners\/|banner[-_]?modal|modal[-_]?cadastro|n[ãa]o[-_]?dispon[íi]vel|indispon[íi]vel|lote[-_]?default|default[-_]?lote|img[-_]?padrao|(?:\/|_|-)tj[a-z]{2}[-_](?:com[-_])?sigla|bras[aã]o[-_.]|logo[-_]?tj|justi[cç]a[-_](?:do[-_]trabalho|federal|estadual)/i;
 export function fotoDeHtml(html, urlBase) {
   for (const m of String(html || '').matchAll(/<img\b[^>]*>/gi)) {

@@ -21,7 +21,7 @@ import { criarMotorFirecrawl } from './fetch-firecrawl.mjs';
 import { criarMotorApi } from './fetch-api.mjs';
 import { inferirUF } from '../inferir-uf.mjs';
 import { siteDeclaraVazio, MOTIVO_VAZIO_DECLARADO } from '../vazio-declarado.mjs';
-import { naoEhImovel, anularFotoRepetida } from '../dom-parse-util.mjs';
+import { naoEhImovel, anularFotoRepetida, fotoDoMeta } from '../dom-parse-util.mjs';
 import { galeriaDoHtml, montarFotos, FONTES_PASTA_DA_CAPA } from '../galeria-veiculo.mjs';
 import { patchDaApuracao } from '../../../api/_resultado-leilao.js';
 
@@ -314,6 +314,9 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
       if (!det) { sem++; continue; }
       if (det.encerrado) { encerrados++; if (i < iReleitura) recusas.push({ fonte_id: idFonte(tenant, cfg.parse.idDaUrl(url)), motivo: 'encerrado', dias: 30 }); continue; }
       const row = cfg.parse.montarRow(url, det, tenant);
+      // Sem foto no parser, a do meta da página (og:image filtrado) — #289. anularFotoRepetida, adiante, ainda derruba
+      // o og:image de TEMPLATE (o mesmo em todo lote).
+      if (!row.link_foto && html) row.link_foto = fotoDoMeta(html, url);
       // GALERIA (08/10): plataformas com a galeria na pasta exclusiva da capa (lib/galeria-veiculo.mjs).
       // Só grava quando achou mais de uma; o banco não deixa a galeria antiga virar nula (trg_imovel_fotos_nao_encolhem).
       if (html && FONTES_PASTA_DA_CAPA.has(row.fonte)) {
