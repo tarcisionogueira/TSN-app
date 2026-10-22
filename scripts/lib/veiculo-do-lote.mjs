@@ -168,7 +168,10 @@ export function veiculoDoLote(row, { id, fonte }) {
     desconto_percentual: vAval > 0 && vMin > 0 && vMin < vAval ? Math.round((1 - vMin / vAval) * 100) : null,
     cidade: row.cidade || null, estado: /^[A-Z]{2}$/.test(row.estado || '') ? row.estado : null,
     link_lote: row.url_lote || null, data_leilao: dataParaTimestamp(row.data_leilao_2 || row.data_leilao),
-    modalidade: row.modalidade || null, forma_pagamento: row.forma_pagamento || 'a_vista',
+    // veiculos_leilao aceita só judicial/extrajudicial/nao_identificado (CHECK). 'venda_direta' do parser de imóvel
+    // (Soleon) derrubava o upsert do lote inteiro (DANIELGARCIA_VEICULOS, 22/10): venda direta é extrajudicial.
+    modalidade: row.modalidade === 'judicial' ? 'judicial' : row.modalidade === 'venda_direta' || row.modalidade === 'extrajudicial' ? 'extrajudicial' : row.modalidade ? 'nao_identificado' : null,
+    forma_pagamento: row.forma_pagamento || 'a_vista',
     is_sucata: false, status_patio: patio.status, status_patio_motivo: patio.motivo,
     ativo: true, atualizado_em: new Date().toISOString(),
   };

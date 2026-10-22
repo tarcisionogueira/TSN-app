@@ -290,7 +290,9 @@ function parseDetalhe(html, rec) {
   if (TENANTS[FONTE].renderizar) {
     const NOMES = ['Primeira', 'Segunda', 'Terceira'];
     for (let n = 1; n <= 3; n++) {
-      const data = (html.match(new RegExp(`class="Praca${n}DataHoraAbertura"[^>]*>\\s*(\\d{2})/(\\d{2})/(\\d{4})`)) || []);
+      // PW (22/10) divide a data em `Praca<n>DataHoraEncerramento_Data`; o Sublime põe na `…Abertura`.
+      const data = (html.match(new RegExp(`class="Praca${n}DataHoraAbertura"[^>]*>\\s*(\\d{2})/(\\d{2})/(\\d{4})`))
+        || html.match(new RegExp(`class="Praca${n}DataHoraEncerramento_Data"[^>]*>\\s*(\\d{2})/(\\d{2})/(\\d{4})`)) || []);
       const val = (html.match(new RegExp(`class="ValorMinimoLance${NOMES[n - 1]}Praca"[^>]*>\\s*(?:R\\$\\s*)?([\\d.]+,\\d{2})`)) || [])[1];
       if (data[3] && val) pracasDatadas.push({ n, data: `${data[3]}-${data[2]}-${data[1]}`, valor: num(val) });
     }
@@ -370,10 +372,14 @@ function parseDetalhe(html, rec) {
   // Agora o sinal de "página institucional" decide sozinho (ícone do tema, título do site),
   // e a falta de foto só pesa quando a página TAMBÉM não tem nenhum sinal de lote — nenhum
   // valor e nenhum documento. Um lote de verdade tem pelo menos um dos dois.
-  const pareceInstitucional =
-    /apple-touch-icon|Themes\/DefaultClean|\/Content\/images\//i.test(base.link_foto || '')
-    || /^Pecini Leil[õo]es\s*[|-]/i.test((base.titulo || '').trim());
+  // 22/10 (PW, 36 de 40 "sem detalhe"): lote SEM foto própria tem o og:image do TEMA — e isso sozinho virava
+  // "página institucional", com preço e datas na página. Ícone do tema só condena junto com falta de sinal de lote;
+  // com sinal, é só "sem foto".
+  const fotoDoTema = /apple-touch-icon|Themes\/DefaultClean|\/Content\/images\//i.test(base.link_foto || '');
+  if (fotoDoTema) base.link_foto = null;
   const semSinalDeLote = !avaliacao && !valorMinimo && !anexos.length;
+  const pareceInstitucional = (fotoDoTema && semSinalDeLote)
+    || /^Pecini Leil[õo]es\s*[|-]/i.test((base.titulo || '').trim());
   const paginaInvalida = pareceInstitucional || (!base.link_foto && semSinalDeLote);
 
   return {

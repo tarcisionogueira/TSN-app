@@ -137,7 +137,10 @@ async function coletarTenant(cfg, fetchFonte, tenant) {
   }
   // O motivo de cada descarte vai para o log: "N descartados" sozinho obriga outra rodada para saber o porquê.
   console.log(`[${tenant.fonte}] prontos ${rows.length} · sem detalhe ${sem}${[...motivos].map(([m, n]) => ` · ${m}: ${n}`).join('')}`);
-  return { rows, enumerados: en.urls.length, fetchOk: en.fetchOk !== false, sem, cota, idsEnumerados: new Set(en.urls.map(idDe)) };
+  // O porquê também vai para a saúde (22/10, FREITAS_VEICULOS "652 enumerados e nenhum gravado"): o log fica no PC
+  // e, sem isto, descobrir o motivo exigia o dono copiar o terminal.
+  const porque = [sem ? `sem detalhe ${sem}` : '', ...[...motivos].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([m, n]) => `${m}: ${n}`)].filter(Boolean).join(' · ');
+  return { rows, enumerados: en.urls.length, fetchOk: en.fetchOk !== false, sem, cota, porque, idsEnumerados: new Set(en.urls.map(idDe)) };
 }
 
 async function main() {
@@ -160,7 +163,7 @@ async function main() {
           if (!DRYRUN) {
             await registrarSaude(supabase, `${tenant.fonte}_VEICULOS`, r.rows, cfg.chave, {
               ok: r.fetchOk && (r.rows.length > 0 || r.enumerados === 0), enumerados: r.enumerados, semCota: r.cota > 0,
-              motivo: !r.fetchOk ? 'catálogo de veículos não abriu' : (r.enumerados && !r.rows.length ? `${r.enumerados} enumerados e nenhum gravado` : ''),
+              motivo: !r.fetchOk ? 'catálogo de veículos não abriu' : (r.enumerados && !r.rows.length ? `${r.enumerados} enumerados e nenhum gravado (${r.porque || 'sem motivo registrado'})`.slice(0, 300) : ''),
             });
           }
         } catch (e) {
