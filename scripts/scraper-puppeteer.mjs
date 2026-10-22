@@ -458,13 +458,17 @@ async function salvarEFinalizar(imoveis, fonte) {
   // a limpeza por data do leilão continua aposentando o que venceu.
   const metadeDoAcervo = Number.isFinite(ativosAntes) && ativosAntes > 0 && salvos < ativosAntes * 0.5;
   const sweepBloqueado = imoveis.coletaParcial || eAtivos || metadeDoAcervo;
-  if (sweepBloqueado && gravouTudo && salvos > 50) {
+  // PISO DO SWEEP (22/10, #277): era `salvos > 50` fixo — fonte pequena (TOTALLEILOES 10, CALIL…) nunca
+  // desligava o lote que saiu do site. O que protege contra lista ruim é o freio RELATIVO (metadeDoAcervo)
+  // e a coleta parcial; o piso absoluto só evita varrer por 1–2 lotes soltos.
+  const SWEEP_MIN = 3;
+  if (sweepBloqueado && gravouTudo && salvos >= SWEEP_MIN) {
     const pq = imoveis.coletaParcial ? `coleta parcial (${imoveis.coletaParcial})`
       : eAtivos ? 'acervo ativo não pôde ser contado'
       : `gravou ${salvos} de ${ativosAntes} ativos (< 50%)`;
     console.error(`  🛑 ${fonte}: sweep PULADO — ${pq}. Desativar aqui aposentaria lote que a fonte ainda tem.`);
   }
-  if (salvos > 50 && gravouTudo && !sweepBloqueado) {
+  if (salvos >= SWEEP_MIN && gravouTudo && !sweepBloqueado) {
     // suprimido_motivo: registra POR QUE saiu de circulação — sumiu desta coleta (delisted,
     // vendido antes da praça, etc.). Sem isto o banco não distinguia "a fonte tirou do ar" de
     // "nós falhamos em coletar" para NENHUM lote destas fontes (0 de 2892 preenchidos no ZUK,

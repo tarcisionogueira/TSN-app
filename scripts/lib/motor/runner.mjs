@@ -45,6 +45,9 @@ export async function enumerar(fetchFonte, tenant, cfg, { maxPages, debug, semBD
   const detCatalogo = new Map();
   const eventosPaginas = new Map();
   let fetchOk = false, via = null, eventosCount = null, htmlPagina1 = null, htmlEvento1 = null, eventosDeclaramVazio = false;
+  // `cortada` (22/10, #277): a lista só prova AUSÊNCIA se foi lida inteira — teto de páginas/eventos batido com
+  // lote novo chegando, ou evento que não abriu, deixam lote do site fora da lista sem ele ter saído.
+  let cortada = null;
   for (let p = 1; p <= maxPages; p++) {
     const url = `${tenant.base}${tenant.catalogo ?? cfg.catalogo}${p > 1 ? `?${cfg.paginaParam}=${p}` : ''}`; // tenant.catalogo: id de categoria varia por site (Viva, 10/10)
     const r = await fetchFonte(url, { semBD });
@@ -60,6 +63,7 @@ export async function enumerar(fetchFonte, tenant, cfg, { maxPages, debug, semBD
     if (cfg.parse.detalhesDoCatalogo) for (const [u, det] of cfg.parse.detalhesDoCatalogo(r.html, tenant.base)) detCatalogo.set(u, det);
     if (debug) console.log(`   [${tenant.fonte}] pág ${p} (${r.via}): +${urls.size - antes} (total ${urls.size})`);
     if (urls.size === antes && eventosPaginas.size === antesEv) break;
+    if (p === maxPages) cortada = `catálogo no teto de ${maxPages} página(s)`;
     await sleep(400);
   }
 
@@ -78,8 +82,9 @@ export async function enumerar(fetchFonte, tenant, cfg, { maxPages, debug, semBD
   // mesmo assim o nível 2 saía sem número nenhum, porque só a 2ª busca (esta, agora removida)
   // podia falhar por conta própria.
   if (cfg.parse.extrairUrlsDeEvento && fetchOk) {
-    const eventos = [...(cfg.eventosEmTodasPaginas ? eventosPaginas : cfg.parse.extrairUrlsDeEvento(htmlPagina1, tenant.base)).values()]
-      .slice(0, cfg.maxEventos ?? 12);
+    const todosEventos = [...(cfg.eventosEmTodasPaginas ? eventosPaginas : cfg.parse.extrairUrlsDeEvento(htmlPagina1, tenant.base)).values()];
+    const eventos = todosEventos.slice(0, cfg.maxEventos ?? 12);
+    if (todosEventos.length > eventos.length) cortada = `${eventos.length} de ${todosEventos.length} eventos`;
     eventosCount = eventos.length;
     if (debug) console.log(`   [${tenant.fonte}] nível 2: ${eventos.length} evento(s)`);
     // ⚠️ O EVENTO TAMBÉM PAGINA (29/08). Isto lia UMA página por evento — o que bastava para o
@@ -100,7 +105,7 @@ export async function enumerar(fetchFonte, tenant, cfg, { maxPages, debug, semBD
       for (let p = 1; p <= maxPagEvento; p++) {
         const sep = ev.includes('?') ? '&' : '?';
         const re = await fetchFonte(p > 1 ? `${ev}${sep}${cfg.paginaParam}=${p}` : ev, { semBD });
-        if (!re.html) { if (p === 1) eventosDeclaramVazio = false; break; }
+        if (!re.html) { if (p === 1) { eventosDeclaramVazio = false; cortada = 'evento não abriu'; } break; }
         if (p === 1 && (cfg.parse.extrairUrlsDeLote(re.html, tenant.base).size || !siteDeclaraVazio(re.html))) eventosDeclaramVazio = false;
         if (!htmlEvento1) htmlEvento1 = { url: ev, html: re.html };
         const antes = urls.size;
@@ -110,6 +115,7 @@ export async function enumerar(fetchFonte, tenant, cfg, { maxPages, debug, semBD
         if (cfg.parse.detalhesDoCatalogo) for (const [u, det] of cfg.parse.detalhesDoCatalogo(re.html, tenant.base)) detCatalogo.set(u, det);
         if (debug) console.log(`   [${tenant.fonte}] evento ${ev.slice(-40)} pág ${p}: +${urls.size - antes} (total ${urls.size})`);
         if (urls.size === antes) break;
+        if (p === maxPagEvento) cortada = `evento no teto de ${maxPagEvento} página(s)`;
         await sleep(400);
       }
       if (!debug) console.log(`   [${tenant.fonte}] evento ${ev.slice(-40)}: +${urls.size - antesEvento}`);
@@ -118,7 +124,7 @@ export async function enumerar(fetchFonte, tenant, cfg, { maxPages, debug, semBD
   }
   if (fetchOk && urls.size === 0) await amostrarVazio(tenant, cfg, htmlPagina1, htmlEvento1);
   const vazioDeclarado = fetchOk && urls.size === 0 && (eventosDeclaramVazio || (!eventosCount && siteDeclaraVazio(htmlPagina1)));
-  return { urls: [...urls.values()], fetchOk, via, eventosCount, vazioDeclarado, detCatalogo };
+  return { urls: [...urls.values()], fetchOk, via, eventosCount, vazioDeclarado, detCatalogo, completa: fetchOk && !cortada, cortada };
 }
 
 // AMOSTRA DO VAZIO (27/09). "Respondeu 200 e enumerou 0" diz QUE o parser não achou lote, mas
@@ -361,7 +367,10 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
   // fonteVazia = respondeu mas 0 lotes (não é falha: o leiloeiro só não tem imóveis agora).
   // `fonteVazia`/`enumerados` medem o que o SITE listou, não o que sobrou do filtro por URL — senão
   // um acervo 100% não-imóvel viraria "site vazio" e calaria o alarme (forma 10).
-  return { prontos, encerrados, fonteVazia: fetchOk && enumerado.urls.length === 0, vazioDeclarado, enumerados: enumerado.urls.length, cotaNegada, eventosCount, viaCatalogo: via, naoImovelIds };
+  // `idsEnumerados` = TODOS os ids que o site listou (inclusive os fora pela URL): é a prova de presença que a
+  // varredura de sumidos usa — e só quando `listaCompleta` (#277).
+  const idsEnumerados = new Set(enumerado.urls.map(u => idFonte(tenant, cfg.parse.idDaUrl(u))));
+  return { prontos, encerrados, fonteVazia: fetchOk && enumerado.urls.length === 0, vazioDeclarado, enumerados: enumerado.urls.length, cotaNegada, eventosCount, viaCatalogo: via, naoImovelIds, idsEnumerados, listaCompleta: enumerado.completa, listaCortada: enumerado.cortada };
 }
 
 // Roda a coleta de uma fonte inteira (todos os tenants). opts:
@@ -386,7 +395,7 @@ export async function rodarFonte(cfg, opts) {
   console.log(`${rotulo} ${dryrun ? '(DRY-RUN — não grava)' : '(GRAVANDO)'} · tenants: ${tenants.map(t => t.fonte).join(',')} · max ${maxLotes}/tenant`);
 
   for (const tenant of tenants) {
-    const { prontos, encerrados, fonteVazia, vazioDeclarado, enumerados, cotaNegada, eventosCount, viaCatalogo, naoImovelIds = [] } = await coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debug, semBD, dryrun });
+    const { prontos, encerrados, fonteVazia, vazioDeclarado, enumerados, cotaNegada, eventosCount, viaCatalogo, naoImovelIds = [], idsEnumerados, listaCompleta, listaCortada } = await coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debug, semBD, dryrun });
 
     if (!prontos.length) {
       // ⚠️ 29/08 — FONTE VAZIA PRECISA VIRAR LINHA, NÃO SILÊNCIO. Isto era um `continue` que
@@ -504,6 +513,33 @@ export async function rodarFonte(cfg, opts) {
       if (eSum) console.error(`[${tenant.fonte}] varredura de sumidos falhou:`, eSum.message);
       else console.log(`[${tenant.fonte}] varredura: ${sumidos?.length || 0} lote(s) fora do catálogo há ${cfg.sumidoDias}+ dias → sumiu_da_fonte`);
     }
+    // SUMIDOS PELA LISTA (22/10, #277) — vale para TODA fonte do motor, não só as com `sumidoDias`. A prova é
+    // exata: lote ativo desta fonte que NÃO está na enumeração lida inteira saiu do site. (A regra de cima usa
+    // `atualizado_em`, que confunde "não foi relido por orçamento" com "sumiu" — por isso era opt-in.) Media em
+    // 22/10: JELEILOES 84 de 147 ativos sem regravar, ALBERTOMACEDO 10 de 28, GIORDANO 8 de 14. Freio relativo
+    // ao acervo: mais de 50% (ou de 5, em fonte pequena) sumindo de uma vez é lista ruim, não site esvaziado.
+    // Leilão sem lance apurado há < 15 dias fica (janela da proposta de compra, mesma regra do coletor principal).
+    if (listaCompleta && idsEnumerados?.size && !estado.semCota && !cotaNegada) {
+      const ativos = [];
+      for (let de = 0; ; de += 1000) {
+        const { data, error: eAt } = await supabase.from('imoveis_leilao').select('id,fonte_id,resultado_leilao,resultado_apurado_em')
+          .eq('fonte', tenant.fonte).eq('ativo', true).order('id').range(de, de + 999);
+        if (eAt) { console.error(`[${tenant.fonte}] sumidos pela lista: leitura falhou (${eAt.message}) — pulado`); ativos.length = 0; break; }
+        ativos.push(...data);
+        if (data.length < 1000) break;
+      }
+      const janela = Date.now() - 15 * 864e5;
+      const fora = ativos.filter(a => !idsEnumerados.has(a.fonte_id)
+        && !(['sem_lance', 'indeterminado'].includes(a.resultado_leilao) && Date.parse(a.resultado_apurado_em || 0) > janela));
+      if (fora.length > Math.max(5, ativos.length * 0.5)) {
+        console.warn(`[${tenant.fonte}] sumidos pela lista: ${fora.length} de ${ativos.length} ativos fora da lista — demais para uma rodada, NÃO desligados (conferir a enumeração)`);
+      } else if (fora.length) {
+        const { data: saiu, error: eF } = await supabase.from('imoveis_leilao').update({ ativo: false, suprimido_motivo: 'sumiu_da_fonte' })
+          .in('id', fora.map(a => a.id)).eq('ativo', true).select('id');
+        if (eF) console.error(`[${tenant.fonte}] sumidos pela lista: desligamento falhou (${eF.message})`);
+        else console.log(`[${tenant.fonte}] sumidos pela lista: ${saiu.length} lote(s) que saíram do site → sumiu_da_fonte`);
+      }
+    } else if (!listaCompleta && listaCortada) console.log(`[${tenant.fonte}] sumidos pela lista: pulado — lista incompleta (${listaCortada})`);
     await apurarVencidos(supabase, fetchFonte, tenant, cfg);
     await registrarConhecimento(supabase, { fonte: tenant.fonte, ...cfg.conhecimento, qualidade: qualidadeColeta(prontos) });
   }
