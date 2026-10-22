@@ -128,8 +128,11 @@ const RESULTADO_OPTS = [
   // 'Com lance' SAIU (13/10, dono): lote arrematado não aceita proposta e já sai da vitrine na
   // varredura horária (desativar_leiloes_encerrados) — o filtro só listaria o que não se pode comprar.
   ['sem_lance', 'Sem lance', 'Confirmado na página do leiloeiro: o leilão encerrou sem nenhum lance. Oportunidade de propor compra direta.'],
-  ['nao_apurado', 'Ainda não apurado', 'O leilão ainda não encerrou, ou encerrou e o cron do fim do dia ainda não chegou nele.'],
+  // 22/10: a busca só mostra o que ainda dá para disputar — vencido sem resultado não aparece em lugar nenhum.
+  ['nao_apurado', 'Ainda não apurado', 'Leilão ainda aberto, sem resultado. O vencido só aparece em "Sem lance", depois de apurado.'],
 ];
+// Dia de HOJE em Brasília (AAAA-MM-DD): `data_fim` é data local; o dia UTC viraria "amanhã" às 21h.
+const hojeBrasilia = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
 function calcularJanelaPrazo(opcao) {
   if (!opcao) return null;
   if (opcao === 'sem_data') return { tipo: 'sem_data' };
@@ -312,6 +315,11 @@ function aplicarFiltrosImoveis(base, f, cidadesFiltro, raioAtivo) {
   if (f.resultadoLeilao === 'sem_lance') q = q.eq('resultado_leilao', 'sem_lance'); // só confirmado (24/09): indeterminado pode ter tido lance
   else if (f.resultadoLeilao === 'nao_apurado') q = q.is('resultado_leilao', null);
   else if (f.resultadoLeilao) q = q.eq('resultado_leilao', f.resultadoLeilao);
+  // SÓ O QUE DÁ PARA DISPUTAR (22/10, dono): "na busca aberta e com os demais filtros devemos encontrar
+  // leilões que possamos disputar"; o vencido sem lance aparece SÓ no filtro "Sem lance". `data_fim` é o
+  // último prazo (2ª praça inclusa); sem data (venda direta, ~60% do acervo) continua disputável.
+  // Mesma regra na RPC buscar_por_raio_v2 (migração 20261022_busca_so_disputaveis.sql).
+  if (f.resultadoLeilao !== 'sem_lance') q = q.or(`data_fim.gte.${hojeBrasilia()},data_fim.is.null`);
   // Intenção da busca — filtra DE FATO pelo objetivo (combina em AND com os demais filtros).
   if (f.intencao === 'revenda')        q = q.in('tipo', TIPOS_LIQUIDOS).gte('desconto_percentual', REVENDA_DESCONTO_MIN);
   else if (f.intencao === 'locacao')   q = q.in('tipo', TIPOS_RESIDENCIAL).gte('desconto_percentual', LOCACAO_DESCONTO_MIN);

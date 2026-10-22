@@ -68,7 +68,8 @@ const RESULTADO_OPTS = [
   // 'Com lance' SAIU (13/10, dono): lote arrematado não aceita proposta e já sai da vitrine na
   // varredura horária (desativar_leiloes_encerrados) — o filtro só listaria o que não se pode comprar.
   ['sem_lance', 'Sem lance', 'Confirmado na página do leiloeiro: o leilão encerrou sem nenhum lance. Oportunidade de propor compra direta.'],
-  ['nao_apurado', 'Ainda não apurado', 'O leilão ainda não encerrou, ou encerrou e o cron do fim do dia ainda não chegou nele.'],
+  // 22/10: a busca só mostra o que ainda dá para disputar — vencido sem resultado não aparece em lugar nenhum.
+  ['nao_apurado', 'Ainda não apurado', 'Leilão ainda aberto, sem resultado. O vencido só aparece em "Sem lance", depois de apurado.'],
 ];
 
 // "Tipo de veículo" (13/09, pedido do dono) — NÃO é o mesmo campo que `tipoMonta`
@@ -356,6 +357,10 @@ function aplicarFiltros(q, f, ign = new Set()) {
   else if (f.resultadoLeilao === 'nao_apurado') q = q.is('resultado_leilao', null);
   else if (f.resultadoLeilao === 'vendido') q = q.or('resultado_leilao.eq.vendido,and(teve_lance.is.true,resultado_leilao.not.is.null)');
   else if (f.resultadoLeilao) q = q.eq('resultado_leilao', f.resultadoLeilao);
+  // SÓ O QUE DÁ PARA DISPUTAR (22/10, dono) — mesma regra da busca de imóveis: o vencido sem lance
+  // aparece SÓ no filtro "Sem lance". `data_leilao` do veículo é o ENCERRAMENTO (última praça).
+  // Fica fora do `ign` de propósito: o diagnóstico de "por que não achei" não pode sugerir vencido.
+  if (ign.has('resultadoLeilao') || f.resultadoLeilao !== 'sem_lance') q = q.or(`data_leilao.gte.${new Date().toISOString()},data_leilao.is.null`);
   if (ign.has('motor') || !f.motor) { /* sem filtro */ }
   else if (f.motor === 'nao_informado') q = q.is('motor_status', null);
   else q = q.eq('motor_status', f.motor);
