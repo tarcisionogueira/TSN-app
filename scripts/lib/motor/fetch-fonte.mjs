@@ -78,8 +78,8 @@ export function criarMotorFetch(proposito) {
   const estado = { semCota: false };
   // DISJUNTOR POR HOST (revisão 29/09): sem memória, fonte que SEMPRE é Cloudflare (leilaobrasil,
   // emiliomatos) pagava ~20 s do direto + até 30 s do banco em CADA página antes do Bright Data —
-  // risco de estourar o teto do job. Banco falhou 2× no host → pula o banco nele; banco funcionou e
-  // o direto falhou → pula o direto nele. Vale só nesta execução (o próximo run reaprende).
+  // risco de estourar o teto do job. Banco falhou 2× seguidas no host → pausa crescente nele; banco
+  // funcionou e o direto falhou → pula o direto nele (exceto com o banco em pausa). Vale só nesta execução (o próximo run reaprende).
   const hostDe = (u) => { try { return new URL(u).host; } catch { return ''; } };
   const bancoFalhas = new Map();
   const diretoInutil = new Set();
@@ -91,7 +91,11 @@ export function criarMotorFetch(proposito) {
     // lote pronto" — LEJE e FREITAS falharam do PC do dono sem ninguém saber se foi 403,
     // challenge ou rede. Agora o motivo segue no `via` até o registro de saúde.
     let porQueGratis = null;
-    if (diretoInutil.has(host)) porQueGratis = 'direto pulado (banco serve este host)';
+    const bancoPausado = (bancoFalhas.get(host)?.ate || 0) > Date.now();
+    // 23/10 (LEILAOELETRONICO): o banco serviu o feed (direto marcado inútil), falhou 2× nas páginas e
+    // foi desligado — sem caminho nenhum, 118 de 118 lotes "sem detalhe" em 4 s. Com o banco em pausa,
+    // o direto volta a ser tentado.
+    if (diretoInutil.has(host) && !bancoPausado) porQueGratis = 'direto pulado (banco serve este host)';
     else try {
       const c = new AbortController();
       const t = setTimeout(() => c.abort(), 20000);
@@ -108,11 +112,22 @@ export function criarMotorFetch(proposito) {
     } catch (e) { porQueGratis = `rede: ${String(e?.name === 'AbortError' ? 'timeout 20s' : e?.cause?.code || e?.message || e).slice(0, 60)}`; }
 
     // 1b) VIA BANCO — grátis, outro IP (AWS). Antes de gastar Bright Data.
-    if ((bancoFalhas.get(host) || 0) >= 2) porQueGratis = `${porQueGratis} · banco: pulado (2 falhas neste host)`;
+    // Freio (23/10): 2 falhas seguidas → PAUSA no host (crescente, ver abaixo), depois tenta de novo (antes era
+    // desligado pelo resto da rodada, e uma falha passageira do pg_net zerava a coleta da fonte).
+    // Pausa curta (≤ 60 s) com o direto também recusado: ESPERA e tenta o banco — senão uma fonte rápida
+    // queima todas as páginas dentro da janela (118 em 4 s). Pausa longa = o banco não serve este host.
+    const restaPausa = (bancoFalhas.get(host)?.ate || 0) - Date.now();
+    if (restaPausa > 0 && restaPausa <= 60000) await new Promise((r) => setTimeout(r, restaPausa));
+    if (restaPausa > 60000) porQueGratis = `${porQueGratis} · banco: em pausa (falhas seguidas neste host)`;
     else {
       const banco = await viaBanco(url);
-      if (banco.html) { bancoFalhas.set(host, 0); diretoInutil.add(host); return { html: banco.html, via: 'banco' }; }
-      bancoFalhas.set(host, (bancoFalhas.get(host) || 0) + 1);
+      if (banco.html) { bancoFalhas.delete(host); diretoInutil.add(host); return { html: banco.html, via: 'banco' }; }
+      const f = bancoFalhas.get(host) || { n: 0, ate: 0, pausas: 0 };
+      f.n += 1;
+      // Pausa cresce a cada vez (1, 2, 4… até 15 min): host em que o banco nunca serve não paga 2
+      // tentativas por minuto; falha passageira volta a tentar logo.
+      if (f.n >= 2) { f.n = 0; f.pausas += 1; f.ate = Date.now() + Math.min(60000 * 2 ** (f.pausas - 1), 900000); }
+      bancoFalhas.set(host, f);
       porQueGratis = `${porQueGratis} · banco: ${banco.motivo}`;
     }
 

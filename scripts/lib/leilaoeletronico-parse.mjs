@@ -115,7 +115,12 @@ export function parseDetalhe(html, url, { agora = new Date() } = {}) {
     .map((c) => extrairArea(`${c.v.replace(/m\s*$/i, 'm²')}`, '')).find((v) => v > 0) || 0;
 
   const descricao = limpo(secao(h, 'dg-lote-descricao').replace(/<h2[\s\S]*?<\/h2>/i, '')).slice(0, 8000) || null;
-  const endereco = limpo((secao(h, 'dg-lote-local').replace(/<h3[\s\S]*?<\/h3>/i, '').match(/<div[^>]*>\s*([^<]{6,200}?)\s*<\/div>/) || [])[1]) || null;
+  // Endereço: a <div class="dg-lote-local-endereco">. O genérico "1ª <div> com texto" pegava, na página REAL,
+  // a <div class="col-xs-12"> que sobra só com espaços depois de tirar o <h3> — e o endereço saía nulo nos
+  // 137 lotes (23/10; a fixture simplificada não tinha essa camada). Exige ao menos um caractere visível.
+  const loc = secao(h, 'dg-lote-local').replace(/<h3[\s\S]*?<\/h3>/i, '');
+  const endereco = limpo((loc.match(/class=["'][^"']*dg-lote-local-endereco[^"']*["'][^>]*>\s*([^<]*\S[^<]*?)\s*<\/div>/i)
+    || loc.match(/<div[^>]*>\s*([^<]*\S[^<]{4,198}?)\s*<\/div>/) || [])[1]) || null;
 
   const anexos = [...secao(h, 'dg-lote-documentos').matchAll(/<li[^>]*>\s*([^<]+?)\s*<a[\s\S]*?<\/li>/gi)].flatMap(([bloco, nome]) => {
     const dl = (bloco.match(/href=["']([^"']*\/download\/[^"']+)["']/i) || [])[1];
