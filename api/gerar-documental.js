@@ -515,15 +515,18 @@ function caixaRegrasVendaUrl({ fonte } = {}) {
 // Fire-and-forget: nunca bloqueia nem falha a resposta.
 async function dispararCaptura(arquivoWorkflow) {
   const token = process.env.GITHUB_ACTIONS_TOKEN;
-  if (!token) return false;
+  if (!token) { console.warn(`[dispararCaptura] GITHUB_ACTIONS_TOKEN ausente — ${arquivoWorkflow} fica para o agendamento`); return false; }
+  // 23/10: a falha era engolida. Nenhum disparo funcionou de 01/10 a 23/10 (token vencido) e a
+  // matrícula da Caixa esperava o agendamento do GitHub, que na prática roda a cada ~5 h, não 30 min.
   try {
     const r = await fetch(`https://api.github.com/repos/tarcisionogueira/TSN-app/actions/workflows/${arquivoWorkflow}/dispatches`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'Content-Type': 'application/json' },
       body: JSON.stringify({ ref: 'main' }),
     });
+    if (!r.ok) console.warn(`[dispararCaptura] ${arquivoWorkflow} HTTP ${r.status}: ${(await r.text().catch(() => '')).slice(0, 200)}`);
     return r.ok;
-  } catch { return false; }
+  } catch (e) { console.warn(`[dispararCaptura] ${arquivoWorkflow} falhou: ${e?.message}`); return false; }
 }
 
 // Fetch com anti-SSRF em CADA salto de redirect: valida o host inicial E o de cada
