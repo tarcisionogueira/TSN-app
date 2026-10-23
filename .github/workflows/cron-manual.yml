@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       rota:
-        description: 'rota, ex.: /api/geocodificar'
+        description: 'rota, ex.: /api/geocodificar  ou  /api/enviar-alertas-cron?email=voce@x.com (prévia só para esse e-mail)'
         required: true
       metodo:
         description: 'GET | POST'
@@ -24,7 +24,7 @@ jobs:
           ROTA: ${{ inputs.rota }}
           METODO: ${{ inputs.metodo }}
         run: |
-          [[ "$ROTA" =~ ^/api/[a-z0-9-]+(\?[a-zA-Z0-9=\&,_-]*)?$ ]] || { echo "::error::rota inválida"; exit 1; }
+          [[ "$ROTA" =~ ^/api/[a-z0-9-]+(\?[a-zA-Z0-9=\&,_@.-]*)?$ ]] || { echo "::error::rota inválida"; exit 1; }
           [[ "$METODO" == "GET" || "$METODO" == "POST" ]] || { echo "::error::método inválido"; exit 1; }
           curl -sS -L --post301 --post302 --post303 --max-time 320 -X "$METODO" "https://bidprobrasil.com.br${ROTA}" \
             -H "x-cron-secret: ${CRON_SECRET}" -H "Content-Type: application/json" \
