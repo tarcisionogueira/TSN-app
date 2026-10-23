@@ -79,7 +79,14 @@ export default async function handler(req, res) {
     + `&result->>preliminarMotivo=eq.fontes_externas&created_at=gt.${encodeURIComponent(desde)}`
     + `&regen_tentativas=gte.${MAX_TENT}&regen_tentativas=lt.${MAX_TENT_EXTERNAS}`
     + `&order=created_at.asc&limit=${LOTE}&${SELECT}`;
-  let rowsBase = [], rowsExtra = [];
+  // TRAVA DE LIBERAÇÃO (23/10): documento do leiloeiro não lido (ex.: 403 da Caixa com o Bright Data
+  // recusado por orçamento) grava `bloqueioLiberacao` SEM `preliminar` — e a tela promete "estamos
+  // tentando de novo automaticamente". Nenhuma consulta acima pegava esse caso: a promessa era falsa.
+  // Mesmo teto de 3 (regen_tentativas) e mesma janela de 48h.
+  const qBloqueio = `analises_documental?status=eq.concluida&result->>bloqueioLiberacao=eq.true`
+    + `&created_at=gt.${encodeURIComponent(desde)}&regen_tentativas=lt.${MAX_TENT}`
+    + `&order=created_at.asc&limit=${LOTE}&${SELECT}`;
+  let rowsBase = [], rowsExtra = [], rowsBloqueio = [];
   // padrao-ok: leitura best-effort de agendamento — falhar aqui só significa "esta rodada da
   // cron não pega candidatos desta consulta"; a próxima rodada (1h depois) tenta de novo, e
   // nada é gravado/decidido a partir de um corpo não lido (mesmo formato da consulta única
@@ -87,8 +94,10 @@ export default async function handler(req, res) {
   try { rowsBase = await (await sb(qBase)).json(); } catch { rowsBase = []; }
   // padrao-ok: idem acima — best-effort, sem impacto em dado gravado.
   try { rowsExtra = await (await sb(qExternasExtra)).json(); } catch { rowsExtra = []; }
+  // padrao-ok: idem acima — best-effort, sem impacto em dado gravado.
+  try { rowsBloqueio = await (await sb(qBloqueio)).json(); } catch { rowsBloqueio = []; }
   const vistos = new Set();
-  const rows = [...(Array.isArray(rowsBase) ? rowsBase : []), ...(Array.isArray(rowsExtra) ? rowsExtra : [])]
+  const rows = [...(Array.isArray(rowsBase) ? rowsBase : []), ...(Array.isArray(rowsExtra) ? rowsExtra : []), ...(Array.isArray(rowsBloqueio) ? rowsBloqueio : [])]
     .filter((r) => { const k = `${r.user_id}:${r.imovel_id}`; if (vistos.has(k)) return false; vistos.add(k); return true; })
     .slice(0, LOTE);
   if (!rows.length) { res.status(200).json({ ok: true, retentados: 0 }); return; }
