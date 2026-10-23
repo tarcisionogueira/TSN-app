@@ -17,6 +17,9 @@ export default {
   catalogo: '/sitemap.xml',
   paginaParam: 'page',
   maxPages: 1,
+  // Novos sem teto prático (250 no wrapper: o catálogo inteiro entra na 1ª rodada, ~2 s/lote pelo banco); a
+  // releitura dos já gravados fica em 60/dia para a rodada diária não pesar no teto de 75 min do scraper-dom.
+  maxRefresh: 60,
   tenants: Object.values(TENANTS),
   parse: { extrairUrlsDeLote, idDaUrl, parseDetalhe, montarRow, checarQualidade },
   conhecimento: {

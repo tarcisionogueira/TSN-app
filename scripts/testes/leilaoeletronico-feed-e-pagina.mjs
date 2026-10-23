@@ -89,4 +89,16 @@ assert.equal(d3.data_leilao_2, new Date('2026-10-29T14:30:00-03:00').toISOString
 assert.equal(parseDetalhe('<html></html>', 'https://www.leilaoeletronico.com.br/lote/leilao-de-apartamento-antigo/1500/', { agora: AGORA }).encerrado, true);
 assert.equal(parseDetalhe('<html></html>', 'https://www.leilaoeletronico.com.br/lote/sumiu-do-feed/9999/', { agora: AGORA }).encerrado, true);
 
+// (7) Cidade-padrão do feed ("Acrelândia/Acre", lote recém-cadastrado) não vence o título nem a descrição.
+const URL_2824 = 'https://www.leilaoeletronico.com.br/lote/leilao-de-apartamento-e-vaga-em-brasilia-df/2824/';
+const URL_2823 = 'https://www.leilaoeletronico.com.br/lote/leilao-de-casa-no-bairro-jardim-mar-sao-bernardo-do-campo/2823/';
+const acre = (u) => listing(`<name>EXTRAJUDICIAL</name> <address format="simples"> <component name="city">Acrelândia</component> <component name="region">Acre</component> </address>
+ <price>160000,00 BRL</price> <url>${u}</url> <available_dates_price_config> <end_date>2099-01-01T14:00:00</end_date> <rate>160000,00 BRL</rate> </available_dates_price_config>`);
+extrairUrlsDeLote(`<listings>${acre(URL_2824)}${acre(URL_2823)}</listings>`, T.base);
+const pg = (titulo, desc) => `<ul><li><a href="/">Home</a></li><li>${titulo}</li></ul><section id="dg-lote-descricao"><h2>Descrição</h2><p>${desc}</p></section>`;
+const d4 = parseDetalhe(pg('Leilão de Apartamento e Vaga em Brasília/DF EXTRAJUDICIAL', 'Apartamento com vaga.'), URL_2824, { agora: AGORA });
+assert.deepEqual([d4.cidade, d4.estado], ['Brasília', 'DF']);
+const d5 = parseDetalhe(pg('Leilão de Casa no Bairro Jardim Mar EXTRAJUDICIAL', 'Casa situada na cidade de São Bernardo do Campo/SP, matrícula 123.'), URL_2823, { agora: AGORA });
+assert.deepEqual([d5.cidade, d5.estado], ['São Bernardo do Campo', 'SP']);
+
 console.log('✓ leilaoeletronico: feed + página → linha (todos os casos)');

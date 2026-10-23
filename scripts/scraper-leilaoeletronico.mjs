@@ -2,7 +2,7 @@
  * Scraper LEILÃO ELETRÔNICO (23/10, pendência 307). Wrapper fino do motor; fonte em
  * lib/motor/fontes/leilaoeletronico.mjs; parser puro em lib/leilaoeletronico-parse.mjs. Só via grátis (`semBD`).
  *
- * Env: LEILAOELETRONICO_MAX_LOTES (80) · LEILAOELETRONICO_DRYRUN (default '1') · LEILAOELETRONICO_DEBUG.
+ * Env: LEILAOELETRONICO_MAX_LOTES (250 — o catálogo inteiro; a releitura tem teto próprio na fonte) · LEILAOELETRONICO_DRYRUN (default '1') · LEILAOELETRONICO_DEBUG.
  * Env infra: VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY.
  */
 import './lib/env-runner.mjs';
@@ -16,7 +16,7 @@ if (!SB_URL || !SB_KEY) { console.error('Faltam VITE_SUPABASE_URL / SUPABASE_SER
 
 rodarFonte(cfg, {
   supabase: createClient(SB_URL, SB_KEY),
-  maxLotes: Number(process.env.LEILAOELETRONICO_MAX_LOTES || 80),
+  maxLotes: Number(process.env.LEILAOELETRONICO_MAX_LOTES || 250),
   dryrun: process.env.LEILAOELETRONICO_DRYRUN !== '0',
   debug: process.env.LEILAOELETRONICO_DEBUG === '1',
   semBD: true,

@@ -19,7 +19,7 @@
 import { lotesDoFeed, ehFeedDegrau } from './degrau-feed.mjs';
 import { naoImovelDoFeed } from './mgl-parse.mjs';
 import { inferirTipo, extrairArea, checarQualidade } from './leilaopro-parse.mjs';
-import { num, plaus, titleCase, montarRowDom, UF_POR_NOME } from './dom-parse-util.mjs';
+import { num, plaus, titleCase, montarRowDom, UF_POR_NOME, cidadeUFBare, semPrefixoCidade } from './dom-parse-util.mjs';
 import { decodificarEntidades } from '../../api/_texto-imovel.js';
 
 export const TENANTS = {
@@ -136,10 +136,16 @@ export function parseDetalhe(html, url, { agora = new Date() } = {}) {
   const minimo = plaus(vig?.valor) || avaliacao;
   const minimo2 = prox ? plaus(prox.valor) : 0;
 
-  // Cidade/UF: o feed (campos próprios) vence o texto; sem feed, o "Cidade/UF" do título.
+  // Cidade/UF — ordem medida em 23/10: (1) o "Cidade/UF" ESCRITO no título; (2) o feed; (3) a descrição. O feed
+  // não pode vir primeiro: lote recém-cadastrado sai com o valor-padrão do seletor, "Acrelândia/Acre" (o 1º
+  // município do IBGE) — 3 de 240 (2823, 2824 "Apartamento e Vaga em Brasília/DF", 2826). Esse padrão só vale se o
+  // próprio lote citar Acrelândia.
   const doTitulo = (tituloCru.match(/([A-ZÀ-Ý][A-Za-zÀ-ÿ' ]{2,40}?)\s*\/\s*([A-Z]{2})\b/) || []);
-  const cidade = feed?.cidade || (doTitulo[1] ? titleCase(doTitulo[1].replace(/^.*\bem\s+/i, '')) : null);
-  const estado = feed?.estado || doTitulo[2] || null;
+  const feedPlaceholder = semAcento(feed?.cidade) === 'acrelandia' && !/acrel[aâ]ndia/i.test(`${tituloCru} ${descricao || ''}`);
+  const daDescricao = cidadeUFBare(`${descricao || ''} ${endereco || ''}`);
+  const cidade = (doTitulo[1] ? titleCase(semPrefixoCidade(doTitulo[1].replace(/^.*\bem\s+/i, ''))) : null)
+    || (!feedPlaceholder && feed?.cidade) || daDescricao?.cidade || null;
+  const estado = doTitulo[2] || (!feedPlaceholder && feed?.estado) || daDescricao?.estado || null;
 
   return {
     titulo, cidade, estado, endereco, bairro: feed?.bairro || null,
