@@ -316,7 +316,14 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
       const row = cfg.parse.montarRow(url, det, tenant);
       // Sem foto no parser, a do meta da página (og:image filtrado) — #289. anularFotoRepetida, adiante, ainda derruba
       // o og:image de TEMPLATE (o mesmo em todo lote).
-      if (!row.link_foto && html) row.link_foto = fotoDoMeta(html, url);
+      if (html) {
+        const meta = fotoDoMeta(html, url);
+        if (!row.link_foto) row.link_foto = meta;
+        // A 1ª <img> (fotoDeHtml) pode ser ilustração COMUM a vários lotes (ALFA "IMG_Ilustrativa"): o
+        // anularFotoRepetida a derruba e o lote ficava sem foto com o og:image próprio na página. Guarda o meta
+        // fora das chaves enumeráveis (não vai no upsert) para entrar no lugar da repetida, adiante.
+        else if (meta && meta !== row.link_foto) Object.defineProperty(row, '_fotoMeta', { value: meta, enumerable: false });
+      }
       // GALERIA (08/10): plataformas com a galeria na pasta exclusiva da capa (lib/galeria-veiculo.mjs).
       // Só grava quando achou mais de uma; o banco não deixa a galeria antiga virar nula (trg_imovel_fotos_nao_encolhem).
       if (html && FONTES_PASTA_DA_CAPA.has(row.fonte)) {
@@ -466,7 +473,11 @@ export async function rodarFonte(cfg, opts) {
       ufRecuperadas++;
     }
     if (ufRecuperadas) console.log(`[${tenant.fonte}] UF recuperada em ${ufRecuperadas} lote(s) (texto/cidade conferidos no IBGE).`);
-    const fotosGenericas = anularFotoRepetida(prontos);
+    let fotosGenericas = anularFotoRepetida(prontos);
+    // Repetida derrubada → o og:image próprio do lote (#289); e outra passada, caso o meta também seja template.
+    let trocadas = 0;
+    for (const r of prontos) if (!r.link_foto && r._fotoMeta) { r.link_foto = r._fotoMeta; trocadas++; }
+    if (trocadas) { console.log(`[${tenant.fonte}] ${trocadas} foto(s) repetida(s) trocada(s) pelo og:image do próprio lote.`); fotosGenericas += anularFotoRepetida(prontos); }
     if (fotosGenericas) console.log(`[${tenant.fonte}] ${fotosGenericas} lote(s) com a MESMA foto de outros 2+ lotes — imagem genérica, não gravada como foto.`);
 
     if (dryrun) {
