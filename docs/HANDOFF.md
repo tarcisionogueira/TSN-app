@@ -38298,3 +38298,9 @@ Achados no rastro do banco: NORDESTE_VEICULOS zerou, NORDESTE/JMF regressão, CR
 - Restantes:
   - 4 corrigidos pelo próprio texto (3 SUPERBID e Corumbá de Goiás);
   - 6 sem cidade na fonte (MILAN e RIGOLON com título "Imóvel", CASSIANO, NAKAKOGUE) explicados por 30 dias, pendência **310**.
+- **Desfecho do documental CEF Feira de Santana (23/10):** a cota isenta funcionou, mas a Caixa devolve **200 VAZIO
+  ao Bright Data** nos PDFs; só a captura por navegador (`matricula-cef.yml`) traz o documento. O disparo
+  automático dessa Action pelo servidor parou em 01/10 (`GITHUB_ACTIONS_TOKEN`, provável token vencido →
+  pendência **311**, do dono). Captura disparada à mão em 16:36. A geração das 20:11 leu os 4 documentos e
+  concluiu às 20:15: amarelo, confiança baixa por diligências de praxe (IPTU, condomínio, ação do ex-mutuário,
+  ocupação). Também: `documental-retry-cron` passa a pegar `bloqueioLiberacao`, e `dispararCaptura` passa a logar a falha.
