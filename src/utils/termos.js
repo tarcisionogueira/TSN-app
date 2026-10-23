@@ -33,7 +33,8 @@ export const TERMOS_VERSAO = '3.3';
 // TEMPLATE_CLUBE em api/auto-contrato.js) e neste termo de ciência (item 7, acima).
 // termos_uso 3.4 (16/10): nota fiscal em TODO saque, repasse pelo bruto. Sobe JUNTO com
 // regra_negocio.saque.exige_termos_vigentes.versao ('termos_uso-v3.4') — as duas pontas precisam casar.
-const VERSAO_FAMILIA = { assessorado: '3.2', clube: '3.2', termos_uso: '3.4' };
+// assessorado 3.3 (23/10): a assessoria passa a incluir o Combo (Investidor Pro + Leilão de Veículos).
+const VERSAO_FAMILIA = { assessorado: '3.3', clube: '3.2', termos_uso: '3.4' };
 
 // ─── REGISTRO CENTRAL POR PRODUTO/SERVIÇO (pedido do dono, 30/07) ────────────────
 // Cada produto tem TÍTULO amigável (auditoria/comprovante/360) e TERMO próprio
@@ -97,7 +98,7 @@ export function termoDoProduto(key, { nome, valorLabel, modelo, inclui, bonus } 
     veiculos: { modelo: 'recorrente', inclui: 'busca de veículos em leilão com a identificação do leiloeiro, acesso ao lote, documentos e local do pátio, e relatórios de análise de veículos por inteligência artificial conforme a cota do plano (sem assessoria de arrematação)' },
     combo: { modelo: 'recorrente', inclui: 'todos os recursos do Investidor Pro (imóveis) e do Leilão de Veículos, conforme as cotas de cada plano (assessoria de arrematação não incluída)' },
     clube: { modelo: 'recorrente', honorarios: true, inclui: 'acesso a TODOS os cursos e ebooks da plataforma; encontro SEMANAL ao vivo (online) com o mentor para dúvidas e ensinamentos sobre o mercado de leilões; acesso aos eventos do mentor com até 10 (dez) convidados; e assessoria de arrematação inclusa para 1 (um) imóvel por mês' },
-    assessorado: { modelo: 'parcelado', honorarios: true, inclui: 'assessoria de arrematação com equipe da plataforma e advogado parceiro, conforme escopo do contrato de prestação de serviços' },
+    assessorado: { modelo: 'parcelado', honorarios: true, inclui: 'assessoria de arrematação com equipe da plataforma e advogado parceiro, conforme escopo do contrato de prestação de serviços; e, enquanto a assessoria estiver ativa, todos os recursos do Combo Imóveis + Veículos (Investidor Pro e Leilão de Veículos, conforme as cotas de cada plano), sem cobrança de mensalidade' },
     consultor: { modelo: 'recorrente' },
     advogado: { modelo: 'recorrente' },
     analista: { modelo: 'recorrente' },

@@ -241,12 +241,16 @@ export async function cancelarOutrasRecorrencias({ userId, email, asaasCustomerI
   return out;
 }
 
-// ASSESSORIA INCLUI O PRO (06/10, regra_negocio['assessoria.inclui_pro']): contratada a assessoria,
-// a mensalidade do Investidor Pro para de ser cobrada — enquanto ela estiver ativa os benefícios
-// vêm do papel `assessorado`. Cancela SÓ a recorrência do Pro (MP: external_reference `uid|top2*`;
-// Asaas: descrição "Investidor Pro…", sem maxPayments). O parcelamento 12× da PRÓPRIA assessoria
+// ASSESSORIA INCLUI O PRO (06/10, regra_negocio['assessoria.inclui_pro']) — e desde 23/10 o COMBO
+// (regra_negocio['assessoria.inclui_combo']): contratada a assessoria, as mensalidades do Investidor Pro,
+// do Combo e do Leilão de Veículos param de ser cobradas — enquanto ela estiver ativa os benefícios vêm
+// do papel `assessorado`. Até 23/10 o filtro era só `top2*`, e quem tinha o Combo seguia pagando R$ 99,90
+// com a assessoria ativa. Cancela SÓ essas recorrências (MP: external_reference `uid|top2*|combo*|veiculos*`;
+// Asaas: descrição do plano, sem maxPayments). O parcelamento 12× da PRÓPRIA assessoria
 // também é recorrência e não pode ser tocado — por isso o filtro é pelo plano, não "todas as outras".
 // Nunca lança: a ativação da assessoria não pode cair por causa disto — toda falha ALERTA.
+const RE_PLANO_INCLUIDO = /^(top2|combo|veiculos)/;
+const RE_DESCRICAO_INCLUIDA = /^(Investidor Pro|Combo Im[oó]veis|Leil[aã]o de Ve[ií]culos)/i;
 export async function cancelarRecorrenciaPro({ userId, email, asaasCustomerId, origem }) {
   const out = { mpCancelados: [], asaasCancelados: [], erros: [] };
   if (!userId) return out;
@@ -261,7 +265,7 @@ export async function cancelarRecorrenciaPro({ userId, email, asaasCustomerId, o
         const d = await r.json();
         for (const p of d?.results || []) {
           const [uid, plano] = String(p.external_reference || '').split('|');
-          if (uid !== String(userId) || !/^top2/.test(plano || '')) continue;
+          if (uid !== String(userId) || !RE_PLANO_INCLUIDO.test(plano || '')) continue;
           const c = await fetch(`${MP_BASE}/preapproval/${p.id}`, { method: 'PUT', headers: { Authorization: `Bearer ${mpToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'cancelled' }) });
           if (c.ok) out.mpCancelados.push(String(p.id)); else out.erros.push(`MP ${p.id}: ${c.status}`);
         }
@@ -272,7 +276,7 @@ export async function cancelarRecorrenciaPro({ userId, email, asaasCustomerId, o
       if (cust) {
         const d = await asaasGet(`/subscriptions?customer=${encodeURIComponent(cust)}&status=ACTIVE&limit=20`);
         for (const s of d?.data || []) {
-          if (!s?.id || s.maxPayments || !/^Investidor Pro/i.test(String(s.description || ''))) continue;
+          if (!s?.id || s.maxPayments || !RE_DESCRICAO_INCLUIDA.test(String(s.description || ''))) continue;
           try { await apagarAssinaturaAsaas(s.id); out.asaasCancelados.push(String(s.id)); }
           catch (e) { out.erros.push(`Asaas ${s.id}: ${e?.message || e}`); } // padrao-ok: motivo vai para out.erros, logado e alertado no fim
         }
@@ -294,7 +298,7 @@ export async function cancelarRecorrenciaPro({ userId, email, asaasCustomerId, o
   }
   if (out.erros.length) {
     console.error(`[recorrencia-pro] ${origem}: falhas`, out.erros);
-    alertarErro({ rota: `recorrencia-pro/${origem}`, erro: `Assessoria contratada mas a mensalidade do Investidor Pro NÃO foi cancelada — cliente ${userId} pode seguir sendo cobrado. Conferir MP/Asaas: ${out.erros.join(' | ')}`, extra: { userId } });
+    alertarErro({ rota: `recorrencia-pro/${origem}`, erro: `Assessoria contratada mas a mensalidade do Investidor Pro/Combo/Veículos NÃO foi cancelada — cliente ${userId} pode seguir sendo cobrado. Conferir MP/Asaas: ${out.erros.join(' | ')}`, extra: { userId } });
   }
   return out;
 }

@@ -22,7 +22,7 @@ const buildFAQS = ({ precoMesLabel, mesAnualLabel, anoLabel, economiaPctLabel, l
     // (FAQ de honorários removido da tela comercial — detalhes ficam no checkout/contrato)
     { q: 'O Leilão Club inclui arrematações ilimitadas?', r: 'Sim. Com o Clube você tem acesso a assessoria contínua para todas as arrematações durante a vigência do plano.' },
   ] : [
-    { q: 'Como contrato a assessoria?', r: 'A assessoria é contratada por arrematação, dentro da plataforma: crie sua conta grátis para ver valores e condições. Enquanto ela estiver ativa, você tem todos os benefícios do Investidor Pro, sem mensalidade.' },
+    { q: 'Como contrato a assessoria?', r: 'A assessoria é contratada por arrematação, dentro da plataforma: crie sua conta grátis para ver valores e condições. Enquanto ela estiver ativa, você tem tudo do Combo — Investidor Pro e Leilão de Veículos —, sem mensalidade.' },
   ]),
   { q: 'Posso pagar parcelado no cartão?', r: 'Sim. Aceitamos crédito, débito e PIX. Parcelamento em até 12× disponível, a partir da 4ª parcela os juros são assumidos pelo cliente conforme a operadora.' },
   { q: 'O que é o relatório de viabilidade?', r: 'Nossa IA analisa edital, matrícula e documentos do imóvel e gera um relatório completo com análise mercadológica, financeira e jurídica em menos de 5 minutos.' },
@@ -174,6 +174,8 @@ export default function Planos() {
   };
 
   const atual = (key) => user && (key === role || `${key}_anual` === role);
+  // Assessoria inclui o Combo (23/10, regra_negocio['assessoria.inclui_combo']): Veículos e Combo já são dele.
+  const assessoriaIncluiCombo = !!user && /^assessorado/.test(String(role || ''));
 
   // Posição do plano na escada (p/ rotular a CTA como atual/upgrade/downgrade quando logado).
   const RANK = { explorador: 0, top2: 1, top2_anual: 1, assessorado: 2, assessorado_anual: 2, clube: 3, clube_anual: 3 };
@@ -449,9 +451,9 @@ export default function Planos() {
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 32 }}>
                 {['Busca de veículos com FIPE em todo o Brasil', 'Selo com o nome do leiloeiro em cada veículo', 'Link do lote, documentos e endereço do pátio', '10 relatórios por IA de veículos/mês (condição, FIPE e teto de lance)'].map(t => <CheckItem key={t} txt={t} />)}
               </div>
-              <button onClick={() => ir('veiculos')}
-                style={{ width: '100%', padding: '14px', border: 'none', borderRadius: 12, background: '#0f766e', color: 'white', fontWeight: 800, fontSize: 15, cursor: 'pointer' }}>
-                Desbloquear veículos →
+              <button onClick={() => { if (!assessoriaIncluiCombo) ir('veiculos'); }} disabled={assessoriaIncluiCombo}
+                style={{ width: '100%', padding: '14px', border: 'none', borderRadius: 12, background: assessoriaIncluiCombo ? '#f1f5f9' : '#0f766e', color: assessoriaIncluiCombo ? '#94a3b8' : 'white', fontWeight: 800, fontSize: 15, cursor: assessoriaIncluiCombo ? 'default' : 'pointer' }}>
+                {assessoriaIncluiCombo ? 'Incluído na sua assessoria' : 'Desbloquear veículos →'}
               </button>
               <BotaoCompartilhar planoKey="veiculos" />
             </div>
@@ -470,12 +472,13 @@ export default function Planos() {
                 Relatórios de imóveis e de veículos e o leiloeiro de cada carro desbloqueado, numa assinatura só
                 {PLANOS.top2?.preco && PLANOS.veiculos?.preco && PLANOS.combo?.preco && PLANOS.top2.preco + PLANOS.veiculos.preco > PLANOS.combo.preco
                   ? <> — <strong style={{ color: '#86efac' }}>economize {fmtR(PLANOS.top2.preco + PLANOS.veiculos.preco - PLANOS.combo.preco)}/mês</strong></> : null}.
+                {ativoPlano('assessorado') && <> Contratando a <strong style={{ color: 'white' }}>Assessoria</strong>, o Combo vem incluído, sem mensalidade.</>}
               </div>
             </div>
             <div style={{ flex: '0 1 240px', minWidth: 0, width: '100%' }}>
-              <button onClick={() => ir('combo')}
-                style={{ width: '100%', padding: '14px', border: 'none', borderRadius: 12, background: 'white', color: '#5b21b6', fontWeight: 900, fontSize: 15, cursor: 'pointer' }}>
-                Assinar o Combo →
+              <button onClick={() => { if (!assessoriaIncluiCombo) ir('combo'); }} disabled={assessoriaIncluiCombo}
+                style={{ width: '100%', padding: '14px', border: 'none', borderRadius: 12, background: assessoriaIncluiCombo ? 'rgba(255,255,255,0.18)' : 'white', color: assessoriaIncluiCombo ? '#ede9fe' : '#5b21b6', fontWeight: 900, fontSize: 15, cursor: assessoriaIncluiCombo ? 'default' : 'pointer' }}>
+                {assessoriaIncluiCombo ? 'Incluído na sua assessoria' : 'Assinar o Combo →'}
               </button>
               <BotaoCompartilhar planoKey="combo" dark />
             </div>
@@ -525,6 +528,11 @@ export default function Planos() {
               </tbody>
             </table>
           </div>
+          {ativoPlano('assessorado') && (
+            <p style={{ fontSize: 13, color: '#64748b', textAlign: 'center', margin: '12px 0 0' }}>
+              A <strong style={{ color: '#c2410c' }}>Assessoria</strong> inclui tudo da coluna Combo, sem mensalidade, enquanto estiver ativa.
+            </p>
+          )}
         </div>
 
         {/* ── Assessoria Personalizada (só logado) ── */}
@@ -545,7 +553,7 @@ export default function Planos() {
             <div style={{ fontSize: 40, marginBottom: 12 }}>🤝</div>
             <h3 style={{ fontSize: 19, fontWeight: 800, color: '#111', marginBottom: 10 }}>Também oferecemos assessoria e mentoria em leilões</h3>
             <p style={{ color: '#64748b', fontSize: 14, lineHeight: 1.7, margin: '0 0 20px' }}>
-              Acompanhamento completo da análise à imissão de posse, e mentoria contínua para escalar com método. Valores e contratação ficam dentro da plataforma, para clientes — e a assessoria já inclui todos os benefícios do Investidor Pro.
+              Acompanhamento completo da análise à imissão de posse, e mentoria contínua para escalar com método. Valores e contratação ficam dentro da plataforma, para clientes — e a assessoria já inclui tudo do Combo: Investidor Pro e Leilão de Veículos, sem mensalidade.
             </p>
             {/* Regra do dono (23/10): contratar exige CONTA (não exige o Pro). Visitante vai ao cadastro e volta
                 direto ao card da assessoria, que logado mostra o preço. */}
@@ -562,14 +570,15 @@ export default function Planos() {
             <div id="plano-assessorado" style={{ background: 'white', borderRadius: 20, border: atual('assessorado') ? '2px solid #d97706' : '1px solid #fed7aa', padding: '32px 28px', display: 'flex', flexDirection: 'column', boxShadow: '0 4px 24px rgba(217,119,6,0.08)' }}>
               <div style={{ display: 'inline-block', alignSelf: 'flex-start', background: '#fff7ed', color: '#c2410c', fontSize: 12.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1.2, padding: '5px 12px', borderRadius: 8, marginBottom: 12 }}>Assessoria</div>
               {/* Desde 06/10 a assessoria NÃO exige o Investidor Pro (regra_negocio['assessoria.inclui_pro']):
-                  todo cliente vê o preço e contrata direto — o Pro vem incluído enquanto ela está ativa. */}
+                  todo cliente vê o preço e contrata direto — e desde 23/10 o Combo inteiro (Pro + Veículos) vem
+                  incluído enquanto ela está ativa (regra_negocio['assessoria.inclui_combo']). */}
               <PrecoComercial planoKey="assessorado" />
               <div style={{ fontSize: 13, color: '#64748b', marginBottom: 20 }}>1 arrematação · pagamento único</div>
               <p style={{ fontSize: 14, color: '#64748b', marginBottom: 20, lineHeight: 1.7 }}>
                 Assessoria completa para 1 arrematação, da análise do imóvel até a imissão de posse. Acesso à plataforma por 12 meses, extensível até a conclusão.
               </p>
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 11, marginBottom: 28 }}>
-                {['Tudo do Investidor Pro incluído (sem mensalidade)', 'Análise jurídica e estratégia de lance', 'Acompanhamento até a imissão de posse', 'Suporte com documentação pós-arrematação', 'Registro do imóvel via plataforma (ONR)', '12 meses de acesso · extensível até a posse'].map(t => <CheckItem key={t} txt={t} />)}
+                {['Tudo do Combo incluído: Investidor Pro + Leilão de Veículos (sem mensalidade)', 'Análise jurídica e estratégia de lance', 'Acompanhamento até a imissão de posse', 'Suporte com documentação pós-arrematação', 'Registro do imóvel via plataforma (ONR)', '12 meses de acesso · extensível até a posse'].map(t => <CheckItem key={t} txt={t} />)}
               </div>
               {/* Assessoria é POR ARREMATAÇÃO (regra do dono): quem já é assessorado pode
                   contratar a PRÓXIMA operação — o Checkout valida se a atual já teve o

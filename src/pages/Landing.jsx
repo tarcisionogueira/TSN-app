@@ -439,7 +439,7 @@ export default function Landing() {
               { nome: 'Explorador', tag: 'Grátis', cor: '#64748b', itens: ['Busca de leilões em todo o Brasil', 'Relatório de mercado + viabilidade', 'Calculadora de arrematação', 'Cursos gratuitos'] },
               { nome: 'Investidor Pro', tag: 'Mais popular', cor: AZUL, destaque: true, itens: ['Tudo do Explorador', 'Relatório documental e jurídico por IA', 'Bid Score completo', 'Alertas de oportunidade por e-mail'] },
               { nome: 'Leilão de Veículos', tag: 'Novo', cor: '#0f766e', itens: ['Busca com FIPE em todo o Brasil', 'Leiloeiro e documentos de cada lote', 'Relatórios de veículos por IA', 'Combo com o Investidor Pro'] },
-              { nome: 'Assessoria', tag: 'Por arrematação · para clientes', cor: '#d97706', itens: ['Tudo do Investidor Pro', 'Analista dedicado', 'Do lance à imissão na posse', 'Registro via plataforma'] },
+              { nome: 'Assessoria', tag: 'Por arrematação · para clientes', cor: '#d97706', itens: ['Tudo do Combo: imóveis + veículos', 'Analista dedicado', 'Do lance à imissão na posse', 'Registro via plataforma'] },
             ].map(({ nome, tag, cor, itens, destaque }) => (
               <div key={nome} style={{ background: 'white', borderRadius: 18, border: destaque ? `2px solid ${cor}` : '1px solid #e2e8f0', padding: '22px 20px', position: 'relative', boxShadow: destaque ? `0 10px 30px ${cor}22` : 'none' }}>
                 <div style={{ fontSize: 12.5, fontWeight: 900, color: cor, textTransform: 'uppercase', letterSpacing: 1.3 }}>{nome}</div>

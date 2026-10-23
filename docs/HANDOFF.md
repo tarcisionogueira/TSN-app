@@ -38236,3 +38236,19 @@ Achados no rastro do banco: NORDESTE_VEICULOS zerou, NORDESTE/JMF regressão, CR
 - **Página inicial reescrita (a8dc048):** vende plataforma, assessoria e formação — não pode parecer imobiliária (decisão do dono; vitrine de lotes descartada). PostHog: rolagem mediana 9%, só 4/19 passaram da metade → o que decide está nos 2 primeiros blocos. 13 → 8 seções; "Contratar a assessoria" leva a `/planos?plano=assessorado` (o dono vetou "falar com um especialista": o especialista é acesso de quem contrata a assessoria); números do acervo via `landing_numeros` (cache diário — contar na visita custava ~9 s); eventos `lp_secao`/`lp_cta`; banner do app só depois de rolar. Depoimentos: estrutura pronta, seção escondida até os vídeos (pendência 297).
 - **R$ 70M:** no sistema há 1 arremate registrado (R$ 548 mil); o número é histórico. Orientação ao dono: lista interna com os casos que somam o valor (prova se questionado) + casos e vídeos na página.
 - Pendências novas: 297–300 e 303 (a 303 substitui a 301, que citava o botão de especialista vetado).
+
+## 23/10 (tarde) — statement timeouts + Assessoria inclui o Combo
+
+- **Timeouts (diagnóstico de abertura, item 1).** A causa é uma só: o banco tem 256 MB de `shared_buffers` para 1 GB de dados. Toda varredura inteira de `imoveis_leilao` feita com cache frio lê do disco (`count(*) where ativo`: 0,8 s quente, 2,4 s frio). Duas correções, na migração `20261023_relistados_e_painel_sem_timeout.sql`:
+  - **`reconciliar_relistados()`** levava média de 3,4 s e pico de 7,7 s, e uma rodada manual levou 8,6 s sem alterar nenhuma linha. Os mesmos passos escritos como SELECT levam ~160 ms; o custo estava no plano do `UPDATE … FROM grupo`. Agora cada passo junta os ids pelo SELECT e altera pela PK, com índices parciais `(fonte, fotos->>0)` nas duas tabelas. Resultado: **0,22 s**. Ressalva: o planejador só usa o índice novo nas buscas pontuais (os EXISTS); o agrupamento continua pelo índice de `ativo`, porque a estimativa de `fotos->>0 is not null` sai alta.
+  - **`admin_dashboard_contadores()`**: `imoveis_ativos` passa a sair de `plataforma_numeros_cache.lotes`, a mesma contagem atualizada a cada hora. Se o cache estiver ausente, conta ao vivo.
+  - **Não tratado:** `fotos_orfas_para_limpeza()` leva 7 s com cache frio e 0,26 s quente, rodando às 04:20 UTC. É limpeza diária sem urgência; fica registrada. Aumentar o compute do Supabase resolveria a classe inteira, mas é decisão de custo do dono. Conferência na pendência 305.
+- **Assessoria inclui o Combo** (decisão do dono, `regra_negocio['assessoria.inclui_combo']`, migração `20261023_assessoria_inclui_combo.sql`):
+  - O papel `assessorado` passa a ter `tem_acesso_veiculos()` = true e cota de 10 relatórios de veículo por mês em `limite_ia_efetivo`.
+  - Ao concluir a assessoria, o acesso volta a depender de `acesso_veiculos_ate`.
+  - `cancelarRecorrenciaPro` agora cancela `top2|combo|veiculos`. **Defeito que existia antes disso:** quem tinha o Combo e contratava a assessoria continuava pagando R$ 99,90.
+  - Checkout recusa Veículos/Combo para o assessorado, com a explicação.
+  - Termo do assessorado sobe para **v3.3**.
+  - E-mail de conclusão cita o Combo e ganha o botão "Assinar o Combo".
+  - Tela de planos: card, faixa do Combo, nota da tabela, FAQ e "Incluído na sua assessoria" nos botões. A landing troca "Tudo do Investidor Pro" por "Tudo do Combo".
+  - Validação no navegador pelo dono: pendência 306.

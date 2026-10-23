@@ -126,7 +126,7 @@ function IdentificacaoCpfAssessoria({ nav, refCode }) {
 
   const beneficio = (
     <p style={{ color: '#64748b', fontSize: 12.5, lineHeight: 1.6, marginBottom: 18 }}>
-      Sem mensalidade do Investidor Pro: enquanto a assessoria estiver ativa, você tem <strong style={{ color: '#94a3b8' }}>todos os benefícios do Investidor Pro</strong> incluídos.
+      Sem mensalidade: enquanto a assessoria estiver ativa, você tem <strong style={{ color: '#94a3b8' }}>tudo do Combo — Investidor Pro e Leilão de Veículos</strong> incluído.
     </p>
   );
 
@@ -860,9 +860,14 @@ export default function Checkout() {
       //    agora (via gerarLink, que já cancela as anteriores antes de criar).
       //  - para MENSAL (regra b): NÃO cobra agora — agenda a virada para o fim do anual vigente.
       // Já tem o que está comprando (20/10)? Evita a segunda assinatura cobrando em paralelo.
-      // Clube/Assessoria já incluem o Pro: para veículos, o certo é o plano Veículos — o Combo trocaria o
-      // plano de imóveis por um Pro (revisão 20/10).
-      if (planoKey === 'combo' && ['clube', 'clube_anual', 'assessorado', 'assessorado_anual'].includes(role)) {
+      // Assessoria inclui o Combo (23/10, regra_negocio['assessoria.inclui_combo']): nada de veículos para
+      // comprar enquanto ela está ativa. Clube já inclui o Pro: para veículos, o certo é o plano Veículos — o
+      // Combo trocaria o plano de imóveis por um Pro (revisão 20/10).
+      if (PLANOS_VEICULOS.includes(planoKey) && ['assessorado', 'assessorado_anual'].includes(role)) {
+        setErro('Sua assessoria já inclui o Combo: imóveis e veículos, sem mensalidade, enquanto ela estiver ativa.');
+        return;
+      }
+      if (planoKey === 'combo' && ['clube', 'clube_anual'].includes(role)) {
         setErro('Seu plano já inclui o Investidor Pro. Para veículos, assine o Leilão de Veículos (R$ 29,90/mês).');
         return;
       }
