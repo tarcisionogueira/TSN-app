@@ -158,6 +158,12 @@ export default async function handler(req, res) {
         .upsert(rows, { onConflict: 'data,canal,campanha' });
       if (error) throw new Error(error.message);
     }
+    // Carimbo de "rodou" (23/10). A Meta só devolve dias COM veiculação: campanha encerrada = zero linha,
+    // e o último dia em marketing_metricas_dia para de andar. Sem o carimbo, "sem gasto" e "ingestão
+    // parada" eram o mesmo vazio — e o diagnóstico de abertura de 23/10 acusou o segundo quando era o primeiro.
+    const { error: eHb } = await supabase.rpc('registrar_heartbeat',
+      { p_chave: 'meta_insights', p_detalhe: `${rows.length} linha(s) · ${fmt(desde)}..${fmt(ate)}` });
+    if (eHb) console.error('[meta-insights] heartbeat não gravado:', eHb.message);
     return res.status(200).json({
       ok: true, gravadas: rows.length,
       conversoes: rows.reduce((a, r) => a + (r.conversoes || 0), 0),

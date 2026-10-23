@@ -141,6 +141,9 @@ curto (5–8 linhas) antes de seguir:
    > -- antes disso, "último dia = anteontem" é normal, não atraso)
    > select data, canal, gasto, cliques, conversoes from marketing_metricas_dia
    >  where data > current_date - 14 order by data desc;
+   > -- A Meta só devolve dia COM veiculação: último dia parado = campanha encerrada OU ingestão parada.
+   > -- Quem separa os dois é o carimbo do cron (23/10 — confundi os dois na abertura desse dia):
+   > select ultimo_em, detalhe from sistema_heartbeat where chave = 'meta_insights';
    > -- O CRUZAMENTO QUE IMPORTA: clique PAGO (painel do Google) × visita que o nosso
    > -- rastreador registrou. Em 14/08: 214 cliques em 14 dias × 19 visitas com gclid.
    > -- Um número sozinho parece saudável; é a razão entre os dois que denuncia perda.
