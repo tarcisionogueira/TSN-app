@@ -231,7 +231,6 @@ jobs:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           LEILAOELETRONICO_DRYRUN: ${{ env.DRYRUN_PADRAO }}
-          LEILAOELETRONICO_DEBUG: '1'
         run: node scripts/scraper-leilaoeletronico.mjs
 
       - name: Baston
