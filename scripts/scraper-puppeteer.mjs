@@ -7,7 +7,7 @@
  */
 
 import { classificarPatio, patioPreservado } from './lib/patio-veiculo.mjs';
-import { veiculoDoLote } from './lib/veiculo-do-lote.mjs';
+import { veiculoDoLote, modeloDoTitulo } from './lib/veiculo-do-lote.mjs';
 import { marcaModeloAnoVIP } from './lib/vip-veiculo.mjs';
 import { createClient } from '@supabase/supabase-js';
 import puppeteer from 'puppeteer';
@@ -3296,6 +3296,15 @@ async function salvarVeiculos(registros, rotulo) {
   // Ponto único aqui, e não em cada scraper: garante que NENHUMA fonte, presente ou
   // futura, guarde esse tipo de lote — mesmo que uma tela futura esqueça de filtrar.
   const aptos = registros.filter((r) => r.status_patio !== 'excluido');
+  // MODELO PELO TÍTULO (22/10, #291): só preenche o que a fonte não deu, e só com marca conhecida (modeloDoTitulo).
+  let comModelo = 0;
+  for (const r of aptos) {
+    if (r.modelo) continue;
+    const m = modeloDoTitulo(r.titulo);
+    if (m?.modelo) { r.modelo = m.modelo; comModelo++; }
+    if (m?.marca && !r.marca) r.marca = m.marca;
+  }
+  if (comModelo) console.log(`    ${nome}: modelo lido do título em ${comModelo} veículo(s)`);
   const descartados = registros.length - aptos.length;
   if (descartados) console.log(`    ${nome}: ${descartados} descartado(s) — bem ainda com o executado/devedor (status_patio='excluido')`);
   if (!aptos.length) { console.log(`    ${nome}: nada para salvar (tudo excluído).`); await saudeVeiculos(registros[0]?.fonte, registros, { motivo: 'todos com o executado/devedor' }); return 0; }

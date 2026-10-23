@@ -206,3 +206,29 @@ export function complementoGenerico(html) {
   const titulo = mm ? `${mm.trim()}${ano ? ` ${ano[1]}${ano[2] ? `/${ano[2]}` : ''}` : ''}` : null;
   return { titulo, ficha: blocos.length ? blocos.join(' · ').slice(0, 4000) : null };
 }
+
+// MODELO PELO TÍTULO, CONSERVADOR (22/10, #291). ~5,3 mil veículos ativos sem `modelo` (SUPERBID 3,3 mil, LJUD
+// todos, SUPORTE, MEGA) — a busca por modelo não os achava. `marcaAnoDoTitulo` serve ao motor, mas solta sobre
+// estes títulos devolvia lixo plausível ("ZAFIRA COMFORT – 09/09 – Ponta Porã/MS", modelo "-", marca inventada).
+// Aqui só responde com MARCA CONHECIDA (RE_MARCA) e corta o modelo no 1º separador/ano/rótulo. Sem marca: null —
+// título genérico ("Automóvel", "Veículos - VW em leilão - Rua …") fica sem modelo, que é a verdade.
+const MARCA_CANON_TITULO = { vw: 'VOLKSWAGEN', gm: 'CHEVROLET', gmc: 'CHEVROLET', mercedes: 'MERCEDES-BENZ', 'm.benz': 'MERCEDES-BENZ', mbenz: 'MERCEDES-BENZ', mpolo: 'MARCOPOLO', land: 'LAND ROVER' };
+export function modeloDoTitulo(titulo) {
+  let t = String(titulo || '').replace(/\s+/g, ' ').trim();
+  // Prefixos de condição/categoria que vêm ANTES da marca ("Sucata … - FIAT SIENA", "Veículo conservado - HONDA …").
+  t = t.replace(/^.*?(?:aproveitamento de (?:motor|pe[çc]as)|ve[íi]culo conservado|desvincula[çc][ãa]o)\s*[-–]\s*/i, '');
+  t = t.replace(/^(?:direitos sobre\s+)?(?:carro|caminh[ãa]o|caminhonete|camioneta|moto(?:cicleta)?|ve[íi]culo|autom[óo]vel|[ôo]nibus|utilit[áa]rio|van)\b[,:]?\s*/i, '');
+  const toks = t.split(/[\s/]+/);
+  const ehMarca = (w) => { const x = w.replace(/[,.;:]$/, '').split('-')[0]; return RE_MARCA.test(x) || /^gmc$/i.test(x); }; // SUPERBID escreve GMC p/ Chevrolet
+  const i = toks.findIndex((w, k) => k < 4 && ehMarca(w));
+  if (i < 0) return null;
+  const bruta = toks[i].replace(/[,.;:]$/, '');
+  const chave = bruta.split('-')[0].toLowerCase();
+  const marca = /benz/i.test(bruta) ? 'MERCEDES-BENZ' : (MARCA_CANON_TITULO[chave] || chave.toUpperCase());
+  const resto = toks.slice(i + 1).join(' ').replace(/^benz\b\s*/i, '');
+  const modelo = resto
+    .split(/\s[-–]\s|,|\(|\||\bem\s+leil|\b(?:prata|branc[oa]|pret[oa]|azul|vermelh[oa]|cinza|verde|amarel[oa]|bege|roxa|marrom|dourad[oa]|grafite)\b|\b(?:ano|placa|cor|chassi|renavam)\b|\b\d{2}\/\d{2}\b|\b(?:19|20)\d\d(?:\/(?:19|20)\d\d)?\b/i)[0]
+    .replace(/[-–\s]+$/, '').trim();
+  if (!/[A-Za-z]/.test(modelo) || modelo.length < 2 || modelo.length > 40) return { marca, modelo: null };
+  return { marca, modelo: modelo.toUpperCase() };
+}
