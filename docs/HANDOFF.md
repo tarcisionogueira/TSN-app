@@ -38304,3 +38304,10 @@ Achados no rastro do banco: NORDESTE_VEICULOS zerou, NORDESTE/JMF regressão, CR
   pendência **311**, do dono). Captura disparada à mão em 16:36. A geração das 20:11 leu os 4 documentos e
   concluiu às 20:15: amarelo, confiança baixa por diligências de praxe (IPTU, condomínio, ação do ex-mutuário,
   ocupação). Também: `documental-retry-cron` passa a pegar `bloqueioLiberacao`, e `dispararCaptura` passa a logar a falha.
+- **Leilão Eletrônico (#307, fechada):** a 2ª rodada deu 0 de 118 lotes. O site barra o runner do GitHub (403), então só o
+  banco serve. Duas falhas do banco desligavam o banco pelo resto da rodada, e 404 de lote retirado contava como falha.
+  - **Motor (vale para todas as fontes):** 2 falhas seguidas → pausa crescente (1, 2, 4… até 15 min); pausa curta espera
+    e tenta de novo; 404/410 = "inexistente", não aciona o freio; o resumo da rodada imprime os motivos de "sem detalhe".
+  - **Parser:** endereço lido pela div `dg-lote-local-endereco`; o seletor genérico pegava uma div vazia, porque a fixture era
+    simplificada e agora tem a seção real.
+  - **Resultado:** rodada das 21:04 ok, 101 lotes lidos, 178 ativos.
