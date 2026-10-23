@@ -186,6 +186,8 @@ const DIAS_IMINENTE = 21;
 // N por rodada garante que o backlog de falha transitória é corrigido em poucos ciclos, sem
 // sequestrar o orçamento de quem só está velho.
 const SEM_FOTO_TETO = 15;
+// Linhas por upsert: 100 × ~28 ms ≈ 3 s, longe do statement timeout mesmo com a base sob carga.
+const UPSERT_FATIA = 100;
 
 /**
  * PLANEJA O QUE O RUN VAI BUSCAR — puro, exportado, e é isto que os testes exercitam.
@@ -506,9 +508,13 @@ export async function rodarFonte(cfg, opts) {
     // pelas chaves faz cada linha mandar só o que trouxe.
     const grupos = new Map();
     for (const r of prontos) { const k = Object.keys(r).sort().join(','); if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(r); }
+    // EM FATIAS (23/10, #280): 488 linhas num upsert só × ~28 ms de gatilho por linha (35 BEFORE em
+    // imoveis_leilao) estourou o statement timeout e a HASTA perdeu 62 min de leitura no último passo.
     let error = null;
     for (const g of grupos.values()) {
-      ({ error } = await supabase.from('imoveis_leilao').upsert(g, { onConflict: 'fonte_id', ignoreDuplicates: false }));
+      for (let i = 0; i < g.length && !error; i += UPSERT_FATIA) {
+        ({ error } = await supabase.from('imoveis_leilao').upsert(g.slice(i, i + UPSERT_FATIA), { onConflict: 'fonte_id', ignoreDuplicates: false }));
+      }
       if (error) break;
     }
     if (error) { console.error(`[${tenant.fonte}] erro ao gravar:`, error.message); process.exitCode = 1; continue; }

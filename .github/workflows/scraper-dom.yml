@@ -137,6 +137,11 @@ jobs:
           BRIGHTDATA_ISP_USER: ${{ secrets.BRIGHTDATA_ISP_USER }}
           BRIGHTDATA_ISP_PASS: ${{ secrets.BRIGHTDATA_ISP_PASS }}
           HASTA_DRYRUN: ${{ env.DRYRUN_PADRAO }}
+          # 23/10 (#280): com 600 o run relia os 488 lotes todo dia (62 min) e estourava o teto do job,
+          # pulando as ~25 fontes seguintes (veículos inclusive). 120 = lote novo primeiro + os mais
+          # velhos/praça próxima (~16 min); o acervo inteiro cicla em ~4 dias, e o runner residencial
+          # segue relendo os 600. A varredura de sumidos depende da LISTA completa, não deste teto.
+          HASTA_MAX_LOTES: '120'
         run: node scripts/scraper-hasta.mjs
 
       - name: Nordeste
