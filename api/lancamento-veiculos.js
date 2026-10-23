@@ -101,7 +101,7 @@ function html(p, sel, tipoLog) {
   const linhas = [];
   for (let i = 0; i < cards.length; i += 2) linhas.push(`<tr>${cards[i]}${cards[i + 1] || '<td style="width:50%;"></td>'}</tr>`);
   const urlBusca = linkRastreado(p.id, tipoLog, `/#/veiculos?${utmEmail(TIPO, 'botao')}`);
-  const urlPerfil = linkRastreado(p.id, tipoLog, `/#/perfil?${utmEmail(TIPO, 'perfil')}`);
+  const urlPerfil = linkRastreado(p.id, tipoLog, `/#/perfil?responder=1&${utmEmail(TIPO, 'perfil')}`);
   return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
 <div style="max-width:600px;margin:0 auto;padding:24px 16px;">
@@ -117,8 +117,8 @@ function html(p, sel, tipoLog) {
       <li><strong>Relatório por IA</strong> do lote: condição, sinistro, FIPE e teto de lance</li>
     </ul>
     <div style="padding:16px 18px;background:#f0fdfa;border:1px solid #99f6e4;border-radius:12px;font-size:13.5px;color:#115e59;line-height:1.55;margin-bottom:16px;">
-      <strong>Quer receber veículos no seu e-mail de oportunidades?</strong> Complete o seu perfil de investidor com 3 perguntas rápidas: se tem interesse, que tipo de veículo e a faixa de FIPE que procura.
-      <div style="margin-top:12px;text-align:center;"><a href="${urlPerfil}" style="display:inline-block;background:#0f766e;color:#fff;text-decoration:none;padding:12px 24px;border-radius:10px;font-weight:800;font-size:14px;">Completar meu perfil →</a></div>
+      <strong>Quer receber veículos no seu e-mail de oportunidades?</strong> Responda o seu perfil de investidor — se você já respondeu, faltam só 3 perguntas de veículos: se tem interesse, que tipo e a faixa de FIPE. Leva menos de 1 minuto.
+      <div style="margin-top:12px;text-align:center;"><a href="${urlPerfil}" style="display:inline-block;background:#0f766e;color:#fff;text-decoration:none;padding:12px 24px;border-radius:10px;font-weight:800;font-size:14px;">Responder perfil de investidor →</a></div>
     </div>
     ${linhas.length ? `<div style="font-size:13px;font-weight:800;color:#0f172a;margin:4px 0 6px;">Pelo seu perfil, alguns no pátio agora</div>
     <table role="presentation" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;margin:0 -6px 8px;">${linhas.join('')}</table>` : ''}

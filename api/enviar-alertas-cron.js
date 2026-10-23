@@ -1068,7 +1068,7 @@ async function handler(req) {
       }).join('');
       // Sem declaração: convida a responder as 2 perguntas (o clique já ensina, mas a resposta é mais rápida).
       const convitePerfilVeic = veicSelec.length && pv?.origem !== 'declarado'
-        ? `<div style="margin:4px 0 14px;padding:12px 14px;background:#f0fdfa;border:1px solid #99f6e4;border-radius:12px;font-size:12.5px;color:#115e59;line-height:1.5;">Quer receber só o tipo certo — carro, moto ou utilitário? <a href="${BASE}/#/perfil" style="color:#0f766e;font-weight:700;">Responda 2 perguntas no seu perfil →</a></div>`
+        ? `<div style="margin:4px 0 14px;padding:12px 14px;background:#f0fdfa;border:1px solid #99f6e4;border-radius:12px;font-size:12.5px;color:#115e59;line-height:1.5;">Quer receber só o tipo certo — carro, moto ou utilitário? <a href="${BASE}/#/perfil?responder=1" style="color:#0f766e;font-weight:700;">Responder perfil de investidor →</a></div>`
         : '';
 
       const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>

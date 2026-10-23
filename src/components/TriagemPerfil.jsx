@@ -72,6 +72,7 @@ const STEPS = [
   { titulo: 'Valor médio de FIPE do veículo que você procura', campo: 'veiculo_faixa_fipe', opts: FAIXAS_FIPE, pular: semVeiculo },
 ];
 const CAMPOS_VEICULO = ['interesse_veiculos', 'veiculo_tipos', 'veiculo_faixa_fipe'];
+const SO_COM_INTERESSE = CAMPOS_VEICULO.slice(1);
 const CAMPOS = STEPS.map(s => s.campo);
 // CIDADE DE INTERESSE SAIU DA TRIAGEM (14/08, decisão do dono ao acompanhar um cadastro ao
 // vivo): a pergunta vinha logo depois da cidade que o próprio cadastro já coletou
@@ -82,7 +83,9 @@ const CAMPOS = STEPS.map(s => s.campo);
 // tipo, faixa de valor e modalidade — muito mais rico que uma cidade avulsa.
 // `cidades_interesse` continua existindo e sendo lido por quem usa (alertas, enriquecimento):
 // esta mudança só para de PERGUNTAR aqui.
-export default function TriagemPerfil({ userId }) {
+// `forcar` (23/10): aberto pelo link do e-mail (/perfil?responder=1) — aparece mesmo se a pessoa
+// dispensou na sessão. Respondeu tudo? Mostra as de veículo já preenchidas, para revisar.
+export default function TriagemPerfil({ userId, forcar = false, onSalvo }) {
   const [mostrar, setMostrar] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [step, setStep] = useState(0);
@@ -99,19 +102,20 @@ export default function TriagemPerfil({ userId }) {
         if (!vivo || !data) return;
         // Tipos e faixa só faltam para quem disse 'sim' (ou ainda não respondeu o interesse).
         const faltam = CAMPOS.filter(c => !preenchido(data[c])
-          && !(['veiculo_tipos', 'veiculo_faixa_fipe'].includes(c) && data.interesse_veiculos === 'nao'));
+          && !(SO_COM_INTERESSE.includes(c) && data.interesse_veiculos === 'nao'));
+        if (forcar && !faltam.length) faltam.push(...CAMPOS_VEICULO);
         // Só cliente e só quem ainda tem pergunta SEM resposta. Reaparece a cada acesso
         // enquanto faltar alguma (mesmo que tenha fechado antes);
         // o "fechar" (X) só dispensa na SESSÃO atual (sessionStorage).
-        if (ROLES_CLIENTE.includes(data.role) && faltam.length) {
+        if ((forcar || ROLES_CLIENTE.includes(data.role)) && faltam.length) {
           setF(Object.fromEntries(CAMPOS.map(c => [c, data[c] || (c === 'veiculo_tipos' ? [] : '')])));
           setPendentes(faltam);
-          try { if (sessionStorage.getItem('tsn_triagem_dispensada')) return; } catch { /* ignore */ }
+          try { if (!forcar && sessionStorage.getItem('tsn_triagem_dispensada')) return; } catch { /* ignore */ }
           setMostrar(true);
         }
       });
     return () => { vivo = false; };
-  }, [userId]);
+  }, [userId, forcar]);
 
   // 19/09 — entra na fila de modais (era o único a furar: z-index fixo, cobria o vídeo de
   // boas-vindas em conta nova). Continua decidindo SOZINHO se quer aparecer; só a EXIBIÇÃO
@@ -127,13 +131,14 @@ export default function TriagemPerfil({ userId }) {
   const salvar = async () => {
     setSalvando(true);
     const novo = Object.fromEntries(passos.map(s => [s.campo, f[s.campo]]));
-    if (novo.interesse_veiculos === 'nao') { novo.veiculo_tipos = null; novo.veiculo_faixa_fipe = null; }
+    if (novo.interesse_veiculos === 'nao') for (const c of SO_COM_INTERESSE) novo[c] = null;
     const { data: salvo, error } = await supabase.from('perfis')
       .update({ ...novo, triagem_em: new Date().toISOString() }).eq('id', userId).select('id');
     setSalvando(false);
     // Fechar sem ter gravado faria a pessoa achar que respondeu — e o e-mail seguiria genérico.
     if (error || !salvo?.length) { alert('Não consegui salvar suas respostas agora. Tente de novo em instantes.'); return; }
     setMostrar(false);
+    onSalvo?.();
   };
 
   // Fecha na SESSÃO atual (não repete a cada volta pra Home); volta a perguntar no
@@ -161,7 +166,7 @@ export default function TriagemPerfil({ userId }) {
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 17, fontWeight: 900, color: '#111' }}>{soVeiculos ? 'Novidade: leilão de veículos 🚗' : 'Vamos personalizar suas análises'}</div>
             <div style={{ fontSize: 12.5, color: '#64748b', marginTop: 2, lineHeight: 1.5 }}>{soVeiculos
-              ? 'Agora também temos leilão de veículos já no pátio do leiloeiro — mais simples e seguro. Três perguntas rápidas para acertar no que você recebe.'
+              ? 'Agora também temos leilão de veículos já no pátio do leiloeiro — mais simples e seguro. Perguntas rápidas para acertar no que você recebe.'
               : 'Rápido (30s), uma pergunta por vez.'}</div>
           </div>
           <button onClick={depois} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 4 }}><X size={20} /></button>

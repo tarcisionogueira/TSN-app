@@ -16,6 +16,7 @@ import { usePlanos } from '../contexts/PlanosContext';
 import { PLANOS as PLANOS_STATIC } from '../data/cursos';
 import { emailVisivel } from '../utils/identidadeVisivel.js';
 import { ACEITA_DOCUMENTO } from '../utils/arquivo';
+import TriagemPerfil from '../components/TriagemPerfil';
 
 // Ordem hierárquica dos planos compráveis (para o quadro de upgrade/downgrade).
 const ORDEM_PLANOS = ['explorador', 'top2', 'assessorado', 'clube'];
@@ -267,6 +268,8 @@ export default function Perfil() {
   const isMobile = useIsMobile();
   const nav = useNavigate();
   const loc = useLocation();
+  const responder = new URLSearchParams(loc.search).get('responder') === '1';
+  const [versaoInvestidor, setVersaoInvestidor] = useState(0);
   const planosLive = usePlanos();
 
   // Sub-abas do Meu Perfil (organização por funcionalidade). A "Assinatura" abre
@@ -1286,13 +1289,17 @@ export default function Perfil() {
 
         </>)}
 
+        {/* Link do e-mail (/perfil?responder=1, 23/10): abre o questionário em qualquer aba — tudo para
+            quem não respondeu, só as de veículo para quem já respondeu. Salvou → o card recarrega. */}
+        {responder && !emSuporte && <TriagemPerfil userId={uid} forcar onSalvo={() => setVersaoInvestidor(v => v + 1)} />}
+
         {/* ═══ ABA: INVESTIDOR ═══ */}
         {abaValida === 'investidor' && (
           <>
           {/* Perfil de investidor (editável) — direciona a recomendação por e-mail.
               Só para clientes; equipe (admin/analista/etc.) não recebe recomendação. */}
           {['explorador','top2','top2_anual','assessorado','assessorado_anual','clube','clube_anual'].includes(role) && (
-            <PerfilInvestidorCard userId={uid} isMobile={isMobile} readOnly={emSuporte} />
+            <PerfilInvestidorCard key={versaoInvestidor} userId={uid} isMobile={isMobile} readOnly={emSuporte} />
           )}
           </>
         )}
