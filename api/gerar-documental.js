@@ -12,7 +12,7 @@ import { createHash } from 'node:crypto';
 import { getUser, isCronAuthorized } from './_auth.js';
 import { logAtividade } from './_atividade.js';
 import { leilaoEncerrado, respostaLeilaoEncerrado, ehEquipe } from './_leilao-encerrado.js';
-import { fetchViaBrightData, propositoDaFonte } from './_brightdata.js';
+import { fetchViaBrightData, buscarViaBrightData, ErroBrightData, propositoDaFonte } from './_brightdata.js';
 import { refererExigido } from './_foto-hotlink.js';
 import { capturarDocsLoginOnDemand, temLoginParaFonte } from './_leiloeiro-auth.js';
 import { anthropicFetch } from './_claude.js';
@@ -499,7 +499,7 @@ async function caixaPaginaHtml(url, deadline) {
   } catch { /* cai no Bright Data */ }
   if (Date.now() > deadline) return null;
   try {
-    const bd = await fetchViaBrightData(url, { headers: { ...h, Referer: 'https://venda-imoveis.caixa.gov.br/' } });
+    const bd = await fetchViaBrightData(url, { headers: { ...h, Referer: 'https://venda-imoveis.caixa.gov.br/' }, proposito: 'docs' });
     if (bd?.ok) return bom(await bd.text().catch(() => ''));
   } catch { /* segue sem */ }
   return null;
@@ -608,8 +608,19 @@ async function lerDoc(url, deadline, info = {}) {
     ? { 'User-Agent': UA, Referer: 'https://venda-imoveis.caixa.gov.br/sistema/detalhe-imovel.asp', Accept: 'application/pdf,application/octet-stream,*/*' }
     : { 'User-Agent': UA, Accept: '*/*', ...(ref ? { Referer: ref } : {}) };
   try {
-    // Cota própria do leiloeiro quando existe (info.proposito, 14/10); senão a `geral` de sempre.
-    const bd = await fetchViaBrightData(url, { headers: bdHeaders, proposito: info.proposito || 'geral' });
+    // Cota própria do leiloeiro quando existe (info.proposito, 14/10); senão a `docs`.
+    // Recusa por ORÇAMENTO (23/10) → `relatorio_doc`, isenta do teto: relatório do cliente não é travado
+    // por orçamento de coleta (decisão do dono, 12/09). Antes a recusa virava null e o cliente lia
+    // "HTTP 403" — o motivo da 1ª tentativa, não o freio de custo que de fato barrou (forma nº 5).
+    let bd = null;
+    try {
+      bd = await buscarViaBrightData(url, { headers: bdHeaders, proposito: info.proposito || 'docs', exigirOk: false });
+    } catch (e) {
+      if (!(e instanceof ErroBrightData)) throw e;
+      if (!e.semCota) throw e;
+      console.log(`[lerDoc] cota ${info.proposito || 'docs'} recusou (${e.motivo}) — usa relatorio_doc (isenta) ${url}`);
+      bd = await buscarViaBrightData(url, { headers: bdHeaders, proposito: 'relatorio_doc', exigirOk: false });
+    }
     if (bd) {
       const bdClone = bd.clone();
       console.log(`[lerDoc] brightdata resp status=${bd.status} ct=${bd.headers.get('content-type') || ''} ${url}`);
@@ -619,7 +630,10 @@ async function lerDoc(url, deadline, info = {}) {
         console.log(`[lerDoc] brightdata body[0..300]: ${snippet}`);
       }
     } else console.log(`[lerDoc] brightdata indisponível (token/zone ausente ou teto) ${url}`);
-  } catch (e) { console.warn(`[lerDoc] brightdata erro ${e?.message} ${url}`); doc = null; }
+  } catch (e) {
+    console.warn(`[lerDoc] brightdata erro ${e?.message} ${url}`); doc = null;
+    if (e instanceof ErroBrightData) info.motivo = `${info.motivo || 'bloqueado'}; Bright Data: ${e.motivo}`;
+  }
   console.log(`[lerDoc] brightdata ${doc ? 'OK ('+doc.kind+')' : 'FALHOU'} ${url}`);
   return doc;
 }
@@ -1150,7 +1164,7 @@ export default async function handler(req, res) {
     // de leitura, não "doc ainda não capturado").
     const tiposGuardados = Object.values(cache).filter((c) => c?.storage_path).map((c) => c.tipo);
     const blocos = [];
-    const propositoBD = await propositoDaFonte(row?.fonte, 'geral'); // cota própria do leiloeiro (14/10)
+    const propositoBD = await propositoDaFonte(row?.fonte, 'docs'); // cota própria do leiloeiro (14/10); `geral` é dos crons de fundo
     let textoEditalLido = ''; // texto do edital (camada de texto do PDF), para a data de encerramento
     const lidos = [];
     // Impressão digital do CONTEÚDO de cada documento já embarcado — ver a dedup logo
