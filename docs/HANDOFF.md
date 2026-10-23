@@ -38276,3 +38276,25 @@ Achados no rastro do banco: NORDESTE_VEICULOS zerou, NORDESTE/JMF regressão, CR
 - **Causa principal:** título/descrição "MARCA/MODELO" lido como Cidade/UF ("HONDA/CG" → Honda/CG, "FORD/KA", "VOLVO/FH") — FREITAS (`cidadeUf` em `lib/freitas-parse.mjs`, sem endereço caía na descrição) e JOAOEMILIO (`cidadeUF` em `scraper-soleon.mjs`, 3º padrão). As duas agora só aceitam sigla que é estado (`UFS` exportado de `dom-parse-util.mjs`); teste novo em `testar:freitas` (falha sem a correção). O leilão Freitas 8132 inteiro é Santo André/SP — a próxima coleta devolve a cidade aos 19.
 - **Gatilho `trg_veiculo_local`** (`20261023_veiculo_local_uf_invalida_e_apelidos.sql`): UF inexistente → descarta cidade e UF; regiões administrativas do DF → Brasília (só com UF DF: São Sebastião/Santa Maria/Gama existem em outros estados); Indápolis → Dourados/MS (18 LJUD); comparação final sem apóstrofo/espaço e "th"=“t” (Sant'Ana do Livramento, São Mateus do Sul). Nome original vai para `patio`. Reprocessados os ativos afetados.
 - **Restam 10, de propósito:** "Jitocara" (LJUD, não é município — não chutar Itaocara), "Sul"/SC e "Fora"/MG (fragmentos), SUPERBID com cidade sem UF (Campo Grande, Santo André… ambíguos).
+
+### 23/10 (tarde) — documental travado por cota de coleta · estado fora do padrão 33 → 0
+- **Documental do dono (CEF, Feira de Santana/BA) bloqueado com "Matrícula (HTTP 403); Edital (HTTP 403)".**
+  O 403 era só a 1ª tentativa (a Caixa recusa IP de datacenter). O Bright Data nem chegou a ser chamado: a
+  leitura usava a cota `geral`, que é dos crons de fundo (25/dia em 4 turnos) e já tinha recusado às 15h.
+  Isso contrariava a decisão do dono de 12/09 ("relatório não pode ser travado por orçamento de coleta"),
+  que só isentou o DJEN. Correção: `lerDoc` usa a cota do leiloeiro (ou `docs`); quando ela recusa por
+  orçamento, passa para o propósito novo `relatorio_doc` (isento, consumo no ledger). O motivo passa a citar
+  o Bright Data quando foi ele que barrou. O PDF lido vai para o bucket, então regerar não paga de novo.
+  Migração `20261023_brightdata_relatorio_doc_isento.sql`.
+- **`estado_fora_do_padrao` 33 → 0.** 23 lotes nem eram imóvel e passaram pelo `bem_movel_barrado`:
+  - ano/modelo colado vindo do slug (ALFA, "20142015");
+  - "SUCATA - AUTOMÓVEL" (LEILOTECH);
+  - "APROX. 833 CAPAS" (FRAZAO).
+
+  Três sinais novos pegam exatamente esses 23 (teste em seco, 0 falso positivo).
+- ⚠️ **Lição:** `idx_imoveis_bem_movel_barrado` é um índice PARCIAL sobre essa função IMMUTABLE. Trocar o corpo
+  da função não atualiza o índice, e o UPDATE de reprocessamento achou 0 linhas sem erro nenhum. Ao mudar
+  a função, rodar REINDEX no mesmo commit.
+- Restantes:
+  - 4 corrigidos pelo próprio texto (3 SUPERBID e Corumbá de Goiás);
+  - 6 sem cidade na fonte (MILAN e RIGOLON com título "Imóvel", CASSIANO, NAKAKOGUE) explicados por 30 dias, pendência **310**.
