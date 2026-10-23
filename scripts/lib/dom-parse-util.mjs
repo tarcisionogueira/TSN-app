@@ -94,7 +94,7 @@ export function cidadeUFDeSlug(slug) {
   return { cidade: titleCase(m[1].replace(/-/g, ' ')).slice(0, 60) || null, estado: uf };
 }
 
-const UFS = new Set(['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']);
+export const UFS = new Set(['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']);
 
 // Estado por extenso no slug (nordeste: "…-amargosa-bahia") → sigla.
 export const UF_POR_NOME = {

@@ -77,6 +77,13 @@ const carro = parseDetalhe(detalhe({ id: 8079, data: '29/09/2026', hora: '10:00'
   endereco: '', desc: 'I/CHEV TRACKER LTZ AT, 13/14', lances: 'R$ 31.000,00 Lance Inicial' }), `${BASE}/Leiloes/LoteDetalhes?leilaoId=8079&loteNumero=1`);
 assert.equal(carro.encerrado, true);
 
+// (23/10) Sem endereço, a descrição de veículo começa por MARCA/MODELO ("HONDA/CG 160 FAN"): o 1º "X/YY" não é
+// Cidade/UF quando a sigla não é estado — cai no card (leilão 8132, Santo André/SP, 19 lotes gravados como Honda/CG).
+CARDS.set('8132-20', { valor: 9000, cidade: 'Santo Andre', estado: 'SP' });
+const moto = parseDetalhe(detalhe({ id: 8132, data: '29/10/2026', hora: '10:00', status: 'ABERTO PARA LANCES', tipo: 19,
+  endereco: '', desc: 'HONDA/CG 160 FAN, 22/22, PLACA: F__-___7, GASOL/ALC, VERMELHA', lances: 'R$ 9.000,00 Lance Inicial' }), `${BASE}/Leiloes/LoteDetalhes?leilaoId=8132&loteNumero=20`);
+assert.deepEqual([moto.cidade, moto.estado], ['Santo Andre', 'SP']);
+
 // lote vendido sai como encerrado
 const vendido = parseDetalhe(detalhe({ id: 8051, data: '28/09/2026', hora: '10:00', status: 'VENDIDO', tipo: 19,
   endereco: 'Rua X - Rio Branco/AC', desc: 'Casa.', lances: '' }), `${BASE}/Leiloes/LoteDetalhes?leilaoId=8051&loteNumero=2`);

@@ -22,7 +22,7 @@
  * portão de qualidade do runner descarta — melhor que inventar.
  */
 import { inferirTipo, extrairArea, checarQualidade } from './leilaopro-parse.mjs';
-import { num, plaus, titleCase, montarRowDom } from './dom-parse-util.mjs';
+import { num, plaus, titleCase, montarRowDom, UFS } from './dom-parse-util.mjs';
 
 export const TENANTS = {
   freitas: { fonte: 'FREITAS', leiloeiro: 'Freitas Leiloeiro', base: 'https://www.freitasleiloeiro.com.br' },
@@ -48,10 +48,12 @@ export const idDaUrl = url => {
 };
 
 function cidadeUf(s) {
-  // "SAO PAULO/SP" · "Sao Paulo/SP" · "Rio Branco-AC." (início da descrição)
-  const m = String(s || '').match(/([A-Za-zÀ-ÿ'][A-Za-zÀ-ÿ' .]{1,60}?)\s*[/-]\s*([A-Z]{2})\b/);
-  if (!m) return { cidade: null, estado: null };
-  return { cidade: titleCase(m[1].trim()), estado: m[2] };
+  // "SAO PAULO/SP" · "Sao Paulo/SP" · "Rio Branco-AC." (início da descrição). Só UF que EXISTE (23/10): a descrição
+  // de veículo começa por "HONDA/CG 160…" e o 1º "X/YY" virava Honda/CG — 19 lotes do leilão 8132 (Santo André).
+  for (const m of String(s || '').matchAll(/([A-Za-zÀ-ÿ'][A-Za-zÀ-ÿ' .]{1,60}?)\s*[/-]\s*([A-Z]{2})\b/g)) {
+    if (UFS.has(m[2])) return { cidade: titleCase(m[1].trim()), estado: m[2] };
+  }
+  return { cidade: null, estado: null };
 }
 
 /** Lotes do catálogo; de brinde guarda valor/cidade de cada card em CARDS. */

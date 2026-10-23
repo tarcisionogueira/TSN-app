@@ -49,6 +49,7 @@ import { planejarAlvo } from './lib/motor/runner.mjs';
 import { siteDeclaraVazio, MOTIVO_VAZIO_DECLARADO } from './lib/vazio-declarado.mjs';
 import { galeriaDoHtml, montarFotos, FONTES_PASTA_DA_CAPA } from './lib/galeria-veiculo.mjs';
 import { veiculoDoLote } from './lib/veiculo-do-lote.mjs';
+import { UFS } from './lib/dom-parse-util.mjs';
 import { patioPreservado } from './lib/patio-veiculo.mjs';
 
 // Tenants SOLEON confirmados no recon (23/07). fonte = chave única no acervo/monitor;
@@ -137,9 +138,12 @@ const supabase = createClient(SB_URL, SB_KEY);
 // Vitoria" que o regex ganancioso capturava). estado sempre pela sigla após a barra.
 function cidadeUF(txt, titulo = '') {
   const fonte = `${titulo} ${txt}`;
-  let m = fonte.match(/\bCidade:\s*([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'.\- ]{1,28}?)\s*[\/-]\s*([A-Z]{2})\b/i);
-  if (!m) m = fonte.match(/\b(?:em|de|no|na)\s+([A-ZÀ-Ý][A-Za-zÀ-ÿ'.]+(?:\s+[A-ZÀ-Ý][A-Za-zÀ-ÿ'.]+){0,2})\s*\/\s*([A-Z]{2})\b/);
-  if (!m) m = fonte.match(/\b([A-ZÀ-Ý][A-Za-zÀ-ÿ'.]+(?:\s+[A-ZÀ-Ý][A-Za-zÀ-ÿ'.]+){0,2})\s*\/\s*([A-Z]{2})\b/);
+  // Só UF que EXISTE (23/10): título de veículo "HONDA/CG 125 FAN", "VOLVO/FH 440" casava o 3º padrão como Cidade/UF
+  // (JOAOEMILIO, 7 lotes) — cada padrão agora varre os candidatos e pula o par cuja sigla não é estado.
+  const primeiro = (re) => { for (const x of fonte.matchAll(re)) if (UFS.has((x[2] || '').toUpperCase())) return x; return null; };
+  const m = primeiro(/\bCidade:\s*([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'.\- ]{1,28}?)\s*[\/-]\s*([A-Z]{2})\b/gi)
+    || primeiro(/\b(?:em|de|no|na)\s+([A-ZÀ-Ý][A-Za-zÀ-ÿ'.]+(?:\s+[A-ZÀ-Ý][A-Za-zÀ-ÿ'.]+){0,2})\s*\/\s*([A-Z]{2})\b/g)
+    || primeiro(/\b([A-ZÀ-Ý][A-Za-zÀ-ÿ'.]+(?:\s+[A-ZÀ-Ý][A-Za-zÀ-ÿ'.]+){0,2})\s*\/\s*([A-Z]{2})\b/g);
   if (!m) return { cidade: null, estado: null };
   return { cidade: m[1].trim().replace(/\s+/g, ' ').slice(0, 60), estado: (m[2] || '').toUpperCase() || null };
 }
