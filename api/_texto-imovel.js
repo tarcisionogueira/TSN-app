@@ -308,7 +308,7 @@ const ENTIDADES_NOMEADAS = {
   // Símbolos que MUDAM A LEITURA de um número, não só a aparência: `m&sup2;` é a forma
   // HTML mais comum de "m²", e sem esta linha `extrairAreaM2` não enxerga a unidade —
   // a área existe na página e sai 0 do coletor, sem erro nenhum no caminho.
-  sup2: '\u00b2', sup3: '\u00b3', ordm: '\u00ba', orda: '\u00aa', deg: '\u00b0',
+  sup2: '\u00b2', sup3: '\u00b3', ordm: '\u00ba', ordf: '\u00aa', orda: '\u00aa', deg: '\u00b0',
   frac12: '\u00bd', frac14: '\u00bc', middot: '\u00b7', times: '\u00d7',
   ndash: '\u2013', mdash: '\u2014', hellip: '\u2026', laquo: '\u00ab', raquo: '\u00bb',
   lsquo: '\u2018', rsquo: '\u2019', ldquo: '\u201c', rdquo: '\u201d', bull: '\u2022',

@@ -109,6 +109,7 @@
     "testar:escopo-reduzido": "node scripts/testes/escopo-reduzido-nao-vira-regressao-da-fonte.mjs",
     "testar:albertomacedo-pacote": "node scripts/testes/albertomacedo-descobre-lote-dentro-de-pacote.mjs",
     "testar:francoleiloes": "node scripts/testes/francoleiloes-extrai-campos-reais.mjs",
+    "testar:leilaoeletronico": "node scripts/testes/leilaoeletronico-feed-e-pagina.mjs",
     "testar:leiloar": "node scripts/testes/leiloar-parse.mjs",
     "testar:hastapublica": "node scripts/testes/hastapublica-parse.mjs",
     "testar:lgcorretor": "node scripts/testes/lgcorretor-parse.mjs",

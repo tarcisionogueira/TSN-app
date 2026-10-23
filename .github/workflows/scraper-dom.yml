@@ -38,6 +38,8 @@ on:
       - 'scripts/lib/nortedeminas-parse.mjs'
       - 'scripts/scraper-softgt.mjs'
       - 'scripts/scraper-nortedeminas.mjs'
+      - 'scripts/lib/leilaoeletronico-parse.mjs'
+      - 'scripts/scraper-leilaoeletronico.mjs'
       - 'scripts/lib/baston-parse.mjs'
       - 'scripts/lib/cassiano-parse.mjs'
       - 'scripts/lib/arnaldo-parse.mjs'
@@ -79,7 +81,7 @@ on:
   workflow_dispatch:
     inputs:
       fontes:
-        description: 'csv: softgt,nortedeminas,baston,cassiano,arnaldo,novaserrana(recon),alfa,hasta,nordeste,nordeste_veiculos,jeleiloes,leilaoindex,rocha,albertomacedo,francoleiloes,simon,globo,leje,freitas,leiloar,lgcorretor,nakakogue,astavero,suporteoferta,comprei'
+        description: 'csv: softgt,nortedeminas,leilaoeletronico,baston,cassiano,arnaldo,novaserrana(recon),alfa,hasta,nordeste,nordeste_veiculos,jeleiloes,leilaoindex,rocha,albertomacedo,francoleiloes,simon,globo,leje,freitas,leiloar,lgcorretor,nakakogue,astavero,suporteoferta,comprei'
         required: false
         default: 'alfa,nordeste'
       gravar:
@@ -221,6 +223,16 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           NORTEDEMINAS_DRYRUN: ${{ env.DRYRUN_PADRAO }}
         run: node scripts/scraper-nortedeminas.mjs
+
+      # 23/10 (pendência 307): ~218 imóveis abertos, nacional, feed + página pela via grátis (sem Bright Data).
+      - name: Leilão Eletrônico
+        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'leilaoeletronico')) }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          LEILAOELETRONICO_DRYRUN: ${{ env.DRYRUN_PADRAO }}
+          LEILAOELETRONICO_DEBUG: '1'
+        run: node scripts/scraper-leilaoeletronico.mjs
 
       - name: Baston
         if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'baston')) }}
