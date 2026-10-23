@@ -11,11 +11,19 @@ import { salvarRef } from '../utils/ref';
 
 // FAQs montados com os valores reais do planos_config (evita valores fixos
 // divergentes). Os labels de preço chegam já formatados.
-const buildFAQS = ({ precoMesLabel, mesAnualLabel, anoLabel, economiaPctLabel }) => [
+// Clube e Assessoria só para quem tem conta (o visitante não vê esses planos — a pergunta ficaria sem
+// contexto); o visitante recebe "Como contrato a assessoria?" (24/10, reorganização da tela).
+const buildFAQS = ({ precoMesLabel, mesAnualLabel, anoLabel, economiaPctLabel, logado }) => [
   { q: 'Posso cancelar o plano a qualquer momento?', r: 'Sim. No plano mensal (sem fidelidade), cancele quando quiser, sem multa. No plano anual, você cancela a renovação automática a qualquer momento, sem novas cobranças e sem estorno do período já contratado, mantendo o acesso até o fim dos 12 meses.' },
-  { q: 'O plano Assessoria cobre quantas arrematações?', r: 'Uma arrematação por contrato. O assessorado tem até 12 meses para realizar a arrematação, buscando oportunidades e também recebendo indicações da nossa equipe, com acompanhamento completo do início até a imissão de posse.' },
-  // (FAQ de honorários removido da tela comercial — detalhes ficam no checkout/contrato)
-  { q: 'O Leilão Club inclui arrematações ilimitadas?', r: 'Sim. Com o Clube você tem acesso a assessoria contínua para todas as arrematações durante a vigência do plano.' },
+  { q: 'O que o plano Leilão de Veículos libera?', r: 'A busca de veículos com FIPE é aberta. O plano mostra o leiloeiro de cada veículo, o link do lote, os documentos e o endereço do pátio, e inclui 10 relatórios por IA de veículos por mês (condição, FIPE e teto de lance).' },
+  { q: 'Vale a pena o Combo?', r: 'Se você acompanha imóveis e veículos, sim: o Combo junta o Investidor Pro e o Leilão de Veículos numa assinatura só, por menos do que os dois separados.' },
+  ...(logado ? [
+    { q: 'O plano Assessoria cobre quantas arrematações?', r: 'Uma arrematação por contrato. O assessorado tem até 12 meses para realizar a arrematação, buscando oportunidades e também recebendo indicações da nossa equipe, com acompanhamento completo do início até a imissão de posse.' },
+    // (FAQ de honorários removido da tela comercial — detalhes ficam no checkout/contrato)
+    { q: 'O Leilão Club inclui arrematações ilimitadas?', r: 'Sim. Com o Clube você tem acesso a assessoria contínua para todas as arrematações durante a vigência do plano.' },
+  ] : [
+    { q: 'Como contrato a assessoria?', r: 'A assessoria é contratada por arrematação, dentro da plataforma: crie sua conta grátis para ver valores e condições. Enquanto ela estiver ativa, você tem todos os benefícios do Investidor Pro, sem mensalidade.' },
+  ]),
   { q: 'Posso pagar parcelado no cartão?', r: 'Sim. Aceitamos crédito, débito e PIX. Parcelamento em até 12× disponível, a partir da 4ª parcela os juros são assumidos pelo cliente conforme a operadora.' },
   { q: 'O que é o relatório de viabilidade?', r: 'Nossa IA analisa edital, matrícula e documentos do imóvel e gera um relatório completo com análise mercadológica, financeira e jurídica em menos de 5 minutos.' },
   { q: 'Qual a diferença entre pagar mensal e anual?', r: `No plano anual você economiza ${economiaPctLabel}, paga o equivalente a ${mesAnualLabel}/mês (${anoLabel} cobrados uma única vez) em vez de ${precoMesLabel}/mês no mensal.` },
@@ -42,6 +50,12 @@ export default function Planos() {
   const [souParceiro, setSouParceiro] = useState(false);   // parceiro_aceite_em preenchido
   const [meuCodigo, setMeuCodigo] = useState('');           // codigo_indicacao curto p/ o link de venda
   const [copiadoKey, setCopiadoKey] = useState(null);       // feedback do "Compartilhar" por plano
+  const [proAberto, setProAberto] = useState(false);        // "ver tudo o que inclui" do Investidor Pro
+  // Página de venda: o banner "Instalar app" (PwaInstall) só aparece depois que a pessoa rola.
+  useEffect(() => {
+    window.__tsnLanding = true; window.dispatchEvent(new Event('tsn:landing'));
+    return () => { window.__tsnLanding = false; window.dispatchEvent(new Event('tsn:landing')); };
+  }, []);
 
   const enviarDuvida = async () => {
     setDv(d => ({ ...d, enviando: true, erro: '' }));
@@ -141,6 +155,7 @@ export default function Planos() {
     mesAnualLabel: fmtR(_precoAno / 12),
     anoLabel: fmtR(_precoAno),
     economiaPctLabel: `${Number(_economiaPct).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`,
+    logado: !!user,
   });
 
   const ir = (key) => {
@@ -247,30 +262,41 @@ export default function Planos() {
     <div style={{ background: '#f8fafc', minHeight: '100vh' }}>
 
       {/* ── Hero ── */}
-      <div style={{ background: 'linear-gradient(135deg, #080f1a 0%, #0d2a50 100%)', padding: '72px 20px 100px', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
+      {/* Topo COMPACTO (24/10): metade da altura de antes, com o Mensal/Anual dentro — os planos aparecem
+          já na primeira tela. */}
+      <div style={{ background: 'linear-gradient(135deg, #080f1a 0%, #0d2a50 100%)', padding: '48px 20px 40px', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
         <div style={{ position: 'absolute', inset: 0, backgroundImage: 'radial-gradient(ellipse at 20% 80%, rgba(13,99,219,0.2) 0%, transparent 50%), radial-gradient(ellipse at 80% 20%, rgba(99,102,241,0.12) 0%, transparent 50%)' }} />
         <div style={{ position: 'relative' }}>
-          <div style={{ display: 'inline-block', background: 'rgba(37,99,235,0.18)', border: '1px solid rgba(37,99,235,0.3)', borderRadius: 24, padding: '6px 18px', fontSize: 11, fontWeight: 800, color: '#93c5fd', letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 22 }}>
-            Planos & Preços
-          </div>
-          <h1 style={{ fontSize: 'clamp(28px,5vw,52px)', fontWeight: 900, color: 'white', margin: '0 0 16px', lineHeight: 1.08, letterSpacing: '-1px' }}>
-            Invista com inteligência.<br />
-            <span style={{ color: '#60a5fa' }}>Arremate com segurança.</span>
+          <h1 style={{ fontSize: 'clamp(26px,4.2vw,42px)', fontWeight: 900, color: 'white', margin: '0 0 10px', lineHeight: 1.1, letterSpacing: '-1px' }}>
+            Escolha o plano para <span style={{ color: '#60a5fa' }}>arrematar com segurança</span>
           </h1>
-          <p style={{ color: '#94a3b8', fontSize: 'clamp(14px,2vw,17px)', maxWidth: 520, margin: '0 auto 36px', lineHeight: 1.75 }}>
-            Da pesquisa gratuita à assessoria completa, escolha o suporte certo para o seu momento.
+          <p style={{ color: '#94a3b8', fontSize: 'clamp(14px,1.8vw,16px)', maxWidth: 560, margin: '0 auto 18px', lineHeight: 1.6 }}>
+            Comece grátis. Assine quando quiser os relatórios completos de imóveis, de veículos ou dos dois.
           </p>
-          <div style={{ display: 'flex', gap: 24, justifyContent: 'center', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 22, justifyContent: 'center', flexWrap: 'wrap', marginBottom: PLANOS.top2?.precoAnual > 0 ? 22 : 0 }}>
             {[{ icon: Shield, txt: 'Análise jurídica incluída' }, { icon: Zap, txt: 'Relatório em menos de 5 min' }, { icon: Users, txt: '+8 anos no mercado' }].map(({ icon: Icon, txt }) => (
               <div key={txt} style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#94a3b8', fontSize: 13 }}>
                 <Icon size={14} color="#60a5fa" /> {txt}
               </div>
             ))}
           </div>
+        {/* Mensal | Anual (21/10, dono: "o anual disponível para todos os planos com o mesmo % de desconto"). */}
+          {PLANOS.top2?.precoAnual > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'center', margin: 0 }}>
+              <div role="group" aria-label="Ciclo de cobrança" style={{ display: 'flex', gap: 4, padding: 4, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 14 }}>
+                {[['mensal', 'Mensal'], ['anual', `Anual${mesesGratis('top2') > 0 ? ` · ${mesesGratis('top2')} meses grátis` : ''}`]].map(([k, rot]) => (
+                  <button key={k} onClick={() => setPeriodo(k)} aria-pressed={periodo === k}
+                    style={{ padding: '9px 18px', borderRadius: 10, border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 13.5, background: periodo === k ? 'white' : 'transparent', color: periodo === k ? '#084BA6' : '#cbd5e1' }}>
+                    {rot}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
-      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0 20px 80px' }}>
+      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 20px 80px' }}>
 
         {/* Gatilho de preço (passo 8): contagem regressiva quando há aumento AGENDADO do
             Investidor Pro. Converte antes da virada ("assine agora e trave o preço"). */}
@@ -294,19 +320,6 @@ export default function Planos() {
           );
         })()}
 
-        {/* Mensal | Anual (21/10, dono: "o anual disponível para todos os planos com o mesmo % de desconto"). */}
-        {PLANOS.top2?.precoAnual > 0 && (
-          <div style={{ display: 'flex', justifyContent: 'center', margin: '0 0 22px' }}>
-            <div role="group" aria-label="Ciclo de cobrança" style={{ display: 'flex', gap: 4, padding: 4, background: 'white', border: '1px solid #e2e8f0', borderRadius: 14, boxShadow: '0 2px 10px rgba(0,0,0,0.05)' }}>
-              {[['mensal', 'Mensal'], ['anual', `Anual${mesesGratis('top2') > 0 ? ` · ${mesesGratis('top2')} meses grátis` : ''}`]].map(([k, rot]) => (
-                <button key={k} onClick={() => setPeriodo(k)} aria-pressed={periodo === k}
-                  style={{ padding: '9px 18px', borderRadius: 10, border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 13.5, background: periodo === k ? '#084BA6' : 'transparent', color: periodo === k ? 'white' : '#475569' }}>
-                  {rot}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* ── 3 planos lado a lado (21/10, dono): Explorador · Investidor Pro · Leilão de Veículos. O Combo é
             oferecido ao abrir o link de qualquer um (components/OfertaCombo.jsx, no Checkout) e na faixa abaixo. ── */}
@@ -335,7 +348,7 @@ export default function Planos() {
           </div>
 
           {/* Investidor Pro */}
-          <div id="plano-top2" style={{ background: 'linear-gradient(145deg, #084BA6 0%, #0a3d8f 100%)', borderRadius: 20, border: '2px solid #3b82f6', padding: '32px 28px', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', boxShadow: '0 12px 40px rgba(37,99,235,0.35)' }}>
+          <div id="plano-top2" className="card-pro" style={{ background: 'linear-gradient(145deg, #084BA6 0%, #0a3d8f 100%)', borderRadius: 20, border: '2px solid #3b82f6', padding: '32px 28px', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', boxShadow: '0 12px 40px rgba(37,99,235,0.35)' }}>
             <div style={{ position: 'absolute', top: -40, right: -40, width: 160, height: 160, borderRadius: '50%', background: 'rgba(255,255,255,0.04)' }} />
             <div style={{ position: 'absolute', top: 20, right: 20, background: '#fbbf24', color: '#78350f', fontSize: 10, fontWeight: 800, padding: '4px 14px', borderRadius: 20, textTransform: 'uppercase', letterSpacing: 0.5, display: 'flex', alignItems: 'center', gap: 4 }}>
               <Star size={9} fill="#78350f" /> Mais popular
@@ -356,10 +369,23 @@ export default function Planos() {
             </div>
             </div>
             <p style={{ fontSize: 14, color: '#bfdbfe', marginBottom: 24, lineHeight: 1.7 }}>
-              Relatório completo de viabilidade por IA + análise documental e jurídica com base nos anexos do leilão. Até 10 relatórios de cada tipo por mês, e relatórios adicionais por crédito quando precisar.
+              Viabilidade por IA + análise documental e jurídica de cada imóvel, antes do lance.
             </p>
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 32 }}>
+            {/* Lista CURTA (24/10): os 5 que vendem; o resto em "ver tudo" — a lista de 20 itens deixava os
+                outros dois cartões com um vão branco até o botão. */}
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 28 }}>
               <CheckItem txt="Tudo do Explorador" light />
+              {[
+                'Quem é o leiloeiro, link do lote, edital e matrícula',
+                'Relatório de viabilidade e análise documental e jurídica',
+                '10 relatórios mercadológicos + 10 documentais por mês',
+                'Comparativos de mercado e rentabilidade do aluguel',
+                'Todos os eBooks da plataforma inclusos',
+              ].map(t => <CheckItem key={t} txt={t} light />)}
+              <button onClick={() => setProAberto(v => !v)} style={{ alignSelf: 'flex-start', background: 'none', border: 'none', color: '#93c5fd', fontWeight: 800, fontSize: 13, cursor: 'pointer', padding: '4px 0', display: 'flex', alignItems: 'center', gap: 4 }}>
+                {proAberto ? <>Ver menos <ChevronUp size={14} /></> : <>Ver tudo o que inclui <ChevronDown size={14} /></>}
+              </button>
+              {proAberto && <>
 
               <GroupLabel txt="📑 Análise & Relatórios com IA" />
               {[
@@ -395,6 +421,7 @@ export default function Planos() {
                   'Desconto exclusivo em cursos pagos premium',
                 ].map(t => <CheckItem key={t} txt={t} light />)}
               </div>
+              </>}
             </div>
             <button onClick={() => ctaTipo('top2') === 'downgrade' ? irDowngrade() : ir('top2')} disabled={atual('top2')}
               style={{ width: '100%', padding: '14px', border: 'none', borderRadius: 12, background: atual('top2') ? 'rgba(255,255,255,0.15)' : 'white', color: atual('top2') ? '#93c5fd' : '#084BA6', fontWeight: 800, fontSize: 15, cursor: atual('top2') ? 'default' : 'pointer', boxShadow: atual('top2') ? 'none' : '0 4px 16px rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
@@ -433,7 +460,7 @@ export default function Planos() {
 
         {/* ── Combo Imóveis + Veículos (20/10; faixa desde 21/10) ── preço e economia do planos_config. */}
         {ativoPlano('combo') && (
-          <div id="plano-combo" style={{ maxWidth: 1100, margin: '0 auto 64px', background: 'linear-gradient(135deg,#4c1d95 0%,#6d28d9 100%)', border: '2px solid #8b5cf6', borderRadius: 20, padding: '22px 26px', display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap', boxShadow: '0 12px 32px rgba(109,40,217,0.25)' }}>
+          <div id="plano-combo" style={{ maxWidth: 1100, margin: '0 auto 22px', background: 'linear-gradient(135deg,#4c1d95 0%,#6d28d9 100%)', border: '2px solid #8b5cf6', borderRadius: 20, padding: '22px 26px', display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap', boxShadow: '0 12px 32px rgba(109,40,217,0.25)' }}>
             <div style={{ flex: '1 1 320px', minWidth: 0 }}>
               <div style={{ fontSize: 12.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1.2, color: '#ddd6fe' }}>Combo Imóveis + Veículos</div>
               <div style={{ fontSize: 20, fontWeight: 900, color: 'white', margin: '4px 0' }}>
@@ -455,6 +482,51 @@ export default function Planos() {
           </div>
         )}
 
+        {/* ── Garantias numa faixa fina (24/10; antes eram 3 cartões grandes depois da assessoria) ── */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '10px 28px', maxWidth: 1100, margin: '0 auto 56px', padding: '14px 18px', background: 'white', border: '1px solid #e2e8f0', borderRadius: 14 }}>
+          {[['🔒', 'Pagamento seguro: crédito, débito e PIX'], ['✅', 'Mensal sem fidelidade · no anual, cancele a renovação'], ['🤝', 'Analistas, advogados e sócio do seu lado']].map(([ic, t]) => (
+            <div key={t} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#475569', fontWeight: 600 }}><span>{ic}</span>{t}</div>
+          ))}
+        </div>
+
+        {/* ── Compare os planos (24/10): substitui a lista longa para quem quer comparar lado a lado.
+            Texto, não preço — o preço vive nos cartões (planos_config). Combo = Pro + Veículos. ── */}
+        <div style={{ maxWidth: 1000, margin: '0 auto 64px' }}>
+          <h2 style={{ fontSize: 'clamp(22px,3.4vw,30px)', fontWeight: 900, color: '#111', textAlign: 'center', margin: '0 0 20px' }}>Compare os planos</h2>
+          <div style={{ overflowX: 'auto', background: 'white', border: '1px solid #e2e8f0', borderRadius: 16 }}>
+            <table style={{ width: '100%', minWidth: 620, borderCollapse: 'collapse', fontSize: 13.5 }}>
+              <thead>
+                <tr style={{ background: '#f8fafc' }}>
+                  {['', 'Explorador', 'Investidor Pro', 'Veículos', 'Combo'].map((h, i) => (
+                    <th key={h || 'rec'} style={{ textAlign: i ? 'center' : 'left', padding: '14px 14px', fontWeight: 900, color: i === 2 ? '#084BA6' : i === 3 ? '#0f766e' : i === 4 ? '#6d28d9' : '#111', borderBottom: '1px solid #e2e8f0', whiteSpace: 'nowrap' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  ['Busca de leilões de imóveis em todo o Brasil', '✓', '✓', '✓', '✓'],
+                  ['Busca de veículos com FIPE', '✓', '✓', '✓', '✓'],
+                  ['Relatório de mercado + viabilidade', '3 de amostra', '10/mês', '3 de amostra', '10/mês'],
+                  ['Relatório documental e jurídico', '—', '10/mês', '—', '10/mês'],
+                  ['Leiloeiro, link do lote, edital e matrícula (imóveis)', '—', '✓', '—', '✓'],
+                  ['Comparativos, SAC/Price e rentabilidade do aluguel', '—', '✓', '—', '✓'],
+                  ['Leiloeiro, documentos e pátio de cada veículo', '—', '—', '✓', '✓'],
+                  ['Relatórios de veículos por IA', '—', '—', '10/mês', '10/mês'],
+                  ['Todos os eBooks da plataforma', '—', '✓', '—', '✓'],
+                  ['Calculadora e cursos gratuitos', '✓', '✓', '✓', '✓'],
+                ].map(([rec, ...cols], r) => (
+                  <tr key={rec} style={{ background: r % 2 ? '#fcfdff' : 'white' }}>
+                    <td style={{ padding: '12px 14px', color: '#334155', fontWeight: 600, borderBottom: '1px solid #f1f5f9' }}>{rec}</td>
+                    {cols.map((c, i) => (
+                      <td key={i} style={{ padding: '12px 10px', textAlign: 'center', borderBottom: '1px solid #f1f5f9', color: c === '—' ? '#cbd5e1' : c === '✓' ? '#16a34a' : '#0f172a', fontWeight: c === '✓' ? 900 : 700, whiteSpace: 'nowrap' }}>{c}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
         {/* ── Assessoria Personalizada (só logado) ── */}
         <div style={{ textAlign: 'center', margin: '0 0 36px' }}>
           <div style={{ display: 'inline-block', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 20, padding: '5px 16px', fontSize: 11, fontWeight: 800, color: '#c2410c', letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 16 }}>
@@ -472,9 +544,15 @@ export default function Planos() {
           <div style={{ background: 'white', borderRadius: 20, border: '1px solid #e2e8f0', padding: '36px 32px', textAlign: 'center', maxWidth: 600, margin: '0 auto', boxShadow: '0 2px 12px rgba(0,0,0,0.04)' }}>
             <div style={{ fontSize: 40, marginBottom: 12 }}>🤝</div>
             <h3 style={{ fontSize: 19, fontWeight: 800, color: '#111', marginBottom: 10 }}>Também oferecemos assessoria e mentoria em leilões</h3>
-            <p style={{ color: '#64748b', fontSize: 14, lineHeight: 1.7, margin: 0 }}>
-              Para quem quer ir além: acompanhamento completo da análise à imissão de posse, e mentoria contínua para escalar com método. Conheça as opções de assessoria e mentoria dentro da plataforma.
+            <p style={{ color: '#64748b', fontSize: 14, lineHeight: 1.7, margin: '0 0 20px' }}>
+              Acompanhamento completo da análise à imissão de posse, e mentoria contínua para escalar com método. Valores e contratação ficam dentro da plataforma, para clientes — e a assessoria já inclui todos os benefícios do Investidor Pro.
             </p>
+            {/* Regra do dono (23/10): contratar exige CONTA (não exige o Pro). Visitante vai ao cadastro e volta
+                direto ao card da assessoria, que logado mostra o preço. */}
+            <button onClick={() => nav(`/login?modo=cadastro&next=${encodeURIComponent('/planos?plano=assessorado')}`)}
+              style={{ padding: '13px 26px', border: 'none', borderRadius: 12, background: '#d97706', color: 'white', fontWeight: 800, fontSize: 14.5, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8, boxShadow: '0 4px 14px rgba(217,119,6,0.3)' }}>
+              Criar conta grátis para ver valores <ArrowRight size={16} />
+            </button>
           </div>
         ) : (
           <div className="grid-2" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 20, maxWidth: 880, margin: '0 auto' }}>
@@ -536,21 +614,6 @@ export default function Planos() {
             )}
           </div>
         )}
-
-        {/* ── Garantias ── */}
-        <div className="grid-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 16, maxWidth: 820, margin: '56px auto 0' }}>
-          {[
-            { icon: '🔒', titulo: 'Pagamento 100% seguro', sub: 'Crédito, débito e PIX com ambiente certificado' },
-            { icon: '✅', titulo: 'Cancele quando quiser', sub: 'No mensal, sem fidelidade. No anual, cancele a renovação automática, sem estorno do período já contratado' },
-            { icon: '🤝', titulo: 'Equipe especializada', sub: 'Analistas, advogados e sócio disponíveis para você' },
-          ].map(({ icon, titulo, sub }) => (
-            <div key={titulo} style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: '24px 20px', textAlign: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
-              <div style={{ fontSize: 32, marginBottom: 10 }}>{icon}</div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: '#111', marginBottom: 6 }}>{titulo}</div>
-              <div style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.6 }}>{sub}</div>
-            </div>
-          ))}
-        </div>
 
         {/* ── FAQ ── */}
         <div style={{ maxWidth: 720, margin: '72px auto 0' }}>
@@ -620,6 +683,8 @@ export default function Planos() {
         /* 3 planos lado a lado só onde cabem (~300 px cada); abaixo disso, um por linha e centralizados. */
         @media (max-width: 980px) {
           .grid-planos { grid-template-columns: 1fr !important; max-width: 560px !important; }
+          /* No celular o mais vendido vem primeiro (24/10). */
+          .card-pro { order: -1; }
         }
       `}</style>
     </div>
