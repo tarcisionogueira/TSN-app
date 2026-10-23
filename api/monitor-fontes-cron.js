@@ -212,6 +212,12 @@ async function handler(req) {
   // CO-ANÚNCIO (22/10, dono: o mesmo prédio de Salvador 5× na busca): no LJUD cada leiloeiro do pool publica o
   // MESMO lote no próprio leilão, sem matrícula. Mesma fonte + título + descrição + preço + cidade + data, cada
   // cópia de um leiloeiro diferente → fica 1. Ver supabase/migrations/20261022_gemeos_coanuncio.sql.
+  // NÚMEROS DA PÁGINA INICIAL (23/10): imóveis/veículos/leiloeiros do acervo, 1x/dia — contar na hora da
+  // visita custa ~9 s. A página lê o resultado guardado (landing_numeros). Falha só deixa o de ontem.
+  {
+    const { error: eLn } = await supabase.rpc('landing_numeros_atualizar');
+    if (eLn) console.error('[monitor-fontes] landing_numeros_atualizar:', eLn.message);
+  }
   let gemeosCoanuncio = null;
   {
     const { data, error: eGco } = await supabase.rpc('reconciliar_gemeos_coanuncio');

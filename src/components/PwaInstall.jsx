@@ -32,6 +32,22 @@ export default function PwaInstall() {
   const [iosAberto, setIosAberto] = useState(false);
   const [visivel, setVisivel] = useState(false);
   const [forcado, setForcado] = useState(false); // aberto manualmente (menu / landing)
+  // 23/10 — na página inicial de venda o banner só aparece DEPOIS que a pessoa rola (antes cobria a
+  // faixa de prova logo no topo, na primeira tela, que é onde a maioria decide).
+  const [rolou, setRolou] = useState(false);
+  // A Landing avisa quando monta/desmonta (ela é lazy: checar o DOM na hora do render chegava antes dela).
+  const [naLanding, setNaLanding] = useState(() => typeof window !== 'undefined' && !!window.__tsnLanding);
+  useEffect(() => {
+    const f = () => setNaLanding(!!window.__tsnLanding);
+    window.addEventListener('tsn:landing', f);
+    return () => window.removeEventListener('tsn:landing', f);
+  }, []);
+  useEffect(() => {
+    if (rolou) return undefined;
+    const f = () => { if (window.scrollY > 900) setRolou(true); };
+    window.addEventListener('scroll', f, { passive: true });
+    return () => window.removeEventListener('scroll', f);
+  }, [rolou]);
 
   useEffect(() => {
     const dispensadoAntes = () => localStorage.getItem(DISPENSADO) === '1';
@@ -81,6 +97,7 @@ export default function PwaInstall() {
   // resto da sessão e o item "Instalar app" do menu deixaria de funcionar depois.
   if (ehRotaDeCampanha(loc.pathname)) return null;
   if (!visivel) return null;
+  if (!forcado && !rolou && naLanding) return null;
 
   const dispensar = () => {
     setVisivel(false);
