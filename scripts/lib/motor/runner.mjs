@@ -242,6 +242,10 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
   const foraPelaUrl = enumerado.urls.length - urls.length;
   console.log(`[${tenant.fonte}] enumerados ${enumerado.urls.length} lote(s)${via ? ` (via ${via})` : ''}${foraPelaUrl ? ` · ${foraPelaUrl} fora pela URL (não é imóvel) · ${urls.length} candidatos` : ''}`);
   const prontos = []; let encerrados = 0, sem = 0, reprov = 0, cotaNegada = 0, relidos = 0, naoImovel = 0;
+  // Motivo de cada "sem detalhe" (23/10): o motor devolve o porquê no `via` e o runner o descartava —
+  // LEILAOELETRONICO deu 118 de 118 sem detalhe duas vezes sem dizer se foi 403, timeout ou banco.
+  const motivosSem = new Map();
+  const contarSem = (m) => { const k = String(m || 'sem motivo').slice(0, 140); motivosSem.set(k, (motivosSem.get(k) || 0) + 1); };
   const naoImovelIds = [];
   const recusas = [];   // #238: { fonte_id, motivo, dias } — gravadas no fim (fora do dry-run)
   if (urls.length) {
@@ -311,13 +315,13 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
         break;
       }
       const html = r?.html;
-      if (!html && !detPronto) { sem++; continue; }
+      if (!html && !detPronto) { sem++; contarSem(r?.via); continue; }
       // `await` + `fetchFonte` (13/10): parser que precisa de uma 2ª página ou de um PDF (plataforma
       // Leiloar /externo/: valores só no edital) é assíncrono. Para os síncronos, nada muda.
       const det = detPronto || await cfg.parse.parseDetalhe(html, url, { fetchFonte, tenant });
       // Parser que devolve null = "não consegui ler esta página" (ex.: MGL sem render) — conta como
       // sem detalhe; antes disto o `det.encerrado` derrubava a coleta inteira.
-      if (!det) { sem++; continue; }
+      if (!det) { sem++; contarSem('parser não leu a página'); continue; }
       if (det.encerrado) { encerrados++; if (i < iReleitura) recusas.push({ fonte_id: idFonte(tenant, cfg.parse.idDaUrl(url)), motivo: 'encerrado', dias: 30 }); continue; }
       const row = cfg.parse.montarRow(url, det, tenant);
       // Sem foto no parser, a do meta da página (og:image filtrado) — #289. anularFotoRepetida, adiante, ainda derruba
@@ -380,6 +384,7 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
     else console.log(`[${tenant.fonte}] ${linhas.length} recusa(s) lembradas — fora da fila até o prazo (encerrado/não-imóvel 30 d, descarte 10–30 d).`);
   }
   console.log(`[${tenant.fonte}] ${prontos.length} prontos (${relidos} por releitura) · ${encerrados} encerrados · ${reprov} descartados · ${naoImovel} não-imóvel · ${sem} sem detalhe · ${cotaNegada} sem cota · foto ${pct(comFoto)}% · descrição ${pct(comDesc)}%`);
+  if (motivosSem.size) console.log(`[${tenant.fonte}] motivos de "sem detalhe": ${[...motivosSem].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([m, n]) => `${n}× ${m}`).join(' | ')}`);
   // fonteVazia = respondeu mas 0 lotes (não é falha: o leiloeiro só não tem imóveis agora).
   // `fonteVazia`/`enumerados` medem o que o SITE listou, não o que sobrou do filtro por URL — senão
   // um acervo 100% não-imóvel viraria "site vazio" e calaria o alarme (forma 10).
