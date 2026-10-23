@@ -48,6 +48,10 @@ export async function enumerar(fetchFonte, tenant, cfg, { maxPages, debug, semBD
   // `cortada` (22/10, #277): a lista só prova AUSÊNCIA se foi lida inteira — teto de páginas/eventos batido com
   // lote novo chegando, ou evento que não abriu, deixam lote do site fora da lista sem ele ter saído.
   let cortada = null;
+  // Teto batido só é CORTE se a página tem link para a próxima ("?page=N+1"): fonte que lê 1 página por evento
+  // (BASTON, ALBERTOMACEDO) ou cujo catálogo cabe no teto acusava "lista incompleta" toda rodada (23/10) e a
+  // varredura nunca rodava. Paginação só por script não deixa link — aí vale o freio relativo da varredura.
+  const temProxima = (html, p) => new RegExp(`[?&]${cfg.paginaParam || 'page'}=${p + 1}(?!\\d)`).test(String(html || '').replace(/&amp;/g, '&'));
   for (let p = 1; p <= maxPages; p++) {
     const url = `${tenant.base}${tenant.catalogo ?? cfg.catalogo}${p > 1 ? `?${cfg.paginaParam}=${p}` : ''}`; // tenant.catalogo: id de categoria varia por site (Viva, 10/10)
     const r = await fetchFonte(url, { semBD });
@@ -63,7 +67,7 @@ export async function enumerar(fetchFonte, tenant, cfg, { maxPages, debug, semBD
     if (cfg.parse.detalhesDoCatalogo) for (const [u, det] of cfg.parse.detalhesDoCatalogo(r.html, tenant.base)) detCatalogo.set(u, det);
     if (debug) console.log(`   [${tenant.fonte}] pág ${p} (${r.via}): +${urls.size - antes} (total ${urls.size})`);
     if (urls.size === antes && eventosPaginas.size === antesEv) break;
-    if (p === maxPages) cortada = `catálogo no teto de ${maxPages} página(s)`;
+    if (p === maxPages && temProxima(r.html, p)) cortada = `catálogo no teto de ${maxPages} página(s)`;
     await sleep(400);
   }
 
@@ -115,7 +119,7 @@ export async function enumerar(fetchFonte, tenant, cfg, { maxPages, debug, semBD
         if (cfg.parse.detalhesDoCatalogo) for (const [u, det] of cfg.parse.detalhesDoCatalogo(re.html, tenant.base)) detCatalogo.set(u, det);
         if (debug) console.log(`   [${tenant.fonte}] evento ${ev.slice(-40)} pág ${p}: +${urls.size - antes} (total ${urls.size})`);
         if (urls.size === antes) break;
-        if (p === maxPagEvento) cortada = `evento no teto de ${maxPagEvento} página(s)`;
+        if (p === maxPagEvento && temProxima(re.html, p)) cortada = `evento no teto de ${maxPagEvento} página(s)`;
         await sleep(400);
       }
       if (!debug) console.log(`   [${tenant.fonte}] evento ${ev.slice(-40)}: +${urls.size - antesEvento}`);

@@ -30,9 +30,21 @@ const fetchDe = (paginas) => async (url) => {
 }
 // 2) teto de páginas batido ainda trazendo lote novo → cortada
 {
-  const f = fetchDe({ 'https://x/cat': [lotes(1), lotes(2), lotes(3)] });
+  const f = fetchDe({ 'https://x/cat': [lotes(1) + '<a href="?page=2">2</a>', lotes(2) + '<a href="?page=3">3</a>', lotes(3)] });
   const r = await enumerar(f, tenant, { catalogo: '/cat', paginaParam: 'page', parse }, { maxPages: 2 });
-  ok(!r.completa && /teto/.test(r.cortada || ''), 'teto de páginas com lote novo = incompleta');
+  ok(!r.completa && /teto/.test(r.cortada || ''), 'teto de páginas com lote novo e link adiante = incompleta');
+}
+// 2b) teto batido SEM link para a próxima página → a lista acabou ali (completa)
+{
+  const f = fetchDe({ 'https://x/cat': [lotes(1), lotes(2)] });
+  const r = await enumerar(f, tenant, { catalogo: '/cat', paginaParam: 'page', parse }, { maxPages: 2 });
+  ok(r.completa, 'teto batido sem link para a próxima = completa');
+}
+// 2c) teto batido COM link "?page=3" → cortada
+{
+  const f = fetchDe({ 'https://x/cat': [lotes(1), lotes(2) + '<a href="/cat?page=3">3</a>'] });
+  const r = await enumerar(f, tenant, { catalogo: '/cat', paginaParam: 'page', parse }, { maxPages: 2 });
+  ok(!r.completa && /teto/.test(r.cortada || ''), 'teto batido com link para a próxima = incompleta');
 }
 // 3) eventos além do maxEventos → cortada
 {
