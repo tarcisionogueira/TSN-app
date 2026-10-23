@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
+  Car,
   Search, BarChart3, ShieldCheck, FileText, TrendingUp, Zap,
   ChevronRight, CheckCircle2, Star, Gavel, Users, Lock, Clock,
   MapPin, ArrowRight, ChevronDown, ChevronUp, Sparkles, BadgeCheck, HelpCircle,
@@ -113,6 +114,13 @@ export default function Landing() {
       <section style={{ background: 'linear-gradient(135deg, #080f1a 0%, #0a1f3d 60%, #0d2a50 100%)', padding: '90px 20px 110px', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
         <div style={{ position: 'absolute', inset: 0, backgroundImage: 'radial-gradient(ellipse at 15% 85%, rgba(13,99,219,0.18) 0%, transparent 55%), radial-gradient(ellipse at 85% 15%, rgba(99,102,241,0.12) 0%, transparent 55%)' }} />
         <div style={{ maxWidth: 820, margin: '0 auto', position: 'relative' }}>
+          {/* NOVIDADE (23/10, dono): leilão de veículos — atalho para a faixa logo abaixo, sem disputar o CTA do herói. */}
+          <div style={{ marginBottom: 14 }}>
+            <a href="#veiculos-leilao" onClick={(e) => { e.preventDefault(); document.getElementById('veiculos-leilao')?.scrollIntoView({ behavior: 'smooth' }); }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(52,211,153,0.12)', border: '1px solid rgba(52,211,153,0.35)', borderRadius: 24, padding: '6px 16px', fontSize: 12.5, color: '#6ee7b7', fontWeight: 700, textDecoration: 'none' }}>
+              <Car size={14} /> Novo: leilão de veículos abaixo da FIPE <ArrowRight size={13} />
+            </a>
+          </div>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(13,99,219,0.15)', border: '1px solid rgba(13,99,219,0.3)', borderRadius: 24, padding: '6px 18px', fontSize: 11, color: '#93c5fd', fontWeight: 800, marginBottom: 28, textTransform: 'uppercase', letterSpacing: 1.5 }}>
             <ShieldCheck size={12} /> Lucre antes de arrematar
           </div>
@@ -187,6 +195,49 @@ export default function Landing() {
           <p style={{ marginTop: 16, marginBottom: 0 }}>
             <a href="/leiloes" style={{ color: '#60a5fa', fontWeight: 700, fontSize: 13.5, textDecoration: 'none' }}>Ou navegue por estado →</a>
           </p>
+        </div>
+      </section>
+
+      {/* ── LEILÃO DE VEÍCULOS (23/10, pedido do dono) ──────────────────────────────
+          A busca de veículos (/veiculos) é PÚBLICA — o visitante vê lote, FIPE e desconto sem conta;
+          leiloeiro e relatório por IA ficam no plano. Sem número fixo de acervo, pelo mesmo motivo da
+          faixa de cima: ele muda todo dia e a contagem real aparece na própria busca. */}
+      <section id="veiculos-leilao" style={{ padding: '64px 20px', background: 'linear-gradient(180deg, #0f172a 0%, #0b2a3a 100%)', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+        <div style={{ maxWidth: 1000, margin: '0 auto' }}>
+          <div style={{ textAlign: 'center', marginBottom: 30 }}>
+            <div style={{ fontSize: 11, fontWeight: 800, color: '#34d399', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 12 }}>Novidade · Leilão de veículos</div>
+            <h2 style={{ fontSize: 'clamp(22px,3.4vw,32px)', fontWeight: 900, color: 'white', margin: '0 0 10px', letterSpacing: '-0.5px' }}>
+              Carros, motos e utilitários abaixo da FIPE
+            </h2>
+            <p style={{ color: '#94a3b8', fontSize: 14.5, lineHeight: 1.7, margin: '0 auto', maxWidth: 600 }}>
+              Os leilões de veículos de leiloeiros de todo o Brasil num lugar só, com a <strong style={{ color: '#e2e8f0' }}>FIPE ao lado do lance mínimo</strong> e o alerta de sinistro e sucata antes de você se apaixonar pelo lote.
+            </p>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 14, marginBottom: 30 }}>
+            {[
+              ['📊', 'Desconto sobre a FIPE', 'Cada lote mostra quanto está abaixo da tabela FIPE do modelo e ano.'],
+              ['⚠️', 'Sinistro e sucata em destaque', 'Recuperado de financiamento, batido ou sucata: você sabe antes do lance.'],
+              ['📍', 'Perto de você', 'Filtre por estado, cidade, marca, ano e tipo — carro, moto, caminhão, van.'],
+              ['🤖', 'Relatório por IA', 'Condição do lote, FIPE e teto de lance sugerido em minutos.'],
+            ].map(([ic, t, d]) => (
+              <div key={t} style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.09)', borderRadius: 14, padding: '18px 18px' }}>
+                <div style={{ fontSize: 22, marginBottom: 8 }}>{ic}</div>
+                <div style={{ fontSize: 14.5, fontWeight: 800, color: 'white', marginBottom: 4 }}>{t}</div>
+                <div style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.55 }}>{d}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+            <button onClick={() => nav('/veiculos')}
+              style={{ padding: '14px 28px', background: '#059669', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 8px 24px rgba(5,150,105,0.32)' }}>
+              <Car size={17} /> Ver veículos em leilão
+            </button>
+            <button onClick={() => nav('/login?modo=cadastro')}
+              style={{ padding: '14px 24px', background: 'transparent', color: '#e2e8f0', border: '1px solid rgba(255,255,255,0.22)', borderRadius: 12, fontWeight: 700, fontSize: 14.5, cursor: 'pointer' }}>
+              Receber oportunidades por e-mail
+            </button>
+          </div>
+          <p style={{ color: '#64748b', fontSize: 12, marginTop: 14, textAlign: 'center' }}>A busca é aberta, sem cadastro. Com a conta grátis, os veículos do seu perfil chegam no seu e-mail.</p>
         </div>
       </section>
 

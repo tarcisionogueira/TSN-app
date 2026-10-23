@@ -12,7 +12,7 @@
 export const PADRAO = {
   pagante: 7, assessorado: 14, novo: 7, ativo: 14, inativo: 28, pausado: 60,
   novo_dias_conta: 14, ativo_janela_dias: 30, pausa_apos_sem_abrir: 7,
-  itens_padrao: 12, itens_gratuito_ativo: 6,
+  itens_padrao: 10, itens_gratuito_ativo: 6, itens_veiculos: 5,   // 23/10: 10 imóveis + 5 veículos
   imediato_max_semana: 2, imediato_piso_pontos: 80, imediato_janela_horas: 36,
   // TETO DE 100/DIA DO RESEND (24/09): o cron de alertas deixa `reserva_transacional` e-mails
   // do dia para relatório pronto/cadastro/suporte, e o gratuito ainda deixa `reserva_pagante`

@@ -460,6 +460,10 @@
       "schedule": "15 */3 * * *"
     },
     {
+      "path": "/api/lancamento-veiculos?modo=enviar",
+      "schedule": "7 16 * * *"
+    },
+    {
       "path": "/api/arquivar-anexos-email-cron",
       "schedule": "25 * * * *"
     }

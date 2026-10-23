@@ -89,6 +89,14 @@ const INV_EXPERIENCIA = [
   ['1_2', 'Já arrematei 1 a 2'],
   ['recorrente', 'Investidor recorrente'],
 ];
+// Mesmas opções da TriagemPerfil (23/10) — decidem os veículos do e-mail de oportunidades.
+const INV_VEICULOS = [
+  ['carro', 'Sim — carros'], ['moto', 'Sim — motos'], ['carro_moto', 'Sim — carros e motos'],
+  ['pesado', 'Sim — caminhões, vans e utilitários'], ['nao', 'Não, só imóveis'],
+];
+const INV_FINALIDADE_VEICULO = [
+  ['uso', 'Para usar'], ['revenda', 'Para revender'], ['recuperar', 'Para recuperar (aceito sinistro/sucata)'],
+];
 
 // Card editável do perfil de investidor. Autossuficiente (carrega/salva sozinho),
 // independente do formulário de dados cadastrais.
@@ -101,7 +109,7 @@ function PerfilInvestidorCard({ userId, isMobile, readOnly = false }) {
   useEffect(() => {
     if (!userId) return;
     supabase.from('perfis')
-      .select('perfil_investidor, faixa_capital, forma_pagamento, consorcio_interesse, experiencia_leilao, cidades_interesse')
+      .select('perfil_investidor, faixa_capital, forma_pagamento, consorcio_interesse, experiencia_leilao, interesse_veiculos, veiculo_finalidade, cidades_interesse')
       .eq('id', userId).single()
       .then(({ data }) => {
         const c0 = Array.isArray(data?.cidades_interesse) && data.cidades_interesse[0] && typeof data.cidades_interesse[0] === 'object' ? data.cidades_interesse[0] : {};
@@ -111,6 +119,8 @@ function PerfilInvestidorCard({ userId, isMobile, readOnly = false }) {
           forma_pagamento: data?.forma_pagamento || '',
           consorcio_interesse: data?.consorcio_interesse || '',
           experiencia_leilao: data?.experiencia_leilao || '',
+          interesse_veiculos: data?.interesse_veiculos || '',
+          veiculo_finalidade: data?.veiculo_finalidade || '',
           cidade: c0.cidade || '', uf: c0.uf || '', raio_km: String(c0.raio_km || 50),
         };
         setF(snap); setOrig(snap);
@@ -133,6 +143,8 @@ function PerfilInvestidorCard({ userId, isMobile, readOnly = false }) {
       forma_pagamento: f.forma_pagamento || null,
       consorcio_interesse: f.consorcio_interesse || null,
       experiencia_leilao: f.experiencia_leilao || null,
+      interesse_veiculos: f.interesse_veiculos || null,
+      veiculo_finalidade: f.interesse_veiculos === 'nao' ? null : (f.veiculo_finalidade || null),
       cidades_interesse: cidades,
     }).eq('id', userId);
     setSalvando(false);
@@ -159,7 +171,7 @@ function PerfilInvestidorCard({ userId, isMobile, readOnly = false }) {
         <span style={{ fontSize: 15, fontWeight: 800, color: '#111111' }}>Perfil de investidor</span>
       </div>
       <p style={{ fontSize: 12.5, color: '#64748b', margin: '0 0 16px', lineHeight: 1.5 }}>
-        É o que direciona a recomendação de imóveis que você recebe por e-mail. Ajuste sempre que sua intenção mudar.
+        É o que direciona a recomendação de imóveis e veículos que você recebe por e-mail. Ajuste sempre que sua intenção mudar.
       </p>
 
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) minmax(0, 1fr)', gap: 12 }}>
@@ -168,6 +180,8 @@ function PerfilInvestidorCard({ userId, isMobile, readOnly = false }) {
         <Campo label="Forma de pagamento" campo="forma_pagamento" opts={INV_PAGAMENTO} />
         <Campo label="Consórcio" campo="consorcio_interesse" opts={INV_CONSORCIO} />
         <Campo label="Experiência com leilão" campo="experiencia_leilao" opts={INV_EXPERIENCIA} />
+        <Campo label="Leilão de veículos" campo="interesse_veiculos" opts={INV_VEICULOS} />
+        {f.interesse_veiculos && f.interesse_veiculos !== 'nao' && <Campo label="Para que seria o veículo?" campo="veiculo_finalidade" opts={INV_FINALIDADE_VEICULO} />}
       </div>
 
       <div style={{ height: 1, background: '#f1f5f9', margin: '18px 0 14px' }} />

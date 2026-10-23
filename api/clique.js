@@ -34,7 +34,23 @@ const sb = (path, opts = {}) => fetch(`${SB_URL}/rest/v1/${path}`, {
 // (ex.: ativacao-nudge) não entram aqui até serem pedidos — mudar o sinal de um e-mail que
 // ninguém pediu para mudar seria efeito colateral, não melhoria.
 const RE_IMOVEL = /^\/#\/imovel\/([0-9a-f-]{36})/i;
+const RE_VEICULO = /^\/#\/veiculo\/([0-9a-f-]{36})/i;
 async function registrarInteresse(userId, tipo, caminho) {
+  // Veículo (23/10): o clique é o que modela o perfil de quem não respondeu a triagem
+  // (api/_curadoria-veiculos.js) — tipo, marca, preço e se aceita sucata saem daqui. Vale para o
+  // e-mail semanal E para o comunicado de lançamento (api/lancamento-veiculos.js).
+  const mv = caminho.match(RE_VEICULO);
+  if (mv && (tipo === 'oportunidades' || tipo === 'lancamento_veiculos')) {
+    try {
+      const r = await sb('veiculos_email_sinal?on_conflict=user_id,veiculo_id,sinal', {
+        method: 'POST',
+        headers: { Prefer: 'resolution=ignore-duplicates,return=minimal' },
+        body: JSON.stringify({ user_id: userId, veiculo_id: mv[1], sinal: 'clique', contexto: `email_${tipo}` }),
+      });
+      if (!r.ok) console.warn('[clique] sinal de veículo não gravado', r.status);
+    } catch (e) { console.warn('[clique] sinal de veículo falhou', e?.message); /* nunca compete com o redirecionamento */ }
+    return;
+  }
   if (tipo !== 'oportunidades') return;
   const m = caminho.match(RE_IMOVEL);
   if (!m) return;

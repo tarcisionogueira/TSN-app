@@ -68,6 +68,7 @@ import { CIDADES_TEMPORADA } from './_temporada.js';
 import { cabecalhoEmailHTML } from './_email-header.js';
 import { ajustarFiltrosPorIntencao } from '../src/lib/intencao.js';
 import { segmentoCadencia, cedoDemais, podeRecorrenteHoje, cabeNoOrcamento, PADRAO as CADENCIA_PADRAO } from './_cadencia.js';
+import { perfilVeiculo, selecionarVeiculos } from './_curadoria-veiculos.js';
 import { TIPOS_POR_PERFIL, TETO_FAIXA, pontuarCandidato, resumoComportamento, motivoCurto, curarComIA, distanciaKm } from './_curadoria.js';
 
 // A régua da INTENÇÃO vem de `src/lib/intencao.js` — a MESMA função que a Busca chama, não
@@ -261,7 +262,7 @@ async function handler(req) {
   const BATCH = testeEmail ? 1000 : Math.min(300, Math.max(20, Number(qs.get('batch')) || 120));
   const cursor = (qs.get('cursor') || '').trim();
 
-  const perfisRaw = await sbGet(`perfis?select=id,nome,role,endereco_cidade,endereco_uf,created_at,faixa_capital,forma_pagamento,perfil_investidor&role=in.(${ROLES})${isUuid(cursor) ? `&id=gt.${cursor}` : ''}&order=id.asc&limit=${BATCH}`) || [];
+  const perfisRaw = await sbGet(`perfis?select=id,nome,role,endereco_cidade,endereco_uf,created_at,faixa_capital,forma_pagamento,perfil_investidor,interesse_veiculos,veiculo_finalidade&role=in.(${ROLES})${isUuid(cursor) ? `&id=gt.${cursor}` : ''}&order=id.asc&limit=${BATCH}`) || [];
   const loteCheio = Array.isArray(perfisRaw) && perfisRaw.length === BATCH;
   const ultimoIdLote = perfisRaw.length ? perfisRaw[perfisRaw.length - 1].id : null; // cursor avança mesmo p/ quem não tem e-mail
 
@@ -364,7 +365,8 @@ async function handler(req) {
   // sempre trazer NOVAS oportunidades). Janela de 180 dias cobre qualquer leilão ativo
   // (nenhum fica ativo tanto tempo) sem deixar a consulta crescer sem limite na escala.
   const janelaDedup = new Date(Date.now() - 180 * 24 * 3600 * 1000).toISOString();
-  const [alertasArr, fsalvosArr, arremArr, enviadosArr, fbArr, engajamentoArr] = await Promise.all([
+  const janelaVeic = new Date(Date.now() - 120 * 24 * 3600 * 1000).toISOString();
+  const [alertasArr, fsalvosArr, arremArr, enviadosArr, fbArr, engajamentoArr, veicSinaisArr] = await Promise.all([
     sbGetObrig(`alertas_email?user_id=in.${inList}&select=user_id,ativo,ultimo_envio,filtros,total_enviados`),
     sbGet(`filtros_salvos?user_id=in.${inList}&select=user_id,filtros,criado_em&order=criado_em.desc`),
     // `arrematacoes` NÃO tem coluna user_id — o dono do arremate é `arrematante_id`. Com a
@@ -378,7 +380,32 @@ async function handler(req) {
     // Engajamento (pedido do dono, 10/09): quem não abriu NENHUM dos últimos 4 e-mails
     // semanais passa a receber 1x/mês em vez de 1x/semana — ver o gate mais abaixo.
     rpc('alertas_engajamento_lote', { p_user_ids: ids }),
+    // VEÍCULOS (23/10): o que foi enviado (dedup) e clicado (aprendizado) — ver _curadoria-veiculos.js.
+    // Obrigatório: sem o histórico, quem não declarou seria tratado como "nunca recebeu" e levaria
+    // 5 veículos repetidos. Falhou → o bloco de veículos sai deste lote (imóveis seguem).
+    sbGetObrig(`veiculos_email_sinal?user_id=in.${inList}&criado_em=gte.${janelaVeic}&select=user_id,veiculo_id,sinal,criado_em,veiculo:veiculos_leilao(tipo_veiculo,is_sucata,valor_minimo,marca)`),
   ]);
+  const veicSinaisMap = {};
+  for (const r of veicSinaisArr || []) (veicSinaisMap[r.user_id] = veicSinaisMap[r.user_id] || []).push(r);
+  // Pool de candidatos por UF (cache do lote): uma consulta por estado, não uma por cliente.
+  // Duas faixas: leves (carro/moto/utilitário, só com desconto ≥ 15% da FIPE) e pesados
+  // (caminhão/ônibus quase nunca ficam 15% abaixo da FIPE — sem o piso, por data).
+  const poolVeicCache = new Map();
+  const SEL_VEIC = 'id,tipo_veiculo,marca,modelo,titulo,ano_modelo,ano_fabricacao,valor_minimo,valor_fipe,desconto_fipe_percentual,capa:fotos->>0,data_leilao,estado,cidade,is_sucata,sinistro';
+  // `sucata` entra na chave: os maiores descontos sobre a FIPE são quase sempre sucata, e sem
+  // tirá-la na consulta o pool de 250 de SP podia vir sem nenhum carro para quem quer rodar.
+  const poolVeiculos = async (ufV, pesado, sucata) => {
+    const k = `${ufV || '*'}|${pesado ? 'p' : 'l'}|${sucata ? 's' : 'n'}`;
+    if (!poolVeicCache.has(k)) {
+      const base = `veiculos_leilao?ativo=eq.true&data_leilao=gt.${new Date().toISOString()}&valor_minimo=gt.0${ufV ? `&estado=eq.${encodeURIComponent(ufV)}` : ''}${sucata ? '' : '&or=(is_sucata.is.null,is_sucata.is.false)'}`;
+      const q = pesado
+        ? `${base}&tipo_veiculo=in.(caminhao,van_utilitario,onibus)&order=data_leilao.asc&limit=150`
+        : `${base}&tipo_veiculo=in.(carro,moto,van_utilitario)&desconto_fipe_percentual=gte.15&order=desconto_fipe_percentual.desc&limit=250`;
+      const rows = await sbGet(`${q}&select=${SEL_VEIC}`);
+      poolVeicCache.set(k, (rows || []).map(v => ({ ...v, fotos: v.capa ? [v.capa] : [] })));
+    }
+    return poolVeicCache.get(k);
+  };
   if (alertasArr === null || enviadosArr === null) {
     // Sem opt-out/dedup confiáveis não se envia NADA neste lote — e não encadeia: a próxima
     // invocação bateria na mesma falha. Quem ficou de fora volta no cron do próximo dia útil.
@@ -633,6 +660,7 @@ async function handler(req) {
   };
 
   let enviados = 0;
+  let veiculosEnviados = 0; // veículos no fim do e-mail (23/10)
   let iaUsadas = 0, iaFalhas = 0; // curadoria por IA (./_curadoria.js) — vai na resposta do cron
   let CURADORIA_IA = CURADORIA_IA_ENV;
   if (!CURADORIA_IA) {
@@ -935,6 +963,27 @@ async function handler(req) {
       if (!top.length) continue;
       const nContrato = selec.filter(v => v.origem === 'filtro').length;
 
+      // VEÍCULOS (23/10, pedido do dono): até `itens_veiculos` (5) no fim do e-mail, pelo perfil
+      // declarado ou, sem declaração, pelo que a pessoa clica (./_curadoria-veiculos.js). Nunca no
+      // alerta imediato (é sobre UM imóvel excepcional) e nunca sem o histórico do lote (dedup).
+      let veicSelec = [], pv = null;
+      if (modo !== 'imediato' && veicSinaisArr !== null) {
+        pv = perfilVeiculo(perfil, veicSinaisMap[perfil.id] || [], { limite: Number(cadCfg.itens_veiculos ?? 5) });
+        if (pv.quantidade > 0) {
+          const jaVeic = new Set((veicSinaisMap[perfil.id] || []).filter(r => r.sinal === 'enviado').map(r => r.veiculo_id));
+          const pesado = perfil.interesse_veiculos === 'pesado';
+          const ctxV = { uf, cidade };
+          const deUf = uf ? await poolVeiculos(uf, pesado, pv.aceitaSucata) : [];
+          veicSelec = selecionarVeiculos(deUf, pv, ctxV, jaVeic);
+          // Estado com pouco lote: completa com o Brasil (o motivo do card diz o estado de cada um).
+          if (veicSelec.length < pv.quantidade) {
+            const ja = new Set([...jaVeic, ...veicSelec.map(x => x.v.id)]);
+            const resto = selecionarVeiculos(await poolVeiculos('', pesado, pv.aceitaSucata), { ...pv, quantidade: pv.quantidade - veicSelec.length }, ctxV, ja);
+            veicSelec = [...veicSelec, ...resto];
+          }
+        }
+      }
+
       // COBERTURA INCOMPLETA → registro no Cliente 360 (regra do dono, 25/08).
       // O teto de 200 km fica de pé (regra de 01/08: acima disso o deslocamento inviabiliza
       // visita e arremate). Mas quando nem os 200 km fecham as 12, o e-mail sai curto — e
@@ -1012,6 +1061,33 @@ async function handler(req) {
         </div>`;
       }).join('');
 
+      // Cards de veículo: foto SEMPRE pelo nosso proxy por id (a URL original identifica o leiloeiro,
+      // que só o plano Veículos libera) e título montado de marca/modelo/ano, não o do leiloeiro.
+      const proxBaseV = String(BASE).replace(/:\/\/(www\.)?bidprobrasil\.com\.br/, '://www.bidprobrasil.com.br');
+      const cardsVeic = veicSelec.map(({ v, motivos }, idx) => {
+        const url = linkRastreado(perfil.id, 'oportunidades', `/#/veiculo/${v.id}?${utmEmail('oportunidades', 'veiculo')}`);
+        const nome = [v.marca, v.modelo, v.ano_modelo || v.ano_fabricacao].filter(Boolean).join(' ') || 'Veículo em leilão';
+        const desc = Number(v.desconto_fipe_percentual) || 0;
+        const motivoV = motivoCurto(motivos);
+        return `${idx === 0 ? tituloBloco('🚗 Leilão de veículos', pv?.origem === 'declarado' ? 'Pelo tipo de veículo que você marcou no seu perfil' : 'Uma seleção para você conhecer — o que você clicar ajusta os próximos') : ''}
+        <div style="border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;margin-bottom:12px;background:#fff;">
+          <a href="${url}"><img src="${proxBaseV}/api/img-proxy?veiculo=${v.id}&i=0" alt="" style="width:100%;height:130px;object-fit:cover;display:block;border-radius:10px 10px 0 0;"></a>
+          <div style="padding:14px 16px;">
+            <a href="${url}" style="text-decoration:none;color:#0f172a;"><div style="font-size:14px;font-weight:700;margin-bottom:4px;">${escapeHtml(nome)}</div></a>
+            <div style="font-size:12px;color:#64748b;margin-bottom:8px;">📍 ${escapeHtml(v.cidade || '')}${v.estado ? ' — ' + escapeHtml(v.estado) : ''}${fmtData(v.data_leilao) ? ` · 📅 ${fmtData(v.data_leilao)}` : ''}</div>
+            ${motivoV ? `<div style="font-size:12px;color:#0f766e;background:#f0fdfa;border-radius:8px;padding:6px 8px;margin-bottom:8px;">💡 ${escapeHtml(motivoV)}</div>` : ''}
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <div><div style="font-size:11px;color:#94a3b8;">Lance mínimo${v.valor_fipe ? ` · FIPE ${fmtBRL(v.valor_fipe)}` : ''}</div><div style="font-size:16px;font-weight:800;color:#0f172a;">${fmtBRL(v.valor_minimo)}${desc > 0 ? ` <span style="font-size:11px;color:#059669;font-weight:700;">${Math.round(desc)}% abaixo da FIPE</span>` : ''}</div></div>
+              <a href="${url}" style="background:#0f766e;color:#fff;text-decoration:none;padding:8px 16px;border-radius:8px;font-size:12px;font-weight:700;">Ver veículo →</a>
+            </div>
+          </div>
+        </div>`;
+      }).join('');
+      // Sem declaração: convida a responder as 2 perguntas (o clique já ensina, mas a resposta é mais rápida).
+      const convitePerfilVeic = veicSelec.length && pv?.origem !== 'declarado'
+        ? `<div style="margin:4px 0 14px;padding:12px 14px;background:#f0fdfa;border:1px solid #99f6e4;border-radius:12px;font-size:12.5px;color:#115e59;line-height:1.5;">Quer receber só o tipo certo — carro, moto ou utilitário? <a href="${BASE}/#/perfil" style="color:#0f766e;font-weight:700;">Responda 2 perguntas no seu perfil →</a></div>`
+        : '';
+
       const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
 <div style="max-width:600px;margin:0 auto;padding:24px 16px;">
@@ -1020,8 +1096,9 @@ async function handler(req) {
     <h2 style="margin:0 0 4px;font-size:18px;color:#0f172a;">Olá${perfil.nome ? ', ' + escapeHtml(perfil.nome.split(' ')[0]) : ''}!</h2>
     <p style="margin:0 0 20px;color:#475569;font-size:14px;line-height:1.6;">${modo === 'imediato'
       ? `⚡ Acabou de entrar ${top.length > 1 ? `<strong>${top.length} oportunidades</strong> que combinam` : '<strong>uma oportunidade</strong> que combina'} muito com o seu perfil em <strong>${local}</strong>:`
-      : `Selecionamos <strong>${top.length} oportunidade${top.length > 1 ? 's' : ''}</strong> em <strong>${local}</strong> para você:`}</p>
+      : `Selecionamos <strong>${top.length} oportunidade${top.length > 1 ? 's' : ''}</strong> em <strong>${local}</strong> para você${veicSelec.length ? ` — e, no fim, <strong>${veicSelec.length} veículo${veicSelec.length > 1 ? 's' : ''} em leilão</strong>` : ''}:`}</p>
     ${cards}
+    ${cardsVeic ? `<div style="height:8px;"></div>${cardsVeic}${convitePerfilVeic}<div style="text-align:center;margin:6px 0 4px;"><a href="${BASE}/#/veiculos" style="color:#0f766e;font-weight:700;font-size:13px;text-decoration:none;">Ver todos os veículos em leilão →</a></div>` : ''}
     <div style="text-align:center;margin-top:20px;"><a href="${BASE}/#/buscar" style="display:inline-block;background:#059669;color:#fff;text-decoration:none;padding:13px 28px;border-radius:10px;font-weight:700;font-size:15px;">Ver todos os imóveis →</a></div>
     ${seg.segmento === 'ativo' ? `<div style="margin-top:18px;padding:14px 16px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;font-size:13px;color:#1e3a8a;line-height:1.5;">No <strong>Investidor Pro</strong> você recebe as oportunidades <strong>toda semana</strong> e, quando entra algo excepcional no seu perfil, <strong>na hora</strong>. <a href="${BASE}/#/planos" style="color:#1d4ed8;font-weight:700;">Conhecer o plano →</a></div>` : ''}
     <p style="font-size:11px;color:#94a3b8;text-align:center;margin-top:20px;">BidPro Brasil · ${modo === 'imediato' ? 'Alerta imediato do seu plano Investidor Pro' : `Você recebe estas oportunidades ${seg.rotuloFrequencia}`} · <a href="${unsubUrl}" style="color:#94a3b8;">Cancelar</a></p>
@@ -1041,7 +1118,7 @@ async function handler(req) {
       }
       const assunto = modo === 'imediato'
         ? `⚡ Nova oportunidade no seu perfil em ${local}`
-        : `🏠 ${top.length} oportunidades em ${local}`;
+        : veicSelec.length ? `🏠 ${top.length} imóveis + 🚗 ${veicSelec.length} veículos em ${local}` : `🏠 ${top.length} oportunidades em ${local}`;
       const emailRes = await fetch('https://api.resend.com/emails', {
         method: 'POST', headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ from: FROM, to: email, subject: assunto, html }),
@@ -1082,6 +1159,19 @@ async function handler(req) {
               signal: AbortSignal.timeout(15000),
             });
           } catch { /* dedup é best-effort */ }
+          // Veículos enviados: dedup E a base do aprendizado (envio sem clique reduz os próximos).
+          if (veicSelec.length) {
+            try {
+              const rV = await fetch(`${URL_}/rest/v1/veiculos_email_sinal?on_conflict=user_id,veiculo_id,sinal`, {
+                method: 'POST',
+                headers: { ...hdr, 'Content-Type': 'application/json', Prefer: 'resolution=ignore-duplicates,return=minimal' },
+                body: JSON.stringify(veicSelec.map(({ v }) => ({ user_id: perfil.id, veiculo_id: v.id, sinal: 'enviado', contexto: pv?.origem || null }))),
+                signal: AbortSignal.timeout(15000),
+              });
+              if (!rV.ok) console.error('[alertas] veiculos_email_sinal', rV.status, (await rV.text().catch(() => '')).slice(0, 200));
+              else veiculosEnviados += veicSelec.length;
+            } catch (e) { console.error('[alertas] veiculos_email_sinal erro', e?.message); }
+          }
         }
         enviados++;
         porSegmento[seg.segmento] = (porSegmento[seg.segmento] || 0) + 1;
@@ -1117,5 +1207,5 @@ async function handler(req) {
       signal: AbortSignal.timeout(8000),
     });
   } catch { /* rastro é best-effort — nunca derruba o envio */ }
-  return new Response(JSON.stringify({ ok: true, enviados, suprimidos, curadoria_ia: { ligada: CURADORIA_IA, usadas: iaUsadas, falhas: iaFalhas }, cadencia: { cfg: cadCfgOrigem, por_segmento: porSegmento, imediatos, adiados_por_teto: adiadosPorTeto, restante_hoje: restanteHoje }, lote: perfis.length, cortado_por_tempo: cortadoPorTempo, cortado_por_orcamento_email: cortadoPorOrcamentoEmail, cursor_proximo: cortadoPorTempo ? ultimoProcessado : (loteCheio ? ultimoIdLote : null) }), { headers: { 'Content-Type': 'application/json' } });
+  return new Response(JSON.stringify({ ok: true, enviados, suprimidos, veiculos_enviados: veiculosEnviados, curadoria_ia: { ligada: CURADORIA_IA, usadas: iaUsadas, falhas: iaFalhas }, cadencia: { cfg: cadCfgOrigem, por_segmento: porSegmento, imediatos, adiados_por_teto: adiadosPorTeto, restante_hoje: restanteHoje }, lote: perfis.length, cortado_por_tempo: cortadoPorTempo, cortado_por_orcamento_email: cortadoPorOrcamentoEmail, cursor_proximo: cortadoPorTempo ? ultimoProcessado : (loteCheio ? ultimoIdLote : null) }), { headers: { 'Content-Type': 'application/json' } });
 }
