@@ -60,7 +60,7 @@ const EQUIPE = [
 const FAQS = [
   { q: 'O que é o Bid Score?', r: 'É uma nota de 0 a 10 (🟢🟡🔴) que resume risco e oportunidade de cada lote, juntando análise jurídica, viabilidade financeira, ocupação e documentação. O relatório Mercadológico + Financeiro (grátis) gera a nota parcial; o Documental + Jurídico (Investidor Pro) completa o Bid Score.' },
   { q: 'Preciso ter experiência em leilões?', r: 'Não. A plataforma guia iniciantes e investidores experientes, e a formação da BidPro ensina o caminho completo. O plano Explorador é gratuito.' },
-  { q: 'Como funciona a assessoria?', r: 'A equipe acompanha você do estudo do bem ao registro final: estratégia de lance, documentação, regularização e imissão de posse. Ela é contratada por arrematação, no plano Assessoria — e dá acesso a um especialista da equipe para o seu caso.' },
+  { q: 'Como funciona a assessoria?', r: 'A equipe acompanha você do estudo do bem ao registro final: estratégia de lance, documentação, regularização e imissão de posse. É contratada por arrematação, dentro da plataforma: crie sua conta para ver valores e condições — e ter um especialista da equipe no seu caso.' },
   { q: 'Como funciona o leilão de veículos?', r: 'O leiloeiro só apresenta veículos que já estão no pátio dele — você não precisa fazer a retomada. Arrematou e pagou, retira ou contrata o frete; por isso dá para comprar de qualquer estado. Cada lote mostra a FIPE ao lado do lance mínimo.' },
   { q: 'A análise da IA substitui um advogado?', r: 'Não. A IA é o primeiro filtro: identifica riscos em minutos e mostra o que merece estudo mais profundo. Nos planos com assessoria, a análise jurídica é conduzida pela nossa equipe.' },
   { q: 'As análises por IA são ilimitadas?', r: 'Não. Cada análise consome dados pagos de fontes externas, então cada plano inclui uma quantidade de relatórios. Se uma fonte estiver instável, avisamos e liberamos o relatório assim que possível (em até 24 a 48h).' },
@@ -116,9 +116,9 @@ export default function Landing() {
   const cta = (alvo, fn) => () => { registrarEvento('lp_cta', { alvo }); fn(); };
   const cadastro = (alvo) => cta(alvo, () => nav('/login?modo=cadastro'));
 
-  // ASSESSORIA (23/10, dono): o especialista é acesso de quem CONTRATA a assessoria — a página leva ao
-  // plano (Planos já rola e destaca o card com ?plano=assessorado), nunca a um "fale com um especialista".
-  const assessoria = (alvo) => cta(alvo, () => nav('/planos?plano=assessorado'));
+  // ASSESSORIA (23/10, dono): sem preço público e só para quem tem conta — o especialista é acesso de
+  // quem CONTRATA. A página leva ao CADASTRO; valores e contratação ficam dentro da plataforma (a tela de
+  // planos só mostra o card da assessoria logado). Nada de "fale com um especialista" nem link para /planos.
 
   // Dúvida (sem login): nome/email/telefone/mensagem → /api/duvida, que abre um chamado no Atendimento.
   const VAZIO = { open: false, origem: 'duvida_landing', nome: '', email: '', tel: '', msg: '', enviando: false, ok: false, erro: '' };
@@ -173,7 +173,7 @@ export default function Landing() {
             </p>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: mobile ? 'center' : 'flex-start' }}>
               <button onClick={cadastro('topo_cadastro')} style={btnPrim}>Criar conta grátis <ArrowRight size={17} /></button>
-              <button onClick={assessoria('topo_assessoria')} style={btnSec()}><ShieldCheck size={16} /> Contratar a assessoria</button>
+              <button onClick={cta('topo_planos', () => nav('/planos'))} style={btnSec()}>Ver planos e preços</button>
             </div>
             <p style={{ color: '#64748b', fontSize: 12.5, marginTop: 14 }}>Comece grátis · sem cartão de crédito</p>
           </div>
@@ -246,11 +246,12 @@ export default function Landing() {
                 botao: 'Criar conta grátis', acao: cadastro('formas_plataforma') },
               { icon: ShieldCheck, cor: '#d97706', tag: 'Assessoria', titulo: 'Arremate com a nossa equipe', desc: 'Um time do seu lado do estudo do bem até a chave na mão.', destaque: true,
                 itens: ['Analista dedicado que valida o Bid Score', 'Estratégia de lance', 'Documentação, registro e imissão na posse', 'Advogados especializados em pós-arrematação'],
-                botao: 'Contratar a assessoria', acao: assessoria('formas_assessoria') },
+                nota: 'Valores e contratação dentro da plataforma, para clientes.',
+                botao: 'Criar conta e conhecer', acao: cadastro('formas_assessoria') },
               { icon: GraduationCap, cor: '#7c3aed', tag: 'Formação', titulo: 'Aprenda a arrematar', desc: 'O método de quem forma arrematadores há 8 anos.',
                 itens: ['Cursos e e-books práticos', 'Aulas ao vivo com especialistas', 'Clube de negócios e comunidade', 'Do primeiro leilão ao portfólio'],
                 botao: 'Ver cursos', acao: cta('formas_cursos', () => nav('/educacao')) },
-            ].map(({ icon: Icon, cor, tag, titulo, desc, itens, botao, acao, destaque }) => (
+            ].map(({ icon: Icon, cor, tag, titulo, desc, itens, botao, acao, destaque, nota }) => (
               <div key={tag} style={{ borderRadius: 20, border: destaque ? `2px solid ${cor}` : '1px solid #e2e8f0', padding: '28px 26px', background: destaque ? '#fffbeb' : 'white', position: 'relative', display: 'flex', flexDirection: 'column', boxShadow: destaque ? '0 12px 36px rgba(217,119,6,0.14)' : '0 2px 10px rgba(15,23,42,0.05)' }}>
                 {destaque && <div style={{ position: 'absolute', top: -12, left: 26, background: cor, color: 'white', fontSize: 10, fontWeight: 800, padding: '4px 12px', borderRadius: 20, textTransform: 'uppercase', letterSpacing: 1 }}>Mais completo</div>}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
@@ -267,6 +268,7 @@ export default function Landing() {
                     </div>
                   ))}
                 </div>
+                {nota && <div style={{ fontSize: 12.5, color: '#92400e', margin: '-10px 0 14px', lineHeight: 1.5 }}>{nota}</div>}
                 <button onClick={acao} style={{ marginTop: 'auto', padding: '13px 18px', background: destaque ? cor : 'white', color: destaque ? 'white' : cor, border: `1.5px solid ${cor}`, borderRadius: 11, fontWeight: 800, fontSize: 14.5, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                   {botao} <ArrowRight size={15} />
                 </button>
@@ -409,8 +411,7 @@ export default function Landing() {
             <div>
               <div style={rotulo()}>Quem está do seu lado</div>
               <h3 style={{ fontSize: 'clamp(22px,3vw,28px)', fontWeight: 900, margin: '0 0 10px', lineHeight: 1.2 }}>8 anos formando arrematadores no Brasil</h3>
-              <p style={{ fontSize: 14.5, color: '#64748b', lineHeight: 1.7, margin: '0 0 18px' }}>A BidPro nasceu da prática no mercado de leilões. A equipe reúne analistas, advogados de pós-arrematação e especialistas em formação.</p>
-              <button onClick={assessoria('equipe_assessoria')} style={btnSec(false)}><ShieldCheck size={16} /> Contratar a assessoria</button>
+              <p style={{ fontSize: 14.5, color: '#64748b', lineHeight: 1.7, margin: 0 }}>A BidPro nasceu da prática no mercado de leilões. A equipe reúne analistas, advogados de pós-arrematação e especialistas em formação.</p>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
               {EQUIPE.map(({ emoji, cargo, desc }) => (
@@ -438,7 +439,7 @@ export default function Landing() {
               { nome: 'Explorador', tag: 'Grátis', cor: '#64748b', itens: ['Busca de leilões em todo o Brasil', 'Relatório de mercado + viabilidade', 'Calculadora de arrematação', 'Cursos gratuitos'] },
               { nome: 'Investidor Pro', tag: 'Mais popular', cor: AZUL, destaque: true, itens: ['Tudo do Explorador', 'Relatório documental e jurídico por IA', 'Bid Score completo', 'Alertas de oportunidade por e-mail'] },
               { nome: 'Leilão de Veículos', tag: 'Novo', cor: '#0f766e', itens: ['Busca com FIPE em todo o Brasil', 'Leiloeiro e documentos de cada lote', 'Relatórios de veículos por IA', 'Combo com o Investidor Pro'] },
-              { nome: 'Assessoria', tag: 'Por arrematação', cor: '#d97706', itens: ['Tudo do Investidor Pro', 'Analista dedicado', 'Do lance à imissão na posse', 'Registro via plataforma'] },
+              { nome: 'Assessoria', tag: 'Por arrematação · para clientes', cor: '#d97706', itens: ['Tudo do Investidor Pro', 'Analista dedicado', 'Do lance à imissão na posse', 'Registro via plataforma'] },
             ].map(({ nome, tag, cor, itens, destaque }) => (
               <div key={nome} style={{ background: 'white', borderRadius: 18, border: destaque ? `2px solid ${cor}` : '1px solid #e2e8f0', padding: '22px 20px', position: 'relative', boxShadow: destaque ? `0 10px 30px ${cor}22` : 'none' }}>
                 <div style={{ fontSize: 12.5, fontWeight: 900, color: cor, textTransform: 'uppercase', letterSpacing: 1.3 }}>{nome}</div>
@@ -505,10 +506,10 @@ export default function Landing() {
       <section data-lp-secao="cta_final" style={{ ...secao(ESCURO), textAlign: 'center' }}>
         <div style={{ maxWidth: 680, margin: '0 auto' }}>
           <h2 style={{ ...h2('white'), fontSize: 'clamp(28px,5vw,44px)' }}>Seu próximo arremate pode estar no leilão de amanhã.</h2>
-          <p style={{ color: '#94a3b8', fontSize: 16, lineHeight: 1.7, margin: '0 0 30px' }}>Crie sua conta grátis e analise suas primeiras oportunidades hoje — ou contrate a assessoria e arremate com quem já fez R$ 70 milhões em arrematações.</p>
+          <p style={{ color: '#94a3b8', fontSize: 16, lineHeight: 1.7, margin: '0 0 30px' }}>Crie sua conta grátis e analise suas primeiras oportunidades hoje — e, quando quiser, conte com a assessoria de quem já fez R$ 70 milhões em arrematações.</p>
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
             <button onClick={cadastro('final_cadastro')} style={btnPrim}>Criar minha conta grátis <ArrowRight size={18} /></button>
-            <button onClick={assessoria('final_assessoria')} style={btnSec()}><ShieldCheck size={16} /> Contratar a assessoria</button>
+            <button onClick={cta('final_planos', () => nav('/planos'))} style={btnSec()}>Ver planos e preços</button>
           </div>
           <p style={{ color: '#64748b', fontSize: 12.5, marginTop: 16 }}>Comece grátis · sem cartão · cancele quando quiser</p>
         </div>
@@ -527,7 +528,7 @@ export default function Landing() {
               ['Plataforma', [['Planos', () => nav('/planos')], ['Calculadora', () => nav('/calculadora')], ['Educação', () => nav('/educacao')]]],
               ['Leilões', [['Imóveis por estado', '/leiloes'], ['Buscar por cidade', '/leiloes/buscar'], ['Veículos', '/#/veiculos']]],
               ['Legal', [['Termos de Uso', () => nav('/termos')], ['Privacidade', () => nav('/privacidade')]]],
-              ['Contato', [['Assessoria', assessoria('rodape_assessoria')], ['Tirar uma dúvida', abrirDuvida('duvida_landing')]]],
+              ['Contato', [['Tirar uma dúvida', abrirDuvida('duvida_landing')]]],
             ].map(([titulo, links]) => (
               <div key={titulo}>
                 <div style={{ fontSize: 11, fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 12 }}>{titulo}</div>
