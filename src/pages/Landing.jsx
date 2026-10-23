@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Car, Home, Search, BarChart3, ShieldCheck, FileText, TrendingUp, Gavel,
   CheckCircle2, ArrowRight, ChevronDown, ChevronUp, Sparkles, BadgeCheck,
-  GraduationCap, Calculator, MapPin, Smartphone, Users,
+  GraduationCap, Calculator, MapPin, Smartphone,
 } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { useIsMobile } from '../utils/useIsMobile';
@@ -60,7 +60,7 @@ const EQUIPE = [
 const FAQS = [
   { q: 'O que é o Bid Score?', r: 'É uma nota de 0 a 10 (🟢🟡🔴) que resume risco e oportunidade de cada lote, juntando análise jurídica, viabilidade financeira, ocupação e documentação. O relatório Mercadológico + Financeiro (grátis) gera a nota parcial; o Documental + Jurídico (Investidor Pro) completa o Bid Score.' },
   { q: 'Preciso ter experiência em leilões?', r: 'Não. A plataforma guia iniciantes e investidores experientes, e a formação da BidPro ensina o caminho completo. O plano Explorador é gratuito.' },
-  { q: 'Como funciona a assessoria?', r: 'A equipe acompanha você do estudo do bem ao registro final: estratégia de lance, documentação, regularização e imissão de posse. Fale com um especialista para entender o seu caso.' },
+  { q: 'Como funciona a assessoria?', r: 'A equipe acompanha você do estudo do bem ao registro final: estratégia de lance, documentação, regularização e imissão de posse. Ela é contratada por arrematação, no plano Assessoria — e dá acesso a um especialista da equipe para o seu caso.' },
   { q: 'Como funciona o leilão de veículos?', r: 'O leiloeiro só apresenta veículos que já estão no pátio dele — você não precisa fazer a retomada. Arrematou e pagou, retira ou contrata o frete; por isso dá para comprar de qualquer estado. Cada lote mostra a FIPE ao lado do lance mínimo.' },
   { q: 'A análise da IA substitui um advogado?', r: 'Não. A IA é o primeiro filtro: identifica riscos em minutos e mostra o que merece estudo mais profundo. Nos planos com assessoria, a análise jurídica é conduzida pela nossa equipe.' },
   { q: 'As análises por IA são ilimitadas?', r: 'Não. Cada análise consome dados pagos de fontes externas, então cada plano inclui uma quantidade de relatórios. Se uma fonte estiver instável, avisamos e liberamos o relatório assim que possível (em até 24 a 48h).' },
@@ -116,15 +116,16 @@ export default function Landing() {
   const cta = (alvo, fn) => () => { registrarEvento('lp_cta', { alvo }); fn(); };
   const cadastro = (alvo) => cta(alvo, () => nav('/login?modo=cadastro'));
 
-  // Dúvida / especialista (sem login): nome/email/telefone/mensagem → /api/duvida, que abre um chamado
-  // no Atendimento e cria o lead. "Falar com um especialista" é o mesmo formulário com outra origem,
-  // para a equipe comercial saber que é interesse em ASSESSORIA.
+  // ASSESSORIA (23/10, dono): o especialista é acesso de quem CONTRATA a assessoria — a página leva ao
+  // plano (Planos já rola e destaca o card com ?plano=assessorado), nunca a um "fale com um especialista".
+  const assessoria = (alvo) => cta(alvo, () => nav('/planos?plano=assessorado'));
+
+  // Dúvida (sem login): nome/email/telefone/mensagem → /api/duvida, que abre um chamado no Atendimento.
   const VAZIO = { open: false, origem: 'duvida_landing', nome: '', email: '', tel: '', msg: '', enviando: false, ok: false, erro: '' };
   const [dv, setDv] = useState(VAZIO);
   const abrirDuvida = (origem) => cta(origem, () => setDv({ ...VAZIO, open: true, origem }));
-  const especialista = origemEhAssessoria(dv.origem);
   const enviarDuvida = async () => {
-    if (dv.msg.trim().length < 5) { setDv(d => ({ ...d, erro: especialista ? 'Conte em poucas palavras o que você procura.' : 'Escreva sua dúvida.' })); return; }
+    if (dv.msg.trim().length < 5) { setDv(d => ({ ...d, erro: 'Escreva sua dúvida.' })); return; }
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(dv.email)) { setDv(d => ({ ...d, erro: 'Informe um e-mail válido para receber a resposta.' })); return; }
     setDv(d => ({ ...d, enviando: true, erro: '' }));
     try {
@@ -172,7 +173,7 @@ export default function Landing() {
             </p>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: mobile ? 'center' : 'flex-start' }}>
               <button onClick={cadastro('topo_cadastro')} style={btnPrim}>Criar conta grátis <ArrowRight size={17} /></button>
-              <button onClick={abrirDuvida('assessoria_landing_topo')} style={btnSec()}><Users size={16} /> Falar com um especialista</button>
+              <button onClick={assessoria('topo_assessoria')} style={btnSec()}><ShieldCheck size={16} /> Contratar a assessoria</button>
             </div>
             <p style={{ color: '#64748b', fontSize: 12.5, marginTop: 14 }}>Comece grátis · sem cartão de crédito</p>
           </div>
@@ -245,7 +246,7 @@ export default function Landing() {
                 botao: 'Criar conta grátis', acao: cadastro('formas_plataforma') },
               { icon: ShieldCheck, cor: '#d97706', tag: 'Assessoria', titulo: 'Arremate com a nossa equipe', desc: 'Um time do seu lado do estudo do bem até a chave na mão.', destaque: true,
                 itens: ['Analista dedicado que valida o Bid Score', 'Estratégia de lance', 'Documentação, registro e imissão na posse', 'Advogados especializados em pós-arrematação'],
-                botao: 'Falar com um especialista', acao: abrirDuvida('assessoria_landing_formas') },
+                botao: 'Contratar a assessoria', acao: assessoria('formas_assessoria') },
               { icon: GraduationCap, cor: '#7c3aed', tag: 'Formação', titulo: 'Aprenda a arrematar', desc: 'O método de quem forma arrematadores há 8 anos.',
                 itens: ['Cursos e e-books práticos', 'Aulas ao vivo com especialistas', 'Clube de negócios e comunidade', 'Do primeiro leilão ao portfólio'],
                 botao: 'Ver cursos', acao: cta('formas_cursos', () => nav('/educacao')) },
@@ -409,7 +410,7 @@ export default function Landing() {
               <div style={rotulo()}>Quem está do seu lado</div>
               <h3 style={{ fontSize: 'clamp(22px,3vw,28px)', fontWeight: 900, margin: '0 0 10px', lineHeight: 1.2 }}>8 anos formando arrematadores no Brasil</h3>
               <p style={{ fontSize: 14.5, color: '#64748b', lineHeight: 1.7, margin: '0 0 18px' }}>A BidPro nasceu da prática no mercado de leilões. A equipe reúne analistas, advogados de pós-arrematação e especialistas em formação.</p>
-              <button onClick={abrirDuvida('assessoria_landing_equipe')} style={btnSec(false)}><Users size={16} /> Falar com um especialista</button>
+              <button onClick={assessoria('equipe_assessoria')} style={btnSec(false)}><ShieldCheck size={16} /> Contratar a assessoria</button>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
               {EQUIPE.map(({ emoji, cargo, desc }) => (
@@ -504,10 +505,10 @@ export default function Landing() {
       <section data-lp-secao="cta_final" style={{ ...secao(ESCURO), textAlign: 'center' }}>
         <div style={{ maxWidth: 680, margin: '0 auto' }}>
           <h2 style={{ ...h2('white'), fontSize: 'clamp(28px,5vw,44px)' }}>Seu próximo arremate pode estar no leilão de amanhã.</h2>
-          <p style={{ color: '#94a3b8', fontSize: 16, lineHeight: 1.7, margin: '0 0 30px' }}>Crie sua conta grátis e analise suas primeiras oportunidades hoje — ou fale com a nossa equipe e arremate com quem já fez R$ 70 milhões em arrematações.</p>
+          <p style={{ color: '#94a3b8', fontSize: 16, lineHeight: 1.7, margin: '0 0 30px' }}>Crie sua conta grátis e analise suas primeiras oportunidades hoje — ou contrate a assessoria e arremate com quem já fez R$ 70 milhões em arrematações.</p>
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
             <button onClick={cadastro('final_cadastro')} style={btnPrim}>Criar minha conta grátis <ArrowRight size={18} /></button>
-            <button onClick={abrirDuvida('assessoria_landing_final')} style={btnSec()}><Users size={16} /> Falar com um especialista</button>
+            <button onClick={assessoria('final_assessoria')} style={btnSec()}><ShieldCheck size={16} /> Contratar a assessoria</button>
           </div>
           <p style={{ color: '#64748b', fontSize: 12.5, marginTop: 16 }}>Comece grátis · sem cartão · cancele quando quiser</p>
         </div>
@@ -526,7 +527,7 @@ export default function Landing() {
               ['Plataforma', [['Planos', () => nav('/planos')], ['Calculadora', () => nav('/calculadora')], ['Educação', () => nav('/educacao')]]],
               ['Leilões', [['Imóveis por estado', '/leiloes'], ['Buscar por cidade', '/leiloes/buscar'], ['Veículos', '/#/veiculos']]],
               ['Legal', [['Termos de Uso', () => nav('/termos')], ['Privacidade', () => nav('/privacidade')]]],
-              ['Contato', [['Falar com um especialista', abrirDuvida('assessoria_landing_rodape')], ['Tirar uma dúvida', abrirDuvida('duvida_landing')]]],
+              ['Contato', [['Assessoria', assessoria('rodape_assessoria')], ['Tirar uma dúvida', abrirDuvida('duvida_landing')]]],
             ].map(([titulo, links]) => (
               <div key={titulo}>
                 <div style={{ fontSize: 11, fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 12 }}>{titulo}</div>
@@ -543,7 +544,7 @@ export default function Landing() {
         </div>
       </footer>
 
-      {/* ── MODAL: dúvida / falar com especialista (público) ── */}
+      {/* ── MODAL: tirar uma dúvida (público) ── */}
       {dv.open && (
         <div onClick={() => setDv(d => ({ ...d, open: false }))}
           style={{ position: 'fixed', inset: 0, background: 'rgba(8,15,26,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, zIndex: 1000 }}>
@@ -552,20 +553,20 @@ export default function Landing() {
             {dv.ok ? (
               <div style={{ textAlign: 'center', padding: '8px 0' }}>
                 <div style={{ fontSize: 44, marginBottom: 10 }}>✅</div>
-                <h3 style={{ fontSize: 19, fontWeight: 900, margin: '0 0 8px' }}>{especialista ? 'Recebemos seu contato!' : 'Dúvida recebida!'}</h3>
+                <h3 style={{ fontSize: 19, fontWeight: 900, margin: '0 0 8px' }}>Dúvida recebida!</h3>
                 <p style={{ fontSize: 14, color: '#64748b', lineHeight: 1.6, margin: '0 0 20px' }}>
-                  {especialista ? 'Um especialista da nossa equipe vai falar com você' : 'Nossa equipe vai responder'} no e-mail <b>{dv.email}</b>{dv.tel && especialista ? ' ou pelo telefone informado' : ''}.
+                  Nossa equipe vai responder no e-mail <b>{dv.email}</b>.
                 </p>
                 <button onClick={() => setDv(VAZIO)} style={{ padding: '11px 26px', background: AZUL, color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>Fechar</button>
               </div>
             ) : (
               <>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
-                  <h3 style={{ fontSize: 19, fontWeight: 900, margin: 0 }}>{especialista ? 'Falar com um especialista' : 'Tirar uma dúvida'}</h3>
+                  <h3 style={{ fontSize: 19, fontWeight: 900, margin: 0 }}>Tirar uma dúvida</h3>
                   <button onClick={() => setDv(d => ({ ...d, open: false }))} style={{ background: 'none', border: 'none', fontSize: 22, color: '#94a3b8', cursor: 'pointer', lineHeight: 1 }}>×</button>
                 </div>
                 <p style={{ fontSize: 13, color: '#64748b', margin: '0 0 18px', lineHeight: 1.5 }}>
-                  {especialista ? 'Conte o que você procura — imóvel, veículo, assessoria ou cursos. Respondemos rápido, sem compromisso.' : 'Responderemos por e-mail. Sem compromisso.'}
+                  Responderemos por e-mail. Sem compromisso.
                 </p>
                 {['nome', 'email', 'tel'].map(campo => (
                   <input key={campo}
@@ -574,13 +575,13 @@ export default function Landing() {
                     value={dv[campo]} onChange={e => setDv(d => ({ ...d, [campo]: e.target.value, erro: '' }))}
                     style={{ width: '100%', padding: '11px 14px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 14, color: '#111', outline: 'none', marginBottom: 10, boxSizing: 'border-box' }} />
                 ))}
-                <textarea placeholder={especialista ? 'Ex.: quero arrematar um apartamento em Campinas até R$ 400 mil' : 'Escreva sua dúvida…'} rows={4}
+                <textarea placeholder="Escreva sua dúvida…" rows={4}
                   value={dv.msg} onChange={e => setDv(d => ({ ...d, msg: e.target.value, erro: '' }))}
                   style={{ width: '100%', padding: '11px 14px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 14, color: '#111', outline: 'none', marginBottom: 10, boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit' }} />
                 {dv.erro && <div style={{ fontSize: 12, color: '#dc2626', marginBottom: 10, fontWeight: 600 }}>{dv.erro}</div>}
                 <button onClick={enviarDuvida} disabled={dv.enviando}
-                  style={{ width: '100%', padding: '13px', background: especialista ? '#d97706' : AZUL, color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 15, cursor: dv.enviando ? 'default' : 'pointer', opacity: dv.enviando ? 0.7 : 1 }}>
-                  {dv.enviando ? 'Enviando…' : especialista ? 'Quero falar com um especialista' : 'Enviar dúvida'}
+                  style={{ width: '100%', padding: '13px', background: AZUL, color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 15, cursor: dv.enviando ? 'default' : 'pointer', opacity: dv.enviando ? 0.7 : 1 }}>
+                  {dv.enviando ? 'Enviando…' : 'Enviar dúvida'}
                 </button>
               </>
             )}
@@ -590,5 +591,3 @@ export default function Landing() {
     </div>
   );
 }
-
-function origemEhAssessoria(origem) { return String(origem || '').startsWith('assessoria_'); }
