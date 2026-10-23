@@ -10,6 +10,7 @@ dist
 # diretório excluído.
 .claude/*
 !.claude/settings.json
+!.claude/skills/
 .mcp.json
 
 # Python
