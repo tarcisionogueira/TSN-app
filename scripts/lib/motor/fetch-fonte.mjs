@@ -122,6 +122,13 @@ export function criarMotorFetch(proposito) {
     else {
       const banco = await viaBanco(url);
       if (banco.html) { bancoFalhas.delete(host); diretoInutil.add(host); return { html: banco.html, via: 'banco' }; }
+      // 404/410 é RESPOSTA do site (o lote não existe mais), não falha do caminho: o banco funcionou. Contar
+      // como falha pausava o banco depois de 2 lotes retirados seguidos, e com o direto barrado (403 no
+      // runner) as 114 páginas seguintes do LEILAOELETRONICO morriam sem tentativa (23/10).
+      if (banco.status === 404 || banco.status === 410) {
+        bancoFalhas.delete(host);
+        return { html: null, via: `inexistente (HTTP ${banco.status} pelo banco; direto: ${porQueGratis})` };
+      }
       const f = bancoFalhas.get(host) || { n: 0, ate: 0, pausas: 0 };
       f.n += 1;
       // Pausa cresce a cada vez (1, 2, 4… até 15 min): host em que o banco nunca serve não paga 2
