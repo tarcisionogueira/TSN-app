@@ -6253,6 +6253,33 @@ function descricaoEhEcoDoTitulo(im) {
 // Fontes cuja página de lote tem regra de galeria em lib/galeria-veiculo.mjs (medida em HTML real).
 const FONTES_GALERIA_DETALHE = new Set(['ZUK', 'MEGA', 'SUPORTE', 'BIASI', 'GRUPOLANCE', 'HASTAPUBLICA', 'VIP']);
 
+// EDITAL DO EVENTO VALE PARA O EVENTO INTEIRO (22/10, #290). Na plataforma Suporte o edital é do LEILÃO
+// (static.suporteleiloes.com.br/<tenant>/leiloes/<id>/documentos/…pdf) e aparece igual em todo lote dele; o
+// enriquecimento visita 120 lotes por dia, então num evento de 500 lotes (Líder, evento 569) a maioria ficava sem.
+// Medido em 22/10: 432 de 699 ativos sem edital em eventos cujo vizinho já o tinha. Copia só o anexo de EVENTO
+// (o arquivo do BEM, …/bens/<id>/arquivos/, é de cada lote e nunca é copiado).
+function compartilharEditalDoEvento(imoveis, rotulo) {
+  const RE_DOC_EVENTO = /\/leiloes\/\d+\/documentos\//i;
+  const evento = (im) => (String(im.url_lote || '').match(/^(.*)\/lote\//) || [])[1] || null;
+  const porEvento = new Map();
+  for (const im of imoveis) {
+    const ev = evento(im);
+    const ed = ev && Array.isArray(im.anexos) && im.anexos.find(a => a?.tipo === 'edital' && RE_DOC_EVENTO.test(a.url || ''));
+    if (ed && !porEvento.has(ev)) porEvento.set(ev, ed);
+  }
+  let n = 0;
+  for (const im of imoveis) {
+    const ed = porEvento.get(evento(im));
+    if (!ed) continue;
+    const anexos = Array.isArray(im.anexos) ? im.anexos : [];
+    if (anexos.some(a => a?.tipo === 'edital')) continue;
+    im.anexos = [...anexos, { ...ed }];
+    n++;
+  }
+  if (n) console.log(`    ${rotulo}: edital do evento copiado para ${n} lote(s) do mesmo leilão`);
+  return n;
+}
+
 async function enriquecerDocumentosLote(browser, imoveis, { cap = 150, deadlineMs = 8 * 60 * 1000 } = {}) {
   // MERGE do que o BANCO já tem ANTES de decidir quem visitar (P3 de 21/08). Sem isto,
   // dois defeitos da mesma classe da regressão de datas da CEF: (a) o upsert diário do
@@ -7072,6 +7099,7 @@ async function main() {
       const imoveis = await scraperSuporte(browser);
       try { await enriquecerDocumentosLote(browser, imoveis, { cap: 120 }); }
       catch (e) { console.log(`  ⚠️ Enriquecimento de documentos Suporte falhou (segue sem): ${e.message.slice(0, 80)}`); }
+      compartilharEditalDoEvento(imoveis, 'SUPORTE');
       total += await salvarEFinalizar(imoveis, 'SUPORTE');
       await registrarSaude('SUPORTE', imoveis, 'principal', validarColeta(imoveis, 'SUPORTE'));
     } catch (e) {

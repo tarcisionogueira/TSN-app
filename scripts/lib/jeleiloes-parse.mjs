@@ -131,8 +131,11 @@ function anexosJE(html, urlBase) {
     let abs; try { abs = new URL(m[1], urlBase).href; } catch { continue; }
     if (anexos.some((a) => a.url === abs)) continue;
     const texto = m[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-    const tipo = /matr[íi]cula/i.test(texto) ? 'matricula' : /edital/i.test(texto) ? 'edital' : 'outro';
-    anexos.push({ tipo, nome: tipo === 'edital' ? 'Edital' : tipo === 'matricula' ? 'Matrícula / Laudo do bem' : 'Documento', url: abs });
+    // 22/10 (#290): o resto não é "Documento" — o link diz o que é ("Auto de avaliação", "Laudo"…). O nome real
+    // aparece na ficha; o selo de documento (calc_tem_*_doc) continua contando só edital/matrícula.
+    const tipo = /matr[íi]cula/i.test(texto) ? 'matricula' : /edital/i.test(texto) ? 'edital' : /avalia|laudo/i.test(texto) ? 'laudo' : 'outro';
+    const nome = tipo === 'edital' ? 'Edital' : tipo === 'matricula' ? 'Matrícula / Laudo do bem' : (texto && texto.length <= 60 && !/^visualizar$/i.test(texto) ? texto : 'Documento');
+    anexos.push({ tipo, nome, url: abs });
     if (tipo === 'edital' && !link_edital) link_edital = abs;
     if (tipo === 'matricula' && !link_matricula) link_matricula = abs;
   }
