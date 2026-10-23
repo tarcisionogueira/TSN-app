@@ -33,7 +33,8 @@ export default async function handler(req, res) {
   // timeout + 3 RPCs finais podia passar de 60 s — a Vercel mata a função, e o log/resposta (que é o que
   // distingue "nada a fazer" de "parou") nunca saía. Agora: nova tentativa só se couber com folga para as
   // finais, e cada RPC final roda com AbortSignal pelo tempo que resta (ou é pulada, dizendo que foi).
-  const LOTE = 150, inicio = Date.now();
+  // 23/10: 40 por chamada (era 150 — estourava 17 de 24 horas; ver supabase/migrations/20261023_desativar_encerrados_lote_40.sql).
+  const LOTE = 40, inicio = Date.now();
   const LIMITE_MS = 56000;      // maxDuration 60 s − folga para log e resposta
   const CUSTO_RPC_MS = 9000;    // statement timeout de 8 s + rede
   const RESERVA_FINAL_MS = 12000; // as 3 RPCs finais costumam somar ~2-3 s; acima disso cada uma é cortada pelo relógio

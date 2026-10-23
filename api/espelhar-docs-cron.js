@@ -327,15 +327,25 @@ export default async function handler(req, res) {
   // existia + 5.738 novas) e levou a matrícula legível do acervo JUDICIAL de 70% para 86%.
   // Esta chamada existe para o buraco não voltar a se abrir: o que for copiado nesta rodada
   // fica visível na próxima.
+  // LOTES DE 200, REPETINDO ENQUANTO VIER CHEIO (23/10, #222). Era 2000 numa chamada só: ~16 ms por documento
+  // (insert em imovel_anexos + gatilhos do imóvel) passa dos 8 s do statement_timeout — falhou 5 das 6 rodadas
+  // de 22/10, e a fila acumulou documento copiado e invisível (1.207 publicados de uma vez ao esvaziar em 23/10).
+  // 200 ≈ 3 s; até 5 chamadas por rodada. `.ok` checado: falha calada devolveria a cópia como sucesso completo.
   let publicados = null;
+  const somaPub = { inseridos: 0, preenchidos: 0, outros_publicados: 0, chamadas: 0 };
   try {
-    const r = await sb('rpc/registrar_anexos_do_espelho', {
-      method: 'POST', body: JSON.stringify({ p_limite: 2000 }),
-    });
-    // `.ok` checado: publicação que falha calada devolveria a cópia como sucesso completo, e o
-    // sintoma reapareceria só no relatório do cliente — que é como este defeito nasceu.
-    publicados = r.ok ? await r.json().catch(() => null) : `HTTP ${r.status}`;
-  } catch (e) { publicados = String(e?.message || e).slice(0, 80); }
+    // Relógio próprio (a cópia acima já gastou parte do maxDuration de 300 s) e teto total com folga.
+    const tPub = Date.now();
+    for (let k = 0; k < 5 && (k === 0 || (Date.now() - tPub < 40000 && Date.now() - t0 < 280000)); k++) {
+      const r = await sb('rpc/registrar_anexos_do_espelho', { method: 'POST', body: JSON.stringify({ p_limite: 200 }) });
+      if (!r.ok) { publicados = { ...somaPub, erro: `HTTP ${r.status}` }; break; }
+      const j = await r.json().catch(() => null) || {};
+      somaPub.chamadas++;
+      for (const c of ['inseridos', 'preenchidos', 'outros_publicados']) somaPub[c] += Number(j[c]) || 0;
+      publicados = somaPub;
+      if ((Number(j.inseridos) || 0) < 200 && (Number(j.preenchidos) || 0) < 200) break; // fila acabou
+    }
+  } catch (e) { publicados = { ...somaPub, erro: String(e?.message || e).slice(0, 80) }; }
 
   const saida = {
     enfileirados, processados, copiados, falhas, ignorados, publicados, fotos, reconciliacao,
