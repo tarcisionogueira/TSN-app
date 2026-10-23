@@ -142,6 +142,15 @@ const REGRAS = [
       && /href=\{?\s*[`"']\/(?!api\/|i\/|leiloes\b|leilao\/)[a-z][\w-]*(?![\w-]*\.[a-z0-9]{2,4}\b)/i.test(linha),
   },
   {
+    id: 'tela-lendo-imoveis-leilao-direto',
+    titulo: 'Tela lendo `imoveis_leilao` direto — use `imoveis_leilao_mascarado` (colunas do leiloeiro são fechadas)',
+    // 21/10: o SELECT da tabela passou a ser POR COLUNA para `authenticated` (anexos, leiloeiro, link_edital,
+    // link_matricula, link_regras_venda, raw, url_lote e anunciado_em ficam de fora). A busca ainda lia a TABELA
+    // e o cliente tomou "permission denied for table imoveis_leilao" → "Erro na busca. Tente novamente."
+    // (Vitor, explorador, 11:49). A view mascarada é a porta do front: devolve o que o plano do cliente pode ver.
+    testar: (linha, rel) => /^src\//.test(rel || '') && /\.from\(\s*['"`]imoveis_leilao['"`]\s*\)/.test(linha),
+  },
+  {
     id: 'grid-fr-sem-minmax',
     titulo: "Coluna de grade em 'fr' puro — conteúdo largo alarga a coluna e estoura a tela",
     // `1fr` é `minmax(auto, 1fr)`: a coluna se RECUSA a ficar menor que o conteúdo. Uma fileira
