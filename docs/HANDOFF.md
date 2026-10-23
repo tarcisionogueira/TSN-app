@@ -38252,3 +38252,9 @@ Achados no rastro do banco: NORDESTE_VEICULOS zerou, NORDESTE/JMF regressão, CR
   - E-mail de conclusão cita o Combo e ganha o botão "Assinar o Combo".
   - Tela de planos: card, faixa do Combo, nota da tabela, FAQ e "Incluído na sua assessoria" nos botões. A landing troca "Tudo do Investidor Pro" por "Tudo do Combo".
   - Validação no navegador pelo dono: pendência 306.
+
+## 23/10 (tarde, 2) — item 3 do diagnóstico + Leilão Eletrônico
+- **Segurança 0/0:** `landing_numeros` (números públicos da página inicial, sem PII) entrou na allowlist de `auditoria_seguranca` — migração `20261023_landing_numeros_na_allowlist.sql` (edita a allowlist no corpo vigente, idempotente).
+- **`resultado_leilao_atrasado` (crítico):** veículo SUPERBID com `resultado_apuracao_tentativas = 6` gastas no leilão ANTERIOR da mesma oferta — a fila só pega `< 3`, então nunca mais seria apurado. Eram 9 (SUPERBID/NORDESTE), 8 ainda por vencer. Gatilho `trg_veiculo_relistado_zera_apuracao`: data do leilão muda para depois da última apuração com resultado em aberto → contador zera. Os 9 destravados. Imóveis: 0 casos (não estendido).
+- **Meta Ads (item 2):** não estava parada — campanhas acabaram em 15–16/10; cron grava agora `sistema_heartbeat['meta_insights']`.
+- **Leilão Eletrônico** (leilaoeletronico.com.br): NÃO integrado. Plataforma Degrau (mesma de MGL/Viva/Franco), feed `/sitemap.xml` abre grátis via pg_net com 224 lotes abertos (~218 imóveis, vários estados). Pendência 307.
