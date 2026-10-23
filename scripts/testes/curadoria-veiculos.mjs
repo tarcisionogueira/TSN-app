@@ -1,49 +1,48 @@
 /**
- * scripts/testes/curadoria-veiculos.mjs — 23/10. Tranca as regras do bloco de veículos do e-mail:
- * declarado manda, "não" zera, sucata só para quem recupera, aprendizado só com 2+ cliques e
- * fadiga que reduz (nunca zera) quem não declarou e não clica.
+ * scripts/testes/curadoria-veiculos.mjs — 23/10. Tranca as regras do dono para os veículos do e-mail:
+ * só quem declarou interesse (ou clicou 2+), por tipo e faixa de FIPE, de QUALQUER estado, só pátio
+ * confirmado, nunca sucata.
  */
-import { perfilVeiculo, veiculoElegivel, selecionarVeiculos } from '../../api/_curadoria-veiculos.js';
+import { perfilVeiculo, veiculoElegivel, selecionarVeiculos, consultaPoolVeiculos } from '../../api/_curadoria-veiculos.js';
 
 let falhas = 0;
 const ok = (c, o) => { if (c) console.log(`  ✓ ${o}`); else { falhas++; console.log(`  ✗ ${o}`); } };
 const AGORA = Date.parse('2026-10-23T12:00:00Z');
-const futuro = '2026-10-30T13:00:00Z';
 let n = 0;
-const V = (o) => ({ id: `v${++n}`, tipo_veiculo: 'carro', marca: 'FIAT', modelo: `M${n}`, valor_minimo: 20000, valor_fipe: 40000,
-  desconto_fipe_percentual: 40, fotos: ['x'], data_leilao: futuro, estado: 'MG', cidade: 'Belo Horizonte', ano_modelo: 2019, ...o });
-const env = (d) => ({ sinal: 'enviado', criado_em: `${d}T11:00:00Z` });
-const cli = (d, v) => ({ sinal: 'clique', criado_em: `${d}T15:00:00Z`, veiculo: v });
+const V = (o) => ({ id: `v${++n}`, tipo_veiculo: 'carro', marca: 'FIAT', modelo: `M${n}`, valor_minimo: 30000, valor_fipe: 45000,
+  desconto_fipe_percentual: 33, fotos: ['x'], data_leilao: '2026-10-30T13:00:00Z', estado: 'SP', status_patio: 'confirmado', ano_modelo: 2019, ...o });
+const cli = (v) => ({ sinal: 'clique', criado_em: '2026-10-20T15:00:00Z', veiculo: v });
+const sim = (o = {}) => ({ interesse_veiculos: 'sim', veiculo_tipos: ['carro'], veiculo_faixa_fipe: 'ate_50k', ...o });
 
-ok(perfilVeiculo({ interesse_veiculos: 'nao' }).quantidade === 0, '"não" declarado = nenhum veículo');
-const dm = perfilVeiculo({ interesse_veiculos: 'moto', veiculo_finalidade: 'uso' });
-ok(dm.quantidade === 5 && dm.tipos.join() === 'moto' && !dm.aceitaSucata, 'declarou moto/uso = 5 motos, sem sucata');
-ok(perfilVeiculo({ interesse_veiculos: 'carro', veiculo_finalidade: 'recuperar' }).aceitaSucata, 'recuperar = aceita sucata');
+ok(perfilVeiculo({ interesse_veiculos: 'nao' }).quantidade === 0, '"não" = nenhum veículo');
+ok(perfilVeiculo({}).quantidade === 0, 'não respondeu e não clicou = nenhum veículo');
+ok(perfilVeiculo({}, [cli(V({}))]).quantidade === 0, '1 clique só não basta');
+const apr = perfilVeiculo({}, [cli(V({ tipo_veiculo: 'moto', valor_fipe: 12000, marca: 'HONDA' })), cli(V({ tipo_veiculo: 'moto', valor_fipe: 15000, marca: 'HONDA' }))]);
+ok(apr.quantidade === 5 && apr.origem === 'aprendido' && apr.tipos.join() === 'moto' && apr.faixa === 'ate_50k' && apr.marcaPreferida === 'HONDA', '2 cliques em moto Honda = aprende tipo, faixa e marca');
+const dec = perfilVeiculo(sim({ veiculo_tipos: ['carro', 'caminhao'], veiculo_faixa_fipe: 'ate_150k' }));
+ok(dec.quantidade === 5 && dec.tipos.join() === 'carro,caminhao' && dec.faixa === 'ate_150k', 'declarado = 5, tipos e faixa do questionário');
+ok(perfilVeiculo(sim({ veiculo_tipos: [] })).tipos.join() === 'carro,moto', 'declarou sim sem tipo = carro e moto');
 
-const novo = perfilVeiculo({}, []);
-ok(novo.quantidade === 5 && novo.origem === 'teste' && !novo.aceitaSucata, 'sem declaração e sem histórico = 5 de teste, sem sucata');
-ok(perfilVeiculo({}, [env('2026-10-01'), env('2026-10-08'), env('2026-10-15')]).quantidade === 2, '3 envios sem clique = 2');
-ok(perfilVeiculo({}, ['01', '02', '03', '04', '05', '06'].map(d => env(`2026-09-${d}`))).quantidade === 1, '6 envios sem clique = 1 (nunca zero)');
-const umClique = perfilVeiculo({}, [env('2026-10-01'), env('2026-10-08'), env('2026-10-15'), cli('2026-10-15', V({ tipo_veiculo: 'moto' }))]);
-ok(umClique.quantidade === 5 && umClique.tipoPreferido === null, 'clicou uma vez = volta a 5, mas 1 clique não vira preferência');
-const motoqueiro = perfilVeiculo({}, [cli('2026-10-01', V({ tipo_veiculo: 'moto', marca: 'HONDA' })), cli('2026-10-08', V({ tipo_veiculo: 'moto', marca: 'HONDA', valor_minimo: 9000 }))]);
-ok(motoqueiro.tipoPreferido === 'moto' && motoqueiro.marcaPreferida === 'HONDA' && motoqueiro.precoAlvo > 0 && motoqueiro.origem === 'aprendido', '2 cliques em moto Honda = aprende tipo, marca e preço');
-const sucateiro = perfilVeiculo({}, [cli('2026-10-01', V({ is_sucata: true })), cli('2026-10-02', V({ is_sucata: true }))]);
-ok(sucateiro.aceitaSucata, '2 cliques em sucata = passa a aceitar sucata');
-
-const pv = perfilVeiculo({ interesse_veiculos: 'carro', veiculo_finalidade: 'uso' });
-ok(!veiculoElegivel(V({ is_sucata: true }), pv, AGORA), 'sucata barrada para quem quer rodar');
-ok(!veiculoElegivel(V({ fotos: [] }), pv, AGORA), 'sem foto barrado');
-ok(!veiculoElegivel(V({ data_leilao: '2026-10-20T10:00:00Z' }), pv, AGORA), 'leilão passado barrado');
+const pv = perfilVeiculo(sim());
+ok(veiculoElegivel(V({ estado: 'AM' }), pv, AGORA), 'outro estado é elegível (pátio: paga só o frete)');
+ok(!veiculoElegivel(V({ is_sucata: true }), pv, AGORA), 'sucata barrada');
+ok(!veiculoElegivel(V({ status_patio: 'indefinido' }), pv, AGORA), 'pátio não confirmado barrado');
+ok(!veiculoElegivel(V({ valor_fipe: 90000 }), pv, AGORA), 'FIPE acima da faixa barrada');
 ok(!veiculoElegivel(V({ tipo_veiculo: 'moto' }), pv, AGORA), 'tipo fora do declarado barrado');
+ok(!veiculoElegivel(V({ fotos: [] }), pv, AGORA) && !veiculoElegivel(V({ data_leilao: '2026-10-20T10:00:00Z' }), pv, AGORA), 'sem foto ou leilão passado barrados');
+const alto = perfilVeiculo(sim({ veiculo_faixa_fipe: 'acima_150k' }));
+ok(!veiculoElegivel(V({ valor_fipe: 60000 }), alto, AGORA) && veiculoElegivel(V({ valor_fipe: 220000, valor_minimo: 150000 }), alto, AGORA), 'acima de 150 mil não recebe carro de 60 mil');
 
+const naFaixa = V({ valor_fipe: 48000, desconto_fipe_percentual: 20 });
+const barato = V({ valor_fipe: 12000, desconto_fipe_percentual: 25 });
+const s1 = selecionarVeiculos([barato, naFaixa], pv, new Set(), AGORA);
+ok(s1[0].v.id === naFaixa.id, 'dentro da faixa ideal vence um pouco mais de desconto fora dela');
+ok(s1[0].motivos.some(m => /FIPE/.test(m)), 'motivo cita a FIPE');
 const iguais = Array.from({ length: 6 }, () => V({ modelo: 'UNO' }));
-const outros = [V({ modelo: 'PALIO', desconto_fipe_percentual: 10 }), V({ modelo: 'GOL', desconto_fipe_percentual: 5 })];
-const sel = selecionarVeiculos([...iguais, ...outros], pv, { uf: 'MG' }, new Set([iguais[0].id]), AGORA);
-ok(sel.length === 4 && sel.filter(s => s.v.modelo === 'UNO').length === 2, 'no máx. 2 do mesmo modelo; o já enviado não volta');
-ok(sel[0].motivos.some(m => /FIPE/.test(m)), 'motivo cita a FIPE');
-const misto = selecionarVeiculos([V({}), V({}), V({}), V({ tipo_veiculo: 'moto', desconto_fipe_percentual: 5 })], perfilVeiculo({ interesse_veiculos: 'carro_moto' }), {}, new Set(), AGORA);
-ok(misto.some(s => s.v.tipo_veiculo === 'moto'), 'carro e moto declarados = ao menos uma moto mesmo com desconto menor');
+const sel = selecionarVeiculos(iguais, pv, new Set([iguais[0].id]), AGORA);
+ok(sel.length === 2, 'no máx. 2 do mesmo modelo; o já enviado não volta');
+const q = consultaPoolVeiculos(pv, '2026-10-23T00:00:00Z');
+ok(!/estado=/.test(q.qs) && /status_patio=eq.confirmado/.test(q.qs) && /is_sucata/.test(q.qs) && /valor_minimo=lte.55000/.test(q.qs), 'consulta nacional, pátio confirmado, sem sucata, teto da faixa');
 
 if (falhas) { console.error(`${falhas} falha(s)`); process.exit(1); }
 console.log('✓ curadoria-veiculos: todos os casos passaram');

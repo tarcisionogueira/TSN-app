@@ -90,12 +90,13 @@ const INV_EXPERIENCIA = [
   ['recorrente', 'Investidor recorrente'],
 ];
 // Mesmas opções da TriagemPerfil (23/10) — decidem os veículos do e-mail de oportunidades.
-const INV_VEICULOS = [
-  ['carro', 'Sim — carros'], ['moto', 'Sim — motos'], ['carro_moto', 'Sim — carros e motos'],
-  ['pesado', 'Sim — caminhões, vans e utilitários'], ['nao', 'Não, só imóveis'],
+const INV_VEICULOS = [['sim', 'Sim, tenho interesse'], ['nao', 'Não, só imóveis']];
+const INV_TIPOS_VEICULO = [
+  ['carro', 'Carros'], ['moto', 'Motos'], ['caminhao', 'Caminhões'],
+  ['van_utilitario', 'Vans e utilitários'], ['onibus', 'Ônibus'], ['maquina', 'Máquinas'],
 ];
-const INV_FINALIDADE_VEICULO = [
-  ['uso', 'Para usar'], ['revenda', 'Para revender'], ['recuperar', 'Para recuperar (aceito sinistro/sucata)'],
+const INV_FAIXA_FIPE = [
+  ['ate_50k', 'Até R$ 50 mil'], ['ate_100k', 'Até R$ 100 mil'], ['ate_150k', 'Até R$ 150 mil'], ['acima_150k', 'Acima de R$ 150 mil'],
 ];
 
 // Card editável do perfil de investidor. Autossuficiente (carrega/salva sozinho),
@@ -109,7 +110,7 @@ function PerfilInvestidorCard({ userId, isMobile, readOnly = false }) {
   useEffect(() => {
     if (!userId) return;
     supabase.from('perfis')
-      .select('perfil_investidor, faixa_capital, forma_pagamento, consorcio_interesse, experiencia_leilao, interesse_veiculos, veiculo_finalidade, cidades_interesse')
+      .select('perfil_investidor, faixa_capital, forma_pagamento, consorcio_interesse, experiencia_leilao, interesse_veiculos, veiculo_tipos, veiculo_faixa_fipe, cidades_interesse')
       .eq('id', userId).single()
       .then(({ data }) => {
         const c0 = Array.isArray(data?.cidades_interesse) && data.cidades_interesse[0] && typeof data.cidades_interesse[0] === 'object' ? data.cidades_interesse[0] : {};
@@ -120,7 +121,8 @@ function PerfilInvestidorCard({ userId, isMobile, readOnly = false }) {
           consorcio_interesse: data?.consorcio_interesse || '',
           experiencia_leilao: data?.experiencia_leilao || '',
           interesse_veiculos: data?.interesse_veiculos || '',
-          veiculo_finalidade: data?.veiculo_finalidade || '',
+          veiculo_tipos: Array.isArray(data?.veiculo_tipos) ? data.veiculo_tipos : [],
+          veiculo_faixa_fipe: data?.veiculo_faixa_fipe || '',
           cidade: c0.cidade || '', uf: c0.uf || '', raio_km: String(c0.raio_km || 50),
         };
         setF(snap); setOrig(snap);
@@ -144,7 +146,8 @@ function PerfilInvestidorCard({ userId, isMobile, readOnly = false }) {
       consorcio_interesse: f.consorcio_interesse || null,
       experiencia_leilao: f.experiencia_leilao || null,
       interesse_veiculos: f.interesse_veiculos || null,
-      veiculo_finalidade: f.interesse_veiculos === 'nao' ? null : (f.veiculo_finalidade || null),
+      veiculo_tipos: f.interesse_veiculos === 'sim' && f.veiculo_tipos.length ? f.veiculo_tipos : null,
+      veiculo_faixa_fipe: f.interesse_veiculos === 'sim' ? (f.veiculo_faixa_fipe || null) : null,
       cidades_interesse: cidades,
     }).eq('id', userId);
     setSalvando(false);
@@ -181,7 +184,24 @@ function PerfilInvestidorCard({ userId, isMobile, readOnly = false }) {
         <Campo label="Consórcio" campo="consorcio_interesse" opts={INV_CONSORCIO} />
         <Campo label="Experiência com leilão" campo="experiencia_leilao" opts={INV_EXPERIENCIA} />
         <Campo label="Leilão de veículos" campo="interesse_veiculos" opts={INV_VEICULOS} />
-        {f.interesse_veiculos && f.interesse_veiculos !== 'nao' && <Campo label="Para que seria o veículo?" campo="veiculo_finalidade" opts={INV_FINALIDADE_VEICULO} />}
+        {f.interesse_veiculos === 'sim' && <Campo label="Valor médio de FIPE" campo="veiculo_faixa_fipe" opts={INV_FAIXA_FIPE} />}
+        {f.interesse_veiculos === 'sim' && (
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={lbl}>Tipos de veículo</label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {INV_TIPOS_VEICULO.map(([v, t]) => {
+                const on = f.veiculo_tipos.includes(v);
+                return (
+                  <button key={v} type="button" onClick={() => set('veiculo_tipos', on ? f.veiculo_tipos.filter(x => x !== v) : [...f.veiculo_tipos, v])}
+                    style={{ padding: '7px 12px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, cursor: 'pointer',
+                      border: on ? '1.5px solid #0D63DB' : '1px solid #e2e8f0', background: on ? '#eff6ff' : 'white', color: on ? '#0D63DB' : '#475569' }}>
+                    {t}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       <div style={{ height: 1, background: '#f1f5f9', margin: '18px 0 14px' }} />

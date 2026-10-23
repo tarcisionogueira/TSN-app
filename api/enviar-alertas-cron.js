@@ -68,7 +68,7 @@ import { CIDADES_TEMPORADA } from './_temporada.js';
 import { cabecalhoEmailHTML } from './_email-header.js';
 import { ajustarFiltrosPorIntencao } from '../src/lib/intencao.js';
 import { segmentoCadencia, cedoDemais, podeRecorrenteHoje, cabeNoOrcamento, PADRAO as CADENCIA_PADRAO } from './_cadencia.js';
-import { perfilVeiculo, selecionarVeiculos } from './_curadoria-veiculos.js';
+import { perfilVeiculo, selecionarVeiculos, consultaPoolVeiculos } from './_curadoria-veiculos.js';
 import { TIPOS_POR_PERFIL, TETO_FAIXA, pontuarCandidato, resumoComportamento, motivoCurto, curarComIA, distanciaKm } from './_curadoria.js';
 
 // A régua da INTENÇÃO vem de `src/lib/intencao.js` — a MESMA função que a Busca chama, não
@@ -262,7 +262,7 @@ async function handler(req) {
   const BATCH = testeEmail ? 1000 : Math.min(300, Math.max(20, Number(qs.get('batch')) || 120));
   const cursor = (qs.get('cursor') || '').trim();
 
-  const perfisRaw = await sbGet(`perfis?select=id,nome,role,endereco_cidade,endereco_uf,created_at,faixa_capital,forma_pagamento,perfil_investidor,interesse_veiculos,veiculo_finalidade&role=in.(${ROLES})${isUuid(cursor) ? `&id=gt.${cursor}` : ''}&order=id.asc&limit=${BATCH}`) || [];
+  const perfisRaw = await sbGet(`perfis?select=id,nome,role,endereco_cidade,endereco_uf,created_at,faixa_capital,forma_pagamento,perfil_investidor,interesse_veiculos,veiculo_tipos,veiculo_faixa_fipe&role=in.(${ROLES})${isUuid(cursor) ? `&id=gt.${cursor}` : ''}&order=id.asc&limit=${BATCH}`) || [];
   const loteCheio = Array.isArray(perfisRaw) && perfisRaw.length === BATCH;
   const ultimoIdLote = perfisRaw.length ? perfisRaw[perfisRaw.length - 1].id : null; // cursor avança mesmo p/ quem não tem e-mail
 
@@ -383,28 +383,20 @@ async function handler(req) {
     // VEÍCULOS (23/10): o que foi enviado (dedup) e clicado (aprendizado) — ver _curadoria-veiculos.js.
     // Obrigatório: sem o histórico, quem não declarou seria tratado como "nunca recebeu" e levaria
     // 5 veículos repetidos. Falhou → o bloco de veículos sai deste lote (imóveis seguem).
-    sbGetObrig(`veiculos_email_sinal?user_id=in.${inList}&criado_em=gte.${janelaVeic}&select=user_id,veiculo_id,sinal,criado_em,veiculo:veiculos_leilao(tipo_veiculo,is_sucata,valor_minimo,marca)`),
+    sbGetObrig(`veiculos_email_sinal?user_id=in.${inList}&criado_em=gte.${janelaVeic}&select=user_id,veiculo_id,sinal,criado_em,veiculo:veiculos_leilao(tipo_veiculo,valor_fipe,valor_minimo,marca)`),
   ]);
   const veicSinaisMap = {};
   for (const r of veicSinaisArr || []) (veicSinaisMap[r.user_id] = veicSinaisMap[r.user_id] || []).push(r);
-  // Pool de candidatos por UF (cache do lote): uma consulta por estado, não uma por cliente.
-  // Duas faixas: leves (carro/moto/utilitário, só com desconto ≥ 15% da FIPE) e pesados
-  // (caminhão/ônibus quase nunca ficam 15% abaixo da FIPE — sem o piso, por data).
+  // Pool de candidatos NACIONAL por tipos×faixa (cache do lote). Sem estado de propósito: o veículo
+  // está no pátio e o comprador paga só o frete — o que manda é a intenção, não a distância.
   const poolVeicCache = new Map();
-  const SEL_VEIC = 'id,tipo_veiculo,marca,modelo,titulo,ano_modelo,ano_fabricacao,valor_minimo,valor_fipe,desconto_fipe_percentual,capa:fotos->>0,data_leilao,estado,cidade,is_sucata,sinistro';
-  // `sucata` entra na chave: os maiores descontos sobre a FIPE são quase sempre sucata, e sem
-  // tirá-la na consulta o pool de 250 de SP podia vir sem nenhum carro para quem quer rodar.
-  const poolVeiculos = async (ufV, pesado, sucata) => {
-    const k = `${ufV || '*'}|${pesado ? 'p' : 'l'}|${sucata ? 's' : 'n'}`;
-    if (!poolVeicCache.has(k)) {
-      const base = `veiculos_leilao?ativo=eq.true&data_leilao=gt.${new Date().toISOString()}&valor_minimo=gt.0${ufV ? `&estado=eq.${encodeURIComponent(ufV)}` : ''}${sucata ? '' : '&or=(is_sucata.is.null,is_sucata.is.false)'}`;
-      const q = pesado
-        ? `${base}&tipo_veiculo=in.(caminhao,van_utilitario,onibus)&order=data_leilao.asc&limit=150`
-        : `${base}&tipo_veiculo=in.(carro,moto,van_utilitario)&desconto_fipe_percentual=gte.15&order=desconto_fipe_percentual.desc&limit=250`;
-      const rows = await sbGet(`${q}&select=${SEL_VEIC}`);
-      poolVeicCache.set(k, (rows || []).map(v => ({ ...v, fotos: v.capa ? [v.capa] : [] })));
+  const poolVeiculos = async (pvP) => {
+    const { chave, qs } = consultaPoolVeiculos(pvP);
+    if (!poolVeicCache.has(chave)) {
+      const rows = await sbGet(qs);
+      poolVeicCache.set(chave, (rows || []).map(v => ({ ...v, fotos: v.capa ? [v.capa] : [] })));
     }
-    return poolVeicCache.get(k);
+    return poolVeicCache.get(chave);
   };
   if (alertasArr === null || enviadosArr === null) {
     // Sem opt-out/dedup confiáveis não se envia NADA neste lote — e não encadeia: a próxima
@@ -963,24 +955,15 @@ async function handler(req) {
       if (!top.length) continue;
       const nContrato = selec.filter(v => v.origem === 'filtro').length;
 
-      // VEÍCULOS (23/10, pedido do dono): até `itens_veiculos` (5) no fim do e-mail, pelo perfil
-      // declarado ou, sem declaração, pelo que a pessoa clica (./_curadoria-veiculos.js). Nunca no
+      // VEÍCULOS (23/10, pedido do dono): até `itens_veiculos` (5) no fim do e-mail para quem respondeu
+      // o questionário com interesse (ou já clicou em 2+ veículos) — ./_curadoria-veiculos.js. Nunca no
       // alerta imediato (é sobre UM imóvel excepcional) e nunca sem o histórico do lote (dedup).
       let veicSelec = [], pv = null;
       if (modo !== 'imediato' && veicSinaisArr !== null) {
         pv = perfilVeiculo(perfil, veicSinaisMap[perfil.id] || [], { limite: Number(cadCfg.itens_veiculos ?? 5) });
         if (pv.quantidade > 0) {
           const jaVeic = new Set((veicSinaisMap[perfil.id] || []).filter(r => r.sinal === 'enviado').map(r => r.veiculo_id));
-          const pesado = perfil.interesse_veiculos === 'pesado';
-          const ctxV = { uf, cidade };
-          const deUf = uf ? await poolVeiculos(uf, pesado, pv.aceitaSucata) : [];
-          veicSelec = selecionarVeiculos(deUf, pv, ctxV, jaVeic);
-          // Estado com pouco lote: completa com o Brasil (o motivo do card diz o estado de cada um).
-          if (veicSelec.length < pv.quantidade) {
-            const ja = new Set([...jaVeic, ...veicSelec.map(x => x.v.id)]);
-            const resto = selecionarVeiculos(await poolVeiculos('', pesado, pv.aceitaSucata), { ...pv, quantidade: pv.quantidade - veicSelec.length }, ctxV, ja);
-            veicSelec = [...veicSelec, ...resto];
-          }
+          veicSelec = selecionarVeiculos(await poolVeiculos(pv), pv, jaVeic);
         }
       }
 
@@ -1069,7 +1052,7 @@ async function handler(req) {
         const nome = [v.marca, v.modelo, v.ano_modelo || v.ano_fabricacao].filter(Boolean).join(' ') || 'Veículo em leilão';
         const desc = Number(v.desconto_fipe_percentual) || 0;
         const motivoV = motivoCurto(motivos);
-        return `${idx === 0 ? tituloBloco('🚗 Leilão de veículos', pv?.origem === 'declarado' ? 'Pelo tipo de veículo que você marcou no seu perfil' : 'Uma seleção para você conhecer — o que você clicar ajusta os próximos') : ''}
+        return `${idx === 0 ? tituloBloco('🚗 Leilão de veículos', pv?.origem === 'declarado' ? 'No pátio do leiloeiro, pelo tipo e faixa de FIPE do seu perfil — de qualquer estado, você paga só o frete' : 'Pelos veículos que você tem aberto — no pátio do leiloeiro, de qualquer estado') : ''}
         <div style="border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;margin-bottom:12px;background:#fff;">
           <a href="${url}"><img src="${proxBaseV}/api/img-proxy?veiculo=${v.id}&i=0" alt="" style="width:100%;height:130px;object-fit:cover;display:block;border-radius:10px 10px 0 0;"></a>
           <div style="padding:14px 16px;">

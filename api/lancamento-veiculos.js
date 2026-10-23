@@ -1,8 +1,9 @@
 /**
  * /api/lancamento-veiculos — COMUNICADO da nova funcionalidade de leilão de veículos (23/10, pedido do dono)
- * para quem ABRE os nossos e-mails (abriu algum nos últimos 60 dias). Cada um recebe até 4 veículos do
- * próprio estado e o convite para dizer, em 2 perguntas, que veículo procura — e o que clicar já ensina o
- * e-mail semanal (veiculos_email_sinal, ver _curadoria-veiculos.js).
+ * para quem ABRE os nossos e-mails (abriu algum nos últimos 60 dias). É um comunicado, não uma vitrine: explica
+ * o leilão de PÁTIO (o leiloeiro só apresenta veículo que já está no pátio — sem retomada, mais simples e
+ * seguro) e leva ao questionário (interesse, tipos, faixa de FIPE). Veículo no e-mail só para quem já declarou
+ * interesse, e pela intenção dele, nunca pela distância (_curadoria-veiculos.js).
  *
  * Modos (CRON_SECRET; chamado pelo workflow "cron-manual" ou pelo cron diário):
  *   ?modo=seco    (padrão) só conta o público e quantos ainda faltam — não envia nada.
@@ -24,7 +25,7 @@ import { linkRastreado } from './_link-email.js';
 import { utmEmail } from './_utm.js';
 import { escapeHtml } from './_sanitize.js';
 import { cabecalhoEmailHTML } from './_email-header.js';
-import { perfilVeiculo, selecionarVeiculos } from './_curadoria-veiculos.js';
+import { perfilVeiculo, selecionarVeiculos, consultaPoolVeiculos } from './_curadoria-veiculos.js';
 import { motivoCurto } from './_curadoria.js';
 
 const SB = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -62,7 +63,7 @@ async function publico() {
   const ids = [...new Set(abriram.map(r => r.user_id))];
   const perfis = [];
   for (let i = 0; i < ids.length; i += 150) {
-    const fatia = await ler(`perfis?id=in.(${ids.slice(i, i + 150).join(',')})&ativo=eq.true&role=in.(${ROLES_CLIENTE.join(',')})&select=id,nome,endereco_uf,endereco_cidade,interesse_veiculos,veiculo_finalidade`);
+    const fatia = await ler(`perfis?id=in.(${ids.slice(i, i + 150).join(',')})&ativo=eq.true&role=in.(${ROLES_CLIENTE.join(',')})&select=id,nome,interesse_veiculos,veiculo_tipos,veiculo_faixa_fipe`);
     if (!fatia) return null;
     perfis.push(...fatia);
   }
@@ -70,26 +71,12 @@ async function publico() {
 }
 
 const poolCache = new Map();
-async function pool(uf, sucata) {
-  const k = `${uf || '*'}|${sucata ? 's' : 'n'}`;
-  if (!poolCache.has(k)) {
-    const rows = await ler(`veiculos_leilao?ativo=eq.true&data_leilao=gt.${new Date().toISOString()}&valor_minimo=gt.0&tipo_veiculo=in.(carro,moto,van_utilitario)&desconto_fipe_percentual=gte.15`
-      + `${uf ? `&estado=eq.${encodeURIComponent(uf)}` : ''}${sucata ? '' : '&or=(is_sucata.is.null,is_sucata.is.false)'}`
-      + '&order=desconto_fipe_percentual.desc&limit=200&select=id,tipo_veiculo,marca,modelo,titulo,ano_modelo,ano_fabricacao,valor_minimo,valor_fipe,desconto_fipe_percentual,capa:fotos->>0,data_leilao,estado,cidade,is_sucata,sinistro');
-    poolCache.set(k, (rows || []).map(v => ({ ...v, fotos: v.capa ? [v.capa] : [] })));
-  }
-  return poolCache.get(k);
-}
-
 async function veiculosPara(p) {
   const pv = perfilVeiculo(p, [], { limite: 4 });
-  const ctx = { uf: p.endereco_uf, cidade: p.endereco_cidade };
-  let sel = p.endereco_uf ? selecionarVeiculos(await pool(p.endereco_uf, pv.aceitaSucata), pv, ctx) : [];
-  if (sel.length < 4) {
-    const ja = new Set(sel.map(s => s.v.id));
-    sel = [...sel, ...selecionarVeiculos(await pool('', pv.aceitaSucata), { ...pv, quantidade: 4 - sel.length }, ctx, ja)];
-  }
-  return sel;
+  if (!pv.quantidade) return [];   // não declarou: o comunicado convida, não adivinha
+  const { chave, qs } = consultaPoolVeiculos(pv);
+  if (!poolCache.has(chave)) poolCache.set(chave, ((await ler(qs)) || []).map(v => ({ ...v, fotos: v.capa ? [v.capa] : [] })));
+  return selecionarVeiculos(poolCache.get(chave), pv);
 }
 
 function html(p, sel, tipoLog) {
@@ -120,23 +107,22 @@ function html(p, sel, tipoLog) {
 <div style="max-width:600px;margin:0 auto;padding:24px 16px;">
   <a href="${BASE}/#/veiculos" style="text-decoration:none;">${cabecalhoEmailHTML()}</a>
   <div style="background:#fff;padding:28px;border-radius:0 0 16px 16px;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
-    <div style="display:inline-block;background:#ccfbf1;color:#0f766e;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;padding:4px 10px;border-radius:6px;margin-bottom:12px;">Novidade</div>
-    <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a;">Olá${nome ? ', ' + nome : ''}! Agora também tem leilão de veículos 🚗</h2>
-    <p style="margin:0 0 14px;color:#475569;font-size:14px;line-height:1.6;">Juntamos os leilões de carros, motos e utilitários de leiloeiros de todo o Brasil — com a <strong>FIPE ao lado do lance mínimo</strong>, para você ver na hora se o preço vale a pena.</p>
+    <div style="display:inline-block;background:#ccfbf1;color:#0f766e;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;padding:4px 10px;border-radius:6px;margin-bottom:12px;">Novidade na plataforma</div>
+    <h2 style="margin:0 0 10px;font-size:20px;color:#0f172a;">Olá${nome ? ', ' + nome : ''}! Agora a BidPro também tem leilão de veículos 🚗</h2>
+    <p style="margin:0 0 12px;color:#475569;font-size:14px;line-height:1.65;">É um leilão <strong>seguro</strong>: o leiloeiro só apresenta veículos que <strong>já estão no pátio dele</strong>. Você não precisa fazer a retomada nem ir atrás do veículo — arrematou, pagou, retira ou contrata o frete. Uma operação <strong>muito mais simples e segura</strong> do que tomar posse de um bem.</p>
     <ul style="margin:0 0 18px;padding-left:18px;color:#334155;font-size:13.5px;line-height:1.8;">
-      <li><strong>Desconto sobre a FIPE</strong> em cada lote</li>
-      <li><strong>Sinistro e sucata em destaque</strong>, antes do lance</li>
-      <li>Filtro por estado, cidade, marca, ano e tipo</li>
-      <li><strong>Relatório por IA</strong>: condição do lote, FIPE e teto de lance sugerido</li>
+      <li><strong>De qualquer lugar do Brasil</strong> — a distância não pesa, você paga só o frete</li>
+      <li><strong>FIPE ao lado do lance mínimo</strong>, para ver na hora o desconto</li>
+      <li>Carros, motos, caminhões, vans e utilitários</li>
+      <li><strong>Relatório por IA</strong> do lote: condição, sinistro, FIPE e teto de lance</li>
     </ul>
-    ${linhas.length ? `<div style="font-size:13px;font-weight:800;color:#0f172a;margin:4px 0 6px;">Alguns que separamos para você</div>
-    <table role="presentation" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;margin:0 -6px 8px;">${linhas.join('')}</table>` : ''}
-    <div style="text-align:center;margin:16px 0 18px;"><a href="${urlBusca}" style="display:inline-block;background:#0f766e;color:#fff;text-decoration:none;padding:13px 28px;border-radius:10px;font-weight:700;font-size:15px;">Ver todos os veículos →</a></div>
-    <div style="padding:14px 16px;background:#f0fdfa;border:1px solid #99f6e4;border-radius:12px;font-size:13px;color:#115e59;line-height:1.55;">
-      <strong>Quer receber veículos no seu e-mail de oportunidades?</strong> Diga se procura carro, moto ou utilitário e para quê — são 2 perguntas.
-      <div style="margin-top:8px;"><a href="${urlPerfil}" style="color:#0f766e;font-weight:800;">Responder no meu perfil →</a></div>
-      <div style="margin-top:6px;font-size:11.5px;color:#0f766e;">Se preferir não responder, tudo bem: o que você clicar aqui já nos ensina o que mostrar.</div>
+    <div style="padding:16px 18px;background:#f0fdfa;border:1px solid #99f6e4;border-radius:12px;font-size:13.5px;color:#115e59;line-height:1.55;margin-bottom:16px;">
+      <strong>Quer receber veículos no seu e-mail de oportunidades?</strong> Complete o seu perfil de investidor com 3 perguntas rápidas: se tem interesse, que tipo de veículo e a faixa de FIPE que procura.
+      <div style="margin-top:12px;text-align:center;"><a href="${urlPerfil}" style="display:inline-block;background:#0f766e;color:#fff;text-decoration:none;padding:12px 24px;border-radius:10px;font-weight:800;font-size:14px;">Completar meu perfil →</a></div>
     </div>
+    ${linhas.length ? `<div style="font-size:13px;font-weight:800;color:#0f172a;margin:4px 0 6px;">Pelo seu perfil, alguns no pátio agora</div>
+    <table role="presentation" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;margin:0 -6px 8px;">${linhas.join('')}</table>` : ''}
+    <div style="text-align:center;margin:10px 0 4px;"><a href="${urlBusca}" style="color:#0f766e;font-weight:700;font-size:13.5px;text-decoration:none;">Ver os veículos em leilão →</a></div>
     <p style="font-size:11px;color:#94a3b8;text-align:center;margin-top:20px;">BidPro Brasil · <a href="{{UNSUB}}" style="color:#94a3b8;">Não quero receber e-mails de oportunidades</a></p>
   </div>
 </div></body></html>`;
@@ -165,7 +151,7 @@ async function handler(req) {
   const modo = new URL(req.url, 'http://x').searchParams.get('modo') || 'seco';
 
   if (modo === 'teste') {
-    const admins = await ler('perfis?role=eq.admin&ativo=eq.true&select=id,nome,endereco_uf,endereco_cidade,interesse_veiculos,veiculo_finalidade');
+    const admins = await ler('perfis?role=eq.admin&ativo=eq.true&select=id,nome,interesse_veiculos,veiculo_tipos,veiculo_faixa_fipe');
     if (!admins) return resp({ ok: false, motivo: 'leitura de admins falhou' }, 503);
     const emails = await emailsDoLote(admins.map(a => a.id));
     const out = [];
@@ -173,7 +159,7 @@ async function handler(req) {
       const email = emails.get(a.id);
       if (!email) { out.push({ id: a.id, enviado: false, motivo: 'sem e-mail' }); continue; }
       const sel = await veiculosPara(a);
-      const r = await enviarEmail({ from: FROM, to: email, subject: '[TESTE] 🚗 Novidade na BidPro: leilão de veículos abaixo da FIPE',
+      const r = await enviarEmail({ from: FROM, to: email, subject: '[TESTE] 🚗 Novidade na BidPro: leilão de veículos no pátio, simples e seguro',
         html: html(a, sel, `${TIPO}_teste`).replace('{{UNSUB}}', `${BASE}/api/cancelar-alertas?token=${assinarUnsub(a.id)}`),
         meta: { tipo: `${TIPO}_teste`, userId: a.id } });
       out.push({ id: a.id, enviado: !!r?.ok, veiculos: sel.length, erro: r?.ok ? undefined : r?.error });
@@ -197,7 +183,7 @@ async function handler(req) {
     const email = emails.get(p.id);
     if (!email) { semEmail++; continue; }
     const sel = await veiculosPara(p);
-    const r = await enviarEmail({ from: FROM, to: email, subject: '🚗 Novidade na BidPro: leilão de veículos abaixo da FIPE',
+    const r = await enviarEmail({ from: FROM, to: email, subject: '🚗 Novidade na BidPro: leilão de veículos no pátio, simples e seguro',
       html: html(p, sel, TIPO).replace('{{UNSUB}}', `${BASE}/api/cancelar-alertas?token=${assinarUnsub(p.id)}`),
       meta: { tipo: TIPO, userId: p.id } });
     if (r?.ok) { enviados++; restante--; await registrarEnviados(p.id, sel); }

@@ -1,28 +1,37 @@
 /**
- * CURADORIA DE VEÍCULOS DO E-MAIL DE OPORTUNIDADES (23/10, pedido do dono).
+ * CURADORIA DE VEÍCULOS DO E-MAIL DE OPORTUNIDADES (23/10, regras do dono).
  *
- * O e-mail passa a levar 10 imóveis + até 5 veículos. Duas fontes de perfil, nesta ordem:
- *  1. DECLARADO na triagem (perfis.interesse_veiculos / veiculo_finalidade) — vale sempre.
- *  2. APRENDIDO do clique no próprio e-mail (veiculos_email_sinal), para quem não respondeu:
- *     tipo, marca, faixa de preço e se aceita sucata saem do que a pessoa CLICOU. Quem recebe
- *     veículo envio após envio e nunca clica passa a receber menos (nunca zero — sem amostra
- *     não há o que aprender); clicou uma vez, volta ao cheio.
- * Tudo puro e exportado: é a parte que erra calada (mandar sucata a quem quer rodar, ou
- * "aprender" com um clique só), então é ela que os testes exercitam.
+ * - O e-mail leva 10 imóveis + até 5 veículos para quem RESPONDEU o questionário com interesse
+ *   (perfis.interesse_veiculos = 'sim', veiculo_tipos, veiculo_faixa_fipe).
+ * - Quem não respondeu não recebe veículo — exceto se já CLICOU em 2+ veículos (no comunicado ou no
+ *   site pelo e-mail): aí o interesse está demonstrado e tipo/faixa saem dos cliques.
+ * - LOCALIZAÇÃO NÃO PESA: o veículo está no pátio do leiloeiro e o comprador paga só o frete, então
+ *   um carro em outro estado vale o mesmo que um na cidade dele. O que pesa é a INTENÇÃO (tipo e
+ *   faixa de FIPE) e o desconto sobre a FIPE.
+ * - Só veículo com pátio CONFIRMADO (é a promessa do comunicado) e nunca sucata — não há pergunta
+ *   que autorize sucata ainda.
+ * Tudo puro e exportado: é a parte que erra calada, então é ela que os testes exercitam.
  */
 
-export const TIPOS_POR_INTERESSE = {
-  carro: ['carro'],
-  moto: ['moto'],
-  carro_moto: ['carro', 'moto'],
-  pesado: ['caminhao', 'van_utilitario', 'onibus'],
-};
-// Quem não declarou: o que a maioria compra. Ônibus/reboque/máquina só por declaração ou clique.
-export const TIPOS_SEM_DECLARACAO = ['carro', 'moto', 'van_utilitario'];
+export const TIPOS_VEICULO = ['carro', 'moto', 'caminhao', 'van_utilitario', 'onibus', 'maquina'];
+export const TIPOS_PADRAO = ['carro', 'moto'];
+// Teto de FIPE por faixa; a "faixa ideal" é da metade do teto até ele (abaixo disso ainda entra,
+// com menos pontos — mesmo raciocínio do imóvel: R$ 20 mil para quem quer até R$ 150 mil não é o alvo).
+export const TETO_FIPE = { ate_50k: 50000, ate_100k: 100000, ate_150k: 150000, acima_150k: null };
+const PISO_ACIMA = 150000;
 
-const ROTULO_TIPO = { carro: 'carro', moto: 'moto', caminhao: 'caminhão', van_utilitario: 'utilitário', onibus: 'ônibus' };
+const ROTULO_TIPO = { carro: 'carro', moto: 'moto', caminhao: 'caminhão', van_utilitario: 'utilitário', onibus: 'ônibus', maquina: 'máquina' };
 const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : null; };
-const DIA = 864e5;
+/** Valor de referência do veículo: FIPE quando houver; sem ela, o lance mínimo (piso conservador). */
+export const refValor = (v) => num(v?.valor_fipe) || num(v?.valor_minimo) || null;
+
+export function faixaDoValor(valor) {
+  if (!(valor > 0)) return null;
+  if (valor <= 50000) return 'ate_50k';
+  if (valor <= 100000) return 'ate_100k';
+  if (valor <= 150000) return 'ate_150k';
+  return 'acima_150k';
+}
 
 /** Maioria simples com ao menos 2 votos — um clique isolado é curiosidade, não preferência. */
 function preferido(contagem) {
@@ -33,121 +42,108 @@ function preferido(contagem) {
 }
 
 /**
- * @param {{interesse_veiculos?:string|null, veiculo_finalidade?:string|null}} perfil
- * @param {Array<{sinal:'enviado'|'clique', criado_em:string, veiculo?:{tipo_veiculo,is_sucata,valor_minimo,marca}}>} sinais
- * @param {{limite?:number}} opts
- * @returns {{quantidade:number, tipos:string[], tipoPreferido:string|null, aceitaSucata:boolean,
- *            precoAlvo:number|null, marcaPreferida:string|null, origem:'declarado'|'aprendido'|'teste', nota:string}}
+ * @param {{interesse_veiculos?, veiculo_tipos?, veiculo_faixa_fipe?}} perfil
+ * @param {Array<{sinal:'enviado'|'clique', criado_em, veiculo?:{tipo_veiculo,valor_fipe,valor_minimo,marca}}>} sinais
+ * @returns {{quantidade, tipos, faixa, tipoPreferido, marcaPreferida, origem, nota}}
  */
 export function perfilVeiculo(perfil, sinais = [], { limite = 5 } = {}) {
-  const interesse = perfil?.interesse_veiculos || null;
-  const finalidade = perfil?.veiculo_finalidade || null;
-  const vazio = { quantidade: 0, tipos: [], tipoPreferido: null, aceitaSucata: false, precoAlvo: null, marcaPreferida: null };
-  if (interesse === 'nao') return { ...vazio, origem: 'declarado', nota: 'declarou que não quer veículos' };
+  const nenhum = (nota, origem = 'declarado') => ({ quantidade: 0, tipos: [], faixa: null, tipoPreferido: null, marcaPreferida: null, origem, nota });
+  if (perfil?.interesse_veiculos === 'nao') return nenhum('declarou que não quer veículos');
 
   const cliques = sinais.filter(s => s.sinal === 'clique' && s.veiculo);
-  const porTipo = {}, porMarca = {};
-  let sucataClicada = 0;
-  for (const c of cliques) {
-    const v = c.veiculo;
+  const porTipo = {}, porMarca = {}, porFaixa = {};
+  for (const { veiculo: v } of cliques) {
     if (v.tipo_veiculo) porTipo[v.tipo_veiculo] = (porTipo[v.tipo_veiculo] || 0) + 1;
     const m = String(v.marca || '').trim().toUpperCase();
     if (m) porMarca[m] = (porMarca[m] || 0) + 1;
-    if (v.is_sucata) sucataClicada++;
+    const f = faixaDoValor(refValor(v));
+    if (f) porFaixa[f] = (porFaixa[f] || 0) + 1;
   }
-  const precos = cliques.map(c => num(c.veiculo.valor_minimo)).filter(p => p > 0).sort((a, b) => a - b);
-  const precoAlvo = precos.length >= 2 ? precos[Math.floor(precos.length / 2)] : null;
   const tipoPreferido = preferido(porTipo);
   const marcaPreferida = preferido(porMarca);
 
-  if (interesse) {
+  if (perfil?.interesse_veiculos === 'sim') {
+    const tipos = (Array.isArray(perfil.veiculo_tipos) ? perfil.veiculo_tipos : []).filter(t => TIPOS_VEICULO.includes(t));
+    const tiposOk = tipos.length ? tipos : TIPOS_PADRAO;
     return {
-      quantidade: limite,
-      tipos: TIPOS_POR_INTERESSE[interesse] || TIPOS_SEM_DECLARACAO,
-      // Dentro do declarado o clique ainda refina (ex.: declarou carro e moto, só clica moto).
-      tipoPreferido: tipoPreferido && (TIPOS_POR_INTERESSE[interesse] || []).includes(tipoPreferido) ? tipoPreferido : null,
-      aceitaSucata: finalidade === 'recuperar',
-      precoAlvo, marcaPreferida, origem: 'declarado',
-      nota: `declarou ${interesse}${finalidade ? `/${finalidade}` : ''}`,
+      quantidade: limite, tipos: tiposOk,
+      faixa: TETO_FIPE[perfil.veiculo_faixa_fipe] !== undefined ? perfil.veiculo_faixa_fipe : null,
+      // Dentro do declarado o clique ainda refina (declarou carro e moto, só clica moto).
+      tipoPreferido: tipoPreferido && tiposOk.includes(tipoPreferido) ? tipoPreferido : null,
+      marcaPreferida, origem: 'declarado',
+      nota: `declarou ${tiposOk.join('+')}${perfil.veiculo_faixa_fipe ? ` · ${perfil.veiculo_faixa_fipe}` : ''}`,
     };
   }
 
-  // NÃO DECLAROU → aprende. Envios contados por DIA (um e-mail leva vários veículos).
-  const diasEnviados = new Set(sinais.filter(s => s.sinal === 'enviado').map(s => String(s.criado_em).slice(0, 10)));
-  const ultimoClique = cliques.reduce((mx, c) => Math.max(mx, Date.parse(c.criado_em) || 0), 0);
-  // Envios SEM resposta = dias de envio depois do último clique (todos, se nunca clicou).
-  const semClique = [...diasEnviados].filter(d => Date.parse(d) > ultimoClique).length;
-  const quantidade = semClique >= 6 ? 1 : semClique >= 3 ? 2 : limite;
-  const tipos = tipoPreferido && !TIPOS_SEM_DECLARACAO.includes(tipoPreferido)
-    ? [...TIPOS_SEM_DECLARACAO, tipoPreferido] : TIPOS_SEM_DECLARACAO;
+  // Não respondeu: só com interesse DEMONSTRADO (2+ cliques em veículo).
+  if (cliques.length < 2) return nenhum(`não respondeu · ${cliques.length} clique(s) em veículo`, 'sem_interesse');
+  const tipos = Object.keys(porTipo).filter(t => TIPOS_VEICULO.includes(t));
   return {
-    quantidade, tipos, tipoPreferido,
-    // Sucata só para quem a CLICOU de forma consistente (2+ e metade ou mais dos cliques).
-    aceitaSucata: sucataClicada >= 2 && sucataClicada / cliques.length >= 0.5,
-    precoAlvo, marcaPreferida,
-    origem: cliques.length ? 'aprendido' : 'teste',
-    nota: cliques.length ? `${cliques.length} clique(s) em veículo` : `${diasEnviados.size} envio(s) sem clique`,
+    quantidade: limite, tipos: tipos.length ? tipos : TIPOS_PADRAO,
+    faixa: preferido(porFaixa), tipoPreferido, marcaPreferida, origem: 'aprendido',
+    nota: `${cliques.length} cliques em veículo`,
   };
 }
 
 /** O veículo pode entrar no e-mail desta pessoa? (rede de segurança, qualquer que seja a ordem) */
 export function veiculoElegivel(v, pv, agora = Date.now()) {
   if (!v || !pv.tipos.includes(v.tipo_veiculo)) return false;
-  if (v.is_sucata && !pv.aceitaSucata) return false;
+  if (v.is_sucata) return false;
+  if (v.status_patio && v.status_patio !== 'confirmado') return false;
   if (!(num(v.valor_minimo) > 0)) return false;
   if (!Array.isArray(v.fotos) || !v.fotos.length) return false;   // sem foto ninguém clica
   const quando = Date.parse(v.data_leilao);
-  return Number.isFinite(quando) && quando > agora;
+  if (!Number.isFinite(quando) || quando <= agora) return false;
+  if (pv.faixa) {
+    const ref = refValor(v);
+    const teto = TETO_FIPE[pv.faixa];
+    if (teto && ref > teto * 1.1) return false;                       // acima do que a pessoa disse que quer
+    if (pv.faixa === 'acima_150k' && ref < PISO_ACIMA * 0.8) return false;
+  }
+  return true;
 }
 
 /** Pontua com motivo por extenso (vira a linha "💡" do card, como nos imóveis). */
-export function pontuarVeiculo(v, pv, ctx = {}, agora = Date.now()) {
+export function pontuarVeiculo(v, pv, agora = Date.now()) {
   let pts = 0;
   const motivos = [];
   const desc = num(v.desconto_fipe_percentual) || 0;
   pts += Math.min(Math.max(desc, 0), 60) / 60 * 40;
-  if (desc >= 20) motivos.push({ f: desc + 50, t: `${Math.round(desc)}% abaixo da FIPE` });
-  if (ctx.uf && v.estado && String(v.estado).toUpperCase() === String(ctx.uf).toUpperCase()) {
-    pts += 15;
-    const naCidade = ctx.cidade && String(v.cidade || '').toLowerCase() === String(ctx.cidade).toLowerCase();
-    if (naCidade) pts += 8;
-    motivos.push({ f: 80, t: naCidade ? 'na sua cidade' : `em ${v.estado}, seu estado` });
+  if (desc >= 15) motivos.push({ f: desc + 50, t: `${Math.round(desc)}% abaixo da FIPE` });
+  if (pv.faixa) {
+    const ref = refValor(v);
+    const teto = TETO_FIPE[pv.faixa];
+    if (teto ? ref >= teto * 0.5 : ref >= PISO_ACIMA) { pts += 15; motivos.push({ f: 75, t: 'na faixa de FIPE que você procura' }); }
   }
   if (pv.tipoPreferido && v.tipo_veiculo === pv.tipoPreferido) {
-    pts += 12; motivos.push({ f: 70, t: `${ROTULO_TIPO[v.tipo_veiculo] || v.tipo_veiculo}, o que você mais tem aberto` });
+    pts += 10; motivos.push({ f: 70, t: `${ROTULO_TIPO[v.tipo_veiculo] || v.tipo_veiculo}, o que você mais tem aberto` });
   }
   if (pv.marcaPreferida && String(v.marca || '').toUpperCase() === pv.marcaPreferida) {
     pts += 8; motivos.push({ f: 65, t: `${v.marca}, marca que você tem olhado` });
-  }
-  const p = num(v.valor_minimo);
-  if (pv.precoAlvo && p) {
-    const r = p / pv.precoAlvo;
-    if (r >= 0.5 && r <= 1.6) { pts += 8; motivos.push({ f: 60, t: 'na faixa de preço que você clica' }); }
-    else if (r > 3 || r < 0.2) pts -= 8;
   }
   const ano = num(v.ano_modelo) || num(v.ano_fabricacao);
   const anoAtual = new Date(agora).getFullYear();
   if (ano) pts += Math.max(0, 1 - (anoAtual - ano) / 15) * 8;
   if (ano && anoAtual - ano <= 5) motivos.push({ f: 55, t: `${ano}, seminovo` });
-  if (v.is_sucata) motivos.push({ f: 90, t: 'sucata — para recuperar ou peças' });
-  else if (v.sinistro) motivos.push({ f: 85, t: `atenção: ${String(v.sinistro).toLowerCase()}` });
-  const dias = (Date.parse(v.data_leilao) - agora) / DIA;
+  if (v.sinistro) motivos.push({ f: 85, t: `atenção: ${String(v.sinistro).toLowerCase()}` });
+  motivos.push({ f: 40, t: 'no pátio do leiloeiro' });
+  const dias = (Date.parse(v.data_leilao) - agora) / 864e5;
   if (dias >= 2 && dias <= 14) pts += 5;
   if (dias < 2) pts -= 4;   // sem tempo de olhar o lote
-  if (!desc && !num(v.valor_fipe)) pts -= 10;   // sem FIPE o e-mail não tem o argumento principal
+  if (!num(v.valor_fipe)) pts -= 10;   // sem FIPE o e-mail perde o argumento principal
   motivos.sort((a, b) => b.f - a.f);
   return { pontos: Math.round(pts * 10) / 10, motivos: motivos.map(m => m.t) };
 }
 
 /**
  * Escolhe até `pv.quantidade`, sem repetir o já enviado, com variedade: no máximo 2 do mesmo
- * modelo e, sem preferência aprendida, ao menos um de cada tipo quando houver.
+ * modelo e, sem preferência aprendida, ao menos um de cada tipo declarado quando houver.
  */
-export function selecionarVeiculos(candidatos, pv, ctx = {}, jaEnviados = new Set(), agora = Date.now()) {
+export function selecionarVeiculos(candidatos, pv, jaEnviados = new Set(), agora = Date.now()) {
   if (!pv.quantidade) return [];
   const pont = candidatos
     .filter(v => !jaEnviados.has(v.id) && veiculoElegivel(v, pv, agora))
-    .map(v => ({ v, ...pontuarVeiculo(v, pv, ctx, agora) }))
+    .map(v => ({ v, ...pontuarVeiculo(v, pv, agora) }))
     .sort((a, b) => b.pontos - a.pontos);
   const out = [];
   const porModelo = {};
@@ -159,4 +155,23 @@ export function selecionarVeiculos(candidatos, pv, ctx = {}, jaEnviados = new Se
   }
   for (const c of pont) { if (out.length >= pv.quantidade) break; if (!out.includes(c) && cabe(c)) pega(c); }
   return out.sort((a, b) => b.pontos - a.pontos).slice(0, pv.quantidade);
+}
+
+/**
+ * Consulta PostgREST do pool de candidatos para um perfil — NACIONAL (sem estado), pátio
+ * confirmado, sem sucata, lance dentro do teto da faixa. Uma por combinação tipos×faixa (cache
+ * no chamador). O lance fica abaixo da FIPE, então o teto vale para ele também.
+ */
+export function consultaPoolVeiculos(pv, agoraIso = new Date().toISOString()) {
+  const tipos = [...pv.tipos].sort();
+  const teto = pv.faixa ? TETO_FIPE[pv.faixa] : null;
+  const faixaQs = teto ? `&valor_minimo=lte.${Math.round(teto * 1.1)}`
+    : pv.faixa === 'acima_150k' ? `&valor_minimo=gte.${Math.round(PISO_ACIMA * 0.4)}` : '';
+  return {
+    chave: `${tipos.join(',')}|${pv.faixa || '*'}`,
+    qs: `veiculos_leilao?ativo=eq.true&status_patio=eq.confirmado&data_leilao=gt.${agoraIso}&valor_minimo=gt.0`
+      + `&tipo_veiculo=in.(${tipos.join(',')})&or=(is_sucata.is.null,is_sucata.is.false)${faixaQs}`
+      + '&order=desconto_fipe_percentual.desc.nullslast&limit=300'
+      + '&select=id,tipo_veiculo,marca,modelo,titulo,ano_modelo,ano_fabricacao,valor_minimo,valor_fipe,desconto_fipe_percentual,capa:fotos->>0,data_leilao,estado,cidade,is_sucata,sinistro,status_patio',
+  };
 }

@@ -118,7 +118,7 @@ export default function Landing() {
           <div style={{ marginBottom: 14 }}>
             <a href="#veiculos-leilao" onClick={(e) => { e.preventDefault(); document.getElementById('veiculos-leilao')?.scrollIntoView({ behavior: 'smooth' }); }}
               style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(52,211,153,0.12)', border: '1px solid rgba(52,211,153,0.35)', borderRadius: 24, padding: '6px 16px', fontSize: 12.5, color: '#6ee7b7', fontWeight: 700, textDecoration: 'none' }}>
-              <Car size={14} /> Novo: leilão de veículos abaixo da FIPE <ArrowRight size={13} />
+              <Car size={14} /> Novo: leilão de veículos no pátio, abaixo da FIPE <ArrowRight size={13} />
             </a>
           </div>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(13,99,219,0.15)', border: '1px solid rgba(13,99,219,0.3)', borderRadius: 24, padding: '6px 18px', fontSize: 11, color: '#93c5fd', fontWeight: 800, marginBottom: 28, textTransform: 'uppercase', letterSpacing: 1.5 }}>
@@ -207,18 +207,18 @@ export default function Landing() {
           <div style={{ textAlign: 'center', marginBottom: 30 }}>
             <div style={{ fontSize: 11, fontWeight: 800, color: '#34d399', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 12 }}>Novidade · Leilão de veículos</div>
             <h2 style={{ fontSize: 'clamp(22px,3.4vw,32px)', fontWeight: 900, color: 'white', margin: '0 0 10px', letterSpacing: '-0.5px' }}>
-              Carros, motos e utilitários abaixo da FIPE
+              Leilão de veículos no pátio: simples e seguro
             </h2>
-            <p style={{ color: '#94a3b8', fontSize: 14.5, lineHeight: 1.7, margin: '0 auto', maxWidth: 600 }}>
-              Os leilões de veículos de leiloeiros de todo o Brasil num lugar só, com a <strong style={{ color: '#e2e8f0' }}>FIPE ao lado do lance mínimo</strong> e o alerta de sinistro e sucata antes de você se apaixonar pelo lote.
+            <p style={{ color: '#94a3b8', fontSize: 14.5, lineHeight: 1.7, margin: '0 auto', maxWidth: 620 }}>
+              O leiloeiro só apresenta veículos que <strong style={{ color: '#e2e8f0' }}>já estão no pátio dele</strong>. Você não precisa fazer a retomada do veículo: arrematou, pagou, retira ou contrata o frete. Uma operação muito mais simples e segura — com a <strong style={{ color: '#e2e8f0' }}>FIPE ao lado do lance mínimo</strong>.
             </p>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 14, marginBottom: 30 }}>
             {[
+              ['🅿️', 'Veículo no pátio', 'Sem retomada nem busca do bem: o veículo já está sob a guarda do leiloeiro.'],
               ['📊', 'Desconto sobre a FIPE', 'Cada lote mostra quanto está abaixo da tabela FIPE do modelo e ano.'],
-              ['⚠️', 'Sinistro e sucata em destaque', 'Recuperado de financiamento, batido ou sucata: você sabe antes do lance.'],
-              ['📍', 'Perto de você', 'Filtre por estado, cidade, marca, ano e tipo — carro, moto, caminhão, van.'],
-              ['🤖', 'Relatório por IA', 'Condição do lote, FIPE e teto de lance sugerido em minutos.'],
+              ['🚚', 'De qualquer lugar do Brasil', 'Como o veículo está no pátio, a distância não pesa: você paga só o frete.'],
+              ['🤖', 'Relatório por IA', 'Condição do lote, sinistro, FIPE e teto de lance sugerido em minutos.'],
             ].map(([ic, t, d]) => (
               <div key={t} style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.09)', borderRadius: 14, padding: '18px 18px' }}>
                 <div style={{ fontSize: 22, marginBottom: 8 }}>{ic}</div>
