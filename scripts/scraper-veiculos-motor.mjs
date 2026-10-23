@@ -24,6 +24,7 @@ import { criarMotorApi } from './lib/motor/fetch-api.mjs';
 import { veiculoDoLote, complementoGenerico } from './lib/veiculo-do-lote.mjs';
 import { patioPreservado } from './lib/patio-veiculo.mjs';
 import { registrarSaude } from './_saude-fonte.mjs';
+import { classificarVazio, RECUSA_POR_REGRA } from './lib/veiculos-saude.mjs';
 import { FONTES_VEICULOS } from './lib/motor/fontes-veiculos.mjs';
 
 const SB_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -140,7 +141,9 @@ async function coletarTenant(cfg, fetchFonte, tenant) {
   // O porquê também vai para a saúde (22/10, FREITAS_VEICULOS "652 enumerados e nenhum gravado"): o log fica no PC
   // e, sem isto, descobrir o motivo exigia o dono copiar o terminal.
   const porque = [sem ? `sem detalhe ${sem}` : '', ...[...motivos].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([m, n]) => `${m}: ${n}`)].filter(Boolean).join(' · ');
-  return { rows, enumerados: en.urls.length, fetchOk: en.fetchOk !== false, sem, cota, porque, idsEnumerados: new Set(en.urls.map(idDe)) };
+  const lidos = rows.length + sem + [...motivos.values()].reduce((a, n) => a + n, 0);
+  const porRegra = [...motivos].filter(([m]) => RECUSA_POR_REGRA.test(m)).reduce((a, [, n]) => a + n, 0);
+  return { rows, enumerados: en.urls.length, fetchOk: en.fetchOk !== false, sem, cota, porque, lidos, porRegra, idsEnumerados: new Set(en.urls.map(idDe)) };
 }
 
 async function main() {
@@ -161,9 +164,10 @@ async function main() {
           // Só com a lista lida de verdade e não vazia: lista que não abriu NÃO é "tudo sumiu".
           if (!DRYRUN && cfg.veiculos.listaCompleta && r.fetchOk && r.idsEnumerados.size) await desligarSumidos(tenant.fonte, r.idsEnumerados);
           if (!DRYRUN) {
+            const vazio = classificarVazio(r);
             await registrarSaude(supabase, `${tenant.fonte}_VEICULOS`, r.rows, cfg.chave, {
-              ok: r.fetchOk && (r.rows.length > 0 || r.enumerados === 0), enumerados: r.enumerados, semCota: r.cota > 0,
-              motivo: !r.fetchOk ? 'catálogo de veículos não abriu' : (r.enumerados && !r.rows.length ? `${r.enumerados} enumerados e nenhum gravado (${r.porque || 'sem motivo registrado'})`.slice(0, 300) : ''),
+              ok: r.fetchOk && (r.rows.length > 0 || !!vazio), enumerados: r.enumerados, semCota: r.cota > 0, vazio: !!vazio,
+              motivo: !r.fetchOk ? 'catálogo de veículos não abriu' : (vazio || (r.enumerados && !r.rows.length ? `${r.enumerados} enumerados e nenhum gravado (${r.porque || 'sem motivo registrado'})`.slice(0, 300) : '')),
             });
           }
         } catch (e) {
