@@ -127,10 +127,13 @@ curto (5–8 linhas) antes de seguir:
    > formação** — mais barato ver aqui do que na fatura. E `sem_perfil` (triagem não respondida)
    > é o que faz o e-mail de oportunidade sair genérico.
    > ```sql
-   > -- pagante sem entrega: assinou e não gerou UM relatório em 14 dias
+   > -- pagante sem entrega: assinou e não gerou UM relatório em 14 dias. CONTAS DE TESTE ficam de fora
+   > -- (`app_config.contas_teste`): o Fred (assessorado, 32273ff4) é a conta que a IA usa para simular
+   > -- o acesso de cliente — sem pagamento/aceite/caso de propósito (dono, 23/10). Não é pagante nem churn.
    > select p.id, p.role, p.created_at::date assinou
    >   from perfis p
    >  where p.role in ('top2','assessorado','clube') and p.ativo
+   >    and p.id::text not in (select e->>'id' from app_config, jsonb_array_elements(value::jsonb) e where key = 'contas_teste')
    >    and not exists (select 1 from analises_mercado a where a.user_id=p.id and a.created_at > now()-interval '14 days')
    >  order by 3;
    > ```
