@@ -4,7 +4,7 @@
 //  - cidade: o og:title termina com o nome do site ("… - JAC Leilões | Site do leiloeiro oficial de Cascavel/PR") e
 //    o Cascavel/PR do LEILOEIRO virava a cidade do lote; "Cidade - UF" no título só vale com prova do IBGE.
 import assert from 'node:assert/strict';
-import { parseDetalhe, cidadeUF, cidadeDoCorpo } from '../lib/leilaopro-parse.mjs';
+import { parseDetalhe, cidadeUF, cidadeDoCorpo, extrairUrlsDeLote, idDaUrl } from '../lib/leilaopro-parse.mjs';
 
 const pagina = (ogTitle, corpo) => `<html><head><title>${ogTitle}</title>
 <meta property="og:title" content="${ogTitle}"><meta property="og:description" content="${ogTitle}"></head>
@@ -59,5 +59,15 @@ assert.deepEqual(cidadeDoCorpo('DESCRIÇÃO keyboard_arrow_down UM APARTAMENTO s
   { cidade: null, estado: null }, '"desta cidade" não vira cidade, e o rodapé fora do bloco não conta');
 assert.deepEqual(cidadeDoCorpo('DESCRIÇÃO keyboard_arrow_down Conforme Matrícula nº 48.580 do RI da Comarca de Cachoeira do Sul/RS. ÚLTIMOS LANCES'),
   { cidade: null, estado: null }, 'Comarca não é a cidade do lote');
+
+// Trevisan (24/10, pendência 356): venda por alienação particular — TODOS os links da listagem terminam em /alienacao
+// (href real de www.trevisanleiloes.com.br/leilao/lotes/imoveis). Exigir o id no fim do href enumerava 0 de 27.
+const listagemTrevisan = `<a href="/leilao/terreno-de-esquina-232-75m2-em-campo-bom-rs-16-09-2026-15-39-18/lote_id/148/alienacao">ver</a>
+<a href="https://x.com/intent/tweet/?text=x&amp;url=http://www.trevisanleiloes.com.br/leilao/x/lote_id/148/alienacao">tw</a>
+<a href="/leilao/leffa-comum/lote_id/7208">ver</a>`;
+const urlsTrev = extrairUrlsDeLote(listagemTrevisan, 'https://www.trevisanleiloes.com.br');
+assert.deepEqual([...urlsTrev.keys()].sort(), ['148', '7208'], 'sufixo /alienacao aceito; link de compartilhar não conta');
+assert.equal(urlsTrev.get('148'), 'https://www.trevisanleiloes.com.br/leilao/terreno-de-esquina-232-75m2-em-campo-bom-rs-16-09-2026-15-39-18/lote_id/148/alienacao');
+assert.equal(idDaUrl(urlsTrev.get('148')), '148');
 
 console.log('leilaopro-preco-e-cidade: todos os casos passaram');

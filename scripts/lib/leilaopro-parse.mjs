@@ -73,8 +73,6 @@ export const TENANTS = {
   // cpkleiloes, deboramullerleiloes, elevaleiloes, fernandaleiloes.lel.br, leilaobutia, lipinskileiloes,
   // lottermannleiloes, rangelleiloes, rogerserafimleiloes, amtleiloes (rubemgarcia.com.br redireciona p/ ele),
   // srleiloes (DF), swleiloes, veronicaleiloes, zaccariasleiloes.
-  // trevisanleiloes.com.br (27 na listagem) também ficou fora: todos os links são /lote_id/N/alienacao (venda por
-  // alienação particular) e extrairUrlsDeLote exige o id no fim do href — enumera 0. Pede ajuste do parser, não config.
   // santayanaleiloes.com.br (10 na listagem) também: hoje só boxes de estacionamento e massa falida — 0 pronto no seco.
   santoseborin: { fonte: 'SANTOSBORIN', leiloeiro: 'Santos & Borin Leilões', base: 'https://www.santoseborinleiloes.com.br', sufixo: 'Santos & Borin Leilões' }, // 40+
   grandes: { fonte: 'GRANDESLEIL', leiloeiro: 'Grandes Leilões (Jochims)', base: 'https://www.grandesleiloes.com.br', sufixo: 'Grandes Leilões' }, // 40+
@@ -111,6 +109,9 @@ export const TENANTS = {
   feliperotta: { fonte: 'FELIPEROTTA', leiloeiro: 'Felipe Rotta Leilões', base: 'https://www.feliperottaleiloes.com.br', sufixo: 'Felipe Rotta Leilões' }, //  2
   eduardovivian: { fonte: 'EDUARDOVIVIAN', leiloeiro: 'Eduardo Vivian Leiloeiro', base: 'https://www.eduardovivian.com.br', sufixo: 'Eduardo Vivian' }, //  1
   farias: { fonte: 'FARIASLEIL', leiloeiro: 'Farias Leilões (Dediana Farias)', base: 'https://www.fariasleiloes.com.br', sufixo: 'Farias Leilões' }, //  1
+  // 24/10 (pendência 356): Trevisan — todos os links da listagem são /lote_id/N/alienacao (venda por alienação
+  // particular); entrou quando extrairUrlsDeLote passou a aceitar o sufixo (antes enumerava 0).
+  trevisan: { fonte: 'TREVISANLEIL', leiloeiro: 'Marcelo Trevisan Leiloeiro', base: 'https://www.trevisanleiloes.com.br', sufixo: 'Marcelo Trevisan' }, // 27, RS/SC
 };
 
 const num = s => parseFloat(String(s || '').replace(/[^\d.,]/g, '').replace(/\./g, '').replace(',', '.')) || 0;
@@ -130,9 +131,12 @@ export function inferirTipo(titulo = '', url = '') {
 }
 
 // Links de lote na listagem: /leilao/<slug>/lote_id/<ID>. Retorna Map id→url absoluta.
+// Sufixo de modalidade aceito (24/10, Trevisan): venda por alienação particular sai como
+// /leilao/<slug>/lote_id/<ID>/alienacao — é o único link do lote na listagem, então a URL guardada
+// mantém o sufixo. Exigir o id no fim do href enumerava 0 lotes num catálogo de 27.
 export function extrairUrlsDeLote(html, base) {
   const urls = new Map();
-  for (const m of html.matchAll(/href=["'](\/leilao\/[^"']*?\/lote_id\/(\d+))["']/gi)) {
+  for (const m of html.matchAll(/href=["'](\/leilao\/[^"']*?\/lote_id\/(\d+)(?:\/alienacao)?)["']/gi)) {
     try { urls.set(m[2], new URL(decodificarEntidades(m[1]), base).href); } catch { /* skip */ }
   }
   return urls;

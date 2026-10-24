@@ -27,6 +27,16 @@ export const TENANTS = {
   fabianoayupp: { fonte: 'FABIANOAYUPP', leiloeiro: 'Fabiano Ayupp Leiloeiro', base: 'https://fabianoayuppleiloeiro.com.br' },
   depaula: { fonte: 'DEPAULALEILOES', leiloeiro: 'De Paula Leilões', base: 'https://depaulaonline.com.br' },
   leiloesja: { fonte: 'LEILOESJA', leiloeiro: 'Leilões JA', base: 'https://leiloesja.com.br' },
+  // 24/10 (pendência 356): sites da triagem575 que a família Suporte antiga (SUPORTE_TENANTS, /buscador) não
+  // abria — 404 no /buscador, home Suporte. A home deles linka /busca?tipo=Imoveis e /oferta/leilao/imoveis/…: é ESTE
+  // front. Catálogo e lotes lidos pelo banco (pg_net) e passados no motor em seco. Entre parênteses: imóveis no catálogo.
+  // A Rapidão Vende tem ainda fazendas/chácaras em /busca?tipo=Fazendas (URL /oferta/leilao/fazendas/…), fora deste
+  // catálogo e do padrão de URL — ficam para quando a família ler mais de uma categoria.
+  // Casa Forte (casaforteleiloes.com.br, RS) é o mesmo front, mas os 4 imóveis do catálogo hoje são todos box de garagem
+  // — descartados por decisão de negócio no seco (0 pronto). Entra com uma linha quando publicar outro tipo.
+  aba: { fonte: 'ABALEILOES', leiloeiro: 'ABA Leilões', base: 'https://abaleiloes.com.br' }, // 6, SE
+  araujo: { fonte: 'LEILOESARAUJO', leiloeiro: 'Leilões Araújo', base: 'https://leiloesaraujo.com.br' }, // 1, RN/PB
+  rapidaovende: { fonte: 'RAPIDAOVENDE', leiloeiro: 'Rapidão Vende', base: 'https://rapidaovende.com.br' }, // 3, TO
 };
 
 export function extrairUrlsDeLote(html, base) {

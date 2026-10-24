@@ -74,6 +74,6 @@ jobs:
           BRIGHTDATA_MAX_REQ_SEMANA: ${{ secrets.BRIGHTDATA_MAX_REQ_SEMANA }}
           LEILAOPRO_DEBUG: ${{ github.event.inputs.debug || '0' }}
           LEILAOPRO_DRYRUN: ${{ github.event.inputs.dryrun || '0' }}
-          LEILAOPRO_TENANTS: ${{ github.event.inputs.tenants || 'leffa,oscar,hastapublicalel,raupp,renovar,qleilao,nsleiloes,jac,bidgo,soleiloes,santoseborin,grandes,mercado,pietoso,mpleilao,santamaria,scholante,regional,schonardie,vsleiloes,bartmann,rz,gabrielrosa,gt,scotto,rabuske,ferronato,clademir,tonial,arnoldo,dld,ritta,ju,scheid,super,vidal,kirinus,blm,barbieri,machadors,michelli,clovis,feliperotta,eduardovivian,farias' }}
+          LEILAOPRO_TENANTS: ${{ github.event.inputs.tenants || 'leffa,oscar,hastapublicalel,raupp,renovar,qleilao,nsleiloes,jac,bidgo,soleiloes,santoseborin,grandes,mercado,pietoso,mpleilao,santamaria,scholante,regional,schonardie,vsleiloes,bartmann,rz,gabrielrosa,gt,scotto,rabuske,ferronato,clademir,tonial,arnoldo,dld,ritta,ju,scheid,super,vidal,kirinus,blm,barbieri,machadors,michelli,clovis,feliperotta,eduardovivian,farias,trevisan' }}
           LEILAOPRO_MAX_LOTES: ${{ github.event.inputs.max_lotes || '40' }}
         run: node scripts/scraper-leilaopro.mjs

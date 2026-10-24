@@ -5564,8 +5564,9 @@ const SUPORTE_TENANTS = [
   // 11 cards (PI; os 3 primeiros são lotes do Loteamento Delta Park, Marabá/PA), Dal'Aqua 4 (RS), GS 3 (Trindade do
   // Sul/RS), Marca 7 (MS/MT). Nenhum lote destes domínios estava no acervo. `bl.leilao.br` gera tenantKey `bl`
   // (fonte_id `sl_bl_<id>`) — único entre os tenants. FORA: abaleiloes (SE), casaforteleiloes (RS), leiloesaraujo
-  // (PB) e rapidaovende (TO) devolvem 404 em /buscador (home ainda é Suporte — outra rota, pede recon); atlantico
-  // (PB/RN), pineiro (RS) e vlleiloes (PB) abrem o buscador com 0 imóvel hoje.
+  // (PB) e rapidaovende (TO) devolvem 404 em /buscador — são do front Suporte "oferta" (/busca?tipo=Imoveis); ABA, Araújo e
+  // Rapidão coletam por scraper-suporteoferta.mjs desde 24/10 (pendência 356), Casa Forte só tem box de garagem;
+  // atlantico (PB/RN), pineiro (RS) e vlleiloes (PB) abrem o buscador com 0 imóvel hoje.
   { domain: 'bl.leilao.br', leiloeiro: 'Braga Leilões' },
   { domain: 'dalaqualeiloes.com.br', leiloeiro: "Dal'Aqua Leilões" },
   { domain: 'gsleiloes.com.br', leiloeiro: 'GS Leilões' },

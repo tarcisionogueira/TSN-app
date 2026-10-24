@@ -101,6 +101,28 @@ assert.deepEqual([d4.cidade, d4.estado], ['Brasília', 'DF']);
 const d5 = parseDetalhe(pg('Leilão de Casa no Bairro Jardim Mar EXTRAJUDICIAL', 'Casa situada na cidade de São Bernardo do Campo/SP, matrícula 123.'), URL_2823, { agora: AGORA });
 assert.deepEqual([d5.cidade, d5.estado], ['São Bernardo do Campo', 'SP']);
 
+// (7b) GF Leilões (24/10, pendência 356 — textos REAIS): o título traz o BAIRRO ("Vila Prudente/ SP", "… | Vila Prudente | SP")
+//      e o feed manda "Acrelândia/Acre" em todos os lotes. Cidade só com prova do IBGE; feed com UF diferente da página não vence.
+const TG = TENANTS.gf;
+const URL_G237 = 'https://www.gfleiloes.com.br/lote/imovel-comercial-area-de-400m_-vila-prudente-sp/237/';
+const URL_G300 = 'https://www.gfleiloes.com.br/lote/imovel-area-de-24500m_-vila-carbone-sp/300/';
+const URL_G303 = 'https://www.gfleiloes.com.br/lote/imovel-area-de-35200m_-regente-feijo-sp/303/';
+const gfFeed = (u, cidade = 'Acrelândia', regiao = 'Acre') => listing(`<name>JUDICIAL</name> <address format="simples"> <component name="city">${cidade}</component> <component name="region">${regiao}</component> </address>
+ <price>1746000,00 BRL</price> <url>${u}</url> <available_dates_price_config> <end_date>2099-01-01T14:00:00</end_date> <rate>873000,00 BRL</rate> </available_dates_price_config>`);
+extrairUrlsDeLote(`<listings>${gfFeed(URL_G237)}${gfFeed(URL_G300, 'Curitiba', 'Paraná')}${gfFeed(URL_G303)}</listings>`, TG.base);
+const pgGF = (bc, h1, desc) => `<ul> <li><a href="/">Home</a></li> <li><a href="#">Comerciais</a></li> <li>${bc}</li> </ul>
+ <h1 class="dg-lote-titulo"> ${h1} | <span class="dg-lote-titulo-codigo"><strong>x</strong></span></h1>
+ <section id="dg-lote-descricao"><h2>Descrição</h2><p>${desc}</p></section>`;
+const g237 = parseDetalhe(pgGF('Im&#xF3;vel Comercial | &#xC1;rea de 400m&#xB2; | Vila Prudente/ SP Im&#xF3;vel Comercial | &#xC1;rea de 400m&#xB2; | Rua Coelho Neto, n&#xBA; 199 | Vila Prudente | SP',
+  'Im&#xF3;vel Comercial | &#xC1;rea de 400m&#xB2; | Vila Prudente/ SP', 'Um prédio sob o nº 199 da Rua Coelho Neto, 26º Subdistrito - Vila Prudente. Comarca: São Paulo/SP'), URL_G237, { agora: AGORA });
+assert.deepEqual([g237.cidade, g237.estado], ['São Paulo', 'SP'], 'bairro do título não é cidade; Acrelândia do feed não vence');
+const g300 = parseDetalhe(pgGF('Im&#xF3;vel | &#xC1;rea de 245,00m&#xB2; | Rua Doutor Salvador Caborni, n&#xBA; 25/31 | Vila Carbone/SP',
+  'Im&#xF3;vel | &#xC1;rea de 245,00m&#xB2; | Vila Carbone/SP', 'Imóvel com 245,00m².'), URL_G300, { agora: AGORA });
+assert.deepEqual([g300.cidade, g300.estado], [null, 'SP'], 'sem cidade provada: nulo com a UF da página — o Curitiba/PR do feed não entra');
+const g303 = parseDetalhe(pgGF('Im&#xF3;vel | &#xC1;rea de 352,00m&#xB2; | Avenida Regente Feij&#xF3;, n&#xBA; 667 | Regente Feij&#xF3;/SP',
+  'Im&#xF3;vel | &#xC1;rea de 352,00m&#xB2; | Regente Feij&#xF3;/SP', 'Imóvel com 352,00m².'), URL_G303, { agora: AGORA });
+assert.deepEqual([g303.cidade, g303.estado], ['Regente Feijó', 'SP'], 'município de verdade no título continua valendo');
+
 // (8) MULTI-TENANT (24/10). O id é sequencial por SITE: o 375 da Milhão não pode receber o feed do 375 de outro
 //     tenant lido antes no mesmo processo, e lote que só existe no feed de OUTRO site não está "no feed" deste.
 const TM = TENANTS.milhao, TT = TENANTS.taba;

@@ -21,6 +21,8 @@ import { naoImovelDoFeed } from './mgl-parse.mjs';
 import { inferirTipo, extrairArea, checarQualidade } from './leilaopro-parse.mjs';
 import { num, plaus, titleCase, montarRowDom, UF_POR_NOME, UFS, cidadeUFBare, semPrefixoCidade } from './dom-parse-util.mjs';
 import { decodificarEntidades } from '../../api/_texto-imovel.js';
+import MUNICIPIOS from '../../api/_municipios.js';
+import { normCidade } from './inferir-uf.mjs';
 
 export const TENANTS = {
   leilaoeletronico: { fonte: 'LEILAOELETRONICO', leiloeiro: 'Leilão Eletrônico', base: 'https://www.leilaoeletronico.com.br', catalogo: '/sitemap.xml' },
@@ -44,15 +46,20 @@ export const TENANTS = {
   // 24/10 (2ª leva, triagem575 — leiloeiros ATIVOS das Juntas ainda não coletados). Mesma Degrau; home dá 400 a UA
   // de navegador e abre "pelada" (o fetch do motor já repete sem cabeçalho). Feed e 1–2 lotes de cada pelo banco,
   // passados neste parser em seco. Entre parênteses: lotes abertos que sobram depois do filtro de não-imóvel.
-  // Nenhum lote destes domínios estava no acervo. FORA: falleirosleiloes.com.br (feed vazio hoje); absolutaleiloes.com.br
-  // (12 no feed, mas a URL do feed dá 404 nos 2 lotes testados — feed desatualizado, pede recon); gfleiloes.com.br (27:
-  // o <city> do feed é o padrão "Acrelândia/Acre" e o título traz o BAIRRO no lugar da cidade — "… | Vila Prudente | SP"
-  // saiu cidade "Vila Prudente"; plausível e errado, pede prova do IBGE no parser antes de entrar).
+  // Nenhum lote destes domínios estava no acervo. FORA: falleirosleiloes.com.br (feed vazio hoje). GF e Absoluta
+  // entraram depois (pendência 356, abaixo).
   inova:      { fonte: 'INOVALEILAO',    leiloeiro: 'Inova Leilão (Dias Martins)', base: 'https://www.inovaleilao.com.br', catalogo: '/sitemap.xml' }, // 91, PE/AL
   barreto:    { fonte: 'BARRETOLEIL',    leiloeiro: 'Barreto Leilões (Bruno Barreto Sanches)', base: 'https://www.barretoleiloes.com.br', catalogo: '/sitemap.xml' }, // 61, GO/MT/MS/PR
   chbarbosa:  { fonte: 'CHBARBOSA',      leiloeiro: 'CH Barbosa Leilões (Carlos Henrique Barbosa)', base: 'https://www.chbarbosaleiloes.com.br', catalogo: '/sitemap.xml' }, // 15, GO/MT
   erikamaciel: { fonte: 'ERIKAMACIEL',   leiloeiro: 'Leiloeira Erika Maciel', base: 'https://www.leiloeiraerikamaciel.com.br', catalogo: '/sitemap.xml' }, //  2, RJ
   gracie:     { fonte: 'GRACIELEIL',     leiloeiro: 'Gracie Leilões (Renato Gracie)', base: 'https://www.gracieleiloes.com.br', catalogo: '/sitemap.xml' }, //  1, PE
+  // 24/10 (pendência 356). GF: o <city> do feed é o padrão "Acrelândia/Acre" em TODOS os lotes e o título traz o BAIRRO
+  // ("Vila Prudente/ SP") — entrou depois que a cidade passou a exigir prova do IBGE (parseDetalhe). 27 imóveis abertos.
+  gf:         { fonte: 'GFLEILOES',      leiloeiro: 'GF Leilões', base: 'https://www.gfleiloes.com.br', catalogo: '/sitemap.xml' }, // 27, SP
+  // ABSOLUTA (recon 24/10 pelo banco, via pelada): a rota do feed ESTÁ certa — 38, 41 e 44 abrem com HTTP 200 e as
+  // seções dg-lote-*. Os 404 da 1ª triagem eram 30 e 31, lotes que saíram do site e o feed ainda lista. O motor já trata
+  // isso (detalhe que não abre = sem detalhe, não grava). O feed tem ainda 5 "exemplo-de-leilao" (demo da plataforma).
+  absoluta:   { fonte: 'ABSOLUTALEIL',   leiloeiro: 'Absoluta Leilões', base: 'https://www.absolutaleiloes.com.br', catalogo: '/sitemap.xml' }, // 12, SP/MA
 };
 
 const limpo = (s) => decodificarEntidades(String(s || '').replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, ' '))
@@ -246,9 +253,23 @@ export function parseDetalhe(html, url, { agora = new Date() } = {}) {
   const feedPlaceholder = semAcento(feed?.cidade) === 'acrelandia' && !/acrel[aâ]ndia/i.test(`${tituloCru} ${descricao || ''}`);
   const daDescricao = cidadeUFBare(`${descricao || ''} ${endereco || ''}`);
   // "4ª VARA CÍVEL DE DOURADOS/MS" (Select, 24/10): o nome da vara antes da cidade saía como cidade ("Vara Cível de Dourados").
-  const cidade = (doTitulo[1] ? titleCase(semPrefixoCidade(doTitulo[1].replace(/^.*\bem\s+/i, '').replace(/^.*\bvara\b.*?\bd[aeo]s?\s+/i, ''))) : null)
-    || (!feedPlaceholder && feed?.cidade) || daDescricao?.cidade || null;
-  const estado = doTitulo[2] || (!feedPlaceholder && feed?.estado) || daDescricao?.estado || null;
+  const cidadeTitulo = doTitulo[1] ? titleCase(semPrefixoCidade(doTitulo[1].replace(/^.*\bem\s+/i, '').replace(/^.*\bvara\b.*?\bd[aeo]s?\s+/i, ''))) : null;
+  // UF que a PÁGINA declara: "Cidade/UF" do título ou o "| SP" no fim dele (GF: "… | Vila Prudente | SP").
+  const ufFimTitulo = (tituloCru.match(/\|\s*([A-Z]{2})\s*$/) || [])[1];
+  const ufPagina = doTitulo[2] || (UFS.has(ufFimTitulo) ? ufFimTitulo : null);
+  // CIDADE SÓ COM PROVA DO IBGE (24/10, GF Leilões): o título da GF escreve o BAIRRO no lugar da cidade ("Vila Prudente/ SP",
+  // "… | Vila Prudente | SP") e o feed manda o padrão do seletor ("Acrelândia/Acre") em todos os lotes — os dois saíam
+  // como cidade, plausíveis e errados. Cada candidato (título → feed → descrição) só vale se o par cidade+UF existe no
+  // IBGE; e o feed não vence a página: UF do feed diferente da UF que o título declara = valor padrão, não endereço.
+  const noIbge = (c, uf) => !!c && !!uf && Object.prototype.hasOwnProperty.call(MUNICIPIOS, `${uf}|${normCidade(c)}`);
+  const feedConfere = !feedPlaceholder && (!ufPagina || feed?.estado === ufPagina);
+  const candidatos = [
+    [cidadeTitulo, doTitulo[2]],
+    feedConfere ? [feed?.cidade, feed?.estado] : [],
+    [daDescricao?.cidade, daDescricao?.estado],
+  ];
+  const [cidade, ufCidade] = candidatos.find(([c, uf]) => noIbge(c, uf)) || [null, null];
+  const estado = ufCidade || ufPagina || (feedConfere && feed?.estado) || daDescricao?.estado || null;
 
   return {
     naoImovel,
