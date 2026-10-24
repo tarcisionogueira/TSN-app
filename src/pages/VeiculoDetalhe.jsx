@@ -178,7 +178,8 @@ export default function VeiculoDetalhe() {
     // ao abrir a página"): a tabela muda todo mês. 25 dias = a validade do fipe_cache no servidor,
     // então reabrir no mesmo mês não gasta consulta da cota gratuita.
     const velha = Date.now() - Date.parse(v.fipe_atualizado_em || 0) > 25 * 86400000;
-    const precisaBuscar = !v.fipe_atualizado_em || velha || (v.fipe_status !== 'ok' && v.fipe_status !== 'aproximado' && v.fipe_status !== 'leiloeiro' && v.fipe_status !== 'sem_dados' && v.fipe_status !== 'fora_tabela' && v.fipe_status !== 'faixa_modelo');
+    // 'leiloeiro' busca também (24/10, dono): é a FIPE da ficha, não conferida — o servidor (fipeEstaVelho) decide se já é hora.
+    const precisaBuscar = !v.fipe_atualizado_em || velha || (v.fipe_status !== 'ok' && v.fipe_status !== 'aproximado' && v.fipe_status !== 'sem_dados' && v.fipe_status !== 'fora_tabela' && v.fipe_status !== 'faixa_modelo');
     if (!precisaBuscar) return;
     let cancelado = false;
     (async () => {
