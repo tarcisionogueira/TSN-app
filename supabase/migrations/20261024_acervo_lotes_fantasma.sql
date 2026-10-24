@@ -7,6 +7,8 @@
 -- linha `medicao_velha` de fonte_regressao_pendente(), e contá-lo aqui mediria outra coisa (forma nº 10).
 -- Calibrado no dia: com piso de 20 lotes e 20% do acervo da fonte, acusa SUPERBID (veículo), JELEILOES e SUBLIME.
 -- Veículo casa com a saúde de `<FONTE>_VEICULOS` (coleta de veículo), imóvel com a de `<FONTE>`.
+-- ATENÇÃO, duas causas para o mesmo número: o lote saiu do site (fantasma) OU a coleta trouxe menos do que o
+-- site tem (JELEILOES em 24/10: amostra aberta no site, coleta de 39 de ~153). Abrir um lote decide qual.
 -- Lido pelo /api/health-check (2×/dia, custo zero; e-mail ao dono quando há linha).
 create or replace function public.acervo_lotes_fantasma(p_dias int default 4, p_min int default 20, p_pct numeric default 20)
  returns table (tipo text, fonte text, ativos bigint, fantasmas bigint, pct numeric, ultima_coleta_ok timestamptz)
