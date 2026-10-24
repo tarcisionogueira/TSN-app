@@ -5556,6 +5556,17 @@ const SUPORTE_TENANTS = [
   { domain: 'maisleilao.com.br', leiloeiro: 'Mais Leilão' },
   { domain: 'peterlongo.leilao.br', leiloeiro: 'Peterlongo Leilões' },
   { domain: 'ricartleiloes.com.br', leiloeiro: 'Ricart Leilões' },
+  // 24/10 (2ª leva, triagem575 — leiloeiros ATIVOS das Juntas ainda não coletados). Mesmo template `article.lote-main`
+  // em /buscador?categoria=2, catálogo baixado pelo banco e lido pela MESMA suporteParsePagina em Chrome (seco): Braga
+  // 11 cards (PI; os 3 primeiros são lotes do Loteamento Delta Park, Marabá/PA), Dal'Aqua 4 (RS), GS 3 (Trindade do
+  // Sul/RS), Marca 7 (MS/MT). Nenhum lote destes domínios estava no acervo. `bl.leilao.br` gera tenantKey `bl`
+  // (fonte_id `sl_bl_<id>`) — único entre os tenants. FORA: abaleiloes (SE), casaforteleiloes (RS), leiloesaraujo
+  // (PB) e rapidaovende (TO) devolvem 404 em /buscador (home ainda é Suporte — outra rota, pede recon); atlantico
+  // (PB/RN), pineiro (RS) e vlleiloes (PB) abrem o buscador com 0 imóvel hoje.
+  { domain: 'bl.leilao.br', leiloeiro: 'Braga Leilões' },
+  { domain: 'dalaqualeiloes.com.br', leiloeiro: "Dal'Aqua Leilões" },
+  { domain: 'gsleiloes.com.br', leiloeiro: 'GS Leilões' },
+  { domain: 'marcaleiloes.com.br', leiloeiro: 'Marca Leilões' },
   // `donizetteleiloes.leilao.br` é o MESMO site do .com.br (mesmo `arrematante.` e mesmo
   // static). Fora de propósito: o `tenantKey` deriva do domínio antes do primeiro ponto, então
   // os dois gerariam o mesmo `fonte_id` e um sobrescreveria o outro sem nada aparecer.

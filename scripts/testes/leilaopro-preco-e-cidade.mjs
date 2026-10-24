@@ -4,7 +4,7 @@
 //  - cidade: o og:title termina com o nome do site ("… - JAC Leilões | Site do leiloeiro oficial de Cascavel/PR") e
 //    o Cascavel/PR do LEILOEIRO virava a cidade do lote; "Cidade - UF" no título só vale com prova do IBGE.
 import assert from 'node:assert/strict';
-import { parseDetalhe, cidadeUF } from '../lib/leilaopro-parse.mjs';
+import { parseDetalhe, cidadeUF, cidadeDoCorpo } from '../lib/leilaopro-parse.mjs';
 
 const pagina = (ogTitle, corpo) => `<html><head><title>${ogTitle}</title>
 <meta property="og:title" content="${ogTitle}"><meta property="og:description" content="${ogTitle}"></head>
@@ -46,4 +46,18 @@ assert.deepEqual(cidadeUF('PRÉDIO COMERCIAL DE 409 M² NA ENTRADA DE GAROPABA/S
 assert.deepEqual(cidadeUF('ÁREA DE TERRAS, EM FREI ROGÉRIO/SC'), { cidade: 'Frei Rogério', estado: 'SC' });
 assert.deepEqual(cidadeUF('SALA COMERCIAL EM CAPINAS - SP COM 89,64M2'), { cidade: null, estado: null }, 'typo não vira cidade');
 assert.deepEqual(cidadeUF('CASA EM XANGRI-LÁ/RS'), { cidade: 'Xangri-Lá', estado: 'RS' });
+// Hífen colado (24/10, Clóvis): "ALEGRETE- RS" e "CRI DE ROSÁRIO DO SUL-RS" — o IBGE é a prova.
+assert.deepEqual(cidadeUF('UM BOX GARAGEM NO EDIFICIO CAMILA, ALEGRETE- RS'), { cidade: 'Alegrete', estado: 'RS' });
+assert.deepEqual(cidadeUF('UM APARTAMENTO Nº 302, CONFORME MATR. 5.009 CRI DE ROSÁRIO DO SUL-RS'), { cidade: 'Rosário do Sul', estado: 'RS' });
+
+// cidadeDoCorpo (24/10, 2ª leva RS): título sem cidade → campo "Localização" e o bloco DESCRIÇÃO do lote (textos reais).
+assert.deepEqual(cidadeDoCorpo('INFORMAÇÕES DO IMÓVEL keyboard_arrow_down Localização TRAMANDAI / RS CENTRO Endereço RUA BARÃO DO GUAÍBA, 650'),
+  { cidade: 'Tramandai', estado: 'RS' }, 'Eduardo Vivian: Localização estruturada');
+assert.deepEqual(cidadeDoCorpo('DESCRIÇÃO keyboard_arrow_down CASA DE NÚMERO 97, composta de sala, sito à Rua Lino Estácio dos Santos, número 1535, Oriçó, Gravataí, RS, a saber descrito como: M. 89.148 ÚLTIMOS LANCES 0'),
+  { cidade: 'Gravataí', estado: 'RS' }, 'Arnoldo 435: "…, Gravataí, RS" no bloco DESCRIÇÃO');
+assert.deepEqual(cidadeDoCorpo('DESCRIÇÃO keyboard_arrow_down UM APARTAMENTO sob nº 106, sito a rua Andrade Neves, na zona urbana desta cidade ÚLTIMOS LANCES 0 Rua dos Andradas, Porto Alegre/RS'),
+  { cidade: null, estado: null }, '"desta cidade" não vira cidade, e o rodapé fora do bloco não conta');
+assert.deepEqual(cidadeDoCorpo('DESCRIÇÃO keyboard_arrow_down Conforme Matrícula nº 48.580 do RI da Comarca de Cachoeira do Sul/RS. ÚLTIMOS LANCES'),
+  { cidade: null, estado: null }, 'Comarca não é a cidade do lote');
+
 console.log('leilaopro-preco-e-cidade: todos os casos passaram');

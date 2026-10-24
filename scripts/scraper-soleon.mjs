@@ -119,6 +119,30 @@ const TODOS_TENANTS = [
   { fonte: 'AGENCIALEILAO', leiloeiro: 'Agência de Leilão (Vicente Alves Pereira Neto)', base: 'https://agencialeilao.com.br' }, //  10
   { fonte: 'MACHADOLEIL', leiloeiro: 'Fábio Marlon Machado Leiloeiro', base: 'https://machadoleiloeiro.com.br' }, //   9
   { fonte: 'PIMENTELLEIL', leiloeiro: 'Pimentel Leilões', base: 'https://pimentelleiloes.com.br' }, //   9
+  // 24/10 (2ª leva, triagem575 — leiloeiros ATIVOS das Juntas de RS/SE/PI/RN/DF/TO/AC/RO ainda não coletados).
+  // Mesmo procedimento: home e /lotes/imovel pelo banco (grátis, HTTP 200), 2–3 lotes de cada no coletor real em seco.
+  // Nenhum lote destes domínios estava no acervo (conferido por host do url_lote). LEVYLEIL (John Levy Zago Amaral)
+  // e ZAGOLEIL (Cleci Levy Zago) são da mesma família mas catálogos distintos (ids não se repetem).
+  // Ficaram FORA, com /lotes/imovel vazio hoje (SOLEON confirmado na home; entram quando tiverem imóvel — basta
+  // a linha aqui): argleiloes.com.br (SE), jgcargneluttileiloes.com.br (RS), leilaosantos.com.br (RS),
+  // lopesleiloes.net.br (CE), pereiraleiloesce.com.br (CE), portelaleiloes.com.br (RO), realizaleiloes.com.br (SE),
+  // sydneyleiloes.com.br (CE), natalialeiloes.com.br (DF, só com www.); leiloestocantins.com (TO) tem 1 lote, fração
+  // ideal de 25% — sai pela regra de negócio, 0 pronto no seco.
+  { fonte: 'CARGNELUTTI', leiloeiro: 'Cargnelutti Leilões', base: 'https://cargneluttileiloes.com.br' }, // 30+ (RS)
+  { fonte: 'LEILOESRN', leiloeiro: 'Leilões RN (Stella Araújo Zanatta)', base: 'https://leiloesrn.com.br' }, // 30+ (RN)
+  { fonte: 'OROLEIL', leiloeiro: 'Öro Leilões (Erni Carlos Oro)', base: 'https://oroleiloes.lel.br' }, // 30+ (RS)
+  { fonte: 'RECHLEIL', leiloeiro: 'Rech Leilões (Alexandre Rech)', base: 'https://rechleiloes.com.br' }, // 30+ (RS)
+  { fonte: 'BRONZATTO', leiloeiro: 'Bronzatto Leilões', base: 'https://bronzattoleiloes.com.br' }, //  21 (RS)
+  { fonte: 'AGUIAROLIANI', leiloeiro: 'Leilões Aguiar e Oliani', base: 'https://leiloesaguiar.com.br' }, //  21 (AC/RO)
+  { fonte: 'ITALOLEIL', leiloeiro: 'Ítalo Leilões (Ítalo Trindade Moura)', base: 'https://italoleiloes.com' }, //  20 (PI)
+  { fonte: 'MORAESLEIL', leiloeiro: 'Moraes Leilões', base: 'https://moraesleiloes.com.br' }, //  20 (RS)
+  { fonte: 'LANCESE', leiloeiro: 'Lance Leilões (SE)', base: 'https://lancese.com.br' }, //  18 (SE)
+  { fonte: 'LEVYLEIL', leiloeiro: 'Levy Leilões (John Levy Zago Amaral)', base: 'https://levyleiloes.com.br' }, //  14 (RS)
+  { fonte: 'ZAGOLEIL', leiloeiro: 'Zago Leilões (Cleci Levy Zago)', base: 'https://zagoleiloes.com.br' }, //   7 (RS)
+  { fonte: 'BACKLEIL', leiloeiro: 'Back Leilões (Maurício Rodrigo Back)', base: 'https://backleiloes.com.br' }, //   5 (RS)
+  { fonte: 'NIEWINSKI', leiloeiro: 'Bruno Niewinski Leilões', base: 'https://brunoniewinskileiloes.com.br' }, //   2 (RS)
+  { fonte: 'LEILBRASILIA', leiloeiro: 'Leiloeiros de Brasília (Borba Assunção)', base: 'https://leiloeirosdebrasilia.com.br' }, //   1 (DF)
+  { fonte: 'SANTIAGOLEIL', leiloeiro: 'Santiago Leilões (André Viana Hemann)', base: 'https://santiagoleiloes.com.br' }, //   1 (RS)
 ];
 
 // ── REPROVADOS NO MESMO DRY-RUN — ficam FORA, e o registro é o que impede re-tentar às cegas:
@@ -842,7 +866,10 @@ async function coletarVeiculosTenant(tenant) {
 // próprio de /lotes/veiculo — e porque somariam até 20 × 60 detalhes à rodada residencial (ver o relatório da leva).
 const VEICULOS_NAO_VALIDADOS = new Set(['PATIOROCHALEIL', 'LEILOPAR', 'WINLEILOES', 'CASSIANOLEIL', 'ALEMAOLEIL', 'JVLEILOES',
   'MULLERLEIL', 'WMSLEILOES', 'HAMMERLEIL', 'RAICHER', 'VICTORDORTA', 'NOGARI', 'LEILAOPE', 'CRAVOLEIL', 'ISABELLEIL',
-  'MGLEILOESRS', 'RAFAELARIBEIRO', 'AGENCIALEILAO', 'MACHADOLEIL', 'PIMENTELLEIL']);
+  'MGLEILOESRS', 'RAFAELARIBEIRO', 'AGENCIALEILAO', 'MACHADOLEIL', 'PIMENTELLEIL',
+  // 2ª leva (triagem575, 24/10) — mesma razão.
+  'CARGNELUTTI', 'LEILOESRN', 'OROLEIL', 'RECHLEIL', 'BRONZATTO', 'AGUIAROLIANI', 'ITALOLEIL', 'MORAESLEIL', 'LANCESE',
+  'LEVYLEIL', 'ZAGOLEIL', 'BACKLEIL', 'NIEWINSKI', 'LEILBRASILIA', 'SANTIAGOLEIL']);
 
 async function mainVeiculos() {
   const tenantsVeic = TENANTS.filter(t => !VEICULOS_NAO_VALIDADOS.has(t.fonte) || filtro.includes(t.fonte));

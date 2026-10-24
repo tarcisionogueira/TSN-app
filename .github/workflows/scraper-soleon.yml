@@ -57,7 +57,8 @@ on:
 jobs:
   scraper-soleon:
     runs-on: ubuntu-latest
-    timeout-minutes: 50  # via banco (30/09) é grátis mas ~2-3 s por página
+    # 50 → 75 (24/10): +35 tenants nas duas levas das Juntas. Via banco (30/09) é grátis mas ~2-3 s por página.
+    timeout-minutes: 75
     steps:
       - name: Checkout
         uses: actions/checkout@v4

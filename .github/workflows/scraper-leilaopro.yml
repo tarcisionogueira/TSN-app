@@ -32,9 +32,9 @@ on:
         required: false
         default: '1'
       tenants:
-        description: 'tenants csv (leffa,oscar,hastapublicalel,raupp,renovar,qleilao,nsleiloes,jac,bidgo,soleiloes)'
+        description: 'tenants csv (padrão: os 10 da 1ª leva + 35 da triagem575 de 24/10 — ver leilaopro-parse.mjs)'
         required: false
-        default: 'leffa,oscar,hastapublicalel,raupp,renovar,qleilao,nsleiloes,jac,bidgo,soleiloes'
+        default: 'leffa,oscar,hastapublicalel,raupp,renovar,qleilao,nsleiloes,jac,bidgo,soleiloes,santoseborin,grandes,mercado,pietoso,mpleilao,santamaria,scholante,regional,schonardie,vsleiloes,bartmann,rz,gabrielrosa,gt,scotto,rabuske,ferronato,clademir,tonial,arnoldo,dld,ritta,ju,scheid,super,vidal,kirinus,blm,barbieri,machadors,michelli,clovis,feliperotta,eduardovivian,farias'
       max_lotes:
         description: 'Máx. de lotes NOVOS por execução (por tenant)'
         required: false
@@ -43,7 +43,8 @@ on:
 jobs:
   scraper-leilaopro:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 30 → 60 (24/10): 10 → 45 tenants (+~490 lotes na 1ª rodada; ~1–3 s por página, banco incluído).
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -73,6 +74,6 @@ jobs:
           BRIGHTDATA_MAX_REQ_SEMANA: ${{ secrets.BRIGHTDATA_MAX_REQ_SEMANA }}
           LEILAOPRO_DEBUG: ${{ github.event.inputs.debug || '0' }}
           LEILAOPRO_DRYRUN: ${{ github.event.inputs.dryrun || '0' }}
-          LEILAOPRO_TENANTS: ${{ github.event.inputs.tenants || 'leffa,oscar,hastapublicalel,raupp,renovar,qleilao,nsleiloes,jac,bidgo,soleiloes' }}
+          LEILAOPRO_TENANTS: ${{ github.event.inputs.tenants || 'leffa,oscar,hastapublicalel,raupp,renovar,qleilao,nsleiloes,jac,bidgo,soleiloes,santoseborin,grandes,mercado,pietoso,mpleilao,santamaria,scholante,regional,schonardie,vsleiloes,bartmann,rz,gabrielrosa,gt,scotto,rabuske,ferronato,clademir,tonial,arnoldo,dld,ritta,ju,scheid,super,vidal,kirinus,blm,barbieri,machadors,michelli,clovis,feliperotta,eduardovivian,farias' }}
           LEILAOPRO_MAX_LOTES: ${{ github.event.inputs.max_lotes || '40' }}
         run: node scripts/scraper-leilaopro.mjs

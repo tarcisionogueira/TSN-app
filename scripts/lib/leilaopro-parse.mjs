@@ -59,6 +59,58 @@ export const TENANTS = {
   jac: { fonte: 'JACLEILOES', leiloeiro: 'JAC Leilões (Jefferson Adriano da Costa)', base: 'https://jacleiloes.com.br', sufixo: 'JAC Leilões' },
   bidgo: { fonte: 'BIDGO', leiloeiro: 'Bid GO Leilões', base: 'https://bidgo.com.br', sufixo: 'Bid GO' },
   soleiloes: { fonte: 'SOLEILOES', leiloeiro: 'Só Leilões', base: 'https://soleiloes.com.br', sufixo: 'Só Leilões' },
+  // 24/10 (2ª leva, triagem575 — leiloeiros ATIVOS das Juntas ainda não coletados; quase todos JUCISRS). Mesma
+  // plataforma (js.pusher.com + cdn.onesignal.com + www.leilao.pro na home), /leilao/lotes/imoveis aberto pelo banco
+  // (grátis) com ≥1 link lote_id, 1–2 lotes de cada no parser em seco. Base = destino final do redirect (www.).
+  // Nenhum lote destes domínios estava no acervo (conferido por host do url_lote) e nenhum par de catálogos se repete
+  // (slugs comparados). `sufixo` = nome do site no <title>/og:title. Entre parênteses: lotes na listagem em 24/10.
+  // Domínios da Junta que só redirecionam para o site abaixo: leiloes.rs → scottoleiloes.com.br; rzleiloes.com.br →
+  // rz.leilao.br; blmleiloes.com.br → blm.leilao.br; scholante.com.br → scholanteleiloes.com.br; eduardovivian.com →
+  // .com.br; mpleilao.com → .com.br; pietosoleiloes.lel.br → .com.br; leiloeiros.lel.br → jritta.lel.br;
+  // mercadoleiloes.com.br (WordPress) → catálogo em mercadoleiloes.leilao.br; scheidleiloes.com.br → leilao.scheid….
+  // Ficaram FORA com /leilao/lotes/imoveis VAZIO hoje (LeilãoPro confirmado; entram com uma linha quando publicarem
+  // imóvel): agenciadeleiloes, auroraleiloes (DF), beltrameleiloes (RO), bisleiloeiro, bsbleiloes (DF), ckleiloes,
+  // cpkleiloes, deboramullerleiloes, elevaleiloes, fernandaleiloes.lel.br, leilaobutia, lipinskileiloes,
+  // lottermannleiloes, rangelleiloes, rogerserafimleiloes, amtleiloes (rubemgarcia.com.br redireciona p/ ele),
+  // srleiloes (DF), swleiloes, veronicaleiloes, zaccariasleiloes.
+  // trevisanleiloes.com.br (27 na listagem) também ficou fora: todos os links são /lote_id/N/alienacao (venda por
+  // alienação particular) e extrairUrlsDeLote exige o id no fim do href — enumera 0. Pede ajuste do parser, não config.
+  // santayanaleiloes.com.br (10 na listagem) também: hoje só boxes de estacionamento e massa falida — 0 pronto no seco.
+  santoseborin: { fonte: 'SANTOSBORIN', leiloeiro: 'Santos & Borin Leilões', base: 'https://www.santoseborinleiloes.com.br', sufixo: 'Santos & Borin Leilões' }, // 40+
+  grandes: { fonte: 'GRANDESLEIL', leiloeiro: 'Grandes Leilões (Jochims)', base: 'https://www.grandesleiloes.com.br', sufixo: 'Grandes Leilões' }, // 40+
+  mercado: { fonte: 'MERCADOLEIL', leiloeiro: 'Mercado Leilões (José Lázaro Ribeiro Menezes)', base: 'https://www.mercadoleiloes.leilao.br', sufixo: 'Mercado Leilões' }, // 38
+  pietoso: { fonte: 'PIETOSO', leiloeiro: 'Pietoso Leilões', base: 'https://www.pietosoleiloes.com.br', sufixo: 'Pietoso Leilões' }, // 35
+  mpleilao: { fonte: 'MPLEILAO', leiloeiro: 'MP Leilão (Pereira de Oliveira)', base: 'https://www.mpleilao.com.br', sufixo: 'MP Leilão' }, // 33
+  santamaria: { fonte: 'SANTAMARIALEIL', leiloeiro: 'Santa Maria Leilões', base: 'https://www.santamarialeiloes.com.br', sufixo: 'Santa Maria Leilões' }, // 25
+  scholante: { fonte: 'SCHOLANTE', leiloeiro: 'Sérgio Scholante Leiloeiro', base: 'https://www.scholanteleiloes.com.br', sufixo: 'Sérgio Scholante' }, // 23
+  regional: { fonte: 'REGIONALLEIL', leiloeiro: 'Regional Leilões (Alessandro Fahrion Pinto)', base: 'https://www.regionalleiloes.com.br', sufixo: 'Regional Leilões' }, // 21
+  schonardie: { fonte: 'SCHONARDIE', leiloeiro: 'Marcelo Schonardie Leiloeiro', base: 'https://www.marceloleiloeiro.com.br', sufixo: 'Marcelo Schonardie' }, // 18
+  vsleiloes: { fonte: 'VSLEILOES', leiloeiro: 'VS Leilões (Valdinei Generoso Silveira)', base: 'https://www.vsleiloes.com', sufixo: 'VS Leilões' }, // 17
+  bartmann: { fonte: 'BARTMANN', leiloeiro: 'Ivan Bartmann Leiloeiro', base: 'https://www.bartmannleiloes.com.br', sufixo: 'Ivan Bartmann' }, // 15
+  rz: { fonte: 'RZLEILOES', leiloeiro: 'Roberta Zago Leilões', base: 'https://www.rz.leilao.br', sufixo: 'Roberta Zago Leilões' }, // 13
+  gabrielrosa: { fonte: 'GABRIELROSA', leiloeiro: 'Gabriel Rosa Leilões', base: 'https://www.gabrielleiloes.com.br', sufixo: 'Gabriel Rosa Leilões' }, // 12
+  gt: { fonte: 'GTLEILOES', leiloeiro: 'GT Leilões (Gilmar Thume)', base: 'https://www.gtleiloes.com.br', sufixo: 'GT Leilões' }, // 10
+  scotto: { fonte: 'SCOTTOLEIL', leiloeiro: 'Scotto Leilões (Joseane de Avila Scotto)', base: 'https://www.scottoleiloes.com.br', sufixo: 'Scotto Leilões' }, // 10
+  rabuske: { fonte: 'RABUSKE', leiloeiro: 'Rabuske Leilões (Cesar Carlos Rabuske)', base: 'https://www.rabuskeleiloes.com.br', sufixo: 'Rabuske Leilões' }, //  9
+  ferronato: { fonte: 'FERRONATO', leiloeiro: 'Ferronato Leilões (Giuliano Ferronato)', base: 'https://www.ferronato.leilao.br', sufixo: 'Ferronato Leilões' }, //  8
+  clademir: { fonte: 'CLADEMIR', leiloeiro: 'Clademir Leilões', base: 'https://www.clademirleiloeiro.com.br', sufixo: 'Clademir Leilões' }, //  7
+  tonial: { fonte: 'TONIALLEIL', leiloeiro: 'Tonial Leilões', base: 'https://www.tonialleiloes.com.br', sufixo: 'Tonial Leilões' }, //  7
+  arnoldo: { fonte: 'ARNOLDOLEIL', leiloeiro: 'Henrique Arnoldo Junior | Felipe Scholl', base: 'https://www.arnoldoleiloes.com.br', sufixo: 'Henrique Arnoldo Junior' }, //  5
+  dld: { fonte: 'DLDLEILOEIRO', leiloeiro: 'Daniel Lazownik Duarte Leiloeiro', base: 'https://www.dldleiloeiro.com.br', sufixo: 'Daniel Lazownik Duarte' }, //  5
+  ritta: { fonte: 'RITTALEIL', leiloeiro: 'Ritta Leilões', base: 'https://www.jritta.lel.br', sufixo: 'Ritta Leilões' }, //  5
+  ju: { fonte: 'JULEILOES', leiloeiro: 'Ju Leilões (Jucenara Bordignon)', base: 'https://www.juleiloes.com.br', sufixo: 'Ju Leilões' }, //  5
+  scheid: { fonte: 'SCHEIDLEIL', leiloeiro: 'Scheid Leilões (Matias Scheid)', base: 'https://leilao.scheidleiloes.com.br', sufixo: 'Scheid Leilões' }, //  5
+  super: { fonte: 'SUPERLEIL', leiloeiro: 'Super Leilões', base: 'https://www.superleiloes.net', sufixo: 'Super Leilões' }, //  5
+  vidal: { fonte: 'VIDALLEIL', leiloeiro: 'Vidal Leilões', base: 'https://www.vidalleiloes.com.br', sufixo: 'Vidal Leilões' }, //  5
+  kirinus: { fonte: 'KIRINUSLEIL', leiloeiro: 'Leomar Kirinus Leilões', base: 'https://www.leomarkirinusleiloes.com.br', sufixo: 'Leomar Kirinus Leilões' }, //  4
+  blm: { fonte: 'BLMLEILOES', leiloeiro: 'BLM Leilões (Breno Loureiro de Menezes)', base: 'https://www.blm.leilao.br', sufixo: 'BLM Leilões' }, //  3
+  barbieri: { fonte: 'BARBIERILEIL', leiloeiro: 'Marciano Barbieri Leiloeiro', base: 'https://www.leiloeirobarbieri.com.br', sufixo: 'Comendador Marciano Barbieri' }, //  3
+  machadors: { fonte: 'MACHADORS', leiloeiro: 'Machado Leilões RS (Fabio Samir Machado)', base: 'https://www.machadoleiloesrs.com.br', sufixo: 'Machado Leilões RS' }, //  3
+  michelli: { fonte: 'MICHELLILEIL', leiloeiro: 'Michelli Leilões', base: 'https://www.michellileiloes.com.br', sufixo: 'Michelli Leilões' }, //  3
+  clovis: { fonte: 'CLOVISLEIL', leiloeiro: 'Clóvis Leiloeiro (José Clóvis Vaz de Souza)', base: 'https://www.clovisleiloeiro.com.br', sufixo: 'Clóvis Leiloeiro' }, //  2
+  feliperotta: { fonte: 'FELIPEROTTA', leiloeiro: 'Felipe Rotta Leilões', base: 'https://www.feliperottaleiloes.com.br', sufixo: 'Felipe Rotta Leilões' }, //  2
+  eduardovivian: { fonte: 'EDUARDOVIVIAN', leiloeiro: 'Eduardo Vivian Leiloeiro', base: 'https://www.eduardovivian.com.br', sufixo: 'Eduardo Vivian' }, //  1
+  farias: { fonte: 'FARIASLEIL', leiloeiro: 'Farias Leilões (Dediana Farias)', base: 'https://www.fariasleiloes.com.br', sufixo: 'Farias Leilões' }, //  1
 };
 
 const num = s => parseFloat(String(s || '').replace(/[^\d.,]/g, '').replace(/\./g, '').replace(',', '.')) || 0;
@@ -126,7 +178,8 @@ export function cidadeUF(titulo = '', descricao = '') {
     // JOINVILLE - SC". Sem isto a busca descia para a descrição e pegava o endereço do LEILOEIRO ("Cascavel/PR") como
     // cidade do lote. Hífen é separador comum demais para aceitar sem prova: só vale o sufixo que é município da UF.
     if (s === titulo) {
-      for (const h of String(s || '').matchAll(/([A-ZÀ-Ÿ][A-Za-zÀ-ÿ'.\-]*(?:\s+[A-Za-zÀ-ÿ'.\-]+){0,5})\s+[-–]\s+([A-Z]{2})\b/g)) {
+      // `\s*[-–]\s*` (24/10, Clóvis): "…EDIFICIO CAMILA, ALEGRETE- RS" e "…CRI DE ROSÁRIO DO SUL-RS" — o IBGE abaixo é a prova.
+      for (const h of String(s || '').matchAll(/([A-ZÀ-Ÿ][A-Za-zÀ-ÿ'.\-]*(?:\s+[A-Za-zÀ-ÿ'.\-]+){0,5}?)\s*[-–]\s*([A-Z]{2})\b/g)) {
         const uf = h[2];
         const pal = h[1].trim().split(/\s+/);
         for (let i = 0; i < pal.length; i++) {
@@ -195,6 +248,40 @@ export function proximaData(txt, agora = new Date()) {
   return d.toISOString().slice(0, 10);
 }
 
+// CIDADE PELO CORPO (24/10, 2ª leva das Juntas — RS): título e og:description sem "Cidade/UF" ("CASA 2 DORM GRAVATAI
+// COM 44,41M2", "APTO 201 - TV ANTÔNIO XAVIER, Nº 15") deixavam 11 de 14 lotes do seco sem cidade nem UF — e lote sem
+// UF some de /leiloes. Só entra quando título/og:description não resolveram, e só com município que EXISTE no IBGE:
+//   1º o campo estruturado "Localização TRAMANDAI / RS" (tema novo da plataforma);
+//   2º o bloco DESCRIÇÃO do lote (só ele — não o rodapé, que traz o endereço do LEILOEIRO): "Cidade/UF" com as mesmas
+//      exclusões de Comarca/CRI do cidadeUF, ou "…, Gravataí, RS". O bloco NÃO vira a `descricao` gravada (a
+//      calibração da fração ideal continua no og:description — ver o comentário em parseDetalhe).
+const ehMunicipioUF = (c, uf) => Object.prototype.hasOwnProperty.call(MUNICIPIOS, `${uf}|${normCidade(c)}`);
+function sufixoMunicipio(trecho, uf) {
+  const pal = String(trecho || '').trim().split(/\s+/).filter(Boolean);
+  for (let i = 0; i < pal.length; i++) {
+    const c = pal.slice(i).join(' ').replace(/^(?:(?:de|do|da|dos|das|e|em|no|na|nos|nas)\s+)+/i, '');
+    if (c && ehMunicipioUF(c, uf)) return titleCase(c).slice(0, 60);
+  }
+  return null;
+}
+export function cidadeDoCorpo(txt = '') {
+  const t = String(txt || '');
+  const loc = t.match(/\bLocaliza[çc][ãa]o\s+([A-Za-zÀ-ÿ'.\- ]{2,50}?)\s*\/\s*([A-Z]{2})\b/);
+  if (loc) {
+    const c = sufixoMunicipio(loc[1], loc[2].toUpperCase());
+    if (c) return { cidade: c, estado: loc[2].toUpperCase() };
+  }
+  const bloco = (t.match(/\bDESCRI[ÇC][ÃA]O\s+keyboard_arrow_down\s+([\s\S]{20,4000}?)\s+(?:[ÚU]LTIMOS LANCES|INFORMA[ÇC][ÕO]ES JUDICIAIS|LOCALIZA[ÇC][ÃA]O \/|EDITAL E DOCUMENTOS)/) || [])[1];
+  if (!bloco) return { cidade: null, estado: null };
+  const r = cidadeUF('', bloco);
+  if (r.cidade && r.estado && ehMunicipioUF(r.cidade, r.estado)) return r;
+  for (const m of bloco.matchAll(/([A-ZÀ-Ÿ][A-Za-zÀ-ÿ'.\-]+(?:\s+[A-Za-zÀ-ÿ'.\-]+){0,4}),\s*([A-Z]{2})\b/g)) {
+    const c = sufixoMunicipio(m[1], m[2]);
+    if (c) return { cidade: c, estado: m[2] };
+  }
+  return { cidade: null, estado: null };
+}
+
 export function parseDetalhe(html, url) {
   const base = extrairGenerico(html, url) || {};
   const titulo = limparTitulo(base.titulo, url);
@@ -239,8 +326,9 @@ export function parseDetalhe(html, url) {
     : /extrajudicial/i.test(txt) ? 'extrajudicial'
     : (!temPraca && /venda\s*direta/i.test(txt)) ? 'venda_direta' : 'extrajudicial';
   const area = extrairArea(titulo, descricao) || extrairArea(txt.slice(0, 400));
-  const { cidade, estado } = cidadeUF(titulo, descricao);
-  const mat = (txt.match(/matr[íi]cula\s*(?:n[º°.]?\s*)?([\d.]{4,})/i) || [])[1] || null;
+  let { cidade, estado } = cidadeUF(titulo, descricao);
+  if (!cidade) ({ cidade, estado } = cidadeDoCorpo(txt));
+  const mat =(txt.match(/matr[íi]cula\s*(?:n[º°.]?\s*)?([\d.]{4,})/i) || [])[1] || null;
 
   // Docs: PDFs de /uploads/media/documentos_leilao (edital) e /documentos_bem (matrícula/laudo).
   const anexos = [];
