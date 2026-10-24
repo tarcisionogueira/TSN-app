@@ -40,6 +40,8 @@ on:
       - 'scripts/scraper-nortedeminas.mjs'
       - 'scripts/lib/leilaoeletronico-parse.mjs'
       - 'scripts/scraper-leilaoeletronico.mjs'
+      - 'scripts/lib/suportev2-parse.mjs'
+      - 'scripts/scraper-suportev2.mjs'
       - 'scripts/lib/baston-parse.mjs'
       - 'scripts/lib/cassiano-parse.mjs'
       - 'scripts/lib/arnaldo-parse.mjs'
@@ -81,7 +83,7 @@ on:
   workflow_dispatch:
     inputs:
       fontes:
-        description: 'csv: softgt,nortedeminas,leilaoeletronico,baston,cassiano,arnaldo,novaserrana(recon),alfa,hasta,nordeste,nordeste_veiculos,jeleiloes,leilaoindex,rocha,albertomacedo,francoleiloes,simon,globo,leje,freitas,leiloar,lgcorretor,nakakogue,astavero,suporteoferta,comprei'
+        description: 'csv: softgt,nortedeminas,leilaoeletronico,suportev2,baston,cassiano,arnaldo,novaserrana(recon),alfa,hasta,nordeste,nordeste_veiculos,jeleiloes,leilaoindex,rocha,albertomacedo,francoleiloes,simon,globo,leje,freitas,leiloar,lgcorretor,nakakogue,astavero,suporteoferta,comprei'
         required: false
         default: 'alfa,nordeste'
       gravar:
@@ -234,6 +236,16 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           LEILAOELETRONICO_DRYRUN: ${{ env.DRYRUN_PADRAO }}
         run: node scripts/scraper-leilaoeletronico.mjs
+
+      # 24/10 (pendência 296): Marco Antônio, Rodrigo Collyer, Anna Luiza e DCM — o front Next.js novo da Suporte (um
+      # banco, quatro vitrines; fonte MARCOANTONIO). Saíram de SUPORTE_TENANTS. ~45 imóveis, via grátis (direto/banco).
+      - name: Suporte v2 (Marco Antônio / Rodrigo Collyer)
+        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'suportev2')) }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          SUPORTEV2_DRYRUN: ${{ env.DRYRUN_PADRAO }}
+        run: node scripts/scraper-suportev2.mjs
 
       - name: Baston
         if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'baston')) }}
@@ -390,12 +402,12 @@ jobs:
       # VEÍCULOS das fontes do motor deste job (21/10, pedido do dono): JE/K Leilões (/veiculos), Simon
       # (/leiloes/veiculos), Nakakogue (/lotes/consulta/2). Mesmo parser de cada fonte; conversão e pátio em
       # lib/veiculo-do-lote.mjs. Só via grátis (VEIC_BD desligado).
-      - name: Veículos (Globo, JE, Simon, Nakakogue)
+      - name: Veículos (Globo, JE, Simon, Nakakogue, Suporte v2)
         if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'veiculos')) }}
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          VEIC_FONTES: globo,jeleiloes,simon,nakakogue
+          VEIC_FONTES: globo,jeleiloes,simon,nakakogue,suportev2
           VEIC_DRYRUN: ${{ env.DRYRUN_PADRAO }}
           VEIC_MAX_LOTES: '80'
         run: node scripts/scraper-veiculos-motor.mjs

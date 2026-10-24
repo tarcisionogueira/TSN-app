@@ -5535,9 +5535,10 @@ const SUPORTE_TENANTS = [
   { domain: 'serpaleiloes.com.br', leiloeiro: 'Serpa Leilões' },
   { domain: 'stefanellileiloes.com.br', leiloeiro: 'Stefanelli Leilões' },
   { domain: 'luizlobatoleiloeiro.com.br', leiloeiro: 'Luiz Lobato Leilões' },          // PGFN na home
-  { domain: 'marcoantonioleiloeiro.com.br', leiloeiro: 'Marco Antônio Leilões' },      // PGFN na home
+  // marcoantonioleiloeiro.com.br e rodrigoleiloeiro.com.br SAÍRAM daqui (24/10, pendência 296): migraram para o front
+  // Next.js novo da Suporte (sem `lote-main`; 0 lote desde 13/09 e 25/09). Coleta agora em scraper-suportev2.mjs
+  // (fonte MARCOANTONIO — um banco, quatro vitrines, junto com Anna Luiza e DCM).
   { domain: 'rafaelleiloeiro.com.br', leiloeiro: 'Rafael Araújo Leilões' },            // PGFN na home
-  { domain: 'rodrigoleiloeiro.com.br', leiloeiro: 'Rodrigo Collyer Leilões' },         // PGFN na home
   { domain: 'wermelingerleiloes.com.br', leiloeiro: 'Wermelinger Leilões' },           // PGFN na home
   // `donizetteleiloes.leilao.br` é o MESMO site do .com.br (mesmo `arrematante.` e mesmo
   // static). Fora de propósito: o `tenantKey` deriva do domínio antes do primeiro ponto, então

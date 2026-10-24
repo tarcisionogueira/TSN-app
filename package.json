@@ -112,6 +112,7 @@
     "testar:albertomacedo-pacote": "node scripts/testes/albertomacedo-descobre-lote-dentro-de-pacote.mjs",
     "testar:francoleiloes": "node scripts/testes/francoleiloes-extrai-campos-reais.mjs",
     "testar:leilaoeletronico": "node scripts/testes/leilaoeletronico-feed-e-pagina.mjs",
+    "testar:suportev2": "node scripts/testes/suportev2-rsc-lote.mjs",
     "testar:veiculos-vazio": "node scripts/testes/veiculos-vazio-nao-e-falha.mjs",
     "testar:leiloar": "node scripts/testes/leiloar-parse.mjs",
     "testar:hastapublica": "node scripts/testes/hastapublica-parse.mjs",
