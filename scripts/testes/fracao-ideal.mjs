@@ -56,3 +56,14 @@ const barraV4 = [
 for (const im of barraV4) assert.equal(ehFracaoIdeal(im), true, `devia barrar (v4): ${im.titulo}`);
 
 console.log('fracao-ideal: todos os casos passaram');
+
+// 24/10 — porcentagem do bem no TÍTULO (decisão do dono). Títulos reais do acervo ativo:
+for (const t of ['20% do imóvel com 300 m² - São Lucas - Belo Horizonte', '50% de Um Apartamento - Vila Prudente - Sp',
+  'COTA PARTE DE 5% DA CASA GEMINADA "CONDOMÍNIO RESIDENCIAL VISTA BELA', 'DIREITOS de 37,499% do TERRENO com 4,196 alqueires',
+  'LOTE 001: 10% (DEZ POR CENTO) DO TERRENO E CONSTRUÇÕES DO IMOVEL', '50% DO IMÓVEL RURAL MEDINDO 26.210,945M²'])
+  assert.equal(ehFracaoIdeal({ titulo: t, descricao: '' }), true, `devia barrar: ${t}`);
+for (const t of ['100% do imóvel residencial, 143m²', 'Casa com 50% de desconto - Centro', 'Apartamento 2 dorm. 30% abaixo da avaliação'])
+  assert.equal(ehFracaoIdeal({ titulo: t, descricao: '' }), false, `não devia barrar: ${t}`);
+assert.equal(ehFracaoIdeal({ titulo: 'Casa em Ituiutaba', descricao: 'reservada a meação de 50% do imóvel ao cônjuge' }), false, 'na descrição não barra');
+console.log('ok — porcentagem do bem no título');
+

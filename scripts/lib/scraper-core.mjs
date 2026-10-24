@@ -305,6 +305,13 @@ const RE_FATIA_INEQUIVOCA = /\b(parte\s+ideal|fra[çc][õo]es\s+ideais|direito[s
 // fica fora da lista. Espelhado em fracao_ideal_barrada() (migration 20261003_fracao_numerica_titulo.sql).
 // 05/10: "1/9 de Um Imóvel Urbano" (DBS/Astavero) passava — o conector só aceitava do/da/sobre. Espelho:
 // 20261005_fracao_de_um_imovel.sql.
+// PORCENTAGEM DO BEM NO TÍTULO (24/10, decisão do dono: "descarte fração parcial de imóvel"): "20% do imóvel
+// com 300 m²", "50% de Um Apartamento", "COTA PARTE DE 5% DA CASA", "DIREITOS de 37,499% do TERRENO". A
+// régua só conhecia "2/9 do imóvel" e "parte ideal". 1–2 dígitos: "100% do imóvel" não é fatia. Só no
+// TÍTULO (o que está à venda): na descrição "meação de 50% do imóvel" é reserva do cônjuge na venda do todo.
+// Medido no acervo ativo em 24/10: 15 lotes, todos fatia (0 imóvel inteiro). Espelho em fracao_ideal_barrada.
+export const RE_PCT_DO_BEM_TITULO = /(?:^|[^\d,.])\d{1,2}(?:[.,]\d+)?\s*%\s*(?:\([^)]{0,20}\)\s*)?(?:d[oa]s?|de(?:\s+uma?)?|sobre\s+[oa])\s+(?:im[oó]ve(?:l|is)|bem|pr[eé]dio|casa|apartamento|lote|terreno|gleba|fazenda|s[íi]tio|ch[áa]cara|sala|loja|galp)/i;
+
 export const RE_FRACAO_NUMERICA_TITULO = /(?:^|[^\d/])\d{1,3}\s*\/\s*\d{1,3}\s*(?:\([^)]{0,20}\)\s*)?(?:avos\s+)?(?:d[oa]s?|de(?:\s+uma?)?|sobre\s+[oa])\s+(?:im[oó]vel|bem|pr[eé]dio|casa|apartamento|lote)(?![a-zà-ú])/i;
 
 // v4 (08/10, espelho de 20261008_fracao_ideal_clausulas_v4.sql). Com a DESCRIÇÃO COMPLETA da ZUK/MEGA,
@@ -329,7 +336,7 @@ const RE_CONTEXTO_UNIDADE = /(condom[íi]nio|[áa]rea\s+privativa|[áa]rea\s+[ú
 export function ehFracaoIdeal(imovel) {
   const titulo = imovel?.titulo || '';
   // Menção no TÍTULO nunca é descritiva: é o que está à venda. Barra sempre.
-  if (RE_FRACAO_IDEAL.test(titulo) || RE_FRACAO_NUMERICA_TITULO.test(titulo)) return true;
+  if (RE_FRACAO_IDEAL.test(titulo) || RE_FRACAO_NUMERICA_TITULO.test(titulo) || RE_PCT_DO_BEM_TITULO.test(titulo)) return true;
   const txt = `${titulo} ${imovel?.descricao || ''}`.replace(RE_FIDC, ' ').replace(RE_RESPECTIVA, ' fração ideal do terreno ')
     .replace(/fra[çc](ões|oes)\s+ideais\s+(de\s+)?([0-9])/gi, 'fração ideal de $3'); // "com as frações ideais de 44,39m², 1,53m² … do terreno" (apto + vagas)
   // Os dois erros não custam o mesmo: deixar entrar uma fatia gera um relatório que projeta
@@ -435,7 +442,11 @@ export function ehForaDoAcervo(imovel) {
 // Só sai o lote que É a vaga; apartamento/sala/cobertura COM vaga continua. Espelho EXATO de
 // vaga_garagem_barrada() (supabase/migrations/20261005_vaga_garagem_barrada.sql), que o trigger
 // trg_imovel_vaga_garagem aplica a qualquer coletor — aqui é só para não gastar escrita. Mudou lá, mude aqui.
-const RE_VAGA_INICIO = /^((uma?|01|02|03|04|duas|tr[eê]s|\d{1,2})\s*(\([^)]*\)\s*)?)?(vagas?|box(es)?|garage(m|ns))(?![a-zà-ú])/;
+// 24/10 (dono reforçou: "descarte vagas de garagem"): + `estacionamento` ("Estacionamento nº49 c/ 13,21m²", LJUD)
+// e guarda de área 45 → 70 m² — vaga com área TOTAL (privativa + comum) passa de 45 ("Vaga de Garagem, 52,90m²",
+// GRUPOLANCE); apto "2 Vagas | 166m²" segue protegido. Medido no acervo ativo: só esses 2 mudam.
+const RE_VAGA_INICIO = /^((uma?|01|02|03|04|duas|tr[eê]s|\d{1,2})\s*(\([^)]*\)\s*)?)?(vagas?|box(es)?|garage(m|ns)|estacionamentos?)(?![a-zà-ú])/;
+const VAGA_AREA_MAX = 70;
 const RE_VAGA_PREFIXO = /^\s*(\(?\s*lote\s*\d+\s*\)?\s*[-:]?\s*|oportunidade\s*:\s*|im[oó]vel\s*:\s*|[-–:.\s]+|\d+\s*[-–.)]\s+)*/;
 const RE_VAGA_UNIDADE_TITULO = /(apartament|(?<![a-zà-ú])apto(?![a-zà-ú])|(?<![a-zà-ú])casa(?![a-zà-ú])|sobrado|(?<![a-zà-ú])sala(?![a-zà-ú])|(?<![a-zà-ú])loja(?![a-zà-ú])|terreno|pr[eé]dio|galp[aã]o|cobertura|kitnet|(?<![a-zà-ú])studio(?![a-zà-ú])|(?<![a-zà-ú])flat(?![a-zà-ú])|conjunto\s+comercial)/i;
 const RE_VAGA_DESC_PREFIXO = /^\s*(matr[ií]cula\s*:?\s*|bem\s*:?\s*|im[oó]vel\s*:?\s*|descri[cç][aã]o\s*:?\s*|(os\s+)?direitos\s+(aquisitivos\s+)?(sobre|do|da|de)\s+(o|a)?\s*|\d+[.)]\s*|\(?\d+\)?\s*(um|uma)?\s*\)?\s*)*/;
@@ -448,7 +459,7 @@ export function ehVagaGaragem(imovel) {
   if (!(RE_VAGA_INICIO.test(t) || RE_VAGA_INICIO.test(seg))) return false;
   if (RE_VAGA_UNIDADE_TITULO.test(tit)) return false;
   for (const m of tit.matchAll(/(\d{1,3}(?:\.\d{3})+(?:,\d+)?|\d+(?:[.,]\d+)?)\s*m(?:²|2)/gi)) {
-    if (Number(m[1].replace(/\./g, '').replace(',', '.')) >= 45) return false;   // vaga não tem 45 m² (SUBLIME: apto "2 Vagas | 166m²")
+    if (Number(m[1].replace(/\./g, '').replace(',', '.')) >= VAGA_AREA_MAX) return false;   // vaga não tem 70 m² (SUBLIME: apto "2 Vagas | 166m²")
   }
   const d = String(imovel?.descricao || '').slice(0, 260).toLowerCase().replace(RE_VAGA_DESC_PREFIXO, '');
   return !RE_VAGA_DESC_UNIDADE.test(d);

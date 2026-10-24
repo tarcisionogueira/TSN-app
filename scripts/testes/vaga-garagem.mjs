@@ -32,4 +32,9 @@ for (const [titulo, descricao] of fica) assert.equal(ehVagaGaragem({ titulo, des
 // No funil do coletor: descarte permanente com motivo próprio (o runner tira do ar o já gravado).
 const q = checarQualidade({ titulo: 'Box nº 202 - 12,00m² - Centro Histórico', valor_minimo: 30000, modalidade: 'judicial' }, { estrito: false });
 assert.deepEqual([q.descartar, q.faltando], [true, ['vaga_garagem']]);
+// 24/10 (dono reforçou o descarte de vagas): títulos REAIS que escapavam — estacionamento e vaga com área total > 45 m².
+assert.equal(ehVagaGaragem({ titulo: 'Vaga de Garagem,52,90m², Edifício Flávia Regina, Moema, São Paulo/SP', descricao: '' }), true);
+assert.equal(ehVagaGaragem({ titulo: 'Estacionamento nº49 c/ 13,21m² - Av, Baltazar de Oliveira', descricao: '' }), true);
+assert.equal(ehVagaGaragem({ titulo: 'GARAGEM/DEPÓSITO (6.500M²) - TRÊS CORAÇÕES/MG (17556)', descricao: '' }), false, 'galpão grande fica');
+assert.equal(ehVagaGaragem({ titulo: 'BOX de LOJA nº 28 do Edif. Central Comercial Jabaquara, A.U 18,75m²', descricao: '' }), false, 'box de loja fica');
 console.log('vaga-garagem: todos os casos passaram');
