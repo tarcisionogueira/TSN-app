@@ -176,8 +176,10 @@ jobs:
           JELEILOES_DRYRUN: ${{ env.DRYRUN_PADRAO }}
         run: node scripts/scraper-jeleiloes.mjs
 
-      - name: Suporte oferta (Rafael Leiloeiro)
+      - name: Suporte oferta (Rafael, Portella, Fabiano Ayupp, De Paula, Leilões JA)
         # 10/10: achado no radar de editais (DJEN). Server-rendered, fetch grátis — diário.
+        # 24/10 (Juntas): + 4 tenants RJ do mesmo front (~71 imóveis no catálogo). Só via grátis (semBD). ~+3 min por rodada
+        # em regime (5 páginas de catálogo + até 40 lotes novos/tenant a ~1,5 s); 1ª rodada ~+2 min a mais.
         if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'suporteoferta')) }}
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}

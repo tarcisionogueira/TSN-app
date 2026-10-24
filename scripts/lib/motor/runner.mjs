@@ -53,7 +53,10 @@ export async function enumerar(fetchFonte, tenant, cfg, { maxPages, debug, semBD
   // varredura nunca rodava. Paginação só por script não deixa link — aí vale o freio relativo da varredura.
   const temProxima = (html, p) => new RegExp(`[?&]${cfg.paginaParam || 'page'}=${p + 1}(?!\\d)`).test(String(html || '').replace(/&amp;/g, '&'));
   for (let p = 1; p <= maxPages; p++) {
-    const url = `${tenant.base}${tenant.catalogo ?? cfg.catalogo}${p > 1 ? `?${cfg.paginaParam}=${p}` : ''}`; // tenant.catalogo: id de categoria varia por site (Viva, 10/10)
+    // Catálogo que já traz querystring (`/busca?tipo=Imoveis`, `/lotes/?&cate[]=111`) pagina com `&`: o `?` fixo gerava
+    // `/busca?tipo=Imoveis?page=2` — o servidor lê tipo="Imoveis?page=2" e a página 2 nunca vinha (24/10, Suporte oferta).
+    const cat = tenant.catalogo ?? cfg.catalogo;
+    const url = `${tenant.base}${cat}${p > 1 ? `${cat.includes('?') ? '&' : '?'}${cfg.paginaParam}=${p}` : ''}`; // tenant.catalogo: id de categoria varia por site (Viva, 10/10)
     const r = await fetchFonte(url, { semBD });
     // Página 1 recusada: guarda o `via` da FALHA (ex.: 'dom-403') para o motivo em fonte_saude.
     if (!r.html) { if (p === 1) via = r.via || null; break; }

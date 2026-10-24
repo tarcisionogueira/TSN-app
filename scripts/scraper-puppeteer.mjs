@@ -5540,6 +5540,22 @@ const SUPORTE_TENANTS = [
   // (fonte MARCOANTONIO — um banco, quatro vitrines, junto com Anna Luiza e DCM).
   { domain: 'rafaelleiloeiro.com.br', leiloeiro: 'Rafael Araújo Leilões' },            // PGFN na home
   { domain: 'wermelingerleiloes.com.br', leiloeiro: 'Wermelinger Leilões' },           // PGFN na home
+  // ─── JUNTAS (levantamento 24/10, leiloeiro_triagem `junta_2410`) ──────────────────────────────
+  // Mesmo template `article.lote-main` em /buscador?categoria=2. Seco do coletor REAL (scraperSuporteTenant em
+  // Chrome, páginas lidas pelo banco) sobre catálogo + lotes de 24/10: Bueno 9 imóveis (GO/DF), Façanha 4 (RJ; 1 sai
+  // pela regra de fora-do-acervo), Mais Leilão 30 no catálogo (SP/GO/MT/RS/RJ), Peterlongo 44 (RS/SC), Ricart 14 (RJ;
+  // 3 saem por fração/fora). Conferido contra a página: sl_peterlongo_4888 (Porto Alegre/RS, avaliação R$ 98.000,
+  // 1º leilão 24/11/2026, 2º 01/12/2026).
+  // FICARAM DE FORA, de propósito: leiloesgoias.com.br (é o MESMO site da Bueno — mesmos 9 lotes, mesmo HTML);
+  // kleiberleiloes/kleiberjrleiloes/alvaroantonioleiloes/lumussaleiloes (um banco só, os MESMOS 2 lotes nos quatro,
+  // cidade ilegível no card); www.facanhaleiloes.com.br (= facanhaleiloes); emleilao.com.br (493 itens, todos
+  // "Leilão CAIXA … licitação aberta" — imóvel da Caixa, que já entra pela fonte CEF; duplicaria); trileiloes.com.br
+  // (vitrine de "Melhor Proposta" sem praça nem data, foto em 1 de 24 cards).
+  { domain: 'buenoleiloes.com.br', leiloeiro: 'Bueno Leilões' },
+  { domain: 'facanhaleiloes.com.br', leiloeiro: 'Façanha Leilões' },
+  { domain: 'maisleilao.com.br', leiloeiro: 'Mais Leilão' },
+  { domain: 'peterlongo.leilao.br', leiloeiro: 'Peterlongo Leilões' },
+  { domain: 'ricartleiloes.com.br', leiloeiro: 'Ricart Leilões' },
   // `donizetteleiloes.leilao.br` é o MESMO site do .com.br (mesmo `arrematante.` e mesmo
   // static). Fora de propósito: o `tenantKey` deriva do domínio antes do primeiro ponto, então
   // os dois gerariam o mesmo `fonte_id` e um sobrescreveria o outro sem nada aparecer.

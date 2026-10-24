@@ -34,6 +34,8 @@ jobs:
     # tres fontes que vem depois (SUPORTE, GRUPOLANCE, WEBLEILOES), que ficaram 3 dias sem
     # coletar. O teto agora tem folga E o cancelamento avisa (passo abaixo), para o proximo
     # crescimento aparecer em vez de comer a cauda da lista em silencio.
+    # 24/10 (Juntas): +5 tenants em SUPORTE_TENANTS (Bueno, Facanha, Mais Leilao, Peterlongo, Ricart; ~100 imoveis) —
+    # ~15 paginas de catalogo + ~100 visitas de detalhe (teto 60/tenant) = ~+3 min por rodada.
     timeout-minutes: 150
 
     steps:

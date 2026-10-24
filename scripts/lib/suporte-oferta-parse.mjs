@@ -12,9 +12,21 @@
  */
 import { inferirTipo, checarQualidade, extrairArea } from './leilaopro-parse.mjs';
 import { textoDe, titleCase, montarRowDom } from './dom-parse-util.mjs';
+import MUNICIPIOS from '../../api/_municipios.js';
+import { normCidade } from './inferir-uf.mjs';
 
 export const TENANTS = {
   rafael: { fonte: 'RAFAELLEILOEIRO', leiloeiro: 'Rafael Leiloeiro', base: 'https://www.rafaelleiloeiro.com.br' },
+  // Juntas (levantamento 24/10, leiloeiro_triagem `junta_2410`): o mesmo front "oferta" (/busca?tipo=Imoveis, `var lote`),
+  // todos RJ. Seco do motor sobre catálogo + lotes reais (pelo banco): Portella 40 enumerados (2 páginas), Fabiano Ayupp
+  // 18, De Paula 9, Leilões JA 4 — todos os lotes lidos prontos. Conferido: portella_3721 (Engenho Novo, Rio de
+  // Janeiro/RJ, avaliação R$ 301.187,04, 2º leilão R$ 151.000 em 26/10/2026). Fora: rymerleiloes (52 lotes, mas a
+  // página não traz cidade em lugar nenhum legível), sevidanesleiloeira (página do lote responde 500), elydaluzramos e
+  // rodrigocostaleiloeiro (catálogo com lotes de praça já vencida marcados "aberto"), camilaleiloes (1 lote).
+  portella: { fonte: 'PORTELLA', leiloeiro: 'Portella Leilões', base: 'https://portellaleiloes.com.br' },
+  fabianoayupp: { fonte: 'FABIANOAYUPP', leiloeiro: 'Fabiano Ayupp Leiloeiro', base: 'https://fabianoayuppleiloeiro.com.br' },
+  depaula: { fonte: 'DEPAULALEILOES', leiloeiro: 'De Paula Leilões', base: 'https://depaulaonline.com.br' },
+  leiloesja: { fonte: 'LEILOESJA', leiloeiro: 'Leilões JA', base: 'https://leiloesja.com.br' },
 };
 
 export function extrairUrlsDeLote(html, base) {
@@ -60,6 +72,17 @@ function cidadeAntesDaBarra(t) {
   return nome.length ? [null, nome.join(' '), m[2]] : null;
 }
 
+// "Cidade - UF" do bloco de localização da página (ícone de pino + texto, `<span class="s1">…</svg> Rio de Janeiro - RJ`),
+// presente nos sites do mesmo front (Portella, De Paula, Fabiano Ayupp, Leilões JA, Rodrigo Costa — 24/10). É o campo
+// estruturado do próprio site; o título nem sempre traz a cidade ("Apartamento no Engenho Novo") e a descrição enganava
+// ("…Rio de Janeiro/RJ" virava "Janeiro"). Só vale cidade que existe no IBGE para a UF — senão cai no caminho antigo.
+function cidadeDoPino(html) {
+  const m = String(html || '').match(/<span class=["']s1["'][^>]*>\s*(?:<svg[\s\S]*?<\/svg>)?\s*([A-Za-zÀ-ÿ'][A-Za-zÀ-ÿ' .-]{1,50}?)\s+-\s+([A-Z]{2})\s*</);
+  if (!m) return null;
+  const nome = m[1].trim(), uf = m[2];
+  return Object.prototype.hasOwnProperty.call(MUNICIPIOS, `${uf}|${normCidade(nome)}`) ? [null, nome, uf] : null;
+}
+
 export function parseDetalhe(html, url) {
   const lote = varJson(html, 'lote');
   const leilao = varJson(html, 'leilao') || {};
@@ -82,7 +105,7 @@ export function parseDetalhe(html, url) {
 
   const titulo = String(lote.titulo || leilao.titulo || '').trim() || null;
   // "… EM JUIZ DE FORA - MG", "PRÉDIO DO ABC HOTEL CARATINGA/MG", "… CRI TIROS/MG" — cidade/UF no fim do título.
-  const cu = (titulo || '').match(/\bEM\s+([A-ZÀ-Ú][A-ZÀ-Ú ]+?)\s*[-/]\s*([A-Z]{2})\s*$/i)
+  const cu = cidadeDoPino(html) || (titulo || '').match(/\bEM\s+([A-ZÀ-Ú][A-ZÀ-Ú ]+?)\s*[-/]\s*([A-Z]{2})\s*$/i)
     || cidadeAntesDaBarra(titulo || '')
     || String(lote.descricao || '').match(/\bde\s+([A-ZÀ-Ú][\wÀ-ú ]+?)[-/]([A-Z]{2})\b/);
   const desc = String(lote.descricao || '').replace(/\s*\n\s*/g, ' ').trim();
@@ -98,7 +121,7 @@ export function parseDetalhe(html, url) {
   return {
     titulo: titulo ? titleCase(titulo.toLowerCase()).replace(/ - ([a-z]{2})$/i, (_, uf) => ` - ${uf.toUpperCase()}`) : null,
     cidade: cu ? titleCase(cu[1].trim().toLowerCase()) : null,
-    estado: cu ? cu[2].toUpperCase() : (leilao.leiloeiroUf || null),
+    estado: cu ? cu[2].toUpperCase() : (/^[a-z]{2}$/i.test(String(leilao.leiloeiroUf || '').trim()) ? String(leilao.leiloeiroUf).trim().toUpperCase() : null), // "Rj" no Fabiano Ayupp
     valor_avaliacao: avaliacao, valor_minimo: minimo,
     modalidade: leilao.judicial === false ? 'extrajudicial' : 'judicial',
     area_m2: extrairArea(titulo || '', desc.slice(0, 600)) || 0,
