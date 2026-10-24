@@ -41,6 +41,18 @@ export const TENANTS = {
   milhao:     { fonte: 'MILHAOLEILOES',  leiloeiro: 'Milhão Leilões',  base: 'https://www.milhaoleiloes.com.br', catalogo: '/sitemap.xml' },      // 22, MG/GO (Guilherme Caixeta Borges)
   up:         { fonte: 'UPLEILAO',       leiloeiro: 'UP Leilão',       base: 'https://www.upleilao.com.br', catalogo: '/sitemap.xml' },           // 12, SP (Paulo Marcelo Silva Almeida)
   select:     { fonte: 'SELECTLEILOES',  leiloeiro: 'Select Leilões',  base: 'https://www.selectleiloes.com.br', catalogo: '/sitemap.xml' },      //  6, SP/MS (Mauricio S. Appolinario)
+  // 24/10 (2ª leva, triagem575 — leiloeiros ATIVOS das Juntas ainda não coletados). Mesma Degrau; home dá 400 a UA
+  // de navegador e abre "pelada" (o fetch do motor já repete sem cabeçalho). Feed e 1–2 lotes de cada pelo banco,
+  // passados neste parser em seco. Entre parênteses: lotes abertos que sobram depois do filtro de não-imóvel.
+  // Nenhum lote destes domínios estava no acervo. FORA: falleirosleiloes.com.br (feed vazio hoje); absolutaleiloes.com.br
+  // (12 no feed, mas a URL do feed dá 404 nos 2 lotes testados — feed desatualizado, pede recon); gfleiloes.com.br (27:
+  // o <city> do feed é o padrão "Acrelândia/Acre" e o título traz o BAIRRO no lugar da cidade — "… | Vila Prudente | SP"
+  // saiu cidade "Vila Prudente"; plausível e errado, pede prova do IBGE no parser antes de entrar).
+  inova:      { fonte: 'INOVALEILAO',    leiloeiro: 'Inova Leilão (Dias Martins)', base: 'https://www.inovaleilao.com.br', catalogo: '/sitemap.xml' }, // 91, PE/AL
+  barreto:    { fonte: 'BARRETOLEIL',    leiloeiro: 'Barreto Leilões (Bruno Barreto Sanches)', base: 'https://www.barretoleiloes.com.br', catalogo: '/sitemap.xml' }, // 61, GO/MT/MS/PR
+  chbarbosa:  { fonte: 'CHBARBOSA',      leiloeiro: 'CH Barbosa Leilões (Carlos Henrique Barbosa)', base: 'https://www.chbarbosaleiloes.com.br', catalogo: '/sitemap.xml' }, // 15, GO/MT
+  erikamaciel: { fonte: 'ERIKAMACIEL',   leiloeiro: 'Leiloeira Erika Maciel', base: 'https://www.leiloeiraerikamaciel.com.br', catalogo: '/sitemap.xml' }, //  2, RJ
+  gracie:     { fonte: 'GRACIELEIL',     leiloeiro: 'Gracie Leilões (Renato Gracie)', base: 'https://www.gracieleiloes.com.br', catalogo: '/sitemap.xml' }, //  1, PE
 };
 
 const limpo = (s) => decodificarEntidades(String(s || '').replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, ' '))
