@@ -270,6 +270,20 @@ async function handler(req) {
     };
   }));
 
+  // ── 3b-bis. Captura — LOTE FANTASMA (24/10, dono: "faça o alerta") ──
+  // Lote ativo de data futura que a coleta da fonte NÃO tocou há 4+ dias, com a fonte coletada com sucesso
+  // nas últimas 48 h: saiu do site e segue no nosso ar com link morto. Nasceu de 5.145 veículos SUPERBID
+  // assim, achados pelo dono abrindo dois lotes. Regra e calibragem em public.acervo_lotes_fantasma().
+  itens.push(await check('Captura — lotes fantasma (saíram do site, seguem no ar)', async () => {
+    const r = await sb('rpc/acervo_lotes_fantasma', { method: 'POST', body: '{}' });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const linhas = await r.json();
+    if (!Array.isArray(linhas)) throw new Error('retorno inesperado');
+    if (!linhas.length) return { status: 'ok', detalhe: 'Nenhuma fonte com lote fantasma acima de 20 lotes e 20% do acervo' };
+    const linha = (l) => `${l.fonte} (${l.tipo}): ${l.fantasmas} de ${l.ativos} (${l.pct}%)`;
+    return { status: 'aviso', detalhe: `${linhas.length} fonte(s): ${linhas.slice(0, 5).map(linha).join(' | ')}${linhas.length > 5 ? ` … +${linhas.length - 5}` : ''}` };
+  }));
+
   // ── 3c. Uso — gaps de RLS que quebram a AÇÃO do usuário (proativo) ──
   // Detecta a classe do bug "new row violates row-level security policy": tabela de
   // dados do usuário (com coluna de dono) com RLS ligada mas SEM política de escrita
