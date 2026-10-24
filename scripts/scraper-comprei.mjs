@@ -150,11 +150,16 @@ function montarRow(a, v) {
   };
 }
 
+// 24/10: fatias de 200 estouravam o statement timeout com cache frio (21–23/10: 0 gravados, a
+// fonte parou em 20/10 sem linha nova em fonte_saude). 50 por vez, e um timeout ganha 1 nova tentativa.
+const FATIA = 50;
 async function gravar(rows) {
   let n = 0;
-  for (let i = 0; i < rows.length; i += 200) {
-    const { data, error } = await supabase.from('imoveis_leilao').upsert(rows.slice(i, i + 200), { onConflict: 'fonte_id' }).select('fonte_id');
-    if (error) throw new Error(`upsert: ${error.message}`);
+  for (let i = 0; i < rows.length; i += FATIA) {
+    const up = () => supabase.from('imoveis_leilao').upsert(rows.slice(i, i + FATIA), { onConflict: 'fonte_id' }).select('fonte_id');
+    let { data, error } = await up();
+    if (error && /statement timeout/i.test(error.message)) { await sleep(5000); ({ data, error } = await up()); }
+    if (error) throw new Error(`upsert (${n} de ${rows.length} gravados): ${error.message}`);
     n += data?.length || 0;
   }
   return n;
@@ -241,7 +246,16 @@ async function main() {
     if (cont.falhas) process.exitCode = 1;
     return;
   }
-  const gravados = await gravar(prontos);
+  let gravados;
+  try { gravados = await gravar(prontos); }
+  catch (e) {
+    // Sem esta linha a fonte só aparecia como medicao_velha 4,5 dias depois.
+    const motivo = `gravação falhou: ${String(e.message).slice(0, 120)}`;
+    console.error(`  ${motivo}`);
+    await registrarSaude(supabase, FONTE, [], 'api', { ok: false, vazio: false, enumerados: itens.length, motivo,
+      metricas: { n: 0, uf_pct: 0, valor_pct: 0, link_pct: 0, foto_pct: 0 } });
+    process.exitCode = 1; return;
+  }
   console.log(`✅ ${gravados} anúncios gravados/atualizados.`);
   // Varredura só com a lista inteira E todos os anúncios lidos: falha de leitura não é "saiu do site".
   if (completa && !cont.falhas) await varrerSumidos(new Set(itens.filter((a) => a.bemVendido !== true).map((a) => `comprei_${a.id}`)));

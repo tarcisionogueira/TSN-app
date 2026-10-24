@@ -113,7 +113,9 @@ function PerfilInvestidorCard({ userId, isMobile, readOnly = false }) {
     supabase.from('perfis')
       .select('perfil_investidor, faixa_capital, forma_pagamento, consorcio_interesse, experiencia_leilao, interesse_veiculos, veiculo_tipos, veiculo_faixa_fipe, cidades_interesse')
       .eq('id', userId).single()
-      .then(({ data }) => {
+      .then(({ data, error }) => {
+        // Leitura falhou: o card fica escondido. Mostrá-lo vazio faria o salvar gravar null nos outros campos.
+        if (error || !data) { console.warn('[perfil] perfil de investidor ilegível:', error?.message); return; }
         const c0 = Array.isArray(data?.cidades_interesse) && data.cidades_interesse[0] && typeof data.cidades_interesse[0] === 'object' ? data.cidades_interesse[0] : {};
         const snap = {
           perfil_investidor: data?.perfil_investidor || '',
@@ -140,7 +142,7 @@ function PerfilInvestidorCard({ userId, isMobile, readOnly = false }) {
     const cidades = f.cidade.trim()
       ? [{ cidade: f.cidade.trim(), uf: (f.uf || '').trim().toUpperCase(), raio_km: Number(f.raio_km) || 50 }]
       : [];
-    const { error } = await supabase.from('perfis').update({
+    const { data: salvo, error } = await supabase.from('perfis').update({
       perfil_investidor: f.perfil_investidor || null,
       faixa_capital: f.faixa_capital || null,
       forma_pagamento: f.forma_pagamento || null,
@@ -150,9 +152,10 @@ function PerfilInvestidorCard({ userId, isMobile, readOnly = false }) {
       veiculo_tipos: f.interesse_veiculos === 'sim' && f.veiculo_tipos.length ? f.veiculo_tipos : null,
       veiculo_faixa_fipe: f.interesse_veiculos === 'sim' ? (f.veiculo_faixa_fipe || null) : null,
       cidades_interesse: cidades,
-    }).eq('id', userId);
+    }).eq('id', userId).select('id');
     setSalvando(false);
-    if (error) setMsg({ ok: false, texto: 'Não foi possível salvar. Tente novamente.' });
+    // RLS que filtra a linha (sessão expirada) não dá erro — só o select prova que gravou.
+    if (error || !salvo?.length) setMsg({ ok: false, texto: 'Não foi possível salvar. Tente novamente.' });
     else { setOrig({ ...f }); setMsg({ ok: true, texto: 'Perfil de investidor atualizado! As recomendações do seu e-mail passam a seguir essa intenção.' }); }
   };
 

@@ -98,7 +98,9 @@ jobs:
     runs-on: ubuntu-latest
     # 40 → 55 (29/09): a rodada agendada já levava ~36 min e a GLOBO (JSON, ~5–7 min/dia) entrou no
     # RODA_TUDO. Estourar o teto CORTA as fontes seguintes (incidente de 10–12/08) — folga de propósito.
-    timeout-minutes: 75  # 15/10: era 55; a rodada de 14/10 levou 54:40 e a FRANCO pelo feed (+~4 min) estourou, cortando o Astavero
+    # 24/10: 75 → 120. Com a HASTA em 18 min (teto 120 lotes), a rodada de 23/10 ainda chegou a 70 min no Simon
+    # e cortou Globo, Nakakogue, Astavero, Leje, Freitas e o passo de veículos. Repo público = minutos sem custo.
+    timeout-minutes: 120  # 15/10: era 55; a rodada de 14/10 levou 54:40 e a FRANCO pelo feed (+~4 min) estourou, cortando o Astavero
     env:
       # Nome pelo EFEITO no _DRYRUN de cada fonte (1=dry-run, 0=grava) — não pelo gatilho.
       # (achado 07/09, revisão externa: "GRAVA" antes chamava 1 de "grava", exatamente o

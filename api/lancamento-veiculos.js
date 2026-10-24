@@ -55,7 +55,9 @@ async function publico() {
   const desde = new Date(Date.now() - 60 * 864e5).toISOString();
   const [abriram, jaFoi, optout] = await Promise.all([
     ler(`emails_log?aberto_em=gte.${desde}&user_id=not.is.null&select=user_id&limit=20000`),
-    ler(`emails_log?tipo=eq.${TIPO}&status=in.(enviado,enfileirado)&select=user_id&limit=20000`),
+    // 24/10: o webhook do Resend troca 'enviado' por entregue/bounce/aberto — com in.(enviado,enfileirado)
+    // os 33 de 23/10 voltavam para a fila. Já foi = toda linha, menos a que comprovadamente não saiu.
+    ler(`emails_log?tipo=eq.${TIPO}&status=not.in.(limitado,suprimido,falha)&user_id=not.is.null&select=user_id&limit=20000`),
     ler('alertas_email?ativo=eq.false&select=user_id&limit=20000'),
   ]);
   if (!abriram || !jaFoi || !optout) return null;
@@ -176,9 +178,13 @@ async function handler(req) {
   if (flag[0]?.value !== 'liberado') return resp({ ok: true, modo, enviados: 0, motivo: 'aguardando liberação do dono (app_config.lancamento_veiculos)', faltam: pub.faltam.length });
 
   let restante = await orcamentoRestanteHoje();
-  const emails = await emailsDoLote(pub.faltam.slice(0, POR_CHAMADA).map(p => p.id));
+  // Candidatos além das vagas: quem é barrado (limite semanal, sem e-mail) não pode ocupar a vaga do dia
+  // inteiro e travar a fila para sempre — percorre até completar POR_CHAMADA saídas.
+  const candidatos = pub.faltam.slice(0, POR_CHAMADA * 3);
+  const emails = await emailsDoLote(candidatos.map(p => p.id));
   let enviados = 0, enfileirados = 0, limitados = 0, falhas = 0, semEmail = 0;
-  for (const p of pub.faltam.slice(0, POR_CHAMADA)) {
+  for (const p of candidatos) {
+    if (enviados + enfileirados >= POR_CHAMADA) break;
     if (restante <= RESERVA) break;   // o resto do dia é do transacional e das oportunidades
     const email = emails.get(p.id);
     if (!email) { semEmail++; continue; }
