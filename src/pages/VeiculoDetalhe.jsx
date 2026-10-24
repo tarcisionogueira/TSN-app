@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ORIGEM_VENDA } from '../utils/origemVeiculo';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { Car, ArrowLeft, ExternalLink, MapPin, Loader2, BarChart2, FileText, Mail, Share2, Lock } from 'lucide-react';
+import { Car, ArrowLeft, ExternalLink, MapPin, Loader2, BarChart2, FileText, Mail, Share2, Lock, ChevronLeft, ChevronRight } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { fmtBRL } from '../utils/format';
 import { useIsMobile } from '../utils/useIsMobile';
@@ -121,6 +121,9 @@ export default function VeiculoDetalhe() {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState(null);
   const [fotoAtiva, setFotoAtiva] = useState(0);
+  const [fotoFalhou, setFotoFalhou] = useState(null);   // índice da foto que não carregou
+  // Outro veículo na mesma rota (/veiculo/:id) reaproveita o componente: a foto escolhida não pode vazar de um para outro.
+  useEffect(() => { setFotoAtiva(0); setFotoFalhou(null); }, [id]);
   const [propondo, setPropondo] = useState(false);
   const [buscandoFipe, setBuscandoFipe] = useState(false);
   const [cotaEsgotada, setCotaEsgotada] = useState(false);
@@ -301,10 +304,30 @@ export default function VeiculoDetalhe() {
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : 'minmax(0, 1.1fr) minmax(0, 0.9fr)', gap: 20 }}>
         {/* Galeria */}
         <div>
-          <div style={{ width: '100%', aspectRatio: '4/3', borderRadius: 14, overflow: 'hidden', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ position: 'relative', width: '100%', aspectRatio: '4/3', borderRadius: 14, overflow: 'hidden', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {/* 24/10 (dono: "clico para mudar a foto e não muda"): `key` pela URL recria o <img> a cada troca —
+                sem isso o navegador segue exibindo a foto anterior enquanto a nova não decodifica (e para sempre
+                se ela falhar). Falha vira aviso, não a foto velha parada. */}
             {fotos.length
-              ? <img src={fotos[fotoAtiva]} alt={v.titulo} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ? (fotoFalhou === fotoAtiva
+                ? <span style={{ fontSize: 13, color: '#64748b', padding: 16, textAlign: 'center' }}>Não foi possível carregar a foto {fotoAtiva + 1}. Tente a próxima.</span>
+                : <img key={fotos[fotoAtiva]} src={fotos[fotoAtiva]} alt={`${v.titulo || 'Veículo'} — foto ${fotoAtiva + 1}`}
+                    onError={() => setFotoFalhou(fotoAtiva)}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }} />)
               : <Car size={48} color="#cbd5e1" />}
+            {fotos.length > 1 && (<>
+              <button aria-label="Foto anterior" onClick={() => setFotoAtiva((fotoAtiva - 1 + fotos.length) % fotos.length)}
+                style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', width: 36, height: 36, borderRadius: 18, border: 'none', background: 'rgba(15,23,42,0.55)', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <ChevronLeft size={20} />
+              </button>
+              <button aria-label="Próxima foto" onClick={() => setFotoAtiva((fotoAtiva + 1) % fotos.length)}
+                style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', width: 36, height: 36, borderRadius: 18, border: 'none', background: 'rgba(15,23,42,0.55)', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <ChevronRight size={20} />
+              </button>
+              <span style={{ position: 'absolute', right: 10, bottom: 10, background: 'rgba(15,23,42,0.65)', color: 'white', fontSize: 12, fontWeight: 700, borderRadius: 10, padding: '3px 9px' }}>
+                {fotoAtiva + 1}/{fotos.length}
+              </span>
+            </>)}
           </div>
           {fotos.length > 1 && (
             <div style={{ display: 'flex', gap: 6, marginTop: 8, overflowX: 'auto' }}>
