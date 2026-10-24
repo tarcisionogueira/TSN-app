@@ -1,7 +1,7 @@
 /**
  * FONTE (config) — JELEILOES (jeleiloes.com.br). Fonte `dom`: server-rendered, roda no
  * runner sem Cloudflare (recon 07/09, GitHub Actions). Catálogo de imóveis: /imoveis,
- * paginação `?page=N` (confirmado real: 9+ páginas, ~172 imóveis no total). Parser puro em
+ * paginação `?page=N` (confirmado real: 9+ páginas, ~172 imóveis no total; 24/10: 10 páginas, 197). Parser puro em
  * lib/jeleiloes-parse.mjs.
  */
 import {
@@ -21,7 +21,7 @@ export default {
   dom: { esperaMs: 3000, delayAntesMs: 1000, isolarSessao: true },
   catalogo: '/imoveis',
   paginaParam: 'page',
-  maxPages: 10,
+  maxPages: 15,   // 24/10: 10 páginas era exatamente o catálogo inteiro (197 imóveis) — sem folga para crescer
   tenants: Object.values(TENANTS),
   parse: { extrairUrlsDeLote, idDaUrl, parseDetalhe, montarRow, checarQualidade },
   // VEÍCULOS (21/10): /veiculos?page=N (JE 124, K Leilões ≥20 no site; 0 no acervo).

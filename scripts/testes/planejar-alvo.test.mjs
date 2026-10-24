@@ -114,5 +114,21 @@ const eq = (nome, a, b) => {
   eq('recusado recente sai da fila de novos', r.alvo, ['novo1','novo2']);
 }
 
-console.log(falhas ? `\n${falhas} FALHA(S)` : '\n11/11 cenários passam');
+// 12) #358 (24/10): FOME. Praça iminente sem limite matava de fome a praça longe — JELEILOES tinha 47 iminentes
+//     contra 40 vagas, e os lotes com praça a 45+ dias (41785, aberto para lances) ficavam sem leitura nenhuma.
+//     Lote sem leitura há 3+ dias entra na frente, do mais velho, até METADE da releitura.
+{
+  const imin = Array.from({ length: 47 }, (_, i) => ({ u: `im${String(i).padStart(2, '0')}`, tocado: '2026-08-28T12:00:00Z', fim: dia(10), foto: true }));
+  const longe = Array.from({ length: 30 }, (_, i) => ({ u: `lg${String(i).padStart(2, '0')}`, tocado: '2026-08-10T12:00:00Z', fim: dia(45), foto: true }));
+  const meta = metaDe([...imin, ...longe]);
+  const r = planejarAlvo({ urls: [...imin, ...longe].map(d => d.u), meta, chaveDe, maxLotes: 40, agora: AGORA });
+  eq('fome: 20 vagas (metade) para a praça longe parada há 19 dias', r.releitura.filter(u => u.startsWith('lg')).length, 20);
+  eq('fome: a outra metade segue com a iminente', r.releitura.filter(u => u.startsWith('im')).length, 20);
+  // Iminente lida ontem não é faminta: sem ninguém parado há 3+ dias, a ordem de sempre fica intacta.
+  const meta2 = metaDe([...imin, ...longe.map(d => ({ ...d, tocado: '2026-08-28T12:00:00Z' }))]);
+  const r2 = planejarAlvo({ urls: [...imin, ...longe].map(d => d.u), meta: meta2, chaveDe, maxLotes: 40, agora: AGORA });
+  eq('sem fome: 40 iminentes, como antes', r2.releitura.every(u => u.startsWith('im')), true);
+}
+
+console.log(falhas ? `\n${falhas} FALHA(S)` : '\n12/12 cenários passam');
 process.exit(falhas ? 1 : 0);

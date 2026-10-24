@@ -37,6 +37,7 @@ import { registrarConhecimento, qualidadeColeta } from './lib/conhecimento.mjs';
 import { registrarSaude } from './_saude-fonte.mjs';
 import { inferirUF } from './lib/inferir-uf.mjs';
 import { pisoEnumeracao, demaisParaUmaRodada } from './lib/sweep-trava.mjs';
+import { planejarFilaSitemap, naoImovelPelaPagina } from './lib/pecini-fila.mjs';
 
 // MULTI-LEILOEIRO (27/09): a plataforma ASP.NET "DefaultClean" (suaplataformadeleilao.com.br) é
 // a mesma em outros leiloeiros — confirmado no Sublime pelo recon (recon_dump 71): /Core/V1,
@@ -388,6 +389,8 @@ function parseDetalhe(html, rec) {
     titulo: (base.titulo || `Imóvel Pecini ${rec.id}`)
       .replace(/\s*\|\s*(?:Sublime|Pecini) Leil[õo]es\s*$/i, '')
       .replace(/\s+[A-Za-zÀ-ÿ]+ em leil[ãa]o\s*$/i, '').trim().slice(0, 180),
+    // Título CRU (com o sufixo de categoria "Motos em leilão"), só para `naoImovelPelaPagina` — o de cima o corta.
+    tituloCru: base.titulo || '',
     link_foto: base.link_foto,
     valor_avaliacao: avaliacao,
     valor_minimo: valorMinimo,
@@ -423,9 +426,7 @@ function parseDetalhe(html, rec) {
 // imoveis_leilao ("Mercedes-Benz C180 | Modelo 2015", "Lote principal" de "/lote/11-veiculos-no-
 // tatuape/"). Pelo SLUG decide antes de abrir o navegador; pelo título, depois.
 // Palavra INTEIRA no slug ("terreno-em-fordlandia-pa" não é Ford).
-const RE_VEICULO_SLUG = /\/lote\/(?:[^/]*-)?(veiculos?|motos?|carros?|caminh(?:ao|oes)|onibus|mercedes|fiat|hyundai|honda|toyota|chevrolet|volkswagen|vw|ford|renault|nissan|jeep)(?:-|\/)/i;
-const RE_VEICULO_TITULO = /\b(mercedes|fiat|hyundai|honda|toyota|chevrolet|volkswagen|vw|ford|renault|nissan|jeep|peugeot|citro[eë]n|bmw|audi|kia|mitsubishi|motocicleta|caminh[ãa]o|ve[íi]culo)\b|\bmod(?:elo|\.)\s*(19|20)\d{2}\b/i;
-const ehVeiculo = (url, titulo = '') => RE_VEICULO_SLUG.test(url || '') || RE_VEICULO_TITULO.test(titulo || '');
+// As regras (slug, título e categoria da página) moram em lib/pecini-fila.mjs desde 24/10 (#358), testadas.
 
 function montarRow(rec, det) {
   // Slug do Sublime às vezes é BAIRRO ("casa-na-vila-madalena") ou traz sufixo ("casa-em-jacarei-
@@ -511,36 +512,45 @@ async function main() {
     return;
   }
 
-  // QUEM ESTE RUN VAI VISITAR (PECINI_ALVO, default 'novos' = comportamento de sempre).
-  //
-  // Por que virou opção (18/08): `novos.length ? novos : lotes` significa que os lotes JÁ
+  // PECINI_ALVO (histórico). Por que virou opção (18/08): `novos.length ? novos : lotes` significa que os lotes JÁ
   // capturados só são revisitados quando NÃO HÁ nenhum novo no sitemap. Como quase sempre há,
   // os antigos nunca eram relidos — os da PECINI estavam parados desde julho, com a metragem
   // e a matrícula que os consertos de 17/08 passaram a saber extrair, e sem nada que os fosse
   // buscar. "Rodar os antigos" não era possível pedir: era um efeito colateral de o sitemap
-  // estar sem novidade.
-  //
-  //   novos   → só os que ainda não estão no banco (default; cai nos antigos se não houver novo)
-  //   antigos → só os JÁ capturados, do mais desatualizado para o mais recente
-  //   todos   → novos primeiro, antigos em seguida, na mesma rodada
+  // estar sem novidade. (24/10: o mesmo defeito voltou pelo outro lado — "novo" que nunca vira linha.)
   const ids = lotes.map(l => `${PREFIXO}${l.id}`);
-  const visto = new Map();   // fonte_id → atualizado_em (null = nunca)
+  const visto = new Map();   // fonte_id → { atualizado_em, ativo }
   for (let i = 0; i < ids.length; i += 200) {
     const { data, error } = await supabase.from('imoveis_leilao')
-      .select('fonte_id,atualizado_em').in('fonte_id', ids.slice(i, i + 200));
+      .select('fonte_id,atualizado_em,ativo').in('fonte_id', ids.slice(i, i + 200));
     // Um erro aqui NÃO pode virar "não tem nada no banco": isso reclassificaria o acervo
     // inteiro como novo e faria a rodada gastar cota recapturando o que já existe.
     if (error) { console.error(`falha ao ler o acervo (${error.message}). Abortado.`); process.exitCode = 1; return; }
-    for (const r of data || []) visto.set(r.fonte_id, r.atualizado_em || null);
+    for (const r of data || []) visto.set(r.fonte_id, { atualizado_em: r.atualizado_em || null, ativo: r.ativo !== false });
   }
-  const novos = lotes.filter(l => !visto.has(`${PREFIXO}${l.id}`));
-  const antigos = lotes.filter(l => visto.has(`${PREFIXO}${l.id}`))
-    .sort((a, b) => String(visto.get(`${PREFIXO}${a.id}`) || '').localeCompare(String(visto.get(`${PREFIXO}${b.id}`) || '')));
-  const fila = ALVO === 'antigos' ? antigos
-    : ALVO === 'todos' ? [...novos, ...antigos]
-    : (novos.length ? novos : antigos);
-  const alvoLotes = fila.slice(0, MAX_LOTES);
-  console.log(`no banco: ${visto.size} · novos: ${novos.length} · antigos: ${antigos.length} · alvo '${ALVO}' · processando: ${alvoLotes.length}`);
+  // MEMÓRIA DE RECUSA (24/10, #358 — a mesma tabela do motor, #238). Lote lido e recusado nunca entra em
+  // imoveis_leilao, então sem isto ele era "novo" para sempre e tomava a vaga dos imóveis já gravados.
+  // Ilegível = segue sem ela (só custa leitura repetida, nunca dado errado), com o motivo no log.
+  const recusados = new Set();
+  const semLinha = ids.filter(id => !visto.has(id));
+  for (let i = 0; i < semLinha.length; i += 200) {
+    const { data, error } = await supabase.from('coleta_lote_recusado')
+      .select('fonte_id').in('fonte_id', semLinha.slice(i, i + 200)).gt('rever_apos', new Date().toISOString());
+    if (error) { console.log(`  ⚠️ memória de recusa ilegível — segue relendo os recusados: ${error.message}`); break; }
+    for (const r of data || []) recusados.add(r.fonte_id);
+  }
+  // QUEM ESTE RUN VAI VISITAR — ver lib/pecini-fila.mjs (24/10, #358). PECINI_ALVO continua valendo:
+  //   novos   → os que ainda não estão no banco; no caminho GRÁTIS (residencial) a vaga que sobra vai
+  //             para os antigos ATIVOS, do mais velho para o mais novo; no PAGO, só cai nos antigos sem novo
+  //   antigos → só os JÁ capturados (ativos), do mais desatualizado para o mais recente
+  //   todos   → novos primeiro, antigos em seguida, na mesma rodada
+  const plano = planejarFilaSitemap({
+    lotes, noBanco: visto, recusados, prefixo: PREFIXO, maxLotes: MAX_LOTES,
+    releituraLivre: RESIDENCIAL, alvo: ALVO, filtrarNaoImovel: FONTE !== 'PECINI',
+  });
+  const { novos, antigos } = plano;
+  const alvoLotes = plano.fila;
+  console.log(`no banco: ${visto.size} · novos: ${novos.length} · antigos ativos: ${antigos.length} · não-imóvel pelo endereço: ${plano.foraPeloEndereco.length}${plano.recusadosPulados ? ` · ${plano.recusadosPulados} recusado(s) há pouco, pulados` : ''} · alvo '${ALVO}' · processando: ${alvoLotes.length}`);
 
   // ─── SAIU DO SITE? PERGUNTE À ENUMERAÇÃO, NÃO À COLETA (18/08) ───────────────────────────
   //
@@ -603,21 +613,55 @@ async function main() {
   // 2) Detalhe de cada lote alvo.
   const prontos = [];
   let semDetalhe = 0, reprovados = 0;
-  for (const rec of alvoLotes) {
-    if (FONTE !== 'PECINI' && ehVeiculo(rec.loteUrl)) { reprovados++; console.log(`  ${rec.id} · DESCARTADO(veiculo — pelo endereço, sem abrir)`); continue; }
+  const recusas = [];   // { fonte_id, motivo, dias } — só de lote NOVO (o antigo já tem linha e não volta como novo)
+  const naoImovelIds = [...plano.naoImovelNoAcervo];   // gravados como imóvel e que não são: saem do acervo
+  for (let i = 0; i < alvoLotes.length; i++) {
+    const rec = alvoLotes[i];
+    const fonteId = `${PREFIXO}${rec.id}`;
+    const ehNovo = i < plano.iReleitura;
     if (recusaDeCota) { semDetalhe++; continue; }   // o freio já disse não: insistir só repete a recusa
     const html = await bd(rec.loteUrl);
     if (!html) { semDetalhe++; console.log(`- ${rec.id}: detalhe não veio`); continue; }
     const det = parseDetalhe(html, rec);
     if (det.paginaInvalida) { semDetalhe++; console.log(`- ${rec.id}: página genérica/sem lote (pulado)`); continue; }
-    if (FONTE !== 'PECINI' && ehVeiculo(rec.loteUrl, det.titulo)) { reprovados++; console.log(`  ${rec.id} · DESCARTADO(veiculo — pelo título)`); continue; }
+    if (FONTE !== 'PECINI' && naoImovelPelaPagina(rec.loteUrl, det.titulo, det.tituloCru)) {
+      reprovados++; console.log(`  ${rec.id} · DESCARTADO(não-imóvel — pelo título/categoria da página)`);
+      if (ehNovo) recusas.push({ fonte_id: fonteId, motivo: 'nao_imovel', dias: 30 });
+      else naoImovelIds.push(fonteId);
+      continue;
+    }
     const row = montarRow(rec, det);
     const q = checarQualidade(row, { estrito: false });
-    console.log(`  ${rec.id} ${rec.cidade || '?'}/${rec.uf || '?'} · aval R$${row.valor_avaliacao} · min R$${row.valor_minimo} · desc ${row.desconto_percentual ?? '?'}% · foto ${row.link_foto ? 'sim' : 'NÃO'} · ${row.modalidade}${q.descartar ? ' · DESCARTADO(' + q.faltando.join(',') + ')' : (q.faltando.length ? ' · faltando ' + q.faltando.join(',') : ' · OK')}`);
-    if (q.descartar) { reprovados++; continue; }
+    console.log(`  ${rec.id} ${rec.cidade || '?'}/${rec.uf || '?'} · aval R$${row.valor_avaliacao} · min R$${row.valor_minimo} · desc ${row.desconto_percentual ?? '?'}% · foto ${row.link_foto ? 'sim' : 'NÃO'} · ${row.modalidade}${ehNovo ? '' : ' · releitura'}${q.descartar ? ' · DESCARTADO(' + q.faltando.join(',') + ')' : (q.faltando.length ? ' · faltando ' + q.faltando.join(',') : ' · OK')}`);
+    if (q.descartar) {
+      reprovados++;
+      // Sem valor/data pode ser temporário (o site publica depois): volta à fila em 10 dias, como no motor.
+      if (ehNovo) recusas.push({ fonte_id: fonteId, motivo: `descartado: ${(q.faltando || []).join(', ').slice(0, 120)}`, dias: 10 });
+      continue;
+    }
     prontos.push(row);
     await sleep(400); // gentileza entre requisições
   }
+  const relidos = prontos.filter(r => visto.has(r.fonte_id)).length;
+  console.log(`  (${relidos} dos prontos são releitura de lote já gravado)`);
+
+  // Grava ANTES do "nada pronto" lá embaixo: uma rodada só de recusas é exatamente a que precisa lembrar delas.
+  if (!DRYRUN && recusas.length) {
+    const agora = Date.now();
+    const linhas = [...new Map(recusas.map(r => [r.fonte_id, { fonte_id: r.fonte_id, fonte: FONTE, motivo: r.motivo,
+      visto_em: new Date(agora).toISOString(), rever_apos: new Date(agora + r.dias * 864e5).toISOString() }])).values()];
+    const { error: eRec } = await supabase.from('coleta_lote_recusado').upsert(linhas, { onConflict: 'fonte_id' });
+    if (eRec) console.error(`  não gravei a memória de ${linhas.length} recusa(s) — serão relidas na próxima rodada: ${eRec.message}`);
+    else console.log(`  ${linhas.length} recusa(s) lembradas — fora da fila até o prazo (não-imóvel 30 d, descarte 10 d).`);
+  } else if (recusas.length) console.log(`  DRY-RUN: ${recusas.length} recusa(s) seriam lembradas: ${recusas.map(r => r.fonte_id).join(', ')}`);
+  // Lote JÁ GRAVADO que é veículo/máquina (pelo endereço ou pela página): sai com motivo, como no motor
+  // (o gatilho de gemeos_hasta_cef.sql segura a ressurreição de linha com suprimido_motivo). `.select()` prova.
+  if (naoImovelIds.length && !DRYRUN) {
+    const { data: saiu, error: eNi } = await supabase.from('imoveis_leilao')
+      .update({ ativo: false, suprimido_motivo: 'nao_imovel' }).in('fonte_id', [...new Set(naoImovelIds)]).eq('ativo', true).select('fonte_id');
+    if (eNi) console.error(`  não consegui retirar os não-imóveis: ${eNi.message}`);
+    else console.log(`  🚗 ${(saiu || []).length} lote(s) gravados como imóvel e que são veículo/máquina retirados: ${(saiu || []).map(r => r.fonte_id).join(', ')}`);
+  } else if (naoImovelIds.length) console.log(`  DRY-RUN: retiraria do acervo (não-imóvel): ${[...new Set(naoImovelIds)].join(', ')}`);
 
   console.log(`\nResumo: ${prontos.length} prontos · ${reprovados} descartados · ${semDetalhe} sem detalhe.`);
   // "Não coletei porque o orçamento disse não" é uma frase diferente de "a fonte não tinha nada",

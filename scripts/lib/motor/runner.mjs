@@ -189,6 +189,14 @@ const DIAS_IMINENTE = 21;
 // N por rodada garante que o backlog de falha transitória é corrigido em poucos ciclos, sem
 // sequestrar o orçamento de quem só está velho.
 const SEM_FOTO_TETO = 15;
+// FOME FURA A FILA, ATÉ METADE DA RELEITURA (24/10, pendência #358). "Praça próxima primeiro" sem
+// limite deixava a praça LONGE sem leitura NENHUMA enquanto houvesse mais iminentes que vagas: na
+// JELEILOES, 47 iminentes contra ~40 vagas por rodada — os 106 lotes com praça a mais de 21 dias
+// ficavam de fora todo dia (41785, aberto para lances, sem toque desde 17/10; 71 "fantasmas"). Lote
+// sem leitura há `DIAS_FOME` ou mais entra na frente, do mais velho para o mais novo, até METADE do
+// teto — a outra metade continua com a ordem de sempre (iminente primeiro). Abaixo do limiar de 4 dias
+// do `acervo_lotes_fantasma()` de propósito: o lote é relido antes de virar suspeito.
+const DIAS_FOME = 3;
 // Linhas por upsert: 100 × ~28 ms ≈ 3 s, longe do statement timeout mesmo com a base sob carga.
 const UPSERT_FATIA = 100;
 
@@ -224,10 +232,16 @@ export function planejarAlvo({ urls, meta, chaveDe, maxLotes, maxRefresh, recusa
   // o resto da fila segue exatamente como já era (ver garantia de compatibilidade no teste).
   const semFotoBoost = porOrdemBase.filter(c => !c.temFoto).slice(0, SEM_FOTO_TETO);
   const boostIds = new Set(semFotoBoost.map(c => c.id));
-  const conhecidas = [...semFotoBoost, ...porOrdemBase.filter(c => !boostIds.has(c.id))];
   const usadosPorNovos = Math.min(novos.length, maxLotes);
   const folga = maxLotes - usadosPorNovos;
   const teto = maxRefresh === undefined ? folga : Math.max(0, Math.min(folga, maxRefresh));
+  // Famintos (ver DIAS_FOME): `floor(teto/2)` — com teto 1 a vaga única continua da praça iminente.
+  const limiteFome = agora - DIAS_FOME * 864e5;
+  const famintos = porOrdemBase.filter(c => !boostIds.has(c.id) && (c.tocado || 0) < limiteFome)
+    .sort((a, b) => (a.tocado || 0) - (b.tocado || 0) || (a.id < b.id ? -1 : 1))
+    .slice(0, Math.floor(teto / 2));
+  for (const c of famintos) boostIds.add(c.id);
+  const conhecidas = [...semFotoBoost, ...famintos, ...porOrdemBase.filter(c => !boostIds.has(c.id))];
   const releitura = conhecidas.slice(0, teto).map(c => c.url);
   return {
     novos, releitura,

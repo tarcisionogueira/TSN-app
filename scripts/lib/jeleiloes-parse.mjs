@@ -47,9 +47,15 @@ export const TENANTS = {
   kleiloes: { fonte: 'KLEILOES', leiloeiro: 'Klöckner Leilões', base: 'https://kleiloes.com.br' },
 };
 
+// SLUG COM `%` (24/10, pendência #358): o título com "nº" vira `n%C2%BA` na URL ("apto-n%C2%BA-307-do-…",
+// "garagem-n%C2%BA-72-…") e a classe `[a-z0-9-]` do slug recusava o card inteiro — 33 dos 197 imóveis do
+// catálogo (17%) nunca entraram na enumeração, nem como novo nem como releitura. `%[0-9a-f]{2}` aceita
+// só o escape de URL, não qualquer caractere.
+const SLUG = '(?:[a-z0-9-]|%[0-9a-f]{2})+';
+const RE_LOTE_IMOVEL = new RegExp(`href=["']([^"']*\\/ofertas?\\/leilao\\/imoveis\\/[a-z0-9-]+\\/\\d+\\/(?:id-)?(\\d+)\\/${SLUG})\\/?["']`, 'gi');
 export function extrairUrlsDeLote(html, base) {
   const urls = new Map();
-  for (const m of String(html || '').matchAll(/href=["']([^"']*\/ofertas?\/leilao\/imoveis\/[a-z0-9-]+\/\d+\/(?:id-)?(\d+)\/[a-z0-9-]+)\/?["']/gi)) {
+  for (const m of String(html || '').matchAll(RE_LOTE_IMOVEL)) {
     try { urls.set(m[2], new URL(m[1], base).href); } catch { /* skip */ }
   }
   return urls;
@@ -58,17 +64,22 @@ export const idDaUrl = url => (String(url).match(/\/ofertas?\/leilao\/(?:imoveis
 
 // VEÍCULOS (21/10): /oferta/leilao/veiculos/<categoria>/<n>/id-<id>/<slug>. Sucata, trator/máquina e
 // aeronave saem PELA CATEGORIA da URL, antes de gastar uma leitura (JE: 124 veículos, 0 no acervo).
+const RE_LOTE_VEICULO = new RegExp(`href=["']([^"'}]*\\/ofertas?\\/leilao\\/veiculos\\/([a-z0-9-]+)\\/\\d+\\/(?:id-)?(\\d+)\\/${SLUG})\\/?["'}]`, 'gi');
 const CAT_VEICULO_FORA = /^(sucatas?|trator-maquina|maquinas?|aeronaves?|embarcac(?:ao|oes)|pecas)$/i;
 export function extrairUrlsDeVeiculo(html, base) {
   const urls = new Map();
-  for (const m of String(html || '').matchAll(/href=["']([^"'}]*\/ofertas?\/leilao\/veiculos\/([a-z0-9-]+)\/\d+\/(?:id-)?(\d+)\/[a-z0-9-]+)\/?["'}]/gi)) {
+  for (const m of String(html || '').matchAll(RE_LOTE_VEICULO)) {
     if (CAT_VEICULO_FORA.test(m[2])) continue;
     try { urls.set(m[3], new URL(m[1], base).href); } catch { /* href malformado: ignora o card */ }
   }
   return urls;
 }
 
-const slugDa = url => (String(url).match(/\/ofertas?\/leilao\/imoveis\/[a-z0-9-]+\/\d+\/(?:id-)?\d+\/([a-z0-9-]+)/i) || [])[1] || '';
+// Slug DECODIFICADO ("apto-nº-307-…"): título e cidade/UF saem dele; cru, o `%C2%BA` virava palavra do título.
+const slugDa = (url) => {
+  const cru = (String(url).match(new RegExp(`\\/ofertas?\\/leilao\\/imoveis\\/[a-z0-9-]+\\/\\d+\\/(?:id-)?\\d+\\/(${SLUG})`, 'i')) || [])[1] || '';
+  try { return decodeURIComponent(cru); } catch { return cru; }   // escape malformado: o slug cru ainda serve
+};
 
 // Tabela real (Lote | Tipo do Bem | Valor de Avaliação | Lance Inicial - 2ª Praça/Hasta | …).
 // Lê <tr>/<td|th> de verdade — não innerText — porque o motor `dom` entrega `page.content()`.

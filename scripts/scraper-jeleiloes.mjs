@@ -8,7 +8,7 @@
  * próprio parser contra o HTML ao vivo). Rodar `JELEILOES_DEBUG=1` numa Action antes de virar
  * produção.
  *
- * Env: JELEILOES_MAX_LOTES (40) · JELEILOES_MAX_PAGES (10) · JELEILOES_DRYRUN (default '1') ·
+ * Env: JELEILOES_MAX_LOTES (80) · JELEILOES_MAX_PAGES (15) · JELEILOES_DRYRUN (default '1') ·
  * JELEILOES_DEBUG.
  * Env infra: VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY.
  */
@@ -23,8 +23,13 @@ if (!SB_URL || !SB_KEY) { console.error('Faltam VITE_SUPABASE_URL / SUPABASE_SER
 
 rodarFonte(cfg, {
   supabase: createClient(SB_URL, SB_KEY),
-  maxLotes: Number(process.env.JELEILOES_MAX_LOTES || 40),
-  maxPages: Number(process.env.JELEILOES_MAX_PAGES || 10),
+  // 40 → 80 e 10 → 15 (24/10, pendência #358): o catálogo tem ~197 imóveis em 10 páginas (a 10ª já é a
+  // última, com 17) e 40 leituras/dia não davam a volta no acervo — 71 lotes com praça futura ficavam 4+
+  // dias sem toque. 80 dá a volta em ~2,5 dias (o motor reserva metade para o lote há mais tempo sem
+  // leitura); ~+4 min na rodada do scraper-dom (fetch grátis). 15 páginas: folga para o catálogo crescer
+  // sem cortar a lista (o laço para sozinho na 1ª página sem lote novo).
+  maxLotes: Number(process.env.JELEILOES_MAX_LOTES || 80),
+  maxPages: Number(process.env.JELEILOES_MAX_PAGES || 15),
   dryrun: process.env.JELEILOES_DRYRUN !== '0',
   debug: process.env.JELEILOES_DEBUG === '1',
 }).catch(e => { console.error(e); process.exit(1); });

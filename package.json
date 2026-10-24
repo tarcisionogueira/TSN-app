@@ -53,6 +53,7 @@
     "testar:freitas": "node scripts/testes/freitas-parse.mjs",
     "testar:milan": "node scripts/testes/milan-parse.mjs",
     "testar:sweep-trava": "node scripts/testes/sweep-trava.mjs",
+    "testar:pecini-fila": "node scripts/testes/pecini-fila.mjs",
     "testar:cidade-nesta-cidade": "node scripts/testes/cidade-nesta-cidade.mjs",
     "testar:fracao": "node scripts/testes/fracao-ideal.mjs",
     "testar:redator": "node scripts/testes/redator-proposta-nao-inventa-valor.mjs",
