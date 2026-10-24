@@ -134,8 +134,20 @@ export function parseDetalhe(html, url) {
   const ultima = datas.length >= 2 && datas[datas.length - 1] > (fut || datas[0]) ? datas[datas.length - 1] : null;
   const encerrado = datas.length > 0 && !datas.some(d => d >= hoje) && !/ABERTO\s+PARA\s+LANCES/i.test(txt);
 
+  // FOTOS (24/10, #289): o parser não lia imagem nenhuma — 491 de 601 ativos sem foto. A foto do lote
+  // mora em `…cloudfront.net/bens/<id do bem>/img-….jpg` (mesma plataforma SOLEON de TORRES3/DANIELGARCIA:
+  // pasta exclusiva do lote). Capa = og:image quando for dessa forma; senão a 1ª da pasta. Banner e logo
+  // (`/banners/`, `/site/images/`) ficam de fora pela própria forma da URL.
+  const RE_FOTO = /https?:\/\/[a-z0-9.-]+\/bens\/\d+\/[^"'\s<>?#]+\.(?:jpe?g|png|webp)/gi;
+  const og = (String(html).match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)/i) || [])[1] || null;
+  const todas = [...new Set(String(html).match(RE_FOTO) || [])];
+  const capa = og && /\/bens\/\d+\//.test(og) ? og : todas[0] || null;
+  const pasta = capa ? (capa.match(/^(https?:\/\/[^?#]+\/bens\/\d+\/)/i) || [])[1] : null;
+  const fotos = pasta ? [capa, ...todas.filter((u) => u.startsWith(pasta) && u !== capa)].slice(0, 20) : [];
+
   const docs = anexosDeHtml(html, url);
   return {
+    link_foto: capa, fotos,
     titulo: titulo || null, cidade, estado, endereco,
     valor_avaliacao: avaliacao, valor_minimo: minimo,
     modalidade, area_m2: area,
@@ -158,6 +170,8 @@ export const montarRow = (url, det, tenant) => {
   const mapa = { apartamento: 'apartamento', casa: 'casa', terreno: 'terreno', comercial: 'comercial', sala: 'comercial', loja: 'comercial', galpao: 'comercial', predio: 'comercial', rural: 'rural', fazenda: 'rural', sitio: 'rural' };
   if (det.tipo_hint && mapa[det.tipo_hint]) row.tipo = mapa[det.tipo_hint];
   if (det.endereco) row.endereco = det.endereco;
+  // Só quando leu foto: lote sem foto nesta leitura não apaga a galeria de uma leitura anterior.
+  if (det.fotos?.length) row.fotos = det.fotos;
   return row;
 };
 export { checarQualidade };
