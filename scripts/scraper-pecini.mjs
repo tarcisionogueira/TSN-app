@@ -36,6 +36,7 @@ import { registrarConhecimento, qualidadeColeta } from './lib/conhecimento.mjs';
 // Monitor de fontes: sem esta linha a fonte fica INVISÍVEL ao bug bounty (ver _saude-fonte.mjs).
 import { registrarSaude } from './_saude-fonte.mjs';
 import { inferirUF } from './lib/inferir-uf.mjs';
+import { pisoEnumeracao, demaisParaUmaRodada } from './lib/sweep-trava.mjs';
 
 // MULTI-LEILOEIRO (27/09): a plataforma ASP.NET "DefaultClean" (suaplataformadeleilao.com.br) é
 // a mesma em outros leiloeiros — confirmado no Sublime pelo recon (recon_dump 71): /Core/V1,
@@ -557,28 +558,41 @@ async function main() {
   // COLETADO (4–6 aqui), que não descreve a enumeração (52). Misturar os dois corromperia o
   // baseline das duas medidas. Até existir histórico de ENUMERAÇÃO, o piso fica explícito aqui
   // e o número enumerado vai para o log de toda rodada, que é de onde esse histórico sai.
-  const PISO_ENUMERACAO = 40;   // observado: 52. Sitemap quebrado devolve 0 ou punhado.
-  if (!DRYRUN && lotes.length >= PISO_ENUMERACAO) {
+  const PISO_ENUMERACAO = 40;   // fallback sem histórico (observado: 52). Sitemap quebrado devolve 0 ou punhado.
+  // 24/10 (#277): o piso fixo virou dívida paga — o sitemap da PECINI encolheu para 38–43 e a varredura era
+  // pulada quase todo dia. Agora o piso é RELATIVO ao que o próprio sitemap enumerou nas últimas rodadas
+  // (`fonte_saude.enumerados`, ver lib/sweep-trava.mjs); o fixo só vale sem histórico legível.
+  const { data: histEnum, error: eHist } = await supabase.from('fonte_saude').select('enumerados')
+    .eq('fonte', FONTE).not('enumerados', 'is', null).order('executado_em', { ascending: false }).limit(10);
+  if (eHist) console.error(`  histórico de enumeração ilegível (${eHist.message}) — piso fixo ${PISO_ENUMERACAO}.`);
+  const { piso: pisoEnum, via: viaPiso } = pisoEnumeracao(eHist ? [] : histEnum, PISO_ENUMERACAO);
+  if (!DRYRUN && lotes.length >= pisoEnum) {
     const noSitemap = new Set(lotes.map(l => `${PREFIXO}${l.id}`));
     const { data: ativosNoBanco, error: eAtivos } = await supabase
-      .from('imoveis_leilao').select('fonte_id').eq('fonte', FONTE).eq('ativo', true);
+      .from('imoveis_leilao').select('fonte_id,resultado_leilao,resultado_apurado_em').eq('fonte', FONTE).eq('ativo', true);
     if (eAtivos) {
       console.error(`  não consegui ler os ativos para a varredura (${eAtivos.message}) — sweep PULADO.`);
     } else {
-      const sumiram = (ativosNoBanco || []).map(r => r.fonte_id).filter(id => !noSitemap.has(id));
-      if (sumiram.length) {
+      // LEILÃO NEGATIVO FICA 15 DIAS (regra do dono, mesma de salvarEFinalizar/desativar_leiloes_encerrados):
+      // "sem lance" apurado há < 15 dias continua ativo para a proposta de compra, mesmo fora do sitemap.
+      const janela = Date.now() - 15 * 864e5;
+      const retido = (r) => ['sem_lance', 'indeterminado'].includes(r.resultado_leilao) && Date.parse(r.resultado_apurado_em || 0) > janela;
+      const sumiram = (ativosNoBanco || []).filter(r => !noSitemap.has(r.fonte_id) && !retido(r)).map(r => r.fonte_id);
+      if (demaisParaUmaRodada(sumiram.length, (ativosNoBanco || []).length)) {
+        console.error(`  🛑 ${sumiram.length} de ${(ativosNoBanco || []).length} ativos fora do sitemap de uma vez — demais para uma rodada, NÃO desligados (conferir o sitemap).`);
+      } else if (sumiram.length) {
         const { data: desativados, error: eDesat } = await supabase
-          .from('imoveis_leilao').update({ ativo: false }).in('fonte_id', sumiram).select('fonte_id');
+          .from('imoveis_leilao').update({ ativo: false, suprimido_motivo: 'sumiu_da_fonte' }).in('fonte_id', sumiram).eq('ativo', true).select('fonte_id');
         // `.select()` de propósito: update que a RLS/filtro não alcança devolve error null e
         // zero linha — sem isto, "desativei 58" seria afirmação sem prova (CLAUDE.md, forma 3).
         if (eDesat) console.error(`  falha ao desativar os que sumiram do sitemap: ${eDesat.message}`);
-        else console.log(`  🔻 ${(desativados || []).length} lote(s) desativado(s): ativos no banco e AUSENTES do sitemap (${lotes.length} enumerados).`);
+        else console.log(`  🔻 ${(desativados || []).length} lote(s) desativado(s): ativos no banco e AUSENTES do sitemap (${lotes.length} enumerados; piso ${pisoEnum}, ${viaPiso}).`);
       } else {
         console.log(`  ✓ nenhum lote ativo fora do sitemap (${lotes.length} enumerados).`);
       }
     }
   } else if (!DRYRUN) {
-    console.error(`  ⚠️ sitemap enumerou ${lotes.length} (< piso ${PISO_ENUMERACAO}) — varredura de ausentes PULADA para não zerar a fonte por parse quebrado.`);
+    console.error(`  ⚠️ sitemap enumerou ${lotes.length} (< piso ${pisoEnum}, ${viaPiso}) — varredura de ausentes PULADA para não zerar a fonte por parse quebrado.`);
   }
   if (!alvoLotes.length) {
     console.error(`nenhum lote na fila para alvo='${ALVO}'. Nada a fazer.`);

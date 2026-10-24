@@ -52,6 +52,8 @@
     "testar:albertomacedo-cidade": "node scripts/testes/albertomacedo-cidade-do-lote.mjs",
     "testar:freitas": "node scripts/testes/freitas-parse.mjs",
     "testar:milan": "node scripts/testes/milan-parse.mjs",
+    "testar:sweep-trava": "node scripts/testes/sweep-trava.mjs",
+    "testar:cidade-nesta-cidade": "node scripts/testes/cidade-nesta-cidade.mjs",
     "testar:fracao": "node scripts/testes/fracao-ideal.mjs",
     "testar:redator": "node scripts/testes/redator-proposta-nao-inventa-valor.mjs",
     "testar:whatsapp-oficial": "node scripts/testes/whatsapp-escuta-e-envio.mjs",

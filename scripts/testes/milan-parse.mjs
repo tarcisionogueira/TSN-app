@@ -70,4 +70,25 @@ const boa = '<!doctype html><html lang="pt-BR"><head><title>Milan</title></head>
 assert.equal(ehDesafio(boa), false);
 assert.equal(ehDesafio('<!DOCTYPE html><html lang="en-US" dir="ltr"><head><title>Just a moment...</title>'), true);
 
+// #310 (24/10): cards REAIS do evento 15605 (recon_dump 68, amostra milan-sem-valor de 27/09, reduzidos ao
+// essencial). O lote 002 tem o título em `card_lote_titulo__SdByA`, não em `tituloGrande` — saía "Imóvel" sem
+// cidade (milan_15605_002, 15626_008 e 15642_001 ativos assim em 23/10). E o formato novo "Cidade/UF – …".
+const ev15605 = parseEvento(`<h1>Leilão de Imóveis</h1><h2><span>Início:</span> 27 OUT 11:00</h2><ul>`
+  + `<li id="card-001"><div><a href="/leilao/15605/lote/001"><div><img alt="Lote Americana/SP – Loteamento Morada do Sol - Casa com aprox. 147,15m² (estimada) e Terreno de 263,70m²" src="https://milanleiloes.com.br/_next/image?url=https%3A%2F%2Fadm.milanleiloes.com.br%2FFotos%2F20261027_15605%2F001_amer1.jpg%3Fv%3D1&amp;w=3840&amp;q=75"></div><div><div><div><span id="card_lote_lote__xyHtm">Lote 001</span><p id="card_lote_tituloGrande__w2pVU">Americana/SP – Loteamento Morada do Sol - Casa com aprox. 147,15m² (estimada) e Terreno de 263,70m²</p><p id="card_lote_lanceMinimo__l2ivg"><span>LANCE INICIAL:</span> R$ 330.000,00</p></div></div><div><div id="estado_lote_tag_estadoLote__QA3i6"><div id="estado_lote_tag_dotEstadolote___Lj6t"></div>RECEBENDO LANCES</div></div></div></a></div></li>`
+  + `<li id="card-002"><div><a href="/leilao/15605/lote/002"><div><img alt="Lote Porto Seguro/BA – Arraial D’Ajuda - Fazenda com 2,88 Ha." src="https://milanleiloes.com.br/_next/image?url=https%3A%2F%2Fadm.milanleiloes.com.br%2FFotos%2F20261027_15605%2F002_portoseg1.jpg%3Fv%3D1&amp;w=3840&amp;q=75"></div><div><div><div><span id="card_lote_lote__xyHtm">Lote 002</span><p id="card_lote_titulo__SdByA">Porto Seguro/BA – Arraial D’Ajuda - Fazenda com 2,88 Ha.</p><p id="card_lote_lanceMinimo__l2ivg"><span>LANCE INICIAL:</span> R$ 526.000,00</p></div></div><div><div id="estado_lote_tag_estadoLote__QA3i6"><div id="estado_lote_tag_dotEstadolote___Lj6t"></div>RECEBENDO LANCES</div></div></div></a></div></li></ul>`, 15605, BASE);
+assert.equal(ev15605.lotes.length, 2);
+const [c1, c2] = ev15605.lotes;
+assert.equal(c2.titulo, 'Porto Seguro/BA – Arraial D’Ajuda - Fazenda com 2,88 Ha.');
+const m1 = montarRow(ev15605, c1, TENANTS.milan), m2 = montarRow(ev15605, c2, TENANTS.milan);
+assert.equal(m1.titulo, 'Casa - Americana/SP'); assert.equal(m1.cidade, 'Americana'); assert.equal(m1.estado, 'SP');
+assert.equal(m2.titulo, 'Fazenda - Porto Seguro/BA'); assert.equal(m2.cidade, 'Porto Seguro'); assert.equal(m2.estado, 'BA');
+assert.equal(m2.area_m2, 28800); assert.equal(m2.valor_minimo, 526000);
+assert.ok(m2.descricao.includes('Arraial'));
+// Galpão no formato novo (milan_15605_003, gravado em 23/10 com título "Imóvel").
+const g = montarRow(ev15605, { ...c1, lote: '003', titulo: 'São Bernardo do Campo/SP – Bairro Taboão – Galpão Industrial com 474,93m² e Terreno de 1.000,00m²' }, TENANTS.milan);
+assert.equal(g.titulo, 'Galpão - São Bernardo do Campo/SP');
+// Card sem o <p> do título: o alt da foto segura.
+const soAlt = parseEvento(`<ul><li id="card-009"><div><a href="/leilao/15642/lote/009"><img alt="Lote Curitiba/PR – Bairro Água Verde - Apartamento 60m²" src="x"><span>Lote 009</span></a></div></li></ul>`, 15642, BASE);
+assert.equal(soAlt.lotes[0].titulo, 'Curitiba/PR – Bairro Água Verde - Apartamento 60m²');
+
 console.log('milan-parse: todos os casos passaram');

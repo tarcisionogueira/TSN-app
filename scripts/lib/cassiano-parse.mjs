@@ -12,7 +12,7 @@
  *     edital em `/media/arquivos/lote/…pdf` ("Regulamento - Edital"). Sem avaliação na página.
  */
 import { inferirTipo, extrairArea, checarQualidade } from './leilaopro-parse.mjs';
-import { num, plaus, textoDe, titleCase, montarRowDom, cidadeUFBare, semPrefixoCidade, RE_IMG_DESCARTA } from './dom-parse-util.mjs';
+import { num, plaus, textoDe, titleCase, montarRowDom, cidadeUFBare, semPrefixoCidade, cidadeNestaCidade, RE_IMG_DESCARTA } from './dom-parse-util.mjs';
 import { decodificarEntidades } from '../../api/_texto-imovel.js';
 
 export const TENANTS = {
@@ -41,8 +41,12 @@ const limpo = (s) => decodificarEntidades(String(s || '').replace(/<[^>]+>/g, ' 
 const dataBr = (s) => { const m = String(s || '').match(/(\d{2})\/(\d{2})\/(\d{4})/); return m ? `${m[3]}-${m[2]}-${m[1]}` : null; };
 
 // "Comarca de Uberlândia.", "COMARCA DE TIROS (MG)", "SITUADO EM TIROS – MG", "Uberlândia/MG".
-function cidadeUf(desc) {
+// 24/10 (#310): "Um terreno situado NESTA CIDADE, no bairro Jardim Patrícia II…" — a cidade só aparece no
+// cartório ("…2º Cartório de Registro de Imóveis de Uberlândia (MG)"). Ver cidadeNestaCidade.
+export function cidadeUf(desc) {
   const d = String(desc || '');
+  const nc = cidadeNestaCidade(d);
+  if (nc.cidade) return { cidade: nc.cidade, estado: nc.estado || 'MG' };
   const m1 = d.match(/(?:comarca|munic[íi]pio|cidade)\s+de\s+([A-Za-zÀ-ÿ']+(?:\s+(?:de|do|da|dos|das)?\s*[A-Za-zÀ-ÿ']+){0,3}?)\s*(?:[/(–-]\s*([A-Z]{2})\b|[,.;)]|$)/i);
   if (m1) return { cidade: titleCase(m1[1].trim()), estado: m1[2] || 'MG' };
   const m2 = d.match(/([A-ZÀ-Ý][A-Za-zÀ-ÿ' ]{2,40}?)\s*[/–-]\s*(MG|GO|SP)\b/);

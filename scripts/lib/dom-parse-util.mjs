@@ -196,6 +196,21 @@ export function semPrefixoCidade(s) {
   return p.join(' ');
 }
 
+// "NESTA CIDADE" + CARTÓRIO (24/10, #310). Matrícula transcrita diz "um terreno situado NESTA CIDADE, no bairro…"
+// e só nomeia a cidade no fim: "…matriculado sob o nº 41.686 do 2º Cartório de Registro de Imóveis de Uberlândia
+// (MG)". O "nesta cidade" é a cidade do próprio registro — é PROVA, não palpite. Só vale com as duas metades: sem
+// o "nesta cidade/neste município" a comarca do cartório pode cobrir vários municípios (o NAKAKOGUE recusa juízo
+// como cidade pelo mesmo motivo). O texto vem em CAIXA ALTA com acento fora do lugar ("REGÍSTRO") — tolerado.
+const RE_NESTA_CIDADE = /\b(?:nest[ae]|dest[ae])\s+(?:cidade|munic[íi]pio|comarca)\b/i;
+const RE_CARTORIO_DE = /reg[íi]stro\s+(?:geral\s+)?de\s+im[óo]veis\s+(?:da\s+comarca\s+)?de\s+([A-Za-zÀ-ÿ']+(?:\s+(?:de|do|da|dos|das)?\s*[A-Za-zÀ-ÿ']+){0,3}?)\s*(?:[/(–-]\s*([A-Za-z]{2})\b|[,.;)]|$)/i;
+export function cidadeNestaCidade(txt) {
+  const t = String(txt || '');
+  if (!RE_NESTA_CIDADE.test(t)) return { cidade: null, estado: null };
+  const m = t.match(RE_CARTORIO_DE);
+  if (!m) return { cidade: null, estado: null };
+  return { cidade: titleCase(m[1].trim()), estado: m[2] ? m[2].toUpperCase() : null };
+}
+
 export function cidadeUFBare(txt, desde = 0) {
   const texto = String(txt || '');
   // Janela curta primeiro (rápido, evita casar algo errado num texto grande) — mas alguns

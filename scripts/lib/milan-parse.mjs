@@ -80,7 +80,12 @@ export function parseEvento(html, cod, base) {
     const lote = (bloco.match(/^(\d{1,4})"/) || [])[1];
     const href = (bloco.match(/href="(\/leilao\/\d+\/lote\/\d+)"/) || [])[1];
     if (!lote || !href) continue;
-    const titulo = limpar((bloco.match(/id="card_lote_tituloGrande[^"]*">([\s\S]*?)<\/p>/) || [])[1]);
+    // TÍTULO EM DOIS IDs (24/10, #310): o card longo usa `card_lote_tituloGrande__…`, o curto
+    // `card_lote_titulo__…` (amostra REAL do evento 15605, recon_dump 68: lote 001 num, 002 no outro). Só o
+    // primeiro era lido — o 002 saía título "Imóvel", sem cidade e sem descrição. Último recurso: o `alt` da
+    // foto ("Lote Porto Seguro/BA – …"), que o site preenche com o mesmo texto.
+    const titulo = limpar((bloco.match(/id="card_lote_titulo(?:Grande)?__[^"]*">([\s\S]*?)<\/p>/) || [])[1])
+      || limpar((bloco.match(/<img[^>]*\balt="Lote\s+([^"]{8,})"/) || [])[1]);
     // "LANCE MÍNIMO" (leilão convencional) ou "LANCE INICIAL" (Porto Seguro e outros — medido em
     // 27/09: 41 de 69 lotes, 4 eventos, mesmo elemento `card_lote_lanceMinimo`).
     const minimo = plaus(num((bloco.match(/LANCE (?:M[ÍI]NIMO|INICIAL):<\/span>\s*R\$\s*([\d.]+,\d{2})/i) || [])[1]));
@@ -101,8 +106,10 @@ export function parseEvento(html, cod, base) {
 
 // "Minaçu - GO. Bairro Morada do Sol 1. Terreno. Áreas Totais. Terr. 2.847,44m²."
 // "Curitiba – PR. Bairro Camponesa. Casa. …" (travessão) · "Porto Alegre - RS. … Apto. Área Priv. 63,47m²"
+// 24/10 (#310): formato novo "Porto Seguro/BA – Arraial D’Ajuda - Fazenda com 2,88 Ha." (eventos 15605,
+// 15626, 15642): cidade com BARRA e o tipo depois de " – ", não de ". ".
 function cidadeUfTipo(titulo) {
-  const m = String(titulo || '').match(/^\s*([A-Za-zÀ-ÿ'][A-Za-zÀ-ÿ' .]{1,60}?)\s*[-–—]\s*([A-Z]{2})\b/);
+  const m = String(titulo || '').match(/^\s*([A-Za-zÀ-ÿ'][A-Za-zÀ-ÿ' .’]{1,60}?)\s*[-–—/]\s*([A-Z]{2})\b/);
   const cidade = m ? titleCase(m[1].trim()) : null, estado = m ? m[2] : null;
   // Tipo = a PALAVRA-CHAVE do trecho, não o trecho inteiro: "Fazenda São Jorge" virava título
   // "Fazenda São Jorge - Bambui/MG" (dry-run 27/09). O nome próprio fica na descrição.
@@ -110,7 +117,7 @@ function cidadeUfTipo(titulo) {
     ['terreno', 'Terreno'], ['sala', 'Sala Comercial'], ['loja', 'Loja'], ['galp[ãa]o', 'Galpão'], ['pr[ée]dio', 'Prédio'],
     ['fazenda', 'Fazenda'], ['s[íi]tio', 'Sítio'], ['ch[áa]cara', 'Chácara'], ['gleba', 'Gleba'], ['lote', 'Lote'],
     ['box', 'Box'], ['vaga', 'Vaga de Garagem'], ['conjunto', 'Conjunto Comercial']];
-  const partes = String(titulo || '').split(/\.\s+/).map(p => p.trim());
+  const partes = String(titulo || '').split(/\.\s+|\s[-–—]\s/).map(p => p.trim());
   let tipo = 'Imóvel';
   for (const p of partes) {
     const t = TIPOS.find(([re]) => new RegExp(`^${re}\\b`, 'i').test(p));

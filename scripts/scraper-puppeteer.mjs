@@ -42,6 +42,7 @@ import { capturarContatoSeAusente, lojaSuperbid, gravarContatosTenant } from './
 import { localVeiculoZuk } from './lib/zuk-local-veiculo.mjs';
 import { galeriaDoHtml, montarFotos, fotosPreservadas } from './lib/galeria-veiculo.mjs';
 import { fotoDoMeta } from './lib/dom-parse-util.mjs';
+import { travaDoSweep, medianaTotais } from './lib/sweep-trava.mjs';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -411,10 +412,26 @@ async function salvarEFinalizar(imoveis, fonte) {
   if (urlAmostra) await capturarContatoSeAusente(supabase, fonte, urlAmostra);
 
   const runStart = new Date().toISOString();
+  // LEILÃO NEGATIVO FICA 15 DIAS (23/09) — ver o sweep abaixo. Mesmo filtro nos dois lugares.
+  const janelaNegativo = new Date(Date.now() - 15 * 864e5).toISOString();
+  const ORFILTRO_VARRIVEL = `resultado_leilao.is.null,resultado_leilao.eq.vendido,resultado_apurado_em.is.null,resultado_apurado_em.lt.${janelaNegativo}`;
   // Tamanho do acervo ATIVO antes da rodada — base da trava de proporção do sweep (abaixo).
+  // SÓ O QUE O SWEEP PODE TOCAR (24/10, #277): contava também o "sem lance" retido pela janela de 15 dias, que
+  // o site já não lista e o sweep nunca desliga. Na VIP eram 74 de 95 ativos: gravava 39 (tudo que o site tem),
+  // 39 < 95 × 0,5, e o sweep era PULADO todo dia — o lote que saiu do site sem apuração ficava ativo. O
+  // denominador da trava tem que ser a mesma população que o numerador pode cobrir — ver lib/sweep-trava.mjs.
   const { count: ativosAntes, error: eAtivos } = await supabase
     .from('imoveis_leilao').select('id', { count: 'exact', head: true })
     .eq('fonte', fonte).eq('ativo', true);
+  const { count: varriveisAntes, error: eVarr } = await supabase
+    .from('imoveis_leilao').select('id', { count: 'exact', head: true })
+    .eq('fonte', fonte).eq('ativo', true).or(ORFILTRO_VARRIVEL);
+  // Tamanho recente da fonte: mediana do total das últimas rodadas sadias (antes desta). Ilegível ⇒ null
+  // ⇒ a trava volta à régua antiga (todo o acervo ativo), que é a mais conservadora.
+  const { data: saudeRecente, error: eHist } = await supabase.from('fonte_saude').select('total')
+    .eq('fonte', fonte).eq('status', 'ok').lt('executado_em', runStart).order('executado_em', { ascending: false }).limit(7);
+  if (eHist || eVarr) console.error(`  ${fonte}: histórico/varríveis ilegível (${(eHist || eVarr).message}) — trava do sweep na régua antiga.`);
+  const totalRecente = (eHist || eVarr) ? null : medianaTotais(saudeRecente);
   if (eAtivos) console.error(`  ${fonte}: não consegui contar o acervo ativo (${eAtivos.message}) — sweep será pulado.`);
   let salvos = 0, esperados = 0;
   // BLOCOS DE 100, E O QUE ESTOURA SE DIVIDE (22/10). Eram blocos de 500: com ~35 gatilhos BEFORE por
@@ -457,7 +474,8 @@ async function salvarEFinalizar(imoveis, fonte) {
   // travas agora: (a) o coletor avisou que parou por falha (`coletaParcial`); (b) a rodada
   // gravou menos da METADE do que estava ativo. Queda grande legítima só atrasa a saída:
   // a limpeza por data do leilão continua aposentando o que venceu.
-  const metadeDoAcervo = Number.isFinite(ativosAntes) && ativosAntes > 0 && salvos < ativosAntes * 0.5;
+  const trava = travaDoSweep({ salvos, coletados: imoveis.length, varriveisAntes, ativosAntes, totalRecente });
+  const metadeDoAcervo = trava.bloqueado;
   const sweepBloqueado = imoveis.coletaParcial || eAtivos || metadeDoAcervo;
   // PISO DO SWEEP (22/10, #277): era `salvos > 50` fixo — fonte pequena (TOTALLEILOES 10, CALIL…) nunca
   // desligava o lote que saiu do site. O que protege contra lista ruim é o freio RELATIVO (metadeDoAcervo)
@@ -466,7 +484,7 @@ async function salvarEFinalizar(imoveis, fonte) {
   if (sweepBloqueado && gravouTudo && salvos >= SWEEP_MIN) {
     const pq = imoveis.coletaParcial ? `coleta parcial (${imoveis.coletaParcial})`
       : eAtivos ? 'acervo ativo não pôde ser contado'
-      : `gravou ${salvos} de ${ativosAntes} ativos (< 50%)`;
+      : trava.motivo;
     console.error(`  🛑 ${fonte}: sweep PULADO — ${pq}. Desativar aqui aposentaria lote que a fonte ainda tem.`);
   }
   if (salvos >= SWEEP_MIN && gravouTudo && !sweepBloqueado) {
@@ -478,18 +496,17 @@ async function salvarEFinalizar(imoveis, fonte) {
     // lista oferta ABERTA) — então todo "sem lance" apurado era desligado aqui na coleta
     // seguinte (186 de 186 SUPERBID invisíveis). Mesma janela de desativar_leiloes_encerrados():
     // sem_lance/indeterminado apurado há < 15 dias continua ativo, para a proposta de compra.
-    const janelaNegativo = new Date(Date.now() - 15 * 864e5).toISOString();
     const { error, count } = await supabase
       .from('imoveis_leilao')
       .update({ ativo: false, suprimido_motivo: 'sumiu_da_fonte' }, { count: 'exact' })
       .eq('fonte', fonte)
       .eq('ativo', true)
       .lt('atualizado_em', runStart)
-      .or(`resultado_leilao.is.null,resultado_leilao.eq.vendido,resultado_apurado_em.is.null,resultado_apurado_em.lt.${janelaNegativo}`);
+      .or(ORFILTRO_VARRIVEL);
     if (error) console.error(`  Erro ao desativar ${fonte} obsoletos:`, error.message);
     else console.log(`  🔻 ${fonte}: ${count ?? 0} lotes obsoletos desativados`);
-  } else if (gravouTudo && salvos <= 50) {
-    console.log(`  ⚠️ ${fonte} gravou ${salvos} (≤50) — pulando desativação por segurança`);
+  } else if (gravouTudo && salvos < SWEEP_MIN) {
+    console.log(`  ⚠️ ${fonte} gravou ${salvos} (< ${SWEEP_MIN}) — pulando desativação por segurança`);
   }
   return imoveis.length;
 }

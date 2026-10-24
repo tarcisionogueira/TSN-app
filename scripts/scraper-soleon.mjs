@@ -678,11 +678,15 @@ async function varrerSumidos(tenant) {
   const fonte = tenant.fonte;
   const vistos = ENUM_IDS.get(fonte);
   if (!ENUM_COMPLETA.has(fonte) || !vistos?.size) { console.log(`  [${fonte}] varredura de sumidos PULADA — enumeração não terminou pelo fim da lista.`); return; }
-  const { data: ativos, error: eAt } = await supabase.from('imoveis_leilao').select('fonte_id').eq('fonte', fonte).eq('ativo', true).limit(5000);
+  const { data: ativos, error: eAt } = await supabase.from('imoveis_leilao').select('fonte_id,resultado_leilao,resultado_apurado_em').eq('fonte', fonte).eq('ativo', true).limit(5000);
   if (eAt) { console.error(`  [${fonte}] varredura PULADA — não consegui ler o acervo ativo (${eAt.message}).`); return; }
-  if (vistos.size < (ativos?.length || 0) * 0.5) { console.error(`  🛑 [${fonte}] varredura PULADA — enumerou ${vistos.size} de ${ativos.length} ativos (< 50%).`); return; }
-  const sumidos = (ativos || []).map(r => r.fonte_id).filter(id => !vistos.has(id));
   const janelaNegativo = new Date(Date.now() - 15 * 864e5).toISOString();
+  // 24/10 (#277): a proporção compara com os ativos que a varredura PODE desligar. O "sem lance" retido 15 dias
+  // pela regra do dono já não está no site; contá-lo no denominador pulava a varredura da CALIL (21 retidos).
+  const retido = (r) => ['sem_lance', 'indeterminado'].includes(r.resultado_leilao) && r.resultado_apurado_em && r.resultado_apurado_em >= janelaNegativo;
+  const varriveis = (ativos || []).filter(r => !retido(r));
+  if (vistos.size < varriveis.length * 0.5) { console.error(`  🛑 [${fonte}] varredura PULADA — enumerou ${vistos.size} de ${varriveis.length} ativos varríveis (< 50%).`); return; }
+  const sumidos = varriveis.map(r => r.fonte_id).filter(id => !vistos.has(id));
   let desligados = 0;
   for (let i = 0; i < sumidos.length; i += 200) {
     const { data, error } = await supabase.from('imoveis_leilao')

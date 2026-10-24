@@ -12,7 +12,7 @@
  *    — lidos uma vez por execução em `enriquecer` (lib/motor/fontes/nakakogue.mjs).
  */
 import { inferirTipo, extrairArea, checarQualidade } from './leilaopro-parse.mjs';
-import { num, plaus, textoDe, montarRowDom } from './dom-parse-util.mjs';
+import { num, plaus, textoDe, montarRowDom, cidadeNestaCidade } from './dom-parse-util.mjs';
 import { cidadeDoLote } from './albertomacedo-parse.mjs';
 import { inferirUF } from './inferir-uf.mjs';
 import { decodificarEntidades } from '../../api/_texto-imovel.js';
@@ -60,6 +60,9 @@ export function detalhesDoCatalogo(html, base) {
     // juízo NÃO prova a cidade do imóvel (comarca cobre vários municípios): cidade fica vazia.
     const textoCard = limpo(bloco);
     if (!cidade) ({ cidade, estado } = cidadeDoLote(textoCard, ''));
+    // 24/10 (#310): "situado nesta cidade … Registro de Imóveis de X" — cidade do próprio cartório (prova; o
+    // juízo abaixo não é). Mantém a UF já achada quando o texto não a repete.
+    if (!cidade) { const nc = cidadeNestaCidade(texto); if (nc.cidade) { cidade = nc.cidade; estado = nc.estado || estado; } }
     if (!estado) {
       const juizo = (textoCard.match(/Edital:\s*(.{3,120}?)\s*Situa/i) || [])[1] || '';
       const sede = (juizo.match(/\bde\s+([A-ZÀ-Ý][A-Za-zÀ-ÿ' ]{2,40})$/) || [])[1];
