@@ -65,10 +65,13 @@ import { planejarAlvo } from './lib/motor/runner.mjs';
 import { galeriaDoHtml, montarFotos } from './lib/galeria-veiculo.mjs';
 
 const BASE = 'https://www.rjleiloes.com.br';
-const MAX_LOTES = Number(process.env.RJ_MAX_LOTES || 40);
+const HEADLESS = process.env.RJ_HEADLESS === '1';
+// 24/10 (#272): os tetos 40 lotes / 6 páginas são do caminho PAGO (Bright Data). No runner residencial a leitura
+// é grátis e eles prendiam a fonte em 40 de ~597 lotes toda rodada (fonte_saude: total = 40, sempre). Lá o teto
+// sobe para o acervo inteiro; o caminho pago continua como estava.
+const MAX_LOTES = Number(process.env.RJ_MAX_LOTES || (HEADLESS ? 400 : 40));
 const DRYRUN = process.env.RJ_DRYRUN !== '0'; // default: dry-run (não grava)
 const DEBUG = process.env.RJ_DEBUG === '1';
-const HEADLESS = process.env.RJ_HEADLESS === '1';
 const SB_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -371,7 +374,7 @@ async function main() {
   //    A página 1 é OBRIGATÓRIA: se ela não vier, não sabemos nada sobre o acervo — e
   //    "não sei" nunca pode virar "não há". A partir da 2ª, uma falha interrompe a
   //    paginação mas marca a enumeração como INCOMPLETA (nunca desativa o que não viu).
-  const MAX_PAGES = Number(process.env.RJ_MAX_PAGES || 6);
+  const MAX_PAGES = Number(process.env.RJ_MAX_PAGES || (HEADLESS ? 30 : 6));
   const setUrls = new Set();
   let enumeracaoCompleta = true;
   for (let p = 1; p <= MAX_PAGES; p++) {
