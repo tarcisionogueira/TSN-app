@@ -454,7 +454,7 @@ ela renova — ninguém precisa religar.
 
 | Ferramenta | Franquia | Freio | Onde ver |
 |---|---|---|---|
-| Firecrawl | 1.000 créditos/mês (plano grátis, renova no período) | `fetch-firecrawl.mjs` lê `GET /v2/team/credit-usage` e usa só a fatia da semana; reserva 100 (veículos MGL: 400, último da fila) | `uso_integracoes` provedor `firecrawl` / painel Custos & Uso |
+| Firecrawl | **plano pago desde 24/10: 5.000 créditos/mês por US$ 20** (dono; o grátis de 1.000 esgotou em 24/10) | `fetch-firecrawl.mjs` lê `GET /v2/team/credit-usage` e usa só a fatia da semana; reserva 100 (veículos MGL: 400, último da fila) | `uso_integracoes` provedor `firecrawl` / painel Custos & Uso |
 | Google Geocoding | 10.000/mês | `_geo.js` para em 9.900; contador ilegível = não chama (até 22/10 lia como 0 e liberava) | `uso_integracoes` `google_geocode` |
 | Bright Data | teto semanal pago (`BRIGHTDATA_MAX_REQ_SEMANA`) | ledger `brightdata_uso` + `brightdata_decisao()` | item 1b |
 | Gemini / Resend / LocationIQ | grátis por dia/mês | painel Custos & Uso | `uso_integracoes` |
