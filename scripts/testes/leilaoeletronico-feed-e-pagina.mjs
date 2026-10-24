@@ -101,4 +101,62 @@ assert.deepEqual([d4.cidade, d4.estado], ['Brasília', 'DF']);
 const d5 = parseDetalhe(pg('Leilão de Casa no Bairro Jardim Mar EXTRAJUDICIAL', 'Casa situada na cidade de São Bernardo do Campo/SP, matrícula 123.'), URL_2823, { agora: AGORA });
 assert.deepEqual([d5.cidade, d5.estado], ['São Bernardo do Campo', 'SP']);
 
+// (8) MULTI-TENANT (24/10). O id é sequencial por SITE: o 375 da Milhão não pode receber o feed do 375 de outro
+//     tenant lido antes no mesmo processo, e lote que só existe no feed de OUTRO site não está "no feed" deste.
+const TM = TENANTS.milhao, TT = TENANTS.taba;
+const URL_M375 = 'https://www.milhaoleiloes.com.br/lote/leilao-judicial-imovel-comercial-e-residencial/375/';
+const URL_X375 = 'https://www.tabaleiloes.com.br/lote/imoveis-residenciais-banco-itau-e484-r/375/';
+const URL_T35156 = 'https://www.tabaleiloes.com.br/lote/terrenos-e-apartamento-j0132/35156/';
+// Taba primeiro (o runner roda os tenants em sequência): o 375 dela tem cidade/praça diferentes.
+const urlsTaba = extrairUrlsDeLote(`<listings>${listing(`<name>Lote 18 - Ananindeua - PA - Águas Brancas - Terreno</name> <address format="simples"> <component name="city">Ananindeua</component> <component name="region">Pará</component> </address>
+ <url>${URL_X375}</url> <available_dates_price_config> <end_date>2026-11-20T10:00:00</end_date> <rate>50000,00 BRL</rate> </available_dates_price_config>`)}${listing(`<name>Ubatuba - SP</name> <url>${URL_T35156}</url>
+ <available_dates_price_config> <end_date>2026-11-12T14:00:00</end_date> <rate>90905823 BRL</rate> </available_dates_price_config>`)}</listings>`, TT.base);
+// `\bmoveis-`: o slug "imoveis-residenciais-…" é imóvel (antes caía no filtro de mobília — 154 de 178 lotes da Taba).
+assert.deepEqual([...urlsTaba.keys()].sort(), ['35156', '375']);
+// Milhão depois — feed REAL do lote 375 (24/10), praças em centavos.
+extrairUrlsDeLote(`<listings>${listing(`<home_listing_id>375</home_listing_id> <name>Imóvel Comercial e Residencial em Lagamar/MG</name> <address format="simples"> <component name="city">Lagamar</component> <component name="region">Minas Gerais</component> </address>
+ <latitude>-18.183059</latitude> <longitude> -46.803848</longitude> <price>180000,00 BRL</price> <url>${URL_M375}</url>
+ <available_dates_price_config> <start_date>2026-11-30T14:00:00</start_date> <end_date>2026-12-04T13:00:00</end_date> <rate>18000000 BRL</rate> </available_dates_price_config>
+ <available_dates_price_config> <start_date>2026-12-04T14:00:00</start_date> <end_date>2026-12-14T14:00:00</end_date> <rate>12600000 BRL</rate> </available_dates_price_config>`)}</listings>`, TM.base);
+// Página do 375 da Milhão no 2º tema (h1 `dg-lote-titulo` + `dg-lote-nome`; breadcrumb = leilão + lote colados).
+const pgMilhao = `<nav class="dg-breadcrumb"> <ul> <li><a href="https://www.milhaoleiloes.com.br/">Home</a></li> <li><a href="#">Comerciais</a></li> <li>Leil&#xE3;o Judicial - Im&#xF3;vel Comercial e Residencial Im&#xF3;vel Comercial e Residencial em Lagamar/MG</li> </ul> </nav>
+ <h1 class="dg-lote-titulo"> <span class="dg-lote-nome">Im&#xF3;vel Comercial e Residencial em Lagamar/MG</span> | <span class="dg-lote-nome-titulo-codigo">Cód do leilão: <strong>lj00192/001</strong></span> <span class="dg-lote-titulo-categoria">Comerciais</span> </h1>
+ <span>Avaliação:</span> <strong class="ValorAvaliacao" DataLabel="R$ ">R$180.000,00</strong><br>`;
+const m375 = parseDetalhe(pgMilhao, URL_M375, { agora: AGORA });
+assert.equal(m375.titulo, 'Imóvel Comercial e Residencial em Lagamar/MG', 'título = dg-lote-nome, não o breadcrumb duplicado');
+assert.deepEqual([m375.cidade, m375.estado], ['Lagamar', 'MG']);
+assert.deepEqual([m375.valor_avaliacao, m375.valor_minimo, m375.valor_minimo_2, m375.data_leilao], [180000, 180000, 126000, '2026-12-04']);
+assert.equal(m375.modalidade, 'judicial', '"Leilão Judicial" no nome do leilão (o h1 deste tema não traz modalidade)');
+assert.equal(m375.latitude, -18.183059);
+assert.equal(montarRow(URL_M375, m375, TM).fonte_id, 'milhaoleiloes_375');
+// O 375 da TABA continua com o feed da Taba (antes: o último feed lido sobrescrevia pelo id).
+const t375 = parseDetalhe('<html></html>', URL_X375, { agora: AGORA });
+assert.deepEqual([t375.cidade, t375.data_leilao, t375.encerrado], ['Ananindeua', '2026-11-20', false]);
+// Lote fora do feed do PRÓPRIO site é encerrado mesmo que o id exista no feed de outro tenant.
+assert.equal(parseDetalhe('<html></html>', 'https://www.milhaoleiloes.com.br/lote/sumiu/35156/', { agora: AGORA }).encerrado, true);
+// Nome do lote que não diz o bem (Taba "Ubatuba - SP"): título vira "<leilão> - <lote>".
+const pgTaba = `<ul> <li><a href="/">Home</a></li> <li><a href="#">Residenciais</a></li> <li>Terrenos e Apartamento - J013(2) Ubatuba - SP</li> </ul>
+ <h1 class="dg-lote-titulo"> <span class="dg-lote-nome">Ubatuba - SP</span> | <span>Cód do leilão</span></h1>`;
+assert.equal(parseDetalhe(pgTaba, URL_T35156, { agora: AGORA }).titulo, 'Terrenos e Apartamento - J013(2) - Ubatuba - SP');
+// Vara antes da cidade (Select 785): "4ª VARA CÍVEL DE DOURADOS/MS" → Dourados.
+const pgSelect = `<ul> <li><a href="/">Home</a></li> <li>4ª VARA CÍVEL DE DOURADOS/MS Terreno de 551,78m² em Dourados</li> </ul>
+ <h1 class="dg-lote-titulo"> <span class="dg-lote-nome">Terreno de 551,78m² em Dourados</span> | x</h1>`;
+const s785 = parseDetalhe(pgSelect, 'https://www.selectleiloes.com.br/lote/4-vara-civel-de-dourados-ms/785/', { agora: AGORA });
+assert.deepEqual([s785.cidade, s785.estado], ['Dourados', 'MS']);
+
+// (8b) Categoria "Diversos"/"Veículos" no breadcrumb = não é imóvel (Destak 9366, estrutura eólica); "Cidade - UF" no nome.
+const pgDiv = `<ul> <li><a href="/">Home</a></li> <li><a href="#">Diversos</a></li> <li>Estrutura para Gera&#xE7;&#xE3;o de Energia E&#xF3;lica Estrutura</li> </ul>
+ <h1 class="dg-lote-titulo"> <span class="dg-lote-nome">Estrutura para Gera&#xE7;&#xE3;o de Energia E&#xF3;lica</span> | x</h1>`;
+assert.equal(parseDetalhe(pgDiv, 'https://www.destakleiloes.com.br/lote/estrutura-para-geracao-de-energia-eolica/9366/', { agora: AGORA }).naoImovel, true);
+assert.equal(m375.naoImovel, false, 'Comerciais é imóvel');
+assert.equal('naoImovel' in montarRow(URL_M375, m375, TM), false, 'a marca não vira coluna do upsert');
+const pgTabaCidade = `<ul> <li><a href="/">Home</a></li> <li><a href="#">Rurais</a></li> <li>Im&#xF3;vel Rural com 54 ha - E472 Domingos Martins - ES - Ponto Alto</li> </ul>
+ <h1 class="dg-lote-titulo"> <span class="dg-lote-nome">Domingos Martins - ES - Ponto Alto</span> | x</h1>
+ <section id="dg-lote-descricao"><p>Endereço: distrito de Paraju, município de Domingos Martins/ES.</p></section>`;
+assert.deepEqual((({ cidade, estado }) => [cidade, estado])(parseDetalhe(pgTabaCidade, 'https://www.tabaleiloes.com.br/lote/imovel-rural-com-54-ha-e472/35025/', { agora: AGORA })), ['Domingos Martins', 'ES']);
+
+// (9) Lote que redireciona para o Comprei (UP Leilão 89): a página do gov não é lida como lote (já entra pela COMPREI).
+assert.equal(parseDetalhe('<!DOCTYPE html><html><head><meta name="description" content="O Comprei é uma plataforma de negócios do Governo Federal"></head><body><div id="root"></div></body></html>',
+  'https://www.upleilao.com.br/lote/grande-oportunidade-pgfn-industrial-em-barueri/89/', { agora: AGORA }), null);
+
 console.log('✓ leilaoeletronico: feed + página → linha (todos os casos)');

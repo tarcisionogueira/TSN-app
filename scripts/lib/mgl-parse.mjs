@@ -38,7 +38,9 @@ export const TENANTS = {
 // `comprei-`: a vitrine do leiloeiro REDIRECIONA para comprei.pgfn.gov.br (venda direta da PGFN,
 // medido no Jonas em 10/10 — 5 de 5 lotes) — não é lote do leiloeiro, já entra pela GLOBOLEILOES
 // (128 ativos), e abrir cada um custava 1 crédito para o parser devolver "sem detalhe".
-const RE_SLUG_NAO_IMOVEL = /ve[ií]culo|onibus|caminhao|carro|moto|maquin|trator|sucata|bens-diversos|mobiliario|equipamento|prefeitura-municipal|cisaje|^comprei-|sofa|notebook|ar-condicionado|moveis-|eletro|detran/i;
+// `\bmoveis-` (24/10): sem a fronteira, `moveis-` casava DENTRO de `imoveis-` e descartava imóvel como mobília —
+// na Taba Leilões, 154 de 178 lotes abertos (`imoveis-residenciais-banco-itau-…`) sumiam antes de abrir a página.
+const RE_SLUG_NAO_IMOVEL = /ve[ií]culo|onibus|caminhao|carro|moto|maquin|trator|sucata|bens-diversos|mobiliario|equipamento|prefeitura-municipal|cisaje|^comprei-|sofa|notebook|ar-condicionado|\bmoveis-|eletro|detran/i;
 
 // Feed (15/10): o slug de veículo às vezes é só marca/modelo (`yamaha-nmax-2020`, `honda-fit-2012`, VIVA) e
 // a plataforma publica lotes de demonstração (`exemplo-de-leilao`, JINKINGS). O nome do lote passa pelo

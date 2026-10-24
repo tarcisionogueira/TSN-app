@@ -70,7 +70,9 @@ import requests
 # trazia 18 do mesmo leiloeiro). Mesmo backend do LJUD, mesmo lote_id: o que já existe como
 # `ljud_<lote_id>` ativo é suprimido como gêmeo (reconciliar_gemeos_vlance_ljud, cron diário).
 # fabiobarbosaleiloes.com.br (27/09): achado no RADAR DE EDITAIS (DJEN, PR); dry-run grátis = 12 imóveis.
-TENANTS_PADRAO = ["verdeamareloleiloes.com.br", "sudesteleiloes.com.br", "capitalvalorleiloes.com.br", "sanchesleiloes.com.br", "destakleiloes.com.br", "bomnegocioleiloes.com.br", "paulistanaleiloes.com.br", "joserodovalholeiloes.com.br", "hdleiloes.com.br", "franciscofreitasleiloes.com.br", "fabiobarbosaleiloes.com.br"]
+# 24/10: destakleiloes SAIU — migrou para a plataforma Degrau (coletada em scraper-leilaoeletronico, tenant
+# DESTAKLEILOES); aqui rendia 0 e gastava Web Unlocker à toa.
+TENANTS_PADRAO = ["verdeamareloleiloes.com.br", "sudesteleiloes.com.br", "capitalvalorleiloes.com.br", "sanchesleiloes.com.br", "bomnegocioleiloes.com.br", "paulistanaleiloes.com.br", "joserodovalholeiloes.com.br", "hdleiloes.com.br", "franciscofreitasleiloes.com.br", "fabiobarbosaleiloes.com.br"]
 EP_LEILOES = "/core/api/get-leiloes"
 EP_LOTES = "/core/api/get-lotes"
 

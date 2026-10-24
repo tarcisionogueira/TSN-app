@@ -4,6 +4,10 @@
  * barrado, pelo banco). NÃO entra no motor `mgl`, que é Firecrawl (crédito por página). Enumeração pelo feed
  * /sitemap.xml (224 abertos em 23/10, nacional); datas e lances de cada praça saem do feed, o resto da página.
  * Parser puro em lib/leilaoeletronico-parse.mjs.
+ *
+ * MULTI-TENANT (24/10): +9 leiloeiros da mesma plataforma, sem Cloudflare que a via do banco não passe (Destak, Taba,
+ * Leilão Oficial Online, Silva, Pulse, Silveira, Milhão, UP, Select — ~670 imóveis abertos no feed). Cada um é uma
+ * `fonte` própria (saúde e baseline por leiloeiro); a releitura (`maxRefresh`) vale POR TENANT.
  */
 import {
   TENANTS, extrairUrlsDeLote, idDaUrl, parseDetalhe, montarRow, checarQualidade,

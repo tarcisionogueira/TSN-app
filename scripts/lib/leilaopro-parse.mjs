@@ -39,6 +39,11 @@ export const TENANTS = {
   ileiloes:   { fonte: 'ILEILOES',  leiloeiro: 'iLeilões',          base: 'https://www.ileiloes.com.br' },
   luis:       { fonte: 'LUISLEIL',  leiloeiro: 'Luis Leiloeiro',    base: 'https://www.luisleiloeiro.com.br' },
   versalles:  { fonte: 'VERSALLES', leiloeiro: 'Versalles Leilões', base: 'https://www.versallesleiloes.com.br' },
+  // 24/10 — varredura de não cobertos (leiloeiro_site_descoberto, JUCESP): Hasta Pública Leilões (Giovanni
+  // Wersdoerfer, SC/PR). NÃO é a fonte HASTAPUBLICA (hastapublica.com.br, outra empresa, SP/DF): domínio, leiloeiro e
+  // UFs diferentes, e nenhum dos lotes estava no acervo. Mesma plataforma (mercure2.leilaopro.com.br + /leilao/lotes/
+  // imoveis com 40 links lote_id na pág. 1), aberta pelo banco grátis.
+  hastapublicalel: { fonte: 'HASTAPUBLICALEL', leiloeiro: 'Hasta Pública Leilões (Giovanni Wersdoerfer)', base: 'https://www.hastapublica.lel.br' },
 };
 
 const num = s => parseFloat(String(s || '').replace(/[^\d.,]/g, '').replace(/\./g, '').replace(',', '.')) || 0;
@@ -87,7 +92,9 @@ export function cidadeUF(titulo = '', descricao = '') {
     const ms = [...limpo.matchAll(/([A-ZÀ-Ÿ][A-Za-zÀ-ÿ'.\-]+(?:\s+(?:de|do|da|dos|das|e|[A-ZÀ-Ÿ][A-Za-zÀ-ÿ'.\-]+)){0,3})\s*\/\s*([A-Z]{2})\b/g)];
     if (ms.length) {
       const m = ms[ms.length - 1];
-      return { cidade: titleCase(m[1].trim().replace(/^(?:de|do|da|dos|das|e)\s+/i, '')).slice(0, 60), estado: m[2].toUpperCase() };
+      // `em|no|na…` (24/10, Hasta Pública .lel.br): título em CAIXA ALTA "…TRITÍCULA, EM FREI ROGÉRIO/SC" — o "EM"
+      // maiúsculo passa como palavra de cidade e saía "Em Frei Rogério".
+      return { cidade: titleCase(m[1].trim().replace(/^(?:(?:de|do|da|dos|das|e|em|no|na|nos|nas)\s+)+/i, '')).slice(0, 60), estado: m[2].toUpperCase() };
     }
   }
   return { cidade: null, estado: null };

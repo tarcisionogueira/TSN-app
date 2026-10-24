@@ -19,11 +19,28 @@
 import { lotesDoFeed, ehFeedDegrau } from './degrau-feed.mjs';
 import { naoImovelDoFeed } from './mgl-parse.mjs';
 import { inferirTipo, extrairArea, checarQualidade } from './leilaopro-parse.mjs';
-import { num, plaus, titleCase, montarRowDom, UF_POR_NOME, cidadeUFBare, semPrefixoCidade } from './dom-parse-util.mjs';
+import { num, plaus, titleCase, montarRowDom, UF_POR_NOME, UFS, cidadeUFBare, semPrefixoCidade } from './dom-parse-util.mjs';
 import { decodificarEntidades } from '../../api/_texto-imovel.js';
 
 export const TENANTS = {
   leilaoeletronico: { fonte: 'LEILAOELETRONICO', leiloeiro: 'Leilão Eletrônico', base: 'https://www.leilaoeletronico.com.br', catalogo: '/sitemap.xml' },
+  // ── MESMA PLATAFORMA DEGRAU, MESMO HTML (24/10, varredura de leiloeiros não cobertos) ─────────────────────────
+  // Achados na triagem JUCEMG/JUCESP (`leiloeiro_triagem`): a home dá 400 a UA de navegador (IIS) e Cloudflare só
+  // na beira — `pagina_pedir_pelada` (banco) abre home, feed /sitemap.xml e página de lote com HTTP 200, sem Bright
+  // Data nem Firecrawl. As páginas têm as MESMAS seções `dg-lote-*` do Leilão Eletrônico (conferido nos 9 sites,
+  // 2 lotes cada). Entre parênteses: lotes ABERTOS no feed em 24/10 (antes do filtro de não-imóvel).
+  // Nenhum estava no acervo por outra fonte (cruzado por domínio do url_lote E por nome do leiloeiro em imoveis_leilao).
+  // ⚠️ destakleiloes também está em TENANTS_PADRAO de scripts/scraper_vlance.py (Vlance, recon de 23/07) — lá rende 0
+  //    lote hoje: o site migrou para a Degrau. O fonte_id aqui é `destakleiloes_<id>` (o do Vlance seria outro), sem colisão.
+  destak:     { fonte: 'DESTAKLEILOES',  leiloeiro: 'Destak Leilões',  base: 'https://www.destakleiloes.com.br', catalogo: '/sitemap.xml' },      // 399, nacional (Marcus Vinicius Y. Uebara)
+  taba:       { fonte: 'TABALEILOES',    leiloeiro: 'Taba Leilões',    base: 'https://www.tabaleiloes.com.br', catalogo: '/sitemap.xml' },        // 178, nacional (Wesley O. Ascanio)
+  oficial:    { fonte: 'LEILAOOFICIALONLINE', leiloeiro: 'Leilão Oficial Online', base: 'https://www.leilaooficialonline.com.br', catalogo: '/sitemap.xml' }, // 72, SP (Clécio O. de Carvalho)
+  silva:      { fonte: 'SILVALEILOES',   leiloeiro: 'Silva Leilões',   base: 'https://www.silvaleiloes.com.br', catalogo: '/sitemap.xml' },       // 36 (Renan Souza Silva)
+  pulse:      { fonte: 'PULSELEILOES',   leiloeiro: 'Pulse Leilões',   base: 'https://www.pulseleiloes.com.br', catalogo: '/sitemap.xml' },       // 32, SP (Mayara Turina Loterio)
+  silveira:   { fonte: 'SILVEIRALEILOES', leiloeiro: 'Silveira Leilões', base: 'https://www.silveiraleiloes.com.br', catalogo: '/sitemap.xml' },  // 23, SP (Marcelo E. F. Pierobom Silveira)
+  milhao:     { fonte: 'MILHAOLEILOES',  leiloeiro: 'Milhão Leilões',  base: 'https://www.milhaoleiloes.com.br', catalogo: '/sitemap.xml' },      // 22, MG/GO (Guilherme Caixeta Borges)
+  up:         { fonte: 'UPLEILAO',       leiloeiro: 'UP Leilão',       base: 'https://www.upleilao.com.br', catalogo: '/sitemap.xml' },           // 12, SP (Paulo Marcelo Silva Almeida)
+  select:     { fonte: 'SELECTLEILOES',  leiloeiro: 'Select Leilões',  base: 'https://www.selectleiloes.com.br', catalogo: '/sitemap.xml' },      //  6, SP/MS (Mauricio S. Appolinario)
 };
 
 const limpo = (s) => decodificarEntidades(String(s || '').replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, ' '))
@@ -63,11 +80,23 @@ export function itensDoFeed(xml) {
   return out;
 }
 
+// O id do lote é sequencial POR SITE (Destak 6200 e Taba 6200 são lotes diferentes) e o runner roda os tenants um
+// depois do outro no MESMO processo: chave só por id deixava o feed do tenant anterior responder pelo lote do seguinte
+// (cidade, praças e "encerrado" de outro site, sem erro nenhum). A chave é host + id; HOSTS_COM_FEED diz de quais
+// sites o feed já foi lido nesta execução (é ele, não o tamanho do mapa, que permite concluir "saiu do feed").
 const FEED = new Map();
+const HOSTS_COM_FEED = new Set();
+const hostDe = (u) => { try { return new URL(u).host.replace(/^www\./, '').toLowerCase(); } catch { return ''; } };
+const chaveFeed = (u, id) => `${hostDe(u)}|${id}`;
 
 export function extrairUrlsDeLote(html, base) {
   if (!ehFeedDegrau(html)) return new Map();
-  for (const [id, it] of itensDoFeed(html)) FEED.set(id, it);
+  for (const [id, it] of itensDoFeed(html)) {
+    let abs = base;
+    try { abs = new URL(it.url, base).href; } catch { /* url malformada no feed: o lote fica com o host do tenant */ }
+    FEED.set(chaveFeed(abs, id), it);
+  }
+  HOSTS_COM_FEED.add(hostDe(base));
   return lotesDoFeed(html, base, { descartar: naoImovelDoFeed });
 }
 export const idDaUrl = (url) => (String(url).match(/\/lote\/[^/]+\/(\d+)/) || [])[1] || null;
@@ -89,20 +118,65 @@ function modalidadeDe(s) {
   return 'extrajudicial';
 }
 
+// Tema sem campo de modalidade: o que o leilão ESCREVE no nome/slug ("Leilão Judicial - …"); sem isso, processo CNJ na
+// descrição = judicial. "Execução de Título Extrajudicial" é nome de AÇÃO judicial — por isso a descrição não é lida
+// como texto, só o número do processo conta.
+const RE_CATEGORIA_NAO_IMOVEL = /^(diversos|veiculos?|carros?|motos?|caminh|maquinas?|equipamentos?|bens moveis|moveis|sucatas?|eletro|informatica|animais|semoventes)/;
+const RE_NOME_DIZ_O_BEM = /im[oó]ve|casa|apartament|\bapto?\b|terreno|\blotes?\b|gleba|fazenda|s[ií]tio|ch[aá]cara|galp[aã]o|pr[eé]dio|\bsala|\bloja|sobrado|[aá]rea|rural|edif|resid|comercia|vaga|direitos|im[oó]vel|kitnet|cobertura|haras|industrial|barrac[aã]o/i;
+const slugLegivel = (url) => {
+  const sl = String(url).split('/lote/')[1] || '';
+  try { return decodeURIComponent(sl).replace(/-/g, ' '); } catch { return sl.replace(/-/g, ' '); } // % solto no slug: usa cru
+};
+function modalidadeSemCampo(texto, proc, nomeFeed) {
+  const t = semAcento(texto);
+  if (/venda direta/.test(t)) return 'venda_direta';
+  if (/extrajudicial|alienacao particular|particular/.test(t)) return 'extrajudicial';
+  if (/\bjudicial\b/.test(t)) return 'judicial';
+  if (proc) return 'judicial';
+  return modalidadeDe(nomeFeed || '');
+}
+
 const secao = (h, id) => (h.match(new RegExp(`<section[^>]*id=["']${id}["'][^>]*>([\\s\\S]*?)</section>`, 'i')) || [])[1] || '';
 
 export function parseDetalhe(html, url, { agora = new Date() } = {}) {
   const h = String(html || '');
+  // Lote que REDIRECIONA para o Comprei (venda direta da PGFN — UP Leilão 89, 24/10): a página que chega é a do gov,
+  // sem nada da plataforma. Esse imóvel já entra pela fonte COMPREI; ler aqui seria gravar o feed como se fosse o
+  // lote, com título genérico e sem cidade. null = "não li esta página" (o runner conta como sem detalhe).
+  if (!/dg-lote/i.test(h) && /comprei\.pgfn\.gov\.br|O Comprei [ée] uma plataforma/i.test(h.slice(0, 5000))) return null;
   const id = idDaUrl(url);
-  const feed = FEED.get(id) || null;
+  const feed = FEED.get(chaveFeed(url, id)) || null;
 
   // Título = último item do breadcrumb ("Leilão de Casa de Alto Padrão, em Santana de Parnaíba/SP EXTRAJUDICIAL").
   // O 1º <nav> da página é o menu do topo: o breadcrumb é a lista que começa em "Home".
   const bc = [...((h.match(/>\s*Home\s*<\/a>\s*<\/li>([\s\S]*?)<\/ul>/i) || [])[1] || '').matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi)].map((m) => limpo(m[1]));
   const tituloCru = bc.length ? bc[bc.length - 1] : '';
-  const titulo = tituloCru.replace(/\s+(EXTRAJUDICIAL|JUDICIAL|VENDA DIRETA|PARTICULAR)\s*$/i, '')
+  // Categoria da plataforma = 1º item depois de "Home" no breadcrumb (Residenciais, Comerciais, Terrenos, Rurais,
+  // Industriais… e Diversos/Veículos, que não são imóvel). Medido em 24/10 nos 9 tenants novos: Destak tem 10 "Diversos"
+  // em 25 lotes (estrutura eólica, móveis, prensa) que o texto não denuncia — sem isto entravam no acervo de imóveis.
+  const categoria = bc.length > 1 ? bc[0] : '';
+  const naoImovel = RE_CATEGORIA_NAO_IMOVEL.test(semAcento(categoria));
+  // DOIS TEMAS DA MESMA PLATAFORMA (24/10). Leilão Eletrônico: `<h1 class="dg-titulo"><span class="dg-lote-tipo">EXTRAJUDICIAL`
+  // e o breadcrumb termina no nome do lote. Destak/Taba/Silva/Pulse/Milhão…: `<h1 class="dg-lote-titulo"><span
+  // class="dg-lote-nome">Três Casas em Itapecerica da Serra/SP</span>` e o breadcrumb é "<nome do LEILÃO> <nome do lote>"
+  // colado — lido como título, saía "Três Casas em Itapecerica da Serra/SP Três Casas em Itapecerica da Serra/SP".
+  // Com `dg-lote-nome` o título é ele; o breadcrumb continua servindo para cidade/UF e modalidade.
+  // Variante sem o <span> (Leilão Oficial Online): o nome é o texto solto do h1 antes do " | Cód do leilão".
+  const nomeLote = limpo((h.match(/<span[^>]*class=["'][^"']*\bdg-lote-nome\b[^"']*["'][^>]*>([\s\S]*?)<\/span>/i)
+    || h.match(/<h1[^>]*class=["'][^"']*\bdg-lote-titulo\b[^"']*["'][^>]*>\s*([^<|]*[^<|\s])\s*\|/i) || [])[1]);
+  // Nome de lote que não diz o que é o bem — Taba "Ubatuba - SP" (o bem está no nome do LEILÃO: "Terrenos e
+  // Apartamento - J013(2)"), Pulse "." — vira "<leilão> - <lote>", com o leilão tirado do breadcrumb sem o nome repetido.
+  let nomeTitulo = nomeLote;
+  if (nomeLote && !RE_NOME_DIZ_O_BEM.test(nomeLote)) {
+    const leilao = tituloCru.endsWith(nomeLote) ? tituloCru.slice(0, -nomeLote.length).trim() : tituloCru;
+    nomeTitulo = [leilao, nomeLote.replace(/^[\s.\-|]+|[\s.\-|]+$/g, '')].filter(Boolean).join(' - ');
+  }
+  let titulo = (nomeTitulo || tituloCru.replace(/\s+(EXTRAJUDICIAL|JUDICIAL|VENDA DIRETA|PARTICULAR)\s*$/i, ''))
     .replace(/^Leil+[ãa]o\s+(de|do|da)\s+/i, '').replace(/^\w/, (c) => c.toUpperCase()).slice(0, 180) || null;
-  const h1 = limpo((h.match(/<h1[^>]*>\s*<span[^>]*>([\s\S]*?)<\/span>/i) || [])[1]);
+  // Modalidade: o tema do Leilão Eletrônico escreve no `dg-lote-tipo`. O outro tema não tem campo nenhum — o h1 é o
+  // nome do lote e, lido como modalidade, dava "extrajudicial" para "Leilão Judicial - Casa em Igarapé/MG".
+  const h1 = limpo((h.match(/<span[^>]*class=["'][^"']*\bdg-lote-tipo\b[^"']*["'][^>]*>([\s\S]*?)<\/span>/i) || [])[1])
+    || (nomeLote ? '' : limpo((h.match(/<h1[^>]*>\s*<span[^>]*>([\s\S]*?)<\/span>/i) || [])[1]));
 
   const avalPagina = plaus(num((h.match(/Avalia[çc][ãa]o:\s*<\/span>\s*<strong[^>]*>\s*R\$\s*([\d.,]+)/i) || [])[1]));
 
@@ -115,6 +189,12 @@ export function parseDetalhe(html, url, { agora = new Date() } = {}) {
     .map((c) => extrairArea(`${c.v.replace(/m\s*$/i, 'm²')}`, '')).find((v) => v > 0) || 0;
 
   const descricao = limpo(secao(h, 'dg-lote-descricao').replace(/<h2[\s\S]*?<\/h2>/i, '')).slice(0, 8000) || null;
+  // Nem o lote nem o leilão dizem o bem (Select: leilão "2ª VARA DE EXECUÇÃO DE CAMPO GRANDE-MS", lote "01"): a 1ª frase
+  // da descrição, que é onde este leiloeiro escreve o que está à venda.
+  if (nomeLote && titulo && !RE_NOME_DIZ_O_BEM.test(titulo) && descricao) {
+    const frase = descricao.split(/\n|(?<=[a-zà-ÿ0-9)]{3})\.\s/i)[0].trim();
+    if (RE_NOME_DIZ_O_BEM.test(frase)) titulo = frase.slice(0, 180);
+  }
   // Endereço: a <div class="dg-lote-local-endereco">. O genérico "1ª <div> com texto" pegava, na página REAL,
   // a <div class="col-xs-12"> que sobra só com espaços depois de tirar o <h3> — e o endereço saía nulo nos
   // 137 lotes (23/10; a fixture simplificada não tinha essa camada). Exige ao menos um caractere visível.
@@ -145,27 +225,34 @@ export function parseDetalhe(html, url, { agora = new Date() } = {}) {
   // não pode vir primeiro: lote recém-cadastrado sai com o valor-padrão do seletor, "Acrelândia/Acre" (o 1º
   // município do IBGE) — 3 de 240 (2823, 2824 "Apartamento e Vaga em Brasília/DF", 2826). Esse padrão só vale se o
   // próprio lote citar Acrelândia.
-  const doTitulo = (tituloCru.match(/([A-ZÀ-Ý][A-Za-zÀ-ÿ' ]{2,40}?)\s*\/\s*([A-Z]{2})\b/) || []);
+  // + "Cidade - UF" no nome do lote (Taba: "Domingos Martins - ES - Ponto Alto", "Lote 14 - Ananindeua - PA - Icuí"),
+  // só com UF que existe. Sem ele a cidade vinha da descrição, onde o extrator genérico cortava "município de
+  // Domingos Martins/ES" em "Ípio de Domingos Martins" (24/10).
+  const doTitulo = tituloCru.match(/([A-ZÀ-Ý][A-Za-zÀ-ÿ' ]{2,40}?)\s*\/\s*([A-Z]{2})\b/)
+    || [...String(nomeLote || '').matchAll(/(?:^|\s[-–]\s)([A-ZÀ-Ý][A-Za-zÀ-ÿ' ]{2,40}?)\s+[-–]\s+([A-Z]{2})(?![A-Za-z])/g)].find((m) => UFS.has(m[2]))
+    || [];
   const feedPlaceholder = semAcento(feed?.cidade) === 'acrelandia' && !/acrel[aâ]ndia/i.test(`${tituloCru} ${descricao || ''}`);
   const daDescricao = cidadeUFBare(`${descricao || ''} ${endereco || ''}`);
-  const cidade = (doTitulo[1] ? titleCase(semPrefixoCidade(doTitulo[1].replace(/^.*\bem\s+/i, ''))) : null)
+  // "4ª VARA CÍVEL DE DOURADOS/MS" (Select, 24/10): o nome da vara antes da cidade saía como cidade ("Vara Cível de Dourados").
+  const cidade = (doTitulo[1] ? titleCase(semPrefixoCidade(doTitulo[1].replace(/^.*\bem\s+/i, '').replace(/^.*\bvara\b.*?\bd[aeo]s?\s+/i, ''))) : null)
     || (!feedPlaceholder && feed?.cidade) || daDescricao?.cidade || null;
   const estado = doTitulo[2] || (!feedPlaceholder && feed?.estado) || daDescricao?.estado || null;
 
   return {
+    naoImovel,
     titulo, cidade, estado, endereco, bairro: feed?.bairro || null,
     latitude: feed?.latitude ?? null, longitude: feed?.longitude ?? null,
     valor_avaliacao: avaliacao, valor_minimo: minimo,
     valor_minimo_2: minimo2 && minimo2 !== minimo ? minimo2 : null,
     data_leilao: vig?.fim ? vig.fim.slice(0, 10) : null,
     data_leilao_2: prox?.fim ? new Date(`${prox.fim}-03:00`).toISOString() : null,
-    modalidade: modalidadeDe(h1 || feed?.modalidade || tituloCru),
+    modalidade: h1 ? modalidadeDe(h1) : modalidadeSemCampo(`${tituloCru} ${slugLegivel(url)}`, proc, feed?.modalidade),
     area_m2: areaCard || extrairArea(titulo || '', descricao || ''),
     descricao, numero_matricula: mat, numero_processo: proc, anexos,
     link_edital: anexos.find((a) => a.tipo === 'edital')?.url || null,
     link_matricula: anexos.find((a) => a.tipo === 'matricula')?.url || null,
     link_foto: feed?.fotos?.[0] || null, fotos: feed?.fotos || [],
-    encerrado: FEED.size > 0 && (!feed || encerrado),
+    encerrado: HOSTS_COM_FEED.has(hostDe(url)) && (!feed || encerrado),
   };
 }
 

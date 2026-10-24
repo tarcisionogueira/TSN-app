@@ -85,6 +85,11 @@ const TODOS_TENANTS = [
   // Soluções para Leilões Online", /lotes/imovel com 7 links /item/N/detalhes (pág. 2 declara
   // "nenhum lote encontrado") — mesmo formato dos tenants acima.
   { fonte: 'ALEXANDREPEDROSA', leiloeiro: 'Alexandre Reis Pedrosa', base: 'https://www.alexandrepedrosaleiloeiro.com.br' }, //   7
+  // 24/10 — varredura de não cobertos (triagem JUCESP/JUCEMG). Pelo banco (grátis, HTTP 200): /lotes/imovel com 30
+  // /item/N/detalhes por página (pág. 2 também cheia) + 13 em /lotes/veiculo. Dry-run sobre as páginas reais: 30 lidos
+  // → 23 prontos e 7 descartados por regra de negócio (4 fração ideal, 3 vaga/box) — nenhum por falha de leitura.
+  // No acervo só havia 1 lote dela (EDITAL_DJEN).
+  { fonte: 'GOLDLEILOES',  leiloeiro: 'Gold Leilões',               base: 'https://www.leiloesgold.com.br' },         //  60+
 ];
 
 // ── REPROVADOS NO MESMO DRY-RUN — ficam FORA, e o registro é o que impede re-tentar às cegas:

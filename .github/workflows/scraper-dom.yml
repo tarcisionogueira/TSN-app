@@ -229,6 +229,8 @@ jobs:
         run: node scripts/scraper-nortedeminas.mjs
 
       # 23/10 (pendência 307): ~218 imóveis abertos, nacional, feed + página pela via grátis (sem Bright Data).
+      # 24/10: + 9 tenants da mesma plataforma Degrau (Destak, Taba, Leilão Oficial, Silva, Pulse, Silveira, Milhão, UP,
+      # Select — ~670 imóveis no feed). 1ª rodada ~+25 min pelo banco; depois a releitura é ≤ 60 lotes/tenant/dia.
       - name: Leilão Eletrônico
         if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'leilaoeletronico')) }}
         env:
