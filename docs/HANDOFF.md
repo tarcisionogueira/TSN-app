@@ -38354,3 +38354,34 @@ Achados no rastro do banco: NORDESTE_VEICULOS zerou, NORDESTE/JMF regressão, CR
 
 **Do dono:** #270 → #198 → #164 (destravam a #143), #308 (Neuma/Airton antes de 01/11 e 03/11), #306 (validar
 planos e acesso de assessorado no navegador) e a decisão de aumentar a máquina do Supabase (custo; causa de fundo dos timeouts).
+
+## 24/10 — diagnóstico de abertura + bug bounty (4 agentes: landing/pré-login · veículos/e-mail · dinheiro · backend)
+
+**Diagnóstico:** segurança 0/0, regras de negócio 0 crítico, KYC 0, backup ok, cliente travado/chamados vazios,
+documental discriminando (5 células). Invariantes em alerta: `resultado_leilao_atrasado` 11 (todos COMPREI — ver abaixo),
+`qa_invariantes_lenta` 15 s (cache frio), `sem_foto`, `lote_sem_area_nem_matricula`, `matricula_area_de_outro_lote` 5,
+`doc_debito_maior_que_avaliacao` 1, `erro_na_tela_do_cliente` 1 (o de 21/10, sai sozinho). Erros de cliente: 11× CSP
+`unsafe-eval` na Landing em 23/10 17–18h com stack `eval at evaluate (:234:30)` — é navegador AUTOMATIZADO (página
+inspecionada por agente/Playwright), não código nosso; ruído.
+
+**Achados e consertos (commits 045d3d8 e 35aff39, migrações aplicadas):**
+- **P0 comunicado de veículos** reenviaria hoje 16:07 UTC aos 33 de ontem (dedup por `status in (enviado,enfileirado)`,
+  mas o webhook troca para `entregue`). Corrigido antes do cron; fila anda até 35 saídas. Conferência: #314.
+- **COMPREI parada desde 20/10:** upsert de 200 estourava statement timeout e o script morria sem `fonte_saude`.
+  Fatia 50 + nova tentativa + falha registrada. **scraper-dom** cortado aos 75 min mesmo com a HASTA em 18 min → teto 120
+  (repo público, sem custo). Conferência: #315.
+- Landing: `lp_secao`/`lp_cta` nunca gravados (allowlist do `api/track.js`); cadastro por e-mail perdia `?next`
+  (`CHAVE_DESTINO`); CTAs de assessoria/índice levam o destino; card "App BidPro" abre o prompt nativo direto.
+- Dinheiro: botão do anual pulava a trava do assessorado (tela + `mp-checkout` no servidor); `suspenderPlanoDireto`
+  não rebaixa papel acima do plano cancelado (assessoria paga → mandato do Combo cancelado → `cancelled` virava o
+  assessorado em explorador); e-mail de conclusão respeita `acesso_veiculos_ate`; reserva de preço do Asaas 89,90/899.
+- Backend: `desativar_leiloes_encerrados` limita veículos a 40 (UPDATE sem limite desfazia a função inteira);
+  `fonte_regressao_suspeita` desconta veículo com leilão recente (JOAOEMILIO_VEICULOS era falso alarme);
+  documental-retry só dispara com contador gravado; baixa automática de `documental_liberacao_bloqueada`.
+- Explicadas em `fonte_regressao_explicada`: JOAOEMILIO_VEICULOS (até 31/10) e VIVA/JINKINGS/LUCAS/FERNANDO (semanal
+  Firecrawl, até 27/10).
+
+**Pendências novas:** #314 (comunicado), #315 (scraper-dom/COMPREI), #316 (dono: assessorado 0e0d7b7f sem pagamento
+com Combo grátis), #317 (sinal "aprendido" de veículos nunca nasce), #318 (menores). #298 fechada.
+**Ainda abertas comigo:** #311 (nenhum disparo da captura CEF pelo servidor desde o token novo — aguarda caso real),
+#280 (rodada de veículos do scraper-dom, junto da #315), #305 amanhã.
