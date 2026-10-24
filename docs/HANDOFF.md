@@ -38311,3 +38311,5 @@ Achados no rastro do banco: NORDESTE_VEICULOS zerou, NORDESTE/JMF regressão, CR
   - **Parser:** endereço lido pela div `dg-lote-local-endereco`; o seletor genérico pegava uma div vazia, porque a fixture era
     simplificada e agora tem a seção real.
   - **Resultado:** rodada das 21:04 ok, 101 lotes lidos, 178 ativos.
+- **`GITHUB_ACTIONS_TOKEN` renovado pelo dono (23/10, noite):** fine-grained `bidpro-vercel-actions`, Actions R/W, **vence
+  em 23/10/2027** (lembrete na `pendencias_projeto` para 23/09/2027; nota em `docs/ENVS_VERCEL.md`). O anterior venceu por volta de 02/10.

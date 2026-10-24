@@ -212,6 +212,10 @@ Os dois também como **secret do GitHub** (o `enriquecer-fipe.yml` lê de lá).
 ## As três que a pendência 60 cobrava (conferido em 05/10)
 - `GITHUB_ACTIONS_TOKEN` (Vercel) — **configurado**: `api/trigger-puppeteer.js` e `api/coleta-oportunista.js`
   dispararam "Documentos — captura genérica" de 30/09 a 02/10, o que só acontece com o token válido.
+  ⚠️ **VENCE.** O anterior expirou por volta de 02/10/2026 e ninguém viu por 3 semanas: `dispararCaptura` engolia o
+  401. Trocado em 23/10/2026 por um fine-grained (`bidpro-vercel-actions`, só o repo TSN-app, Actions: Read and
+  write) que **vence em 23/10/2027**; lembrete na `pendencias_projeto` para 23/09/2027. Ao trocar o valor na Vercel,
+  é preciso fazer **Redeploy**: variável nova só vale em deploy novo.
 - `CONTABILIDADE_EMAIL` (Vercel) — **opcional**: `api/conciliacao.js` usa `body.email` primeiro; a env é só o
   destino padrão quando a tela não manda um. Ausente = a tela pede o e-mail.
 - `AUDITORIA_EMAIL_DESTINO` — **não é da Vercel**, é **secret do GitHub** (`auditoria-claude.yml`). Conferir em
