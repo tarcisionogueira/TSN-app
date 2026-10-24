@@ -38313,3 +38313,44 @@ Achados no rastro do banco: NORDESTE_VEICULOS zerou, NORDESTE/JMF regressão, CR
   - **Resultado:** rodada das 21:04 ok, 101 lotes lidos, 178 ativos.
 - **`GITHUB_ACTIONS_TOKEN` renovado pelo dono (23/10, noite):** fine-grained `bidpro-vercel-actions`, Actions R/W, **vence
   em 23/10/2027** (lembrete na `pendencias_projeto` para 23/09/2027; nota em `docs/ENVS_VERCEL.md`). O anterior venceu por volta de 02/10.
+
+## 23/10 (fechamento da sessão) — o que mudou, o que ficou aberto
+
+**Diagnóstico de abertura (8 itens), todos tratados:**
+1. Statement timeouts: `reconciliar_relistados` 8,6 s → 0,22 s; painel /admin lê o cache horário (#305 confere em 25/10).
+2. Meta Ads: não estava parado (campanhas encerradas). O cron agora grava heartbeat `meta_insights`, e o CLAUDE.md
+   ensina a separar "campanha encerrada" de "ingestão parada".
+3. `landing_numeros` na allowlist da segurança (0/0). Veículo relistado volta a ser apurado (gatilho + backfill de 9).
+4. Coletores de veículo: vazio legítimo deixou de ser "falhou" (`classificarVazio`).
+5. #143 (honorário com a parte do admin): conferida em simulação; travada por #270 → #198 → #164, que são do dono.
+6. "Erro na busca": trava nova `tela-lendo-imoveis-leilao-direto`.
+7. Pagantes sem relatório: Fred = conta de teste da IA (`app_config.contas_teste`), excluída da consulta;
+   Neuma e Airton viraram a #308, do dono.
+8. RLS de escrita: escrita revogada em `servicos_cartorio` e `veiculo_compartilhamento`, que são só do servidor.
+
+**Pedidos do dono no meio do caminho:**
+- Assessorado com o Combo (imóveis + veículos): banco, tela de planos, checkout, termos v3.3, e-mail e landing.
+  Também passa a cancelar Combo/Veículos ao contratar a assessoria.
+- Leilão Eletrônico integrado: 178 ativos (#307, fechada). O motor de fetch ganhou freio com pausa crescente,
+  404 que não conta como falha e motivos de "sem detalhe" no log.
+- Alertas de veículos: UF inválida 26 → 0 e cidade fora do IBGE 59 → 10 (os 10 restantes ficam de propósito).
+- `estado_fora_do_padrao` 33 → 0: 23 bens móveis barrados (ano colado, sucata, mercadoria); 6 explicados (#310).
+  Lição: o índice parcial depende de `bem_movel_barrado`, então REINDEX ao mudar a função.
+- Documental da Caixa (Feira de Santana) que não gerava: três defeitos.
+  - A leitura usava a cota `geral` dos crons. Agora há `relatorio_doc`, isento por decisão do dono de 12/09.
+    Ressalva: a Caixa devolve 200 vazio ao Bright Data, então a solução real é a captura por navegador.
+  - O reprocessamento automático não pegava `bloqueioLiberacao`; agora pega.
+  - O disparo da captura falhava em silêncio porque o token tinha vencido em 02/10; agora loga a falha.
+
+  Relatório entregue às 20:15 (amarelo, confiança baixa por diligências de praxe).
+- `GITHUB_ACTIONS_TOKEN` renovado pelo dono (vence 23/10/2027, lembrete #312).
+
+**Abertas comigo, em ordem:**
+- **#311:** fechar só depois de ver um disparo do servidor com o token novo (sem `[dispararCaptura] HTTP 401`).
+- **24/10:** #280 (rodada dos veículos novos às 8h UTC) e #298 (números da página inicial no site).
+- **25/10:** #305 (timeouts sumiram?).
+- **#310:** parsers sem cidade (MILAN, RIGOLON, CASSIANO, NAKAKOGUE). #213 reagendada para 07/11 (nenhum clique real ainda).
+- Não tratado: limpeza de fotos órfãs leva 7 s com cache frio.
+
+**Do dono:** #270 → #198 → #164 (destravam a #143), #308 (Neuma/Airton antes de 01/11 e 03/11), #306 (validar
+planos e acesso de assessorado no navegador) e a decisão de aumentar a máquina do Supabase (custo; causa de fundo dos timeouts).
