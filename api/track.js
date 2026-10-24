@@ -127,6 +127,26 @@ export default async function handler(req, res) {
       }).catch(() => {});
     }
 
+    // INTERESSE EM VEÍCULO (24/10, #317): o e-mail semanal manda veículos a quem "clicou em 2+", mas o único
+    // lugar que gravava o sinal era o link de card de veículo DENTRO do e-mail — que só vai a quem já declarou.
+    // Quem não respondeu nunca gerava sinal (veiculos_email_sinal com 0 linhas). Abrir a ficha de um veículo
+    // logado é o mesmo interesse demonstrado. Best-effort: nunca derruba o tracking.
+    if (userId) {
+      const vistos = [...new Set(lista.filter((e) => e?.tipo === 'pageview')
+        .map((e) => String(e.rota || '').match(/^\/veiculo\/([0-9a-f-]{36})/i)?.[1]).filter(Boolean))].slice(0, 5);
+      if (vistos.length) {
+        try {
+          const r = await fetch(`${SB}/rest/v1/veiculos_email_sinal?on_conflict=user_id,veiculo_id,sinal`, {
+            method: 'POST',
+            headers: { apikey: KEY, Authorization: `Bearer ${KEY}`, 'Content-Type': 'application/json', Prefer: 'resolution=ignore-duplicates,return=minimal' },
+            body: JSON.stringify(vistos.map((id) => ({ user_id: userId, veiculo_id: id, sinal: 'clique', contexto: 'site_ficha' }))),
+            signal: AbortSignal.timeout(5000),
+          });
+          if (!r.ok) console.warn('[track] sinal de veículo não gravado', r.status);
+        } catch (e) { console.warn('[track] sinal de veículo falhou', e?.message); }
+      }
+    }
+
     // ORIGEM DO CLIQUE (gclid/UTM) — PRIMEIRO TOQUE, gravado uma única vez por anon_id.
     // `ignore-duplicates` é o que garante o first touch: a pessoa volta pelo orgânico depois,
     // e o crédito continua com o clique que a trouxe. Sem isto, a última visita sobrescreveria

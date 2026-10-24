@@ -18,6 +18,11 @@ function ehStandalone() {
   return window.matchMedia?.('(display-mode: standalone)')?.matches
     || window.navigator.standalone === true;
 }
+// iPhone/iPad em QUALQUER navegador (Chrome iOS, Instagram, Facebook): lá só o Safari instala o app.
+function ehAparelhoApple() {
+  const ua = window.navigator.userAgent || '';
+  return /iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && 'ontouchend' in document);
+}
 function ehIOS() {
   const ua = window.navigator.userAgent || '';
   const iOS = /iphone|ipad|ipod/i.test(ua)
@@ -162,6 +167,12 @@ export default function PwaInstall() {
                 1. Toque no botão <b>Compartilhar</b> (o quadrado com a seta para cima), na barra do Safari.<br />
                 2. Escolha <b>Adicionar à Tela de Início</b>.<br />
                 3. Confirme em <b>Adicionar</b>. Pronto — o BidPro abre como app e libera as notificações.
+              </>
+            ) : ehAparelhoApple() ? (
+              <>
+                No iPhone, só o <b>Safari</b> instala o app.<br />
+                1. Abra <b>bidprobrasil.com.br</b> no Safari (no Instagram/Facebook: menu <b>⋯</b> → <b>Abrir no navegador</b>).<br />
+                2. Toque em <b>Compartilhar</b> e escolha <b>Adicionar à Tela de Início</b>.
               </>
             ) : (
               <>

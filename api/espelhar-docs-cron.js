@@ -343,7 +343,8 @@ export default async function handler(req, res) {
       somaPub.chamadas++;
       for (const c of ['inseridos', 'preenchidos', 'outros_publicados']) somaPub[c] += Number(j[c]) || 0;
       publicados = somaPub;
-      if ((Number(j.inseridos) || 0) < 200 && (Number(j.preenchidos) || 0) < 200) break; // fila acabou
+      // 24/10: `outros_publicados` também conta — fila só de "outros" parava na 1ª chamada.
+      if ((Number(j.inseridos) || 0) < 200 && (Number(j.preenchidos) || 0) < 200 && (Number(j.outros_publicados) || 0) < 200) break; // fila acabou
     }
   } catch (e) { publicados = { ...somaPub, erro: String(e?.message || e).slice(0, 80) }; }
 
@@ -353,6 +354,9 @@ export default async function handler(req, res) {
     ...(erroLeitura ? { erro_leitura: erroLeitura } : {}),
     ...(enfileirarErro ? { erro_enfileirar: enfileirarErro } : {}),
   };
-  console.log('[espelhar-docs]', JSON.stringify(saida));
-  res.status(200).json({ ok: true, ...saida });
+  // A cópia vale pela publicação: com `publicados.erro` o documento ficou copiado e invisível — não é ok.
+  const ok = !publicados?.erro;
+  if (ok) console.log('[espelhar-docs]', JSON.stringify(saida));
+  else console.error('[espelhar-docs] publicação falhou', JSON.stringify(saida));
+  res.status(ok ? 200 : 500).json({ ok, ...saida });
 }

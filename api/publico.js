@@ -69,6 +69,12 @@ async function sb(path, { publico = false } = {}) {
     });
     // 21/10: o valor devolvido segue igual (a página trata `linhas: null`), mas o motivo vai
     // para o log da Vercel — antes status e corpo morriam aqui e a página só saía mais vazia.
+    // 416 = pediu página além do fim (a cidade encolheu desde que o link foi indexado). Não é falha do
+    // banco: devolve vazio com o total real, e a página da cidade redireciona para a última (24/10).
+    if (r.status === 416) {
+      const total416 = Number(String(r.headers.get('content-range') || '').split('/')[1]) || 0;
+      return { linhas: [], total: total416, foraDoFim: true };
+    }
     if (!r.ok) {
       console.error('[publico] sb falhou', r.status, path.split('?')[0], (await r.text().catch(() => '')).slice(0, 160));
       return { linhas: null, total: 0 };
@@ -863,12 +869,17 @@ async function paginaCidade(uf, cidadeNorm, page) {
   const desloc = (page - 1) * POR_PAGINA;
   // Campos do cartão alinhado à Busca — todos já na linha (custo zero; a página é edge-cached).
   const campos = 'id,titulo,tipo,cidade,estado,bairro,area_m2,valor_minimo,valor_avaliacao,desconto_percentual,link_foto,modalidade,data_leilao,tem_edital_doc,tem_matricula_doc,fonte';
-  const { linhas, total } = await sb(
+  const { linhas, total, foraDoFim } = await sb(
     `imoveis_leilao_mascarado?ativo=eq.true&estado=eq.${uf}&cidade_norm=eq.${encodeURIComponent(cidadeNorm)}` +
     `&select=${campos}&order=desconto_percentual.desc.nullslast&offset=${desloc}&limit=${POR_PAGINA}`, { publico: true });
   // `sb()` devolve linhas null em falha. Sem isto a cidade saía "Nenhum lote ativo" + noindex,
   // cacheada 1 h na borda, por causa de um timeout (16/10).
   if (linhas === null) throw new Error('acervo da cidade indisponível');
+  if (foraDoFim && page > 1) {
+    const ultimaReal = Math.max(1, Math.ceil(total / POR_PAGINA));
+    const destino = `${SITE}/leiloes/${uf.toLowerCase()}/${cidadeNorm}${ultimaReal > 1 ? `?pagina=${ultimaReal}` : ''}`;
+    return { redirecionar: destino };
+  }
   const itens = Array.isArray(linhas) ? linhas : [];
   const nomeCidade = itens[0]?.cidade || cidadeNorm;
   const base = `${SITE}/leiloes/${uf.toLowerCase()}/${cidadeNorm}`;
@@ -1236,6 +1247,11 @@ export default async function handler(req, res) {
     } else if (tipo === 'cidade') {
       if (!UFS.includes(uf) || !cidade) return res.status(404).send('Página não encontrada.');
       html = await paginaCidade(uf, cidade, page);
+      if (html?.redirecionar) {
+        res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=3600');
+        res.setHeader('Location', html.redirecionar);
+        return res.status(301).end();
+      }
     } else if (tipo === 'uf') {
       if (!UFS.includes(uf)) return res.status(404).send('Estado não encontrado.');
       html = await paginaUF(uf);

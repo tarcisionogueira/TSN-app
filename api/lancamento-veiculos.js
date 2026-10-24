@@ -48,17 +48,30 @@ async function ler(path) {
   } catch (e) { console.error('[lancamento-veiculos] GET erro', path.slice(0, 160), e?.message); return null; }
 }
 
+// O PostgREST corta cada resposta no max-rows (~1000) sem erro: `limit=20000` não passava disso. Lista que
+// decide público/dedup/opt-out vem paginada até a última página — cortada, o "já foi" voltava a mandar.
+async function lerTudo(path, pagina = 1000) {
+  const out = [];
+  for (let off = 0; off < 50000; off += pagina) {
+    const fatia = await ler(`${path}&order=user_id.asc&limit=${pagina}&offset=${off}`);
+    if (!fatia) return null;
+    out.push(...fatia);
+    if (fatia.length < pagina) return out;
+  }
+  return out;
+}
+
 const fmtBRL = (v) => (v ? 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) : '—');
 const fmtData = (d) => (d ? new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : '');
 
 async function publico() {
   const desde = new Date(Date.now() - 60 * 864e5).toISOString();
   const [abriram, jaFoi, optout] = await Promise.all([
-    ler(`emails_log?aberto_em=gte.${desde}&user_id=not.is.null&select=user_id&limit=20000`),
+    lerTudo(`emails_log?aberto_em=gte.${desde}&user_id=not.is.null&select=user_id`),
     // 24/10: o webhook do Resend troca 'enviado' por entregue/bounce/aberto — com in.(enviado,enfileirado)
     // os 33 de 23/10 voltavam para a fila. Já foi = toda linha, menos a que comprovadamente não saiu.
-    ler(`emails_log?tipo=eq.${TIPO}&status=not.in.(limitado,suprimido,falha)&user_id=not.is.null&select=user_id&limit=20000`),
-    ler('alertas_email?ativo=eq.false&select=user_id&limit=20000'),
+    lerTudo(`emails_log?tipo=eq.${TIPO}&status=not.in.(limitado,suprimido,falha)&user_id=not.is.null&select=user_id`),
+    lerTudo('alertas_email?ativo=eq.false&select=user_id'),
   ]);
   if (!abriram || !jaFoi || !optout) return null;
   const fora = new Set([...jaFoi, ...optout].map(r => r.user_id));
