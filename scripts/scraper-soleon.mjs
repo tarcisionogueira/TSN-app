@@ -90,6 +90,35 @@ const TODOS_TENANTS = [
   // → 23 prontos e 7 descartados por regra de negócio (4 fração ideal, 3 vaga/box) — nenhum por falha de leitura.
   // No acervo só havia 1 lote dela (EDITAL_DJEN).
   { fonte: 'GOLDLEILOES',  leiloeiro: 'Gold Leilões',               base: 'https://www.leiloesgold.com.br' },         //  60+
+  // 24/10 — levantamento das Juntas Comerciais (leiloeiro_junta/leiloeiro_triagem `junta_2410`): leiloeiros NÃO
+  // coletados que rodam SOLEON. Catálogo e 3–5 lotes de cada baixados pelo banco (grátis) e passados no coletor
+  // real em seco: todos com cidade/UF/valor/data/link batendo com a página (conferidos: alemaoleil_14702 Erechim/RS
+  // R$ 190.000 → 2ª R$ 85.000; winleiloes_7687 Maringá/PR R$ 380.892,88 → 2ª R$ 284.088; machadoleil_15555
+  // Maravilha/SC; hammerleil_18080 Camaçari/BA CAIXA, lance R$ 172.605,05 acima da avaliação R$ 132.000 — é a regra
+  // da CAIXA, não erro). Nenhum lote deles estava no acervo. Contagem = lotes na pág. 1 do catálogo (30+ = há pág. 2).
+  // PATIOROCHALEIL não é ROCHALEILOES (rochaleiloes.com.br, PR/SP) nem o PATIOROCHA morto do scraper.js; CASSIANOLEIL
+  // (Cassiano Ricardo, PE) não é CASSIANO (Glener Brasil Cassiano, leiloesbrasilcassiano.com.br). HAMMER só abre com
+  // `www.` — sem ele /lotes/imovel devolve a home e o /item/N/detalhes também (30 lotes clones no seco).
+  { fonte: 'PATIOROCHALEIL', leiloeiro: 'Pátio Rocha Leilões', base: 'https://patiorochaleiloes.com.br' }, // 30+
+  { fonte: 'LEILOPAR', leiloeiro: 'Leilopar (Eduardo Jesus Bordignon)', base: 'https://leilopar.com.br' }, // 30+
+  { fonte: 'WINLEILOES', leiloeiro: 'Win Leilões', base: 'https://winleiloes.com.br' }, // 30+
+  { fonte: 'CASSIANOLEIL', leiloeiro: 'Cassiano Leilões (Cassiano Ricardo Dall’Ago e Silva)', base: 'https://cassianoleiloes.com.br' }, // 30+
+  { fonte: 'ALEMAOLEIL', leiloeiro: 'Alemão Leiloeiro (Francisco Hillesheim)', base: 'https://alemaoleiloeiro.com.br' }, // 30+
+  { fonte: 'JVLEILOES', leiloeiro: 'Juliana Vettorazzo Leiloeira', base: 'https://jvleiloes.lel.br' }, // 30+
+  { fonte: 'MULLERLEIL', leiloeiro: 'Müller Leilões (Diego Costa Muller)', base: 'https://mullerleiloes.com.br' }, // 30+
+  { fonte: 'WMSLEILOES', leiloeiro: 'WMS Leilões (Wilkerson Machado dos Santos)', base: 'https://wmsleiloes.com.br' }, // 30+
+  { fonte: 'HAMMERLEIL', leiloeiro: 'Hammer Casa de Leilões (Rodrigo Schmitz)', base: 'https://www.hammer.lel.br' }, // 30+
+  { fonte: 'RAICHER', leiloeiro: 'Raicher Leilões (Sami Raicher)', base: 'https://raicherleiloes.com.br' }, //  25
+  { fonte: 'VICTORDORTA', leiloeiro: 'Victor Dorta Leilões', base: 'https://victordortaleiloes.com.br' }, //  18
+  { fonte: 'NOGARI', leiloeiro: 'Nogari Leilões', base: 'https://nogarileiloes.com.br' }, //  17
+  { fonte: 'LEILAOPE', leiloeiro: 'Leilão Pernambuco', base: 'https://leilaopernambuco.com.br' }, //  15
+  { fonte: 'CRAVOLEIL', leiloeiro: 'Cravo Leilões (Viriato Domingues Cravo)', base: 'https://cravoleiloes.com.br' }, //  13
+  { fonte: 'ISABELLEIL', leiloeiro: 'Isabel Leilões (Maria Isabel Soeiro)', base: 'https://isabelleiloes.com.br' }, //  13
+  { fonte: 'MGLEILOESRS', leiloeiro: 'MG Leilões RS (Maurício Gehm)', base: 'https://mgleiloes-rs.com.br' }, //  10
+  { fonte: 'RAFAELARIBEIRO', leiloeiro: 'Rafaela Ribeiro Leilões', base: 'https://rafaelaribeiroleiloes.com.br' }, //  10
+  { fonte: 'AGENCIALEILAO', leiloeiro: 'Agência de Leilão (Vicente Alves Pereira Neto)', base: 'https://agencialeilao.com.br' }, //  10
+  { fonte: 'MACHADOLEIL', leiloeiro: 'Fábio Marlon Machado Leiloeiro', base: 'https://machadoleiloeiro.com.br' }, //   9
+  { fonte: 'PIMENTELLEIL', leiloeiro: 'Pimentel Leilões', base: 'https://pimentelleiloes.com.br' }, //   9
 ];
 
 // ── REPROVADOS NO MESMO DRY-RUN — ficam FORA, e o registro é o que impede re-tentar às cegas:
@@ -809,10 +838,17 @@ async function coletarVeiculosTenant(tenant) {
   return rows.length;
 }
 
+// Os 20 da leva das Juntas (24/10) foram validados no seco só em /lotes/imovel. Ficam fora dos veículos até um seco
+// próprio de /lotes/veiculo — e porque somariam até 20 × 60 detalhes à rodada residencial (ver o relatório da leva).
+const VEICULOS_NAO_VALIDADOS = new Set(['PATIOROCHALEIL', 'LEILOPAR', 'WINLEILOES', 'CASSIANOLEIL', 'ALEMAOLEIL', 'JVLEILOES',
+  'MULLERLEIL', 'WMSLEILOES', 'HAMMERLEIL', 'RAICHER', 'VICTORDORTA', 'NOGARI', 'LEILAOPE', 'CRAVOLEIL', 'ISABELLEIL',
+  'MGLEILOESRS', 'RAFAELARIBEIRO', 'AGENCIALEILAO', 'MACHADOLEIL', 'PIMENTELLEIL']);
+
 async function mainVeiculos() {
-  console.log(`SOLEON VEÍCULOS ${DRYRUN ? '(DRY-RUN — não grava)' : '(GRAVANDO)'} · tenants: ${TENANTS.map(t => t.fonte).join(', ')} · max ${MAX_VEIC}/tenant`);
+  const tenantsVeic = TENANTS.filter(t => !VEICULOS_NAO_VALIDADOS.has(t.fonte) || filtro.includes(t.fonte));
+  console.log(`SOLEON VEÍCULOS ${DRYRUN ? '(DRY-RUN — não grava)' : '(GRAVANDO)'} · tenants: ${tenantsVeic.map(t => t.fonte).join(', ')} · max ${MAX_VEIC}/tenant`);
   let total = 0, falhou = false;
-  for (const tenant of TENANTS) {
+  for (const tenant of tenantsVeic) {
     try { total += await coletarVeiculosTenant(tenant); }
     catch (e) {
       falhou = true; console.error(`[${tenant.fonte}] veículos falhou: ${e?.message || e}`);

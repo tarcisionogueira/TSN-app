@@ -19,6 +19,8 @@
 import { fazendaEhNome } from '../../api/_tipo.js';
 import { extrairGenerico, checarQualidade } from './scraper-core.mjs';
 import { decodificarEntidades, extrairAreaM2 } from '../../api/_texto-imovel.js';
+import MUNICIPIOS from '../../api/_municipios.js';
+import { normCidade } from './inferir-uf.mjs';
 
 // Tenants da plataforma (fonte por LEILOEIRO — o monitor aprende baseline por fonte).
 export const TENANTS = {
@@ -43,7 +45,20 @@ export const TENANTS = {
   // Wersdoerfer, SC/PR). NÃO é a fonte HASTAPUBLICA (hastapublica.com.br, outra empresa, SP/DF): domínio, leiloeiro e
   // UFs diferentes, e nenhum dos lotes estava no acervo. Mesma plataforma (mercure2.leilaopro.com.br + /leilao/lotes/
   // imoveis com 40 links lote_id na pág. 1), aberta pelo banco grátis.
-  hastapublicalel: { fonte: 'HASTAPUBLICALEL', leiloeiro: 'Hasta Pública Leilões (Giovanni Wersdoerfer)', base: 'https://www.hastapublica.lel.br' },
+  hastapublicalel: { fonte: 'HASTAPUBLICALEL', leiloeiro: 'Hasta Pública Leilões (Giovanni Wersdoerfer)', base: 'https://www.hastapublica.lel.br', sufixo: 'Hasta Pública Leilões' },
+  // 24/10 — levantamento das Juntas Comerciais (leiloeiro_triagem `junta_2410`): leiloeiros NÃO coletados na mesma
+  // plataforma. Catálogo + 3–5 lotes de cada pelo banco (grátis), passados no parser em seco. `sufixo` = nome do site
+  // no og:title, que sai do título (ver limparTitulo). Conferidos contra a página: renovar_10335 Joinville/SC
+  // 1º R$ 700.000 → 2º R$ 630.000; raupp_6457 Porto Alegre/RS avaliação R$ 230.000, lance R$ 161.000.
+  // saleiloes.lel.br NÃO entra: é o MESMO catálogo de nsleiloes.leilao.br (16 de 16 lote_id iguais; dois leiloeiros
+  // da Junta, uma empresa "NS Leilões"). luciverareisleiloes.com.br ficou de fora (3 lotes, não validado no seco).
+  raupp: { fonte: 'RAUPP', leiloeiro: 'Raupp Leilões (Naio de Freitas Raupp)', base: 'https://rauppleiloes.com.br', sufixo: 'Raupp Leilões' },
+  renovar: { fonte: 'RENOVAR', leiloeiro: 'Renovar Leilões (Corrêa e Alegranzzi)', base: 'https://renovarleiloes.com.br', sufixo: 'Renovar Leilões' },
+  qleilao: { fonte: 'QLEILAO', leiloeiro: 'QLeilão (José Fernando de Quina)', base: 'https://qleilao.lel.br', sufixo: 'QLeilão' },
+  nsleiloes: { fonte: 'NSLEILOES', leiloeiro: 'NS Leilões', base: 'https://nsleiloes.leilao.br', sufixo: 'NS Leilões' },
+  jac: { fonte: 'JACLEILOES', leiloeiro: 'JAC Leilões (Jefferson Adriano da Costa)', base: 'https://jacleiloes.com.br', sufixo: 'JAC Leilões' },
+  bidgo: { fonte: 'BIDGO', leiloeiro: 'Bid GO Leilões', base: 'https://bidgo.com.br', sufixo: 'Bid GO' },
+  soleiloes: { fonte: 'SOLEILOES', leiloeiro: 'Só Leilões', base: 'https://soleiloes.com.br', sufixo: 'Só Leilões' },
 };
 
 const num = s => parseFloat(String(s || '').replace(/[^\d.,]/g, '').replace(/\./g, '').replace(',', '.')) || 0;
@@ -89,12 +104,36 @@ export function cidadeUF(titulo = '', descricao = '') {
     // Cidade/UF do texto" e a cidade gravada saía errada. `cri` como palavra isolada (\b…\b),
     // não substring — não risca nomes de cidade que por acaso contenham essas letras juntas.
     const limpo = String(s || '').replace(/\b(?:comarca|vara|tribunal|foro|ju[íi]zo|cri|circunscri[çc][ãa]o|cart[óo]rio)[^/]{0,40}?\/\s*[A-Z]{2}\b/gi, ' ');
-    const ms = [...limpo.matchAll(/([A-ZÀ-Ÿ][A-Za-zÀ-ÿ'.\-]+(?:\s+(?:de|do|da|dos|das|e|[A-ZÀ-Ÿ][A-Za-zÀ-ÿ'.\-]+)){0,3})\s*\/\s*([A-Z]{2})\b/g)];
+    // `\/{1,2}` (24/10, Raupp): "(TRAMANDAÍ//RS) UMA CASA…" — barra dobrada de digitação deixava o lote sem cidade.
+    const ms = [...limpo.matchAll(/([A-ZÀ-Ÿ][A-Za-zÀ-ÿ'.\-]+(?:\s+(?:de|do|da|dos|das|e|[A-ZÀ-Ÿ][A-Za-zÀ-ÿ'.\-]+)){0,3})\s*\/{1,2}\s*([A-Z]{2})\b/g)];
     if (ms.length) {
       const m = ms[ms.length - 1];
+      // Sufixo que EXISTE no IBGE (24/10, QLeilão): "…NA ENTRADA DE GAROPABA/SC" saía "Entrada de Garopaba". Fica o
+      // maior sufixo que é município daquela UF; sem nenhum, segue a regra antiga (não inventa cidade).
+      const uf = m[2].toUpperCase();
+      const pal = m[1].trim().split(/\s+/);
+      const ehMunicipio = (c) => Object.prototype.hasOwnProperty.call(MUNICIPIOS, `${uf}|${normCidade(c)}`);
+      if (!ehMunicipio(m[1])) {
+        for (let i = 1; i < pal.length; i++) {
+          if (ehMunicipio(pal.slice(i).join(' '))) return { cidade: titleCase(pal.slice(i).join(' ')).slice(0, 60), estado: uf };
+        }
+      }
       // `em|no|na…` (24/10, Hasta Pública .lel.br): título em CAIXA ALTA "…TRITÍCULA, EM FREI ROGÉRIO/SC" — o "EM"
       // maiúsculo passa como palavra de cidade e saía "Em Frei Rogério".
       return { cidade: titleCase(m[1].trim().replace(/^(?:(?:de|do|da|dos|das|e|em|no|na|nos|nas)\s+)+/i, '')).slice(0, 60), estado: m[2].toUpperCase() };
+    }
+    // "Cidade - UF" no TÍTULO (24/10, JAC/Renovar): "SALA COMERCIAL EM MEDIANEIRA - PR …", "IMÓVEL URBANO … EM
+    // JOINVILLE - SC". Sem isto a busca descia para a descrição e pegava o endereço do LEILOEIRO ("Cascavel/PR") como
+    // cidade do lote. Hífen é separador comum demais para aceitar sem prova: só vale o sufixo que é município da UF.
+    if (s === titulo) {
+      for (const h of String(s || '').matchAll(/([A-ZÀ-Ÿ][A-Za-zÀ-ÿ'.\-]*(?:\s+[A-Za-zÀ-ÿ'.\-]+){0,5})\s+[-–]\s+([A-Z]{2})\b/g)) {
+        const uf = h[2];
+        const pal = h[1].trim().split(/\s+/);
+        for (let i = 0; i < pal.length; i++) {
+          const c = pal.slice(i).join(' ');
+          if (Object.prototype.hasOwnProperty.call(MUNICIPIOS, `${uf}|${normCidade(c)}`)) return { cidade: titleCase(c).slice(0, 60), estado: uf };
+        }
+      }
     }
   }
   return { cidade: null, estado: null };
@@ -114,9 +153,17 @@ export function extrairArea(titulo = '', descricao = '') {
   return m ? num(m[1]) : 0;
 }
 
-const limparTitulo = t => decodificarEntidades(t || '')
-  .replace(/\s*[-–|]\s*(?:LEFFA|OSCAR)\s+LEIL[ÕO]ES.*$/i, '')
-  .replace(/\s+/g, ' ').trim();
+// O og:title é "<lote> - <nome do site>". O nome do site sai pelo `sufixo` do tenant (24/10): sem isto o título
+// carregava "… - JAC Leilões | Site do leiloeiro oficial de Cascavel/PR …" e cidadeUF() lia o "Cascavel/PR" do
+// LEILOEIRO como cidade de lote em Medianeira e Campinas.
+const escRe = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const limparTitulo = (t, url = '') => {
+  let host = ''; try { host = new URL(url).host.replace(/^www\./, ''); } catch { /* sem url: só o sufixo fixo */ }
+  const ten = Object.values(TENANTS).find(x => x.sufixo && new URL(x.base).host.replace(/^www\./, '') === host);
+  let r = decodificarEntidades(t || '').replace(/\s*[-–|]\s*(?:LEFFA|OSCAR)\s+LEIL[ÕO]ES.*$/i, '');
+  if (ten) r = r.replace(new RegExp(`\\s*[-–|]\\s*${escRe(ten.sufixo)}.*$`, 'i'), '');
+  return r.replace(/\s+/g, ' ').trim();
+};
 
 // Datas de praça (dd/mm/20aa) para o status. (Só 20xx — evita "1º"/CEPs.)
 function datasPraca(txt) {
@@ -150,7 +197,7 @@ export function proximaData(txt, agora = new Date()) {
 
 export function parseDetalhe(html, url) {
   const base = extrairGenerico(html, url) || {};
-  const titulo = limparTitulo(base.titulo);
+  const titulo = limparTitulo(base.titulo, url);
   // DESCRIÇÃO do og:description (nível do título: endereço + área), NÃO do corpo. O corpo do
   // LeilãoPro traz a matrícula inteira, e todo APARTAMENTO cita "com a fração ideal de terreno"
   // (a parte comum do condomínio — inerente a qualquer unidade). Usar o corpo fazia o detector
@@ -163,17 +210,25 @@ export function parseDetalhe(html, url) {
     .replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ');
 
   // PREÇO POR RÓTULO: "LANCE INICIAL" (1º) e "LANCE INICIAL 2º LEILÃO" (2º). Nunca max/min cego.
+  // "1ª/2ª DATA" e "2ª PRAÇA" são o mesmo rótulo em outro tema (24/10, NS Leilões: 2ª DATA R$ 90.000 era ignorada).
   const precos = [];
-  for (const m of txt.matchAll(/lance\s*inicial(?:\s*(\d)\s*[º°ª]?\s*leil[ãa]o)?[^R]{0,30}R\$\s*([\d.]+,\d{2})/gi)) {
-    precos.push({ leilao: m[1] ? Number(m[1]) : 1, valor: num(m[2]) });
+  for (const m of txt.matchAll(/lance\s*inicial(?:\s*(\d)\s*[º°ª]?\s*(?:leil[ãa]o|data|pra[çc]a))?[^R]{0,30}R\$\s*([\d.]+,\d{2})/gi)) {
+    precos.push({ leilao: m[1] ? Number(m[1]) : 0, valor: num(m[2]) });
   }
-  const p1 = precos.find(p => p.leilao === 1);
+  // "LANCE INICIAL" sem número (leilao 0) é o lance VIGENTE do card. Só vale como 1º leilão quando a página não
+  // numera os leilões (layout do Leffa). 24/10, Renovar 10335: card "LANCE INICIAL R$ 630.000" (2º em curso) +
+  // "1º LEILÃO R$ 700.000" + "2º LEILÃO R$ 630.000" — o card vencia o rótulo numerado e a avaliação saía 630 mil.
+  const atual = precos.find(p => p.leilao === 0);
+  const p1 = precos.find(p => p.leilao === 1) || atual;
   const p2 = precos.find(p => p.leilao === 2);
   let avaliacao = plaus(p1?.valor || 0);
   // Rótulo "Avaliação" explícito tem prioridade sobre o lance inicial do 1º leilão, se existir.
   const avalExpl = plaus(num((txt.match(/avalia[çc][ãa]o[^R]{0,25}R\$\s*([\d.]+,\d{2})/i) || [])[1]));
   if (avalExpl) avaliacao = avalExpl;
-  let minimo = plaus(p2?.valor || 0) || avaliacao;
+  // Sem 2º leilão, o lance vigente ABAIXO da avaliação é o mínimo (24/10, Raupp 6457: "LANCE INICIAL R$ 161.000 ·
+  // AVALIAÇÃO R$ 230.000" saía com mínimo = avaliação, desconto 0 sobre um lote a 70%).
+  const atualAbaixo = atual && plaus(atual.valor) && atual.valor < avaliacao ? atual.valor : 0;
+  let minimo = plaus(p2?.valor || 0) || atualAbaixo || avaliacao;
   if (!avaliacao && minimo) avaliacao = minimo;
 
   // GATE DE PRAÇA (09/09, mesmo achado do BAYIT: praça com data ⇒ nunca venda direta, regra
