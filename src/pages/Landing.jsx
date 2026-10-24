@@ -77,6 +77,8 @@ const ESCURO = 'linear-gradient(135deg, #080f1a 0%, #0a1f3d 60%, #0d2a50 100%)';
 const rotulo = (cor = AZUL) => ({ fontSize: 11, fontWeight: 800, color: cor, textTransform: 'uppercase', letterSpacing: 2, marginBottom: 10 });
 const h2 = (cor = '#0f172a') => ({ fontSize: 'clamp(26px,4vw,38px)', fontWeight: 900, color: cor, margin: '0 0 12px', lineHeight: 1.15, letterSpacing: '-0.5px' });
 
+const appInstalado = () => typeof window !== 'undefined' && (window.matchMedia?.('(display-mode: standalone)')?.matches || window.navigator.standalone === true);
+
 export default function Landing() {
   const nav = useNavigate();
   const mobile = useIsMobile();
@@ -114,7 +116,8 @@ export default function Landing() {
   }, []);
 
   const cta = (alvo, fn) => () => { registrarEvento('lp_cta', { alvo }); fn(); };
-  const cadastro = (alvo) => cta(alvo, () => nav('/login?modo=cadastro'));
+  // `next` = para onde o botão prometeu levar (sobrevive à confirmação de e-mail via CHAVE_DESTINO).
+  const cadastro = (alvo, next) => cta(alvo, () => nav(`/login?modo=cadastro${next ? `&next=${encodeURIComponent(next)}` : ''}`));
 
   // ASSESSORIA (23/10, dono): sem preço público e só para quem tem conta — o especialista é acesso de
   // quem CONTRATA. A página leva ao CADASTRO; valores e contratação ficam dentro da plataforma (a tela de
@@ -247,7 +250,7 @@ export default function Landing() {
               { icon: ShieldCheck, cor: '#d97706', tag: 'Assessoria', titulo: 'Arremate com a nossa equipe', desc: 'Um time do seu lado do estudo do bem até a chave na mão.', destaque: true,
                 itens: ['Analista dedicado que valida o Bid Score', 'Estratégia de lance', 'Documentação, registro e imissão na posse', 'Advogados especializados em pós-arrematação'],
                 nota: 'Valores e contratação dentro da plataforma, para clientes.',
-                botao: 'Criar conta e conhecer', acao: cadastro('formas_assessoria') },
+                botao: 'Criar conta e conhecer', acao: cadastro('formas_assessoria', '/planos?plano=assessorado') },
               { icon: GraduationCap, cor: '#7c3aed', tag: 'Formação', titulo: 'Aprenda a arrematar', desc: 'O método de quem forma arrematadores há 8 anos.',
                 itens: ['Cursos e e-books práticos', 'Aulas ao vivo com especialistas', 'Clube de negócios e comunidade', 'Do primeiro leilão ao portfólio'],
                 botao: 'Ver cursos', acao: cta('formas_cursos', () => nav('/educacao')) },
@@ -468,8 +471,9 @@ export default function Landing() {
           <div style={{ display: 'grid', gridTemplateColumns: mobile ? 'minmax(0, 1fr)' : 'repeat(3, minmax(0, 1fr))', gap: 16, marginTop: 14 }}>
             {[
               { icon: Calculator, cor: '#059669', titulo: 'Calculadora de arrematação', desc: 'Quanto você pode dar de lance e ainda lucrar.', acao: cta('ferramenta_calculadora', () => nav('/calculadora')) },
-              { icon: MapPin, cor: AZUL, titulo: 'Preço do m² na sua região', desc: 'Venda e locação por cidade e bairro.', acao: cadastro('ferramenta_indice') },
-              { icon: Smartphone, cor: '#7c3aed', titulo: 'App BidPro', desc: 'Alertas de oportunidades no celular.', acao: cta('ferramenta_app', () => window.dispatchEvent(new Event('tsn:pwa-install'))) },
+              { icon: MapPin, cor: AZUL, titulo: 'Preço do m² na sua região', desc: 'Venda e locação por cidade e bairro.', acao: cadastro('ferramenta_indice', '/indice') },
+              // Já aberto como app instalado: o card não teria o que fazer (o Header esconde o mesmo item).
+              ...(appInstalado() ? [] : [{ icon: Smartphone, cor: '#7c3aed', titulo: 'App BidPro', desc: 'Alertas de oportunidades no celular.', acao: cta('ferramenta_app', () => window.dispatchEvent(new Event('tsn:pwa-install'))) }]),
             ].map(({ icon: Icon, cor, titulo, desc, acao }) => (
               <button key={titulo} onClick={acao} style={{ textAlign: 'left', display: 'flex', alignItems: 'center', gap: 14, padding: '18px 18px', borderRadius: 16, border: '1px solid #e2e8f0', background: '#fbfdff', cursor: 'pointer' }}>
                 <div style={{ width: 44, height: 44, borderRadius: 12, background: `${cor}14`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Icon size={21} color={cor} /></div>

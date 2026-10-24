@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { ehRotaDeCampanha } from '../utils/rotaCampanha';
 
@@ -32,6 +32,9 @@ export default function PwaInstall() {
   const [iosAberto, setIosAberto] = useState(false);
   const [visivel, setVisivel] = useState(false);
   const [forcado, setForcado] = useState(false); // aberto manualmente (menu / landing)
+  // O listener abaixo fecha sobre o 1º render: o evento do prompt fica num ref para o gatilho manual.
+  const promptRef = useRef(null);
+  const [pulso, setPulso] = useState(0); // re-anima o banner a cada clique manual
   // 23/10 — na página inicial de venda o banner só aparece DEPOIS que a pessoa rola (antes cobria a
   // faixa de prova logo no topo, na primeira tela, que é onde a maioria decide).
   const [rolou, setRolou] = useState(false);
@@ -60,6 +63,7 @@ export default function PwaInstall() {
     // mas só auto-abre o banner UMA vez (depois, via item fixo do menu).
     const onPrompt = (e) => {
       e.preventDefault();
+      promptRef.current = e;
       setPrompt(e);
       if (podeAutoOfertar()) { setVisivel(true); marcarOfertado(); }
     };
@@ -71,9 +75,18 @@ export default function PwaInstall() {
 
     // Gatilho manual pelo menu interno / landing ("Instalar app"): abre SEMPRE
     // (ignora o "dispensado"), a menos que o app já esteja instalado.
+    // 24/10: o 1º clique só abria uma barra pequena no rodapé (quase invisível em 1920px) que pedia
+    // um 2º clique, e os seguintes não mudavam nada (PostHog: $dead_click em série). Agora, com o prompt
+    // nativo em mãos, abre-o direto (ainda dentro do gesto do clique); sem ele, vai ao passo a passo.
     const onManual = () => {
       if (ehStandalone()) return;
-      setForcado(true); setIosAberto(false); setVisivel(true);
+      const ev = promptRef.current;
+      if (ev) {
+        promptRef.current = null;
+        try { ev.prompt(); Promise.resolve(ev.userChoice).catch(() => {}).finally(() => setPrompt(null)); return; }
+        catch { /* prompt já consumido — cai no passo a passo */ }
+      }
+      setForcado(true); setIosAberto(true); setVisivel(true); setPulso((n) => n + 1);
     };
     window.addEventListener('tsn:pwa-install', onManual);
 
@@ -109,6 +122,7 @@ export default function PwaInstall() {
 
   const instalar = async () => {
     if (prompt) {
+      promptRef.current = null;
       prompt.prompt();
       try { await prompt.userChoice; } catch { /* ok */ }
       setPrompt(null); setVisivel(false); setForcado(false);
@@ -118,10 +132,11 @@ export default function PwaInstall() {
   };
 
   return (
-    <div style={{ position: 'fixed', left: 12, right: 12, bottom: 'calc(12px + env(safe-area-inset-bottom))',
+    <div key={pulso} className={pulso ? 'tsn-pwa-pulso' : undefined} style={{ position: 'fixed', left: 12, right: 12, bottom: 'calc(12px + env(safe-area-inset-bottom))',
       zIndex: 9999, maxWidth: 440, margin: '0 auto', background: '#111111', color: '#fff',
       borderRadius: 14, boxShadow: '0 10px 30px rgba(0,0,0,0.28)', padding: '14px 16px',
       fontFamily: "'Inter', sans-serif" }}>
+      {pulso ? <style>{'@keyframes tsnPwaPulso{0%{opacity:0;transform:translateY(28px)}70%{transform:translateY(-4px)}100%{opacity:1;transform:none}}.tsn-pwa-pulso{animation:tsnPwaPulso .45s ease-out;outline:3px solid #0D63DB;outline-offset:2px}'}</style> : null}
       {!iosAberto ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <img src="/favicon-192.png" alt="BidPro" width={40} height={40} style={{ borderRadius: 9, flexShrink: 0 }} />

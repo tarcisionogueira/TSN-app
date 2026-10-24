@@ -2491,6 +2491,11 @@ export default async function handler(req, res) {
       }
       return bloqueio;
     }
+    // Passou da trava de liberação: a anomalia de um bloqueio anterior deixa de valer (24/10 — o CEF de
+    // Feira de Santana liberou às 20:15 de 23/10 e ela seguia aberta, inflando a consulta 1b da abertura).
+    sb(`relatorio_anomalias?tipo=eq.documental_liberacao_bloqueada&imovel_id=eq.${encodeURIComponent(String(imovelId))}&resolvido=eq.false`, {
+      method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ resolvido: true, atualizado_em: new Date().toISOString() }),
+    }).catch((e) => console.warn('[documental] baixa do bloqueio de liberação falhou:', e?.message || e));
 
     // CNDT / CNIB / CENPROT NÃO são mais forçados na lista de "certidões a gerar antes do lance"
     // (decisão do dono: portal pago + captcha, o sistema não traz sozinho → fora da apresentação).

@@ -119,16 +119,24 @@ export default async function handler(req, res) {
   // Conta a tentativa ANTES de disparar. Se contássemos depois, uma geração que derruba a
   // função (o modo de falha que criou o preliminar) nunca incrementaria — e o teto acima
   // seria decorativo, justo no caso que ele existe para conter.
-  await Promise.allSettled(alvos.map((r) =>
-    sb(`analises_documental?user_id=eq.${encodeURIComponent(String(r.user_id))}&imovel_id=eq.${encodeURIComponent(String(r.imovel_id))}`, {
-      method: 'PATCH', headers: { Prefer: 'return=minimal' },
-      body: JSON.stringify({ regen_tentativas: (r.regen_tentativas || 0) + 1, regen_em: new Date().toISOString() }),
-    }).catch(() => {})
-  ));
+  // 24/10: só dispara quem teve o contador GRAVADO. Um PATCH que volta 4xx/5xx (statement timeout com o
+  // banco carregado) não lança — o contador ficava parado e a geração com IA saía mesmo assim, sem teto.
+  const contados = (await Promise.all(alvos.map(async (r) => {
+    try {
+      const resp = await sb(`analises_documental?user_id=eq.${encodeURIComponent(String(r.user_id))}&imovel_id=eq.${encodeURIComponent(String(r.imovel_id))}&select=imovel_id`, {
+        method: 'PATCH', headers: { Prefer: 'return=representation' },
+        body: JSON.stringify({ regen_tentativas: (r.regen_tentativas || 0) + 1, regen_em: new Date().toISOString() }),
+      });
+      if (!resp.ok) { console.error('[documental-retry] contador não gravado', r.imovel_id, resp.status); return null; }
+      const linhas = await resp.json().catch(() => []);
+      return Array.isArray(linhas) && linhas.length ? r : null;
+    } catch (e) { console.error('[documental-retry] contador não gravado', r.imovel_id, e?.message || e); return null; }
+  }))).filter(Boolean);
+  const semContador = alvos.length - contados.length;
 
   // Dispara em paralelo; aborta a própria conexão em ~9s (a geração continua no
   // destino, invocação independente, até concluir). allSettled p/ não travar a cron.
-  await Promise.allSettled(alvos.map((r) =>
+  await Promise.allSettled(contados.map((r) =>
     fetch(`${BASE}/api/gerar-documental`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-cron-secret': CRON_SECRET },
@@ -137,5 +145,5 @@ export default async function handler(req, res) {
     }).catch(() => {})
   ));
 
-  res.status(200).json({ ok: true, retentados: alvos.length, adiados, teto: MAX_TENT });
+  res.status(200).json({ ok: true, retentados: contados.length, sem_contador: semContador, adiados, teto: MAX_TENT });
 }

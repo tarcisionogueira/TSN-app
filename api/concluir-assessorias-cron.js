@@ -109,7 +109,7 @@ async function handler(req) {
 }
 
 async function avisarConclusao({ user_id: userId, role }) {
-  const r = await fetch(`${SUPABASE_URL}/rest/v1/perfis?id=eq.${encodeURIComponent(userId)}&select=nome,email`, {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/perfis?id=eq.${encodeURIComponent(userId)}&select=nome,email,acesso_veiculos_ate`, {
     headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
   });
   if (!r.ok) throw new Error(`perfil HTTP ${r.status}`);
@@ -121,8 +121,13 @@ async function avisarConclusao({ user_id: userId, role }) {
   const btn = (href, txt, cor) => `<a href="${href}" style="background:${cor};color:#fff;text-decoration:none;padding:11px 22px;border-radius:8px;font-weight:700;display:inline-block;margin:0 8px 10px 0">${txt}</a>`;
   // Desde 23/10 a assessoria inclui o Combo (regra_negocio['assessoria.inclui_combo']): o acesso a veículos
   // também se encerra com ela, salvo assinatura própria de Veículos/Combo (perfis.acesso_veiculos_ate).
+  // 24/10: quem tem Veículos/Combo próprio vigente não perde veículos — o e-mail não pode prometer a perda.
+  const veicAte = p.acesso_veiculos_ate && new Date(p.acesso_veiculos_ate) > new Date() ? new Date(p.acesso_veiculos_ate) : null;
+  const linhaVeic = veicAte ? `O <strong>Leilão de Veículos</strong> segue ativo até ${veicAte.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })} pela sua assinatura.` : null;
   const linhaPro = manteveProprio
-    ? 'Como você mantém a sua assinatura do <strong>Investidor Pro</strong>, os benefícios dele continuam ativos. O <strong>Leilão de Veículos</strong> vinha incluído na assessoria; para mantê-lo, assine o plano Veículos ou o Combo.'
+    ? `Como você mantém a sua assinatura do <strong>Investidor Pro</strong>, os benefícios dele continuam ativos. ${linhaVeic || 'O <strong>Leilão de Veículos</strong> vinha incluído na assessoria; para mantê-lo, assine o plano Veículos ou o Combo.'}`
+    : veicAte
+    ? `Os benefícios do <strong>Investidor Pro</strong> vinham incluídos na assessoria e se encerram com ela. ${linhaVeic} Para manter os de imóveis, você pode <strong>contratar uma nova assessoria</strong> ou <strong>assinar o Investidor Pro</strong>.`
     : 'Os benefícios do <strong>Combo</strong> (Investidor Pro + Leilão de Veículos) vinham incluídos na assessoria e se encerram com ela. Para mantê-los, você pode <strong>contratar uma nova assessoria</strong> para o próximo imóvel ou <strong>assinar o Combo</strong> ou o <strong>Investidor Pro</strong>.';
   const env = await enviarEmail({
     to: p.email,
@@ -131,10 +136,10 @@ async function avisarConclusao({ user_id: userId, role }) {
       <h2 style="color:#0D63DB;margin:0 0 12px">Parabéns, ${nome}! 🏠</h2>
       <p style="font-size:15px;line-height:1.6">A sua assessoria foi <strong>concluída</strong>: a carta de arrematação e a matrícula registrada do imóvel já estão no seu acompanhamento.</p>
       <p style="font-size:15px;line-height:1.6">${linhaPro}</p>
-      <p style="margin:20px 0 10px">${btn(`${base}/#/checkout?plano=assessorado`, 'Contratar nova assessoria', '#d97706')}${manteveProprio ? '' : btn(`${base}/#/checkout?plano=combo`, 'Assinar o Combo', '#6d28d9') + btn(`${base}/#/checkout?plano=top2`, 'Assinar o Investidor Pro', '#0D63DB')}</p>
+      <p style="margin:20px 0 10px">${btn(`${base}/#/checkout?plano=assessorado`, 'Contratar nova assessoria', '#d97706')}${manteveProprio ? '' : (veicAte ? '' : btn(`${base}/#/checkout?plano=combo`, 'Assinar o Combo', '#6d28d9')) + btn(`${base}/#/checkout?plano=top2`, 'Assinar o Investidor Pro', '#0D63DB')}</p>
       <p style="font-size:12px;color:#94a3b8;margin-top:20px">BidPro Brasil — Leilão &amp; Investimentos</p>
     </div>`,
-    text: `Parabéns, ${nome}! A sua assessoria foi concluída. ${linhaPro.replace(/<[^>]+>/g, '')}\n\nNova assessoria: ${base}/#/checkout?plano=assessorado${manteveProprio ? '' : `\nCombo: ${base}/#/checkout?plano=combo\nInvestidor Pro: ${base}/#/checkout?plano=top2`}\n\nBidPro Brasil — Leilão & Investimentos`,
+    text: `Parabéns, ${nome}! A sua assessoria foi concluída. ${linhaPro.replace(/<[^>]+>/g, '')}\n\nNova assessoria: ${base}/#/checkout?plano=assessorado${manteveProprio ? '' : `${veicAte ? '' : `\nCombo: ${base}/#/checkout?plano=combo`}\nInvestidor Pro: ${base}/#/checkout?plano=top2`}\n\nBidPro Brasil — Leilão & Investimentos`,
     meta: { tipo: 'assessoria_concluida', userId },
     idempotencyKey: `assessoria_concluida_${userId}_${new Date().toISOString().slice(0, 10)}`,
   });

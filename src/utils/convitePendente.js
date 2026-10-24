@@ -29,6 +29,9 @@ export const CHAVE_LEILOEIRO = 'tsn_convite_leiloeiro';
 // pessoa cai na home como explorador e a intenção de compra evapora no caminho mais comum
 // do funil. Guardado aqui pela mesma janela.
 export const CHAVE_PLANO = 'tsn_plano_pendente';
+// DESTINO pedido antes do cadastro por e-mail (`?next=` ou página de produto) — 24/10. Mesma doença:
+// /planos?plano=assessorado mandava para /login?next=..., e quem confirmava o e-mail caía na Home.
+export const CHAVE_DESTINO = 'tsn_destino_pendente';
 
 // Guarda o token com carimbo de tempo. NÃO normaliza a caixa: o token de equipe é um
 // `crypto.randomUUID()` (minúsculo) e o RPC compara com igualdade sensível a caixa

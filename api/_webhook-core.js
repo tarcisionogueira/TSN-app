@@ -535,6 +535,13 @@ export async function suspenderPlanoDireto({ userId, gateway, planoKey = null })
   if (eCli) throw new Error(`leitura do perfil falhou: ${eCli.message}`);
   if (!cliente) return { skipped: 'perfil_nao_encontrado' };
   if (cliente.inadimplente_desde) return { ok: true, ja_inadimplente: true };
+  // ANTI-FLIP (24/10, mesma guarda do reconciliar-assinaturas-cron): falha/cancelamento de um plano MENOR
+  // que o papel atual não rebaixa. Caso real: contratar a assessoria cancela o mandato do Combo/Pro
+  // (cancelarRecorrenciaPro), o MP manda `cancelled` com planoKey=combo e, sem esta guarda, quem acabou
+  // de pagar a assessoria virava explorador e recebia o e-mail de resgate.
+  const RANK = { explorador: 0, top2: 1, combo: 1, assessorado: 2, clube: 3 };
+  const rPlano = RANK[planoBase(planoKey)], rPapel = RANK[planoBase(cliente.role)];
+  if (planoKey && rPlano != null && rPapel != null && rPapel > rPlano) return { ok: true, ignorado: 'papel_acima_do_plano' };
   // GUARDA da âncora ANUAL: cancelar o MANDATO anual (troca anual→mensal agendada, ou
   // cancelamento no meio do ano já pago) NÃO rebaixa — o cliente pagou os 12 meses e
   // mantém acesso até plano_vencimento. A virada/rebaixe acontece no vencimento.
@@ -825,7 +832,9 @@ export async function processarConfirmado({ valor, valorLiquido, descricao, emai
   // Mesma regra do ativarPlanoDireto, no outro caminho de confirmação (Asaas / fallback):
   // assessoria paga → cancela a mensalidade do Investidor Pro (regra_negocio['assessoria.inclui_pro']).
   if (mapeado?.plano === 'assessorado' && update.role === 'assessorado') {
-    await cancelarRecorrenciaPro({ userId: cliente.id, email, asaasCustomerId: gateway === 'asaas' ? gatewayCustomerId : null, origem: `${gateway}-confirmado` });
+    // Sem o e-mail do PAGADOR (24/10): os mandatos nascem com o e-mail da CONTA, e quem paga a assessoria
+    // pode ser outra pessoa — a busca achava zero sem erro. cancelarRecorrenciaPro lê o da conta.
+    await cancelarRecorrenciaPro({ userId: cliente.id, asaasCustomerId: gateway === 'asaas' ? gatewayCustomerId : null, origem: `${gateway}-confirmado` });
   }
 
   // LOG DE ATIVIDADE (Cliente 360) — cobre os dois gateways (MP e Asaas) num ponto só, já

@@ -5,7 +5,7 @@ import { salvarRef, lerRef, limparRef } from '../utils/ref';
 import { lerMarketing } from '../utils/marketing';
 import { anonId, registrarEvento } from '../utils/tracker';
 import { identificarPostHog } from '../utils/posthog';
-import { salvarConvite, lerConvite, limparConvite, lerTermosAceitos, limparTermosAceitos, CHAVE_EQUIPE, CHAVE_CLIENTE, CHAVE_PLANO, CHAVE_LEILOEIRO } from '../utils/convitePendente';
+import { salvarConvite, lerConvite, limparConvite, lerTermosAceitos, limparTermosAceitos, CHAVE_EQUIPE, CHAVE_CLIENTE, CHAVE_PLANO, CHAVE_LEILOEIRO, CHAVE_DESTINO } from '../utils/convitePendente';
 import { lerComRenovacao, ehErroDeSessao } from '../lib/sessao-expirada';
 
 const AuthContext = createContext(null);
@@ -461,6 +461,14 @@ export function AuthProvider({ children }) {
             if (roleBase !== String(planoPend) && !/^\/?checkout/.test(window.location.hash.replace(/^#/, ''))) {
               window.location.hash = `/checkout?plano=${encodeURIComponent(planoPend)}`;
             }
+          }
+          // DESTINO pedido antes do cadastro por e-mail (24/10). Só resgata quem chegou na raiz
+          // (o link de confirmação abre `${origin}/`) e só caminho interno — nunca outro domínio.
+          const destPend = lerConvite(CHAVE_DESTINO);
+          if (destPend) {
+            limparConvite(CHAVE_DESTINO);
+            const atual = window.location.hash.replace(/^#/, '');
+            if (!oauthDest && !planoPend && /^\/(?!\/)/.test(destPend) && (atual === '' || atual === '/')) window.location.hash = destPend;
           }
           updateActivity();
         }

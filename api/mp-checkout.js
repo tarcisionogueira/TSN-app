@@ -263,6 +263,20 @@ export default async function handler(req, res) {
     const planoA = req.body?.plano == null ? 'top2' : String(req.body.plano);
     if (!['top2', 'veiculos', 'combo'].includes(planoA)) return res.status(400).json({ error: 'Plano anual inválido.' });
     const SB_URL = process.env.VITE_SUPABASE_URL, SB_KEY = process.env.SUPABASE_SERVICE_KEY;
+    // Assessoria inclui o Combo (23/10): a tela recusa, e o servidor também (24/10 — o botão do anual pulava a
+    // trava da tela). Leitura ilegível = recusa: cobrar R$ 999 de quem já tem o produto é o erro caro.
+    if (planoA !== 'top2' && user?.id) {
+      let roleA = null;
+      try {
+        const r = await fetch(`${SB_URL}/rest/v1/perfis?id=eq.${encodeURIComponent(user.id)}&select=role`, {
+          headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` }, signal: AbortSignal.timeout(10000),
+        });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        roleA = (await r.json())?.[0]?.role ?? '';
+      } catch (e) { console.error('[mp-checkout] plano_anual: papel', e?.message || e); }
+      if (roleA === null) return res.status(503).json({ error: 'Não consegui validar sua conta agora. Tente em instantes.' });
+      if (/^assessorado/.test(roleA)) return res.status(409).json({ error: 'Sua assessoria já inclui o Combo: imóveis e veículos, sem mensalidade, enquanto ela estiver ativa.' });
+    }
     let precoA = 0;
     try {
       const r = await fetch(`${SB_URL}/rest/v1/planos_config?plano_key=eq.${planoA}&select=preco_anual`, {

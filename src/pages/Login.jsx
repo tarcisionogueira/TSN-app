@@ -8,7 +8,7 @@ import { Briefcase, Eye, EyeOff, Loader2, CheckCircle2 } from 'lucide-react';
 import { apiCall } from '../utils/apiCall';
 import { buscarTodasCidades } from '../data/cidades';
 import { salvarRef, lerRef } from '../utils/ref';
-import { salvarConvite, lerConvite, limparConvite, CHAVE_EQUIPE, CHAVE_CLIENTE, CHAVE_PLANO, CHAVE_LEILOEIRO } from '../utils/convitePendente';
+import { salvarConvite, lerConvite, limparConvite, CHAVE_EQUIPE, CHAVE_CLIENTE, CHAVE_PLANO, CHAVE_LEILOEIRO, CHAVE_DESTINO } from '../utils/convitePendente';
 import { versaoTermoProduto } from '../utils/termos';
 
 const inp = {
@@ -516,6 +516,9 @@ export default function Login() {
       // o usuário volta à página do produto para comprar, em vez de cair na Home.
       const destProdCad = destinoProduto(produtoParam);
       if (destProdCad) sessionStorage.setItem('tsn_redirect_produto', destProdCad);
+      // sessionStorage não sobrevive ao link de confirmação aberto noutra aba: o destino vai também
+      // para o localStorage e o AuthContext resgata no 1º login (plano pendente tem prioridade).
+      if (!planoEscolhido && (destProdCad || nextParam)) salvarConvite(CHAVE_DESTINO, destProdCad || nextParam);
       setModo('sucesso');
     } catch (err) {
       // Falha de CADASTRO (validação local, e-mail duplicado ou erro do Auth) deixa rastro no

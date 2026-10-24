@@ -48,8 +48,9 @@ const API_KEY = (process.env.ASAAS_API_KEY || '').trim();
 
 // Fallback hardcoded caso o Supabase não retorne
 const PLANOS_FALLBACK = {
-  top2:              { nome: 'Investidor Pro',              valor: 49.90,    ciclo: 'MONTHLY', maxPayments: undefined },
-  top2_anual:        { nome: 'Investidor Pro (Anual)',      valor: 449.90,   ciclo: 'YEARLY',  maxPayments: undefined }, // recorrente anual (renova = regra c)
+  // 24/10: reserva alinhada ao planos_config (era 49,90/449,90 — se a leitura falhasse, cobrava abaixo do preço).
+  top2:              { nome: 'Investidor Pro',              valor: 89.90,    ciclo: 'MONTHLY', maxPayments: undefined },
+  top2_anual:        { nome: 'Investidor Pro (Anual)',      valor: 899.00,   ciclo: 'YEARLY',  maxPayments: undefined }, // recorrente anual (renova = regra c)
   clube:             { nome: 'Clube de Negócios (Mensal)',  valor: 5000.00,  ciclo: 'MONTHLY', maxPayments: undefined },
   clube_vista:       { nome: 'Clube de Negócios (À Vista)', valor: 48000.00, avulso: true },
   assessorado:       { nome: 'Assessorado (12× R$ 500)',   valor: 500.00,   ciclo: 'MONTHLY', maxPayments: 12 },

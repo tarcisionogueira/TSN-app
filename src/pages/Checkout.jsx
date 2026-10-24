@@ -841,6 +841,23 @@ export default function Checkout() {
     }
   };
 
+  // Travas de quem já tem veículos (20/10 e 23/10). Função própria porque o botão "Pagar o ano de uma vez"
+  // não passa por iniciarPagamento — antes dela (24/10) o assessorado comprava o Combo anual por ali.
+  const bloqueioCompraVeiculos = async () => {
+    if (!PLANOS_VEICULOS.includes(planoKey)) return null;
+    if (['assessorado', 'assessorado_anual'].includes(role)) return 'Sua assessoria já inclui o Combo: imóveis e veículos, sem mensalidade, enquanto ela estiver ativa.';
+    if (planoKey === 'combo' && ['clube', 'clube_anual'].includes(role)) return 'Seu plano já inclui o Investidor Pro. Para veículos, assine o Leilão de Veículos (R$ 29,90/mês).';
+    if (!user) return null;
+    const { data: temAcesso, error: eAc } = await supabase.rpc('tem_acesso_veiculos');
+    if (eAc) console.warn('[checkout] leitura do acesso a veículos falhou:', eAc.message);
+    if (temAcesso === true && (planoKey === 'veiculos' || ['top2', 'assessorado', 'clube'].includes(role))) {
+      return planoKey === 'veiculos'
+        ? 'O Leilão de Veículos já está ativo na sua conta (sozinho ou no Combo).'
+        : 'Você já tem imóveis e veículos ativos na sua conta.';
+    }
+    return null;
+  };
+
   const iniciarPagamento = async () => {
     if (!perfilFaturamentoOk) return;
     // TERMOS NO MOMENTO CERTO (15/08): o upgrade é onde a pessoa está deliberadamente
@@ -863,24 +880,8 @@ export default function Checkout() {
       // Assessoria inclui o Combo (23/10, regra_negocio['assessoria.inclui_combo']): nada de veículos para
       // comprar enquanto ela está ativa. Clube já inclui o Pro: para veículos, o certo é o plano Veículos — o
       // Combo trocaria o plano de imóveis por um Pro (revisão 20/10).
-      if (PLANOS_VEICULOS.includes(planoKey) && ['assessorado', 'assessorado_anual'].includes(role)) {
-        setErro('Sua assessoria já inclui o Combo: imóveis e veículos, sem mensalidade, enquanto ela estiver ativa.');
-        return;
-      }
-      if (planoKey === 'combo' && ['clube', 'clube_anual'].includes(role)) {
-        setErro('Seu plano já inclui o Investidor Pro. Para veículos, assine o Leilão de Veículos (R$ 29,90/mês).');
-        return;
-      }
-      if (PLANOS_VEICULOS.includes(planoKey) && user) {
-        const { data: temAcesso, error: eAc } = await supabase.rpc('tem_acesso_veiculos');
-        if (eAc) console.warn('[checkout] leitura do acesso a veículos falhou:', eAc.message);
-        if (temAcesso === true && (planoKey === 'veiculos' || ['top2', 'assessorado', 'clube'].includes(role))) {
-          setErro(planoKey === 'veiculos'
-            ? 'O Leilão de Veículos já está ativo na sua conta (sozinho ou no Combo).'
-            : 'Você já tem imóveis e veículos ativos na sua conta.');
-          return;
-        }
-      }
+      const bloqueio = await bloqueioCompraVeiculos();
+      if (bloqueio) { setErro(bloqueio); return; }
       // Pro → anual com acesso a veículos (revisão 20/10): se o acesso vier do Combo, o anual o substitui e os
       // veículos acabam no fim do período. Avisa antes; quem tem o Veículos separado não perde nada.
       if (ehTrocaCiclo && cicloAlvo === 'anual') {
@@ -1543,7 +1544,7 @@ export default function Checkout() {
                   </p>
                 ) : resultadoMudanca.agendado === 'mensal' ? (
                   <p style={{ margin: 0, fontSize: 13, color: '#047857', lineHeight: 1.6 }}>
-                    Você continua no plano anual até <strong>{resultadoMudanca.ate ? new Date(resultadoMudanca.ate).toLocaleDateString('pt-BR') : 'o fim do período pago'}</strong>. Ao fim dos 12 meses, o plano passa a ser <strong>mensal (R$ 49,90/mês)</strong> — enviaremos um e-mail perto da virada para você confirmar o cartão. Nenhuma cobrança agora.
+                    Você continua no plano anual até <strong>{resultadoMudanca.ate ? new Date(resultadoMudanca.ate).toLocaleDateString('pt-BR') : 'o fim do período pago'}</strong>. Ao fim dos 12 meses, o plano passa a ser <strong>mensal ({plano?.precoLabel || 'R$ 89,90'}/mês)</strong> — enviaremos um e-mail perto da virada para você confirmar o cartão. Nenhuma cobrança agora.
                   </p>
                 ) : resultadoMudanca.tipo === 'upgrade' ? (
                   <p style={{ margin: 0, fontSize: 13, color: '#047857', lineHeight: 1.6 }}>
@@ -1606,7 +1607,7 @@ export default function Checkout() {
                 <>
                   <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
                     <div style={{ fontSize: 12, color: '#64748b' }}>Você está assinando</div>
-                    <div style={{ fontSize: 15, fontWeight: 800, color: '#111' }}>{plano.nome} · {plano.precoLabel || 'R$ 49,90'}/mês</div>
+                    <div style={{ fontSize: 15, fontWeight: 800, color: '#111' }}>{plano.nome} · {plano.precoLabel || 'R$ 89,90'}/mês</div>
                     <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>Como {su.email} · Cancele quando quiser</div>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
@@ -1653,7 +1654,7 @@ export default function Checkout() {
                   {captcha.widget}
                   <button onClick={assinarComCadastro} disabled={suLoading || !senhaForte(su.senha) || captcha.pendente}
                     style={{ width: '100%', padding: '15px', background: suLoading ? '#94a3b8' : plano.cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: suLoading ? 'not-allowed' : 'pointer', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                    {suLoading ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Processando…</> : `Assinar e pagar ${plano.precoLabel || 'R$ 49,90'}`}
+                    {suLoading ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Processando…</> : `Assinar e pagar ${plano.precoLabel || 'R$ 89,90'}`}
                   </button>
                   <button onClick={() => { setSuErro(''); setEtapa('ident'); }} disabled={suLoading}
                     style={{ width: '100%', padding: '10px', background: 'none', border: 'none', color: '#64748b', fontSize: 13, cursor: suLoading ? 'default' : 'pointer' }}>
@@ -1865,7 +1866,12 @@ export default function Checkout() {
                   Só num contrato NOVO do Pro anual (não em troca de ciclo / mudança de plano). */}
               {temToggleAnual && modalidade === 'anual' && !ehTrocaCiclo && !ehMudanca && (
                 <button
-                  onClick={() => { if (aceitouTermos && perfilFaturamentoOk) { setPixAnualFase('pagando'); setShowPixAnual(true); } }}
+                  onClick={async () => {
+                    if (!aceitouTermos || !perfilFaturamentoOk) return;
+                    const bloqueio = await bloqueioCompraVeiculos();
+                    if (bloqueio) { setErro(bloqueio); return; }
+                    setPixAnualFase('pagando'); setShowPixAnual(true);
+                  }}
                   disabled={loading || !aceitouTermos || !perfilFaturamentoOk}
                   style={{ width: '100%', marginTop: 10, padding: '13px', background: 'white', color: '#059669', border: '1.5px solid #059669', borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: (!aceitouTermos || !perfilFaturamentoOk || loading) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: (!aceitouTermos || !perfilFaturamentoOk || loading) ? 0.6 : 1 }}>
                   Pagar o ano de uma vez: PIX ou cartão em até 12× ({plano?.precoAnualLabel || 'R$ 899,00'})
