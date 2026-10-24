@@ -50,7 +50,9 @@ export function fipeEstaVelho(fipeStatus, fipeAtualizadoEm) {
   const dias = (Date.now() - new Date(fipeAtualizadoEm).getTime()) / 86400000;
   // `sem_dados` também volta em 3 dias (08/10): a régua do título melhora (modelo→marca), e 25 dias
   // deixavam o "HB20 1.0M UNIQUE" sem FIPE por quase um mês depois do conserto.
-  return (fipeStatus === 'sem_match' || fipeStatus === 'sem_dados') ? dias >= RETENTAR_SEM_MATCH_DIAS : dias >= RETENTAR_OK_DIAS;
+  // `leiloeiro` também (24/10, dono: "sempre devemos verificar a FIPE, ela corrige mês a mês"): o valor
+  // da ficha do lote não é consulta nossa — tenta a tabela de novo em 3 dias, como quem ainda não achou.
+  return ['sem_match', 'sem_dados', 'leiloeiro'].includes(fipeStatus) ? dias >= RETENTAR_SEM_MATCH_DIAS : dias >= RETENTAR_OK_DIAS;
 }
 
 export const normalizar = (s) => String(s || '')
@@ -505,6 +507,16 @@ export async function buscarFipe(fipeGet, veiculo, cache = new Map()) {
       if (!codigoMarca) continue;
       for (const mod of modelosTentar) {
         const r = semAno ? await faixaDoModelo(fipeGet, cache, categoria, codigoMarca, mod) : await casarNaMarca(fipeGet, cache, categoria, codigoMarca, veiculo, mod, { triangular: primeira });
+        if (r) return r;
+      }
+      // Marca real DENTRO do modelo (24/10: Superbid grava marca "VW" e modelo "PORSCHE MACAN S" — o
+      // Macan nunca está na Volkswagen e a tela ficava só com a FIPE do leiloeiro). Só depois da tentativa
+      // normal falhar, e só se a 1ª palavra do modelo for, ela mesma, uma marca da tabela.
+      const pm = primeiraPalavra(modelo);
+      const codigoDoModelo = pm && pm !== normalizar(marca).split(' ')[0] ? acharMarca(MARCA_ALIAS[pm] || pm, marcas, indexarMarcas(marcas)) : null;
+      const resto = normalizar(modelo).split(' ').slice(1).join(' ');
+      if (codigoDoModelo && codigoDoModelo !== codigoMarca && resto) {
+        const r = semAno ? await faixaDoModelo(fipeGet, cache, categoria, codigoDoModelo, resto) : await casarNaMarca(fipeGet, cache, categoria, codigoDoModelo, veiculo, resto, { triangular: primeira });
         if (r) return r;
       }
       primeira = false;

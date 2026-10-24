@@ -640,7 +640,8 @@ export default async function handler(req, res) {
   // triangular"). Sem valor válido, tenta AGORA — forçando por cima da espera de 90 dias de um
   // `sem_match` antigo — com a mesma régua da tela (api/_fipe-garantir.js: ano pelo edital, cache,
   // cota e triangulação por ano+combustível). Teto de 25 s: não pode comer o prazo da análise.
-  if (!(Number(v.valor_fipe) > 0 && ['ok', 'aproximado', 'leiloeiro'].includes(v.fipe_status))) {
+  // 'leiloeiro' também tenta (24/10): o valor da ficha não foi conferido na tabela; se a consulta falhar, ele segue.
+  if (!(Number(v.valor_fipe) > 0 && ['ok', 'aproximado'].includes(v.fipe_status))) {
     try {
       const fipe = await Promise.race([
         garantirFipe(v, { forcar: true }),

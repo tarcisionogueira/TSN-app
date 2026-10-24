@@ -1811,7 +1811,10 @@ async function scraperSuperbidVeiculos(browser, { portalId = '[2]', fonte, leilo
 // aberta COMPLETA, cada ativo de data futura que não está nela é conferido POR ID (nada é inferido
 // da ausência — forma nº 4): some na API ou `removed` → desativa; encerrou → grava a data REAL, e a
 // apuração + a regra dos 15 dias do dono seguem dali; ainda aberto (paginação deslocou) → nada.
-async function reconciliarSumidosSuperbidVeic(browser, registros, { fonte = 'SUPERBID', prefixo = 'sbid_veic_', baseSite = 'https://www.superbid.net', max = 800 } = {}) {
+// max 800 → 6000 (24/10): com 800 por rodada e o runner sem coletar alguns dias, acumularam 5.179 ativos
+// de data futura sem atualização desde 20/10 — o dono abriu um (Porsche Macan, oferta 5025255) e o link
+// dava "Página não encontrada". Cada conferência é 1 GET leve na API pública (20 em paralelo, ~5 min no total).
+async function reconciliarSumidosSuperbidVeic(browser, registros, { fonte = 'SUPERBID', prefixo = 'sbid_veic_', baseSite = 'https://www.superbid.net', max = 6000 } = {}) {
   if (!registros?.enumeracaoCompleta) { console.log('    sumidos (veículos SUPERBID): PULADO — enumeração incompleta'); return; }
   const abertos = registros.idsAbertos;
   const candidatos = [];

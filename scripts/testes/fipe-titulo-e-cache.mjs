@@ -138,6 +138,15 @@ let chamou = 0;
 const fusca = await buscarFipe(async () => { chamou++; return null; }, { marca: 'VW', modelo: 'FUSCA 1300 L', titulo: 'VW FUSCA 1300 L 1978 1978', ano_fabricacao: 1978, ano_modelo: 1978, tipo_veiculo: 'carro' });
 ok(fusca.status === 'fora_tabela' && chamou === 0, 'Fusca 1978 → fora_tabela, sem gastar cota');
 
+console.log('\nMARCA REAL DENTRO DO MODELO (24/10)');
+const macan = await buscarFipe(falsa2({
+  '/cars/brands': [{ code: '59', name: 'VW - VolksWagen' }, { code: '47', name: 'Porsche' }],
+  '/cars/brands/59/models': [{ code: '1', name: 'Gol 1.0 Mi 8V' }],
+  '/cars/brands/47/models': [{ code: '5', name: 'Macan S 3.0 V6 Bi-Turbo' }],
+  '/cars/brands/47/models/5/years': [{ code: '2020-1', name: '2020 Gasolina' }],
+}), { marca: 'VW', modelo: 'PORSCHE MACAN S', titulo: 'VW PORSCHE MACAN S', ano_fabricacao: 2019, ano_modelo: 2020, tipo_veiculo: 'carro' });
+ok(macan.status === 'ok', `Superbid "VW" + modelo "PORSCHE MACAN S" → acha na Porsche: ${macan.status}`);
+
 console.log('\nSEM ANO → FAIXA DO MODELO (20/10)');
 const gol = await buscarFipe(async (path) => ({
   '/cars/brands': [{ code: '59', name: 'VW - VolksWagen' }],

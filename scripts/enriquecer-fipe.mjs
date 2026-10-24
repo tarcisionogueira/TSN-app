@@ -53,7 +53,8 @@ async function main() {
     .eq('ativo', true)
     .in('tipo_veiculo', tipos)
     .not('ano_fabricacao', 'is', null)
-    .or(`fipe_atualizado_em.is.null,and(fipe_status.in.(sem_match,sem_dados),fipe_atualizado_em.lt.${desde90}),and(fipe_status.not.in.(sem_match,sem_dados),fipe_atualizado_em.lt.${desde25})`);
+    // 'leiloeiro' = FIPE da ficha, não conferida: mesma espera curta do sem_match (fipeEstaVelho em api/_fipe.js).
+    .or(`fipe_atualizado_em.is.null,and(fipe_status.in.(sem_match,sem_dados,leiloeiro),fipe_atualizado_em.lt.${desde90}),and(fipe_status.not.in.(sem_match,sem_dados,leiloeiro),fipe_atualizado_em.lt.${desde25})`);
   const hoje = new Date().toISOString().slice(0, 10);
   const OUTROS = TIPOS_COM_FIPE.filter((t) => t !== 'carro');
   const leva = (tipos) => [
