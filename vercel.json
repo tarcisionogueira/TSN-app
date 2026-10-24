@@ -264,6 +264,10 @@
       "schedule": "37 * * * *"
     },
     {
+      "path": "/api/superbid-sumidos-cron",
+      "schedule": "23 */2 * * *"
+    },
+    {
       "path": "/api/apurar-resultado-leilao-cron",
       "schedule": "0 */3 * * *"
     },
