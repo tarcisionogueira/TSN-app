@@ -38,3 +38,12 @@ assert.equal(ehVagaGaragem({ titulo: 'Estacionamento nº49 c/ 13,21m² - Av, Bal
 assert.equal(ehVagaGaragem({ titulo: 'GARAGEM/DEPÓSITO (6.500M²) - TRÊS CORAÇÕES/MG (17556)', descricao: '' }), false, 'galpão grande fica');
 assert.equal(ehVagaGaragem({ titulo: 'BOX de LOJA nº 28 do Edif. Central Comercial Jabaquara, A.U 18,75m²', descricao: '' }), false, 'box de loja fica');
 console.log('vaga-garagem: todos os casos passaram');
+// 24/10 (dono): "FRAÇÃO DE TERRAS" no RS é a gleba inteira, não "nem imóvel nem veículo"; "TERRRENO" é terreno.
+import { ehForaDoAcervo, ehFracaoIdeal } from '../lib/scraper-core.mjs';
+for (const titulo of ['FRAÇÃO DE TERRAS COM 2,5 HA NO INTERIOR DE CANDELÁRIA', 'FRAÇÃO DE TERRAS', 'TERRRENO URBANO NO CENTRO']) {
+  assert.equal(ehForaDoAcervo({ titulo, descricao: '' }), false, `devia ser imóvel: ${titulo}`);
+}
+assert.equal(ehFracaoIdeal({ titulo: 'FRAÇÃO DE TERRAS', descricao: '' }), false, 'fração de terras não é fração ideal');
+assert.equal(ehFracaoIdeal({ titulo: 'FRAÇÃO IDEAL DE 50% DE TERRAS', descricao: '' }), true, 'fração ideal segue barrada');
+assert.equal(ehForaDoAcervo({ titulo: 'Lote de gado nelore', descricao: '' }), true, 'gado continua fora');
+console.log('fracao-de-terras: todos os casos passaram');
