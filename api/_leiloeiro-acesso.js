@@ -25,3 +25,20 @@ export async function acessoLeiloeiro(req) {
 export const tituloSemLeiloeiro = (im) => (/leil(õ|o)es|leiloeir/i.test(im?.titulo || '')
   ? `${im.tipo && !/^(outros?|im[oó]vel)$/i.test(im.tipo) ? im.tipo.charAt(0).toUpperCase() + im.tipo.slice(1) : 'Imóvel'}${im.cidade ? ` em ${im.cidade}${im.estado ? `/${im.estado}` : ''}` : ''}`
   : im?.titulo);
+
+// RELATÓRIO MERCADOLÓGICO SEM O LINK DO DOCUMENTO DO LEILOEIRO (25/10, cofre do leiloeiro).
+// api/gerar-analise.js lê o edital/matrícula com a SERVICE KEY e gravava a URL do PDF (servidor do leiloeiro:
+// documentacao.portalzuk..., static.suporteleiloes..., S3 do leiloeiro) em quatro pontos do `result`, que o DONO do
+// relatório lê em analises_mercado — inclusive o Explorador. Os pontos foram medidos no banco (25/10): fora deles,
+// nenhum host de leiloeiro aparece no result de quem não paga. Os BOOLEANOS ficam (editalLido, custosLidos): dizem
+// que o documento foi lido sem dizer onde ele está. Muta e devolve o mesmo objeto; `null`/não-objeto passa direto.
+// MESMA lista de caminhos de public.analise_mercado_sem_leiloeiro() no banco (backfill) — mudar nos dois.
+export function limparLeiloeiroDoRelatorio(result) {
+  if (!result || typeof result !== 'object') return result;
+  const m = result.mercado && typeof result.mercado === 'object' ? result.mercado : null;
+  if (m?.condicoesEdital && typeof m.condicoesEdital === 'object') delete m.condicoesEdital.fonte;
+  if (m?.metodologia?.documento && typeof m.metodologia.documento === 'object') delete m.metodologia.documento.editalFonte;
+  if (m?.metodologia?.area?.divergencia && typeof m.metodologia.area.divergencia === 'object') delete m.metodologia.area.divergencia.fonte;
+  if (result.divergenciaArea && typeof result.divergenciaArea === 'object') delete result.divergenciaArea.fonte;
+  return result;
+}

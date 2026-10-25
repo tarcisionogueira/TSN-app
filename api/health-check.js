@@ -312,6 +312,20 @@ async function handler(req) {
     return { status: 'aviso', detalhe: `${linhas.length} fonte(s) — saíram do site (link morto) OU a coleta trouxe menos do que o site tem; conferir um lote de cada: ${linhas.slice(0, 5).map(linha).join(' | ')}${linhas.length > 5 ? ` … +${linhas.length - 5}` : ''}` };
   }));
 
+  // COFRE DO LEILOEIRO (26/10): o leiloeiro (nome, link, edital, matrícula) é do plano pago — no BANCO, não só na
+  // tela. public.leiloeiro_vaza_para_anon() lê o catálogo (grant de anon/authenticated na tabela e nas colunas que a
+  // view mascara), a view imoveis_leilao_mascarado no papel anon e os relatórios de quem não paga. É o que transforma
+  // "REVOKE escrito e não aplicado" em alarme. Também entra em qa_invariantes() como `leiloeiro_vaza_para_anon`.
+  itens.push(await check('Segurança — leiloeiro só para plano pago', async () => {
+    const r = await sb('rpc/leiloeiro_vaza_para_anon', { method: 'POST', body: '{}' });
+    if (!r.ok) throw new Error(`HTTP ${r.status} — ${(await r.text().catch(() => '')).slice(0, 160)}`);
+    const linhas = await r.json();
+    if (!Array.isArray(linhas) || !linhas.length) throw new Error('retorno inesperado (sem itens) — não deu para verificar');
+    const abertos = linhas.filter((l) => Number(l.valor) > 0);
+    if (!abertos.length) return { status: 'ok', detalhe: `${linhas.length} portas conferidas, todas fechadas` };
+    return { status: 'erro', detalhe: `Leiloeiro saindo para visitante/Explorador: ${abertos.map((l) => `${l.item}=${l.valor}`).join(', ')}. Ver supabase/migrations/20261026_cofre_leiloeiro.sql (itens 7 e 8).` };
+  }));
+
   // ── 3c. Uso — gaps de RLS que quebram a AÇÃO do usuário (proativo) ──
   // Detecta a classe do bug "new row violates row-level security policy": tabela de
   // dados do usuário (com coluna de dono) com RLS ligada mas SEM política de escrita

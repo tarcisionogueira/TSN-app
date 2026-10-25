@@ -4,7 +4,8 @@
 // app lê o resultado do banco. Espelha os prompts de src/utils/claude.js.
 export const config = { runtime: 'nodejs', maxDuration: 300 };
 
-import { getUser, isCronAuthorized } from './_auth.js';
+import { getUser, getUserRoleById, isCronAuthorized } from './_auth.js';
+import { podeVerLeiloeiro, limparLeiloeiroDoRelatorio } from './_leiloeiro-acesso.js';
 import { aplicarRestricaoNasAmostras } from './_restricao-amostras.js';
 import { logAtividade } from './_atividade.js';
 import { leilaoEncerrado, respostaLeilaoEncerrado, ehEquipe } from './_leilao-encerrado.js';
@@ -2043,6 +2044,11 @@ export default async function handler(req, res) {
       if (p && (p.role === 'admin' || p.role === 'analista')) { ownerId = String(body.paraUserId); onBehalf = true; }
     } catch { /* mantém o próprio */ }
   }
+  // COFRE DO LEILOEIRO (25/10): quem decide se o relatório leva o LINK do edital/matrícula é o papel do DONO do
+  // relatório (em nome de: o cliente, não o admin que gerou; cron: o paraUserId). Fail-closed: getUserRoleById
+  // devolve null em falha de leitura e null não vê. Aplicado antes de GRAVAR e de RESPONDER — cobre também o
+  // result reaproveitado de outro usuário (mercadoRecente), que pode trazer o link lido para um pagante.
+  const donoVeLeiloeiro = podeVerLeiloeiro(await getUserRoleById(ownerId));
 
   // Data do leilão (para a regra de limpeza: 15 dias após o leilão sem arrematar).
   const rawData = imovel?.dataLeilao || parecerInputs?.d?.dataLeilao || null;
@@ -4264,6 +4270,7 @@ COMO USAR (obrigatório): dedique um parágrafo aos CUSTOS DA OPERAÇÃO segundo
     if (_parecerPendente) result.parecerPendente = true;
     else if (result.parecerPendente) delete result.parecerPendente;
 
+    if (!donoVeLeiloeiro) limparLeiloeiroDoRelatorio(result);
     await upsertAnalise({ ...base, status: 'concluida', erro: null, result });
     // FECHA O LOOP previsto×realizado quando este é o ÚLTIMO dos 2 relatórios do arremate
     // (18/09): o Laudo de Viabilidade parou de ser gerado para análises novas — "o parecer
@@ -4368,6 +4375,7 @@ COMO USAR (obrigatório): dedique um parágrafo aos CUSTOS DA OPERAÇÃO segundo
     // resposta ao cliente sem retorno se o PRÓPRIO registro do erro também falhar.
     try {
       if (resultAnterior) {
+        if (!donoVeLeiloeiro) limparLeiloeiroDoRelatorio(resultAnterior);
         await upsertAnalise({ ...base, status: 'concluida', erro: `regeracao_falhou: ${String(msg).slice(0, 160)}`, result: resultAnterior });
       } else {
         await upsertAnalise({ ...base, status: 'erro', erro: msg });

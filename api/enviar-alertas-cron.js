@@ -1164,7 +1164,9 @@ async function handler(req) {
           await enviarPushOportunidades(
             perfil.id,
             `🏠 ${top.length} oportunidade${top.length > 1 ? 's' : ''} em ${local}`,
-            top[0] ? `${(top[0].titulo || top[0].endereco || 'Imóvel em leilão').slice(0, 80)} — ${fmtBRL(top[0].valor_minimo_ref ?? top[0].valor_minimo)}` : 'Veja as oportunidades selecionadas para você.',
+            // 25/10 (cofre do leiloeiro): o push usava o título CRU — "Imóvel Hasta Leilões 12107" chegava ao
+            // celular do Explorador com o nome do leiloeiro. Mesma regra do e-mail logo acima (#265).
+            top[0] ? `${((podeVerLeiloeiro(perfil.role) ? top[0].titulo : tituloSemLeiloeiro(top[0])) || top[0].endereco || 'Imóvel em leilão').slice(0, 80)} — ${fmtBRL(top[0].valor_minimo_ref ?? top[0].valor_minimo)}` : 'Veja as oportunidades selecionadas para você.',
           );
         }
       }
