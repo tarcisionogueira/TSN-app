@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<link href="/modulos/icones/css/font-awesome.min.css" rel="stylesheet" type="text/css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1">
+<title>Schulmann Leilões</title>
+<link rel='dns-prefetch' href='//fonts.googleapis.com' />
+<link rel='stylesheet' id='ssbaFont-css'  href='//fonts.googleapis.com/css?family=Indie+Flower&#038;ver=4.9.26' type='text/css' media='all' />
+<link rel='stylesheet' id='clean-journal-fonts-css'  href='//fonts.googleapis.com/css?family=Open+Sans%3A300%2C400%2C700%2C300italic%2C400italic%2C700italic%7CDroid+Sans%3A400%2C700&#038;subset=latin%2Clatin-ext' type='text/css' media='all' />
+<link rel='stylesheet' id='clean-journal-style-css'  href='/css/style.css?ver=4.9.26' type='text/css' media='all' />
+<link rel='stylesheet' id='genericons-css'  href='/css/genericons.css?ver=3.4.1' type='text/css' media='all' />
+<link rel='stylesheet' id='sidr-css'  href='/css/jquery.sidr.light.min.css?ver=2.1.0' type='text/css' media='all' />
+
+
+
+
+
+
+
+
+<link rel="stylesheet" href="https://code.jquery.com/ui/1.13.3/themes/base/jquery-ui.css">
+
+
+
+
+<link rel="shortcut icon" href="./imagens/favicon.png">
+</head>
+
+<body class="home blog custom-background wp-custom-logo two-columns content-left excerpt-image-left mobile-menu-one">
+<div id="mascara"></div>
+<div id="box_info">
+<p style="margin-top:10px" align="center">Informe seu e-mail e senha:</p>
+<div id="box_login">
+    <div class="form-group">
+        <div class="col-sm-1"></div>
+        <label for="" class="col-sm-2 control-label">E-mail:</label>
+        <div class="col-sm-7"><input type="text" name="login_email" id="login_email" class="form-control"></div>
+    </div>
+    <div class="form-group">
+        <div class="col-sm-1"></div>
+        <label for="" class="col-sm-2 control-label">Senha:</label>
+        <div class="col-sm-7"><input type="password" name="login_senha" id="login_senha" class="form-control"></div>
+    </div>
+    <div class="form-group">
+        <div class="col-sm-1"></div>
+        <label for="" class="col-sm-2 control-label"></label>
+        <div class="col-sm-7"><a href="javascript:void(esqueci_senha())">esqueci senha</a></div>
+    </div>
+    <div class="form-group">
+        <div class="col-sm-4 col-xs-6">
+            <button class="botao_leilao fechar_pop_login" onClick="void(fechaMobile())">Fechar</button>
+        </div>
+        <div class="col-sm-4 col-xs-6">
+            <button onClick="void(login_topo())" class="botao_leilao">Entrar</button>
+        </div>
+    </div>
+</div>
+</div>
+</div>
+
+	<nav class="nav-primary search-enabled" role="navigation">
+        <div class="wrapper" style="width:1200px;">
+            <h1 class="assistive-text">Menu principal</h1>
+            <div class="screen-reader-text skip-link"><a href="#content" title="Pular para o conteúdo">Pular para o conteúdo</a></div>
+            <ul id="menu-principal" class="menu clean-journal-nav-menu">
+<li class="menu-item menu-item-type-post_type menu-item-object-page"><a href="thumbs.php?tipo=leiloes-judiciais">Leilões Judiciais</a></li>
+<li class="menu-item menu-item-type-post_type menu-item-object-page"><a href="thumbs.php?tipo=leiloes-extrajudiciais">Leilões Extrajudiciais</a></li>
+<li class="menu-item menu-item-type-post_type menu-item-object-page"><a href="thumbs.php?tipo=leiloes-online">Leilões Online</a></li>
+<li class="menu-item menu-item-type-post_type menu-item-object-page"><a href="thumbs.php?tipo=alienacao-fiduciaria">Alienação Fiduciária</a></li>
+<li class="menu-item menu-item-type-post_type menu-item-object-page"><a href="thumbs.php?tipo=leiloes-de-veiculos">Veículos</a></li>
+<li class="menu-item menu-item-type-post_type menu-item-object-page"><a href="thumbs.php?tipo=diversos-leiloes">Diversos Leilões</a></li>
+<li class="menu-item menu-item-type-post_type menu-item-object-page"><a href="thumbs.php?tipo=venda-direta">Venda Direta</a></li>
+    <li class="menu-item menu-item-type-custom menu-item-object-custom"><a href="javascript:void(chama_exibe_login())" rel="modal">Login</a></li>
+    <li class="menu-item menu-item-type-custom menu-item-object-custom"><a href="cadastro.php">Cadastro</a></li>
+
+</ul>                <div id="search-toggle" class="genericon">
+                    <a class="screen-reader-text" href="#search-container">Buscar</a>
+                </div>
+
+                <div id="search-container" class="displaynone">
+                    
+<form role="search" method="post" class="search-form" action="thumbs.php">
+	<label>
+		<span class="screen-reader-text">Pesquisar por:</span>
+		<input type="search" class="search-field" placeholder="Pesquisar..." value="" name="termo" title="Pesquisar por:">
+	</label>
+	<input type="submit" class="search-submit" value="Pesquisar">
+</form>                </div>
+    	</div>
+    </nav>
+            <div id="page" class="hfeed site">
+                        <div id="header-top" class="header-top-bar">
+                    <div class="wrapper">
+                        <div class="header-top-left full-width">
+                            <section id="widget-default-text" class="widget widget_text header_top_widget_area">
+                                <div class="widget-wrap">
+                                    <div class="textwidget">
+                                        <p><i class="fa fa-phone" style="color:#FFFFFF"></i> 21 2532-1705 / 2532-1739 &nbsp;&nbsp;<b>|</b>&nbsp;&nbsp; <i class="fa fa-envelope" style="color:#FFFFFF"></i> schulmann@schulmann.com.br &nbsp;&nbsp;<b>|</b>&nbsp;&nbsp; <i class="fa fa-user" style="color:#FFFFFF"></i> <a href="cadastro.php">Cadastre-se</a> &nbsp;&nbsp;<b>|</b>&nbsp;&nbsp; 
+    <i class="fa fa-gavel" style="color:#FFFFFF"></i> <a rel="modal" href="javascript:void(chama_exibe_login())">Login</a>
+</p>
+                                    </div>
+                                </div>
+                            </section>
+                        </div>
+                    </div>
+                </div>
+                    <header id="masthead" role="banner">
+            <div class="wrapper">
+
+
+<div class="matriculado_rj_sp">
+        <img src="imagens/estado-rj.jpg" style="height:100%;max-height:60px" alt="Estado do Rio de Janeiro" title="Estado do Rio de Janeiro" style="margin-right: 10px;"/>
+        <img src="imagens/estado-sp.jpg" style="height:100%;max-height:60px" hspace="10" alt="Estado de São Paulo" title="Estado de São Paulo"/>
+
+        <br/>Matriculado para atuar nos estados do Rio de Janeiro e São Paulo.<br/>
+</div>
+
+
+
+            
+    <div id="mobile-header-left-menu" class="mobile-menu-anchor primary-menu">
+        <a href="#mobile-header-left-nav" id="header-left-menu" class="genericon genericon-menu">
+            <span class="mobile-menu-text">Menu</span>
+        </a>
+    </div>
+    <div id="site-branding" class="logo-left">
+				<div id="site-logo"><a href="/" class="custom-logo-link" rel="home" itemprop="url"><img width="490" height="60" src="/imagens/cropped-logo2.png" class="custom-logo" alt="" itemprop="logo" srcset="/imagens/cropped-logo2.png 490w, /imagens/cropped-logo2-300x37.png 300w" sizes="(max-width: 490px) 100vw, 490px" /></a></div>
+		<div id="site-header">
+			<h1 class="site-title"><a href="/"></a></h1>
+			<h2 class="site-description"></h2>
+		</div></div>    <aside class="sidebar sidebar-header-right widget-area">
+        <section class="widget widget_search" id="header-right-search">
+            <div class="widget-wrap">
+                
+<form role="search" method="post" class="search-form" action="/leilao/busca-de-leiloes/">
+	<label>
+		<span class="screen-reader-text">Pesquisar por:</span>
+		<input type="search" class="search-field" placeholder="Pesquisar..." value="" name="termo" title="Pesquisar por:">
+	</label>
+	<input type="submit" class="search-submit" value="Pesquisar">
+</form>            </div>
+        </section>
+    </aside>
+            </div>
+        </header>
+
+
+
+
+
+
+
+
+<link rel="stylesheet" type="text/css" href="/js/fancybox/source/jquery.fancybox.css?v=2.1.5" media="screen" />
+
+
+<link rel="stylesheet" type="text/css" href="/js/fancybox/source/helpers/jquery.fancybox-buttons.css?v=1.0.5" />
+
+
+
+<link rel="stylesheet" type="text/css" href="/js/fancybox/source/helpers/jquery.fancybox-thumbs.css?v=1.0.7" />
+
+
+
+
+
+<link href="/js/prettyphoto/css/prettyPhoto.css" rel="stylesheet" type="text/css" />
+
+
+
+
+    
+    
+    
+        
+    
+    
+    
+<div id="box_oferta">
+    <p style="margin-top:10px" align="center">
+        A oferta é oportunidade do interessado fazer uma oferta a ser estudada pelo leiloeiro ou pelo responsável pelo leilão.<br/><br/>
+        O leiloeiro estudará um meio possível de ser aceita caso não apareça nenhum interessado.<br/><br/>
+        Desde já, fica ciente que essa oferta é um compromisso afirmado entre você e o leiloeiro e o não cumprimento arcará com responsabilidade no âmbito Cívil.<br/><br/>
+        Por isso a necessidade de se identificar no site.        
+        <br/><br/>        
+
+        Valor: <input type="text" name="valor_oferta" id="valor_oferta" style="width: 150px;" onKeyUp="javascript:VerValorDigit(this);"><br/>
+        
+        <div style="width:160px;margin-right:auto;margin-left:auto">
+            <div class="botao_login" style="background-color:#2c2c54;"><a class="fechar_pop_oferta" style="margin:0px;padding:0px;">Fechar</a></div>
+            <div class="botao_login" style="background-color:#2c2c54;margin-left:10px"><a href="javascript:void(fazer_oferta())" style="padding:0px;">Fazer oferta</a></div>
+        </div>
+    </p>
+</div>
+            
+<section id="featured-content" class="layout-four demo-featured-content">
+<div class="wrapper">
+<h1 id="featured-heading" class="entry-title labasoft_h1"><img src="/imagens/escudo.png" class="h1_escudo" align="absmiddle">
+VENDA DIRETA - LOJA EM IPANEMA - <span style="color:#000000">
+    
+    Eletrônico    </span>    
+    
+            <span style="color:#000000"> - 
+
+        Judicial        </span>        
+    
+    
+</h1>
+</div>
+</section>
+<section id="featured-content" class="demo-featured-content">
+<div class="wrapper">
+
+<article id="featured-post-1" class="post hentry post-demo labasoft_detalhe_alinhamento">
+
+    <a class="fancybox-buttons" data-fancybox-group="fotos" href="https://schulmannleiloes.com.br/upload/leilao/5831_P.jpg"><img src="https://schulmannleiloes.com.br/upload/leilao/5831_P.jpg" alt="R. VISC.DE PIRAJA Nº 330/ L313" class="foto_peq"></a>
+
+    <br/><br/>
+
+            <div style="float:left;margin-right:5px;"><a class="fancybox-buttons" data-fancybox-group="fotos" href="https://schulmannleiloes.com.br/upload/leilao/5831_131255_1.jpg"><img src="https://schulmannleiloes.com.br/upload/leilao/peq/5831_131255_1.jpg" width="115"></a></div>
+        
+    <br class="limpa"/>
+    
+            1588 visualizações
+    
+    <section class="layout-two demo-featured-content">
+    
+                                 
+                        <div id="box_info">
+                        </div>
+        
+                                                <div class="detalhe_1_data" onClick="void(exibe_lances())">
+                            
+                            <b>1&ordm; Data</b><br/>
+                            <b>In&iacute;cio:</b> 08/10/2026        
+                            14:00<br/>                                <b>T&eacute;rmino:</b> 08/12/2026        
+                                14:00<br/>        
+                                    
+                                                            <b>A partir de</b><br/> R$ 480.100,00<br/>    
+    <div style="margin-left:auto;margin-right:auto;margin-top:10px;">
+        <div style="float:left">
+            <i class="fa fa-clock-o" aria-hidden="true" style="padding:5px;color:#000;font-size:40px"></i>
+        </div>
+        <div style="float:left;">
+            <span style="" id="texto_reloginho"></span><div id="defaultCountdown" style="color:#FF0000;font-size:14px;font-weight:bold;"></div>
+        </div>    
+    </div>
+    
+    
+                           
+                        </div>
+        
+                                
+                                
+                        
+                        
+                            
+        <br class="limpa"/><br/>
+                    <div class="botao_salvar" style="padding-right:5px;"><a href="#regras" rel="prettyPhoto">Regras</a></div>
+
+            <div id="regras" style="display: none;">
+               <p>&nbsp;</p>
+            </div>
+
+                    
+
+                    <div class="botao_salvar" style="padding-right:5px;"><a href="#edital" rel="prettyPhoto">Edital</a></div>
+
+            <div id="edital" style="display: none;">
+               <div class="timbre_poder">
+<div class="timbre_poder">Poder Judici&aacute;rio</div>
+<div class="timbre_instancia">JUSTI&Ccedil;A FEDERAL</div>
+<div class="timbre_secao_judiciaria">Se&ccedil;&atilde;o Judici&aacute;ria do Rio de Janeiro</div>
+<div class="timbre_orgao">29&ordf; Vara Federal do Rio de Janeiro</div>
+<div class="timbre_tarja_publicacao_prazos">
+<p class="tarja_publicacao_prazos">Disponibilizado no D.E.: 17/12/2024</p>
+<p class="tarja_publicacao_prazos">Prazo do edital: 14/02/2025</p>
+<p class="tarja_publicacao_prazos">Prazo de cita&ccedil;&atilde;o/intima&ccedil;&atilde;o: 07/03/2025</p>
+</div>
+<p class="endereco">Avenida Rio Branco, 243, Anexo II - 6&ordm; andar - Bairro: Centro - CEP: 20040-009 - Fone: (21)3218-8294 - www.jfrj.jus.br - Email: 29vf@jfrj.jus.br</p>
+<p class="identificacao_processo">&nbsp;</p>
+<p class="identificacao_processo"><span data-classe_processo="000098">EXECU&Ccedil;&Atilde;O DE T&Iacute;TULO EXTRAJUDICIAL<span>&nbsp;</span></span><span data-numero_processo="50435159820184025101" data-sin_numero_processo="true">N&ordm; 5043515-98.2018.4.02.5101/</span><span data-origem_processo="RJ">RJ</span></p>
+<p>&nbsp;</p>
+<div class="autores" data-polo="autores">
+<div class="parte_autor" data-sin_parte_principal="S" data-parte_polo="autor" data-sin_parte_entidade="true">
+<p class="parte" data-sin_parte="true" data-id_processo_parte="511544195189476601161935929542"><span class="tipo_parte">EXEQUENTE</span>:<span>&nbsp;</span><span class="nome_parte">UNI&Atilde;O - ADVOCACIA GERAL DA UNI&Atilde;O</span></p>
+</div>
+</div>
+<div class="reus" data-polo="reus">
+<div class="parte_re" data-sin_parte_principal="N" data-parte_polo="reu" data-sin_parte_entidade="false">
+<p class="parte" data-sin_parte="true" data-id_processo_parte="511544195189476601161935929530"><span class="tipo_parte">EXECUTADO</span>:<span>&nbsp;</span><span class="nome_parte">SERGIO ALBINO DE SOUZA CASTILHO (Esp&oacute;lio)</span></p>
+</div>
+<div class="parte_re" data-sin_parte_principal="S" data-parte_polo="reu" data-sin_parte_entidade="false">
+<p class="parte" data-sin_parte="true" data-id_processo_parte="511544195189476601161935929534"><span class="tipo_parte">EXECUTADO</span>:<span>&nbsp;</span><span class="nome_parte">TEL TERMO ENGENHARIA LIMITADA</span></p>
+</div>
+<div class="parte_re" data-sin_parte_principal="S" data-parte_polo="reu" data-sin_parte_entidade="false">
+<p class="parte" data-sin_parte="true" data-id_processo_parte="511544195189476601161935929538"><span class="tipo_parte">EXECUTADO</span>:<span>&nbsp;</span><span class="nome_parte">PAULO CESAR RONDINELLI</span></p>
+</div>
+</div>
+<p id="511791306230710018842860682002_14" class="paragrafoPadrao"><span class="resumo" title="resumo" data-resumo="true"><strong>DEFIRO A ALIENA&Ccedil;&Atilde;O POR INICIATIVA PARTICULAR</strong> do im&oacute;vel penhorado consistente na LOJA N&ordm; 313, situada na Rua Visconde de Piraj&aacute;, n&ordm; 330, Ipanema, Rio de Janeiro/RJ, matr&iacute;cula n&ordm; 97.311 do 5&ordm; Of&iacute;cio de Registro de Im&oacute;veis da Capital, nos termos do art. 880 do CPC.</span></p>
+<p id="511791306230710018842860682002_15" class="paragrafoPadrao"><strong>DESIGNO, para intermediar a aliena&ccedil;&atilde;o e divulgar a oferta p&uacute;blica de venda, o Leiloeiro P&uacute;blico Oficial <span class="anonimizar" data-crc32b="dea28df8">Leonardo Schulmann</span>, j&aacute; atuante no feito, a quem incumbir&aacute; receber e cadastrar as propostas formais em sua plataforma eletr&ocirc;nica, prestando contas a este Ju&iacute;zo.</strong></p>
+<p id="511791306230710018842860682002_16" class="paragrafoPadrao"><span class="resumo" title="resumo" data-resumo="true">Com base no art. 880, &sect; 1&ordm;, do CPC, <strong>FIXO AS SEGUINTES CONDI&Ccedil;&Otilde;ES DA ALIENA&Ccedil;&Atilde;O:</strong></span></p>
+<p id="511791306230710018842860682002_17" class="paragrafoPadrao"><span class="resumo" title="resumo" data-resumo="true">a) Prazo da aliena&ccedil;&atilde;o: 60 (sessenta) dias, a contar da publica&ccedil;&atilde;o desta decis&atilde;o e intima&ccedil;&atilde;o do leiloeiro;</span></p>
+<p id="511791306230710018842860682002_18" class="paragrafoPadrao"><span class="resumo" title="resumo" data-resumo="true">b) Pre&ccedil;o m&iacute;nimo: N&atilde;o inferior a 80% (oitenta por cento) do valor da avalia&ccedil;&atilde;o judicial atualizada (ou seja, m&iacute;nimo de R$ 480.000,00 sobre a avalia&ccedil;&atilde;o de R$ 600.000,00), assegurado, em qualquer hip&oacute;tese, o repasse integral de 50% do valor da avalia&ccedil;&atilde;o &agrave; copropriet&aacute;ria <span class="anonimizar" data-crc32b="4e40bd0d">Suely Gianini Rondinelli</span>, nos termos do art. 843, &sect; 2&ordm;, do CPC;</span></p>
+<p id="511791306230710018842860682002_19" class="paragrafoPadrao"><span class="resumo" title="resumo" data-resumo="true">c) Formas de pagamento: Prefer&ecirc;ncia para proposta de pagamento &agrave; vista. Admite-se proposta de pagamento parcelado, com oferta de pelo menos 25% (vinte e cinco por cento) de entrada &agrave; vista e o saldo restante em at&eacute; 30 (trinta) parcelas mensais, garantido por hipoteca sobre o pr&oacute;prio im&oacute;vel alienado (art. 895, &sect; 1&ordm;, do CPC), devidamente corrigidas pelos &iacute;ndices oficiais da tabela da Justi&ccedil;a Federal;</span></p>
+<p id="511791306230710018842860682002_20" class="paragrafoPadrao"><span class="resumo" title="resumo" data-resumo="true">d) Comiss&atilde;o do leiloeiro: Fixo em 5% (cinco por cento) sobre o valor da aliena&ccedil;&atilde;o, devida exclusivamente pelo adquirente, a ser paga no ato da homologa&ccedil;&atilde;o; e) Publicidade: O leiloeiro dever&aacute; promover ampla divulga&ccedil;&atilde;o do im&oacute;vel em rede mundial de computadores, portais imobili&aacute;rios e plataforma pr&oacute;pria, fazendo constar que o im&oacute;vel encontra-se ocupado/alugado (funcionamento de cl&iacute;nica) e que os d&eacute;bitos condominiais ou fiscais informados nos autos ser&atilde;o resolvidos nos termos da lei.</span></p>
+<p id="511791306230710018842860682002_21" class="paragrafoPadrao"><span class="resumo" title="resumo" data-resumo="true"><strong>Findo o prazo ou apresentada proposta id&ocirc;nea, o leiloeiro juntar&aacute; os autos a oferta colhida. </strong>As partes e a copropriet&aacute;ria ser&atilde;o ouvidas no prazo comum de 5 (cinco) dias, vindo os autos conclusos para homologa&ccedil;&atilde;o da venda e assinatura do respectivo termo (art. 880, &sect; 2&ordm;, do CPC).</span></p>
+<p class="titulo">&nbsp;</p>
+</div>
+<br/><br/>
+               <a href="javascript:void(imprime_edital())"><img src="/imagens/icone_imprimir.png" border="0" align="left" hspace="5"></a>
+            </div>
+            
+                
+                    <div class="botao_salvar" style="padding-right:5px;"><a href="#dividas" rel="prettyPhoto">Dívidas</a></div>
+
+            <div id="dividas" style="display: none;">
+               <p>&nbsp;</p>
+            </div>
+        
+                    <div class="botao_salvar" style="padding-right:5px;"><a href="https://schulmannleiloes.com.br/upload/rgi/5831_rgi.pdf" target="_blank">RGI</a></div>
+        
+                    <div class="botao_salvar" style="padding-right:5px;"><a href="https://schulmannleiloes.com.br/upload/iptu/5831_iptu.pdf" target="_blank">IPTU</a></div>
+                
+        
+        <br class="limpa"/><br/>
+        <a href="javascript:void(print())"><img src="/imagens/icone_imprimir.png" border="0" align="left"></a>
+    </section>    
+</article>
+
+<article id="featured-post-2" class="post hentry post-demo labasoft_colspan_2">
+    
+    <p>R. VISC.DE PIRAJA Nº 330/ L313</p>
+
+    <p><p>&nbsp;LOJA N&ordm; 313, localizada da RUA VISCONDE DE PIRAJA N&ordm; 330 - IPANEMA &ndash; RIO DE JANEIRO - RJ (Inscri&ccedil;&atilde;o Municipal IPTU 1251119-2, Registrado no Cart&oacute;rio do 5&ordm; OF&Iacute;CIO DO REGISTRO DE IM&Oacute;VEIS, Matr&iacute;cula: 97311).</p>
+<p><span>O im&oacute;vel encontra-se ocupado/alugado (funcionamento de cl&iacute;nica) e que os d&eacute;bitos condominiais ou fiscais informados nos autos ser&atilde;o resolvidos nos termos da lei.</span></p>
+</p>
+    
+            <br/>
+        <p align="center" style="color:#FFF;background-color:#b62626;font-family:Helvetica;font-size:1.1em;">
+        Não deixe seu lance para o último segundo.<br/>
+        Acompanhe o cronômetro laranja. O leilão termina quando a tarja "leilão finalizado" aparecer.<br/><br/>
+        Obs.: A hora base é do servidor e não do relógio do seu computador.
+        </p>
+        <br/>
+
+            
+    
+
+    
+ </article>
+
+
+
+
+            <div style="clear:both"></div>
+            <div id="box_lances">
+
+                
+            <br/><br/>
+        <div style="width:500px;background-color:#eaeaea;padding:5px;">
+        <b>Observa&ccedil;&otilde;es:</b><br/><p>&nbsp;</p>
+        </div><br/>
+        
+    
+
+    
+
+
+<div id="tabs" style="width:100%;max-width:500px;max-height:500px;border: 3px solid #2c2c54;overflow-y:scroll;overflow-x:hidden;">
+  <ul style="background-color:#ff9933;">
+    <li><a href="#tabs-1">Últimos Lances</a></li>
+    <li><a href="#tabs-2">Lances por usuários</a></li>
+  </ul>
+  <div id="tabs-1">
+    <p>
+    <table cellpadding="5" cellspacing="0" width="456">
+        
+        <tr bgcolor="#eaeaea" height="20">
+            <td><b>Usu&aacute;rio</b></td>
+            <td><b>Data</b></td>
+                        <td><b>Valor</b></td>
+            <td><b>Tipo</b></td>
+        </tr>
+
+                            
+
+    </table>    
+    
+    
+    </p>
+  </div>
+  <div id="tabs-2">
+    
+    <p>
+    <table cellpadding="5" cellspacing="0" width="456">
+        
+        <tr bgcolor="#eaeaea" height="20">
+            <td><b>Usu&aacute;rio</b></td>
+            <td><b>Quantidade</b></td>
+            <td><b>Valor</b></td>
+        </tr>
+
+</table></p></div></div><br/><br/>            </div>
+        
+           
+
+    <div style="width:100%;height:auto;background:#000;color:#fbfb4f;padding:10px;font-size:1.5em;text-align:center;margin-bottom:20px;">
+    De acordo com o artigo 358 do Código Penal¹, impedir, perturbar ou fraudar arrematação judicial; afastar ou procurar afastar concorrente ou licitante, por meio de violência, grave ameaça, fraude ou oferecimento de vantagem é um crime de *estelionato. A pena prevista é de **detenção, de dois meses a um ano*, ou multa, além da pena correspondente à violência.
+
+    </div>
+
+
+</div>
+</section>
+
+
+
+<footer id="colophon" class="site-footer" role="contentinfo">
+<section id="featured-content" class="layout-three demo-featured-content">
+<div class="wrapper">
+<article id="featured-post-1" class="post hentry post-demo">
+    <div class="entry-container">
+    <h3>Leilões</h3><hr class="rodape_hr">
+    <ul>
+    <li><a title="Eletrônico" href="thumbs.php?tipo=leiloes-online" class="rodape_subitens"><i class="fa fa-laptop" aria-hidden="true"></i>&nbsp;&nbsp;Online</a></li>
+    <li><a title="Presenciais" href="thumbs.php?tipo=leiloes-presenciais" class="rodape_subitens"><i class="fa fa-legal" aria-hidden="true"></i>&nbsp;&nbsp;Presenciais</a></li>
+    <li><a title="Judiciais" href="thumbs.php?tipo=leiloes-judiciais" class="rodape_subitens"><i class="fa fa-balance-scale" aria-hidden="true"></i> Judiciais</a></li>
+    <li><a title="Extrajudiciais" href="thumbs.php?tipo=leiloes-extrajudiciais" class="rodape_subitens"><i class="fa fa-handshake-o" aria-hidden="true"></i> Extrajudiciais</a></li>
+    <li><a title="Próximos" href="thumbs.php?tipo=proximos-leiloes" class="rodape_subitens"><i class="fa fa-line-chart" aria-hidden="true"></i> Próximos</a></li>
+    </ul>
+	</div>
+</article>
+<article id="featured-post-2" class="post hentry post-demo">
+    <div class="entry-container">
+    <h3>Institucional</h3><hr class="rodape_hr">
+    <ul>
+    <li><a title="Contato" href="contato.php" class="rodape_subitens"><i class="fa fa-envelope-open" aria-hidden="true"></i> Formulário de Contato</a></li>
+    <li><a title="Política de Privacidade" href="politica-de-privacidade.php" class="rodape_subitens"><i class="fa fa-lock" aria-hidden="true" style="font-size:20px"></i>&nbsp;&nbsp;Política de Privacidade</a></li>
+    <li><a title="Termo de Uso" href="termo-de-uso.php" class="rodape_subitens"><i class="fa fa-file-text-o" aria-hidden="true"></i>&nbsp;&nbsp;Termo de Uso</a></li>
+    <li><a title="Equipe" href="equipe.php" class="rodape_subitens"><i class="fa fa-group" aria-hidden="true"></i> Equipe</a></li>
+    <li><a title="Vídeos" href="videos.php" class="rodape_subitens"><i class="fa fa-video-camera" aria-hidden="true"></i> Vídeos</a></li>
+    </ul>
+    </div>
+</article>
+<article id="featured-post-3" class="post hentry post-demo">
+    <div class="entry-container">
+        <h3>&nbsp;</h3><hr class="rodape_hr">
+
+        Matriculado para atuar nos estados do Rio de Janeiro e São Paulo.<br/>
+        <img src="imagens/estado-rj.jpg" style="width:100%;max-width:100px" alt="Estado do Rio de Janeiro" title="Estado do Rio de Janeiro" style="margin-right: 10px;"/>
+        <img src="imagens/estado-sp.jpg" style="width:100%;max-width:100px" hspace="10" alt="Estado de São Paulo" title="Estado de São Paulo"/>
+    </div>
+</article>
+
+</div>
+</section>
+
+
+<div id="site-generator">
+    <div class="wrapper">
+        <div id="footer-content" class="copyright">
+        <div class="rodape-esquerda">Leonardo Schulmann - Leiloeiro Público</div>                
+        <div class="rodape-direita">Travessa do Pa&ccedil;o 23, Gr.812, Castelo - Rio de Janeiro - RJ - 21 2532-1705 / 2532-1739 / 2532-1961 - <a href="mailto:schulmann@schulmann.com.br" style="color:#FFFFFF">schulmann@schulmann.com.br</a></div>
+        </div>
+    </div>
+</div>
+
+<div style="text-align:center;padding-top:15px;padding-bottom:15px;color:#FFFFFF;font-family: Arial;font-size:13px;background-color:#000000">desenvolvido por <a href="https://www.labasoft.com.br" target="_blank"><img src="/imagens/logo-labasoft-criacao-de-sites.png" width="78" height="20" border="0" align="absmiddle"></a></div>
+    </footer>
+    </div>
+        
+
+<a href="#masthead" id="scrollup" class="genericon"><span class="screen-reader-text">Deslizar para cima</span></a><nav id="mobile-header-left-nav" class="mobile-menu" role="navigation">
+<ul id="header-left-nav" class="menu">
+<li class="menu-item menu-item-type-post_type menu-item-object-page"><a href="thumbs.php?tipo=leiloes-judiciais">Leilões Judiciais</a></li>
+<li class="menu-item menu-item-type-post_type menu-item-object-page"><a href="thumbs.php?tipo=leiloes-extrajudiciais">Leilões Extrajudiciais</a></li>
+<li class="menu-item menu-item-type-post_type menu-item-object-page"><a href="thumbs.php?tipo=leiloes-eletronicos">Leilões Online</a></li>
+<li class="menu-item menu-item-type-post_type menu-item-object-page"><a href="thumbs.php?tipo=alienacao-fiduciaria">Alienação Fiduciária</a></li>
+<li class="menu-item menu-item-type-post_type menu-item-object-page"><a href="thumbs.php?tipo=leiloes-de-veiculos">Veículos</a></li>
+<li class="menu-item menu-item-type-post_type menu-item-object-page"><a href="thumbs.php?tipo=diversos-leiloes">Diversos Leilões</a></li>
+<li class="menu-item menu-item-type-post_type menu-item-object-page"><a href="thumbs.php?tipo=venda-direta">Venda Direta</a></li>
+    <li class="menu-item menu-item-type-custom menu-item-object-custom"><a href="javascript:void(trataAcessarMobile())" rel="modal">Login</a></li>
+    <li class="menu-item menu-item-type-custom menu-item-object-custom"><a href="cadastro.php">Cadastro</a></li>
+
+
+
+
+</ul></nav>
+
+
+
+
+
+
+
+</body>
+</html>

@@ -106,7 +106,7 @@ export function cidadeComAcento(cidadeCaps, descricao) {
 }
 
 const TIPOS = [[/apartamento|\bapto\b/i, 'Apartamento'], [/\bcasa\b|resid[êe]ncia/i, 'Casa'], [/sobrado/i, 'Sobrado'],
-  [/sala comercial|conjunto comercial|\bsala\b/i, 'Sala Comercial'], [/galp[ãa]o|barrac[ãa]o/i, 'Galpão'], [/\bloja\b/i, 'Loja'],
+  [/sala comercial|conjunto comercial|\bsalas?\b/i, 'Sala Comercial'], [/galp[ãa]o|barrac[ãa]o/i, 'Galpão'], [/\blojas?\b/i, 'Loja'],
   // 25/10 (Nasar/Porto Seguro): "Imóvel monousuário comercial", "Prédio comercial".
   [/pr[ée]dio/i, 'Prédio'], [/im[óo]vel\s+(?:monousu[áa]rio\s+)?comercial/i, 'Imóvel Comercial'],
   [/ch[áa]cara/i, 'Chácara'], [/fazenda|im[óo]vel rural|lote rural|gleba/i, 'Imóvel Rural'],

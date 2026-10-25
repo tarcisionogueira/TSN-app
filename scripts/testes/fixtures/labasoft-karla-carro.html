@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+        
+<head>
+<link href="modulos/icones/css/font-awesome.min.css" rel="stylesheet" type="text/css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1">
+<title>Karla Pepe</title>
+<link rel='dns-prefetch' href='//ws.sharethis.com' />
+<link rel='dns-prefetch' href='//fonts.googleapis.com' />
+<link rel='dns-prefetch' href='//s.w.org' />
+
+<link rel="shortcut icon" href="imagens/favicon.png">
+
+        
+<link rel='stylesheet' id='ssbaFont-css'  href='//fonts.googleapis.com/css?family=Indie+Flower&#038;ver=4.9.15' type='text/css' media='all' />
+<link rel='stylesheet' id='clean-journal-fonts-css'  href='//fonts.googleapis.com/css?family=Open+Sans%3A300%2C400%2C700%2C300italic%2C400italic%2C700italic%7CDroid+Sans%3A400%2C700&#038;subset=latin%2Clatin-ext' type='text/css' media='all' />
+<link rel='stylesheet' id='clean-journal-style-css'  href='css/style.css?ver=4.9.15' type='text/css' media='all' />
+<link rel='stylesheet' id='genericons-css'  href='css/genericons.css?ver=3.4.1' type='text/css' media='all' />
+<link rel='stylesheet' id='sidr-css'  href='css/jquery.sidr.light.min.css?ver=2.1.0' type='text/css' media='all' />
+
+<link rel='stylesheet' id='clean-journal-style-css'  href='css/all-demo.css' type='text/css' media='all' />
+<link rel='stylesheet' id='clean-journal-style-css'  href='css/estilo-adm.css' type='text/css' media='all' />
+
+
+
+
+
+
+
+
+
+
+
+<link rel='stylesheet' id='google-fonts-1-css'  href='https://fonts.googleapis.com/css?family=Roboto%3A100%2C100italic%2C200%2C200italic%2C300%2C300italic%2C400%2C400italic%2C500%2C500italic%2C600%2C600italic%2C700%2C700italic%2C800%2C800italic%2C900%2C900italic%7CRoboto+Slab%3A100%2C100italic%2C200%2C200italic%2C300%2C300italic%2C400%2C400italic%2C500%2C500italic%2C600%2C600italic%2C700%2C700italic%2C800%2C800italic%2C900%2C900italic%7COxygen%3A100%2C100italic%2C200%2C200italic%2C300%2C300italic%2C400%2C400italic%2C500%2C500italic%2C600%2C600italic%2C700%2C700italic%2C800%2C800italic%2C900%2C900italic&#038;ver=4.9.15' type='text/css' media='all' />
+
+      
+            
+    
+
+
+<Script>
+
+var $ = jQuery.noConflict();
+
+</script>
+
+</head>
+
+<body data-rsssl=1 class="home blog custom-background wp-custom-logo two-columns content-right excerpt-image-right mobile-menu-one">
+<div id="mascara"></div>
+<div id="box_info">
+    <p style="margin-top:10px" align="center"><b>Informe seu e-mail e senha.<br/>Caso não tenha cadastro, <a href="cadastro.php">clique aqui</a>.</b></p>
+    
+    <input type="hidden" name="cd_leilao_participar" id="cd_leilao_participar" value="">
+
+    <div id="box_login">
+        <div class="row">
+        <div class="form-group">
+            <div class="col-sm-1"></div>
+            <label for="" class="col-sm-2 control-label">E-mail:</label>
+            <div class="col-sm-7"><input type="text" name="login_email" id="login_email" class="form-control"></div>
+        </div>
+        </div>
+        <br style="clear:both">
+        <div class="row">
+        <div class="form-group">
+            <div class="col-sm-1"></div>
+            <label for="" class="col-sm-2 control-label">Senha:</label>
+            <div class="col-sm-7"><input type="password" name="login_senha" id="login_senha" class="form-control"></div>
+        </div>
+        </div>
+        <div class="form-group">
+            <div class="col-sm-1"></div>
+            <label for="" class="col-sm-2 control-label"></label>
+            <div class="col-sm-7"><a href="javascript:void(esqueci_senha())">esqueci senha</a></div>
+        </div>
+
+        <br/>
+        <div class="form-group">
+            <div class="col-sm-3"></div>
+            <div class="col-sm-4 col-xs-6">
+                <button class="botao_pepe fechar_pop_login" onClick="void(fechaMobile())">Fechar</button>
+            </div>
+            <div class="col-sm-4 col-xs-6">
+                <button onClick="void(login_topo())" class="botao_pepe">Entrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+            <div id="page" class="hfeed site">
+                        <div id="header-top" class="header-top-bar">
+                    <div class="wrapper">
+                        <div class="header-top-left full-width">
+                            <section id="widget-default-text" class="widget widget_text header_top_widget_area">
+                                <div class="widget-wrap">
+                                    <div class="textwidget">
+                                        <p><i class="fa fa-phone" style="color:#FFFFFF"></i> (21) 2544-3640 / Cel: (21) 99997-8666 &nbsp;&nbsp;<b>|</b>&nbsp;&nbsp; <i class="fa fa-envelope" style="color:#FFFFFF"></i> karlapepe.lel@gmail.com &nbsp;&nbsp;<b>|</b>&nbsp;&nbsp; <i class="fa fa-user" style="color:#FFFFFF"></i> <a href="cadastro.php">Cadastre-se</a> &nbsp;&nbsp;<b>|</b>&nbsp;&nbsp; 
+    <i class="fa fa-gavel" style="color:#FFFFFF"></i> <a rel="modal" href="javascript:void(exibe_login())">Login</a>
+</p>
+                                    </div>
+                                </div>
+                            </section>
+                        </div>
+                    </div>
+                </div>
+                    <header id="masthead" role="banner">
+            <div class="wrapper">
+            
+    <div id="mobile-header-right-menu" class="mobile-menu-anchor primary-menu">
+        <a href="#mobile-header-right-nav" id="header-right-menu" class="genericon genericon-menu">
+            <span class="mobile-menu-text">Menu</span>
+        </a>
+    </div>
+    <div id="site-branding" class="logo-right">
+                <div id="site-logo"><a href="/" class="custom-logo-link" rel="home" itemprop="url"><img style="width:100%;max-width:218px" src="/imagens/logo.png" class="custom-logo" alt="" itemprop="logo" srcset="/imagens/logo.png 400w, /imagens/logo.png 300w" sizes="(max-width: 490px) 100vw, 490px" /></a></div>
+        <div id="site-header">
+            <h1 class="site-title"><a href="/leilao/"></a></h1>
+            <h2 class="site-description"></h2>
+        </div></div>    <aside class="sidebar sidebar-header-right widget-area">
+        <section class="widget widget_search" id="header-right-search">
+            <div class="widget-wrap">
+                
+<form role="search" method="post" class="search-form" action="index.php">
+    <label>
+        <span class="screen-reader-text">Pesquisar por:</span>
+        <input type="search" class="search-field form-control" placeholder="Pesquisar..." value="" name="termo" title="Pesquisar por:">
+    </label>
+    <input type="submit" class="search-submit" value="Pesquisar">
+</form>            </div>
+        </section>
+    </aside>
+            </div>
+        </header>
+
+    <nav class="nav-primary search-enabled" role="navigation">
+        <div class="wrapper" style="width:1200px;">
+            <h1 class="assistive-text">Menu principal</h1>
+            <div class="screen-reader-text skip-link"><a href="#content" title="Pular para o conteúdo">Pular para o conteúdo</a></div>
+            <ul id="menu-principal" class="menu clean-journal-nav-menu"><li id="menu-item-36" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-36"><a href="/index.php?tipo=leilao-judicial">Leilões Judiciais</a></li>
+<li id="menu-item-35" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-35"><a href="/index.php?tipo=leilao-extrajudicial">Leilões Extrajudiciais</a></li>
+<li id="menu-item-37" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-37"><a href="/index.php?tipo=leilao-online">Leilões Online</a></li>
+<li id="menu-item-34" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-34"><a href="/index.php?tipo=leilao-de-veiculo">Leilões de Veículos</a></li>
+<li id="menu-item-127" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-127"><a href="/index.php?tipo=outros-leiloes">Outros Leilões</a></li>
+    <li id="menu-item-141" class="menu-item menu-item-type-custom menu-item-object-custom menu-item-141"><a href="javascript:void(chama_exibe_login())" rel="modal">Acessar</a></li>
+    <li id="menu-item-152" class="menu-item menu-item-type-custom menu-item-object-custom menu-item-152"><a href="/cadastro.php">Cadastre-se</a></li>
+<li id="menu-item-152" class="menu-item menu-item-type-custom menu-item-object-custom menu-item-152"><a href="/index.php?tipo=agora">Agora!!!</a></li>
+</ul>                <div id="search-toggle" class="genericon">
+                    <a class="screen-reader-text" href="#search-container">Buscar</a>
+                </div>
+
+                <div id="search-container" class="displaynone">
+                    
+<form role="search" method="post" class="search-form" action="index.php">
+    <label>
+        <span class="screen-reader-text">Pesquisar por:</span>
+        <input type="search" class="search-field form-control" placeholder="Pesquisar..." value="" name="termo" title="Pesquisar por:">
+    </label>
+    <input type="submit" class="search-submit" value="Pesquisar">
+</form>                </div>
+        </div>
+    </nav>        
+
+
+
+
+
+
+<link rel="stylesheet" type="text/css" href="/fancybox/source/jquery.fancybox.css?v=2.1.5" media="screen" />
+
+
+<link rel="stylesheet" type="text/css" href="/fancybox/source/helpers/jquery.fancybox-buttons.css?v=1.0.5" />
+
+
+
+<link rel="stylesheet" type="text/css" href="/fancybox/source/helpers/jquery.fancybox-thumbs.css?v=1.0.7" />
+
+
+
+
+
+
+<link href="/prettyphoto/css/prettyPhoto.css" rel="stylesheet" type="text/css" />
+
+
+
+
+    
+    
+    
+        
+    
+    
+
+
+    
+
+
+<div id="box_oferta">
+    <p style="margin-top:10px" align="center">
+        A oferta é oportunidade do interessado fazer uma oferta a ser estudada pelo leiloeiro ou pelo responsável pelo leilão.<br/><br/>
+        O leiloeiro estudará um meio possível de ser aceita caso não apareça nenhum interessado.<br/><br/>
+        Desde já, fica ciente que essa oferta é um compromisso afirmado entre você e o leiloeiro e o não cumprimento arcará com responsabilidade no âmbito Cívil.<br/><br/>
+        Por isso a necessidade de se identificar no site.        
+        <br/><br/>
+        
+
+        Valor: <input type="text" name="valor_oferta" id="valor_oferta" style="width: 150px;" onKeyUp="javascript:VerValorDigit(this);"><br/>
+        
+        <div style="width:160px;margin-right:auto;margin-left:auto">
+            <div class="botao_login" style="background-color:#2c2c54;"><a class="fechar_pop_oferta" style="margin:0px;padding:0px;">Fechar</a></div>
+            <div class="botao_login" style="background-color:#2c2c54;margin-left:10px"><a href="javascript:void(fazer_oferta())" style="padding:0px;">Fazer oferta</a></div>
+        </div>
+    </p>
+</div>
+
+
+            
+<section id="featured-content" class="layout-four demo-featured-content">
+<div class="wrapper">
+<h1 id="featured-heading" class="entry-title labasoft_h1"><i class="fa fa-legal" aria-hidden="true"></i>
+    Carro VECTRA MILENIUM - 
+    
+    Online    
+    
+    
+        Judicial    
+    </h1>
+
+<br style="clear:both">
+
+
+
+
+
+
+<div class="row">
+<div class="col-sm-6" style="cursor:pointer;border-radius: 5px;background-color:#FFF;box-shadow: 0px 3px 3px rgba(0,0,0,0.1);">
+
+    <br/>
+    <a class="fancybox-buttons" data-fancybox-group="fotos" href="/imagens/foto-indisponivel-grande.jpg"><img src="/imagens/foto-indisponivel-grande.jpg" alt="Carro VECTRA MILENIUM" class="foto_peq"></a>
+
+    <br/>
+
+    <br class="limpa"/>
+
+
+                        
+                        <div id="box_info">
+                        </div>
+
+    
+
+
+                                                <div class="detalhe_1_data">
+                            <b>1&ordm; Data</b><br/>
+                            <p align="left"><i class="fa fa-calendar"></i> <b>In&iacute;cio:</b> 26/10/2026 15:00</p>                                <p align="left"><i class="fa fa-calendar"></i> <b>T&eacute;rmino:</b> 26/10/2026 15:03</p>        
+                                    
+                                    
+                                                            <p align="left"><b>A partir de</b> R$ 14.000,00</p>
+    
+    <div style="margin-left:auto;margin-right:auto;margin-top:10px;" id="reloginho1">
+        <div style="float:left">
+            <i class="fa fa-clock-o" aria-hidden="true" style="padding:5px;color:#000;font-size:40px"></i>
+            
+        </div>
+        <div style="float:left;">
+            <span style="" id="texto_reloginho"></span><div id="defaultCountdown" style="color:#FF0000;font-size:14px;font-weight:bold;"></div>
+        </div>    
+    </div>
+    
+    
+        
+                           
+                        </div>
+        
+                                
+                                                <div class="detalhe_2_data">
+                        
+                                                        
+                            
+                                                            <b>2&ordm; Data</b><br/>
+                                                        
+                            
+                            
+                                                        
+                            
+                            <p align="left"><i class="fa fa-calendar"></i> <b>In&iacute;cio:</b> 27/10/2026        
+                            15:00</p><p align="left"><i class="fa fa-calendar"></i> <b>T&eacute;rmino:</b> 27/10/2026 15:03</p>                                <p align="left"><b>A partir de</b> R$ 7.000,00</p>                        
+                        </div>
+        
+                                
+                        
+                        
+                            
+        
+        
+        
+        <br class="limpa"/><br/>
+        
+
+
+        
+        
+                        
+        
+        <br class="limpa"/>      
+
+            
+        
+
+
+        <div class="row">
+         <div class="col-sm-12">
+            <div style="float:left">Lance: R$ <input type="text" size="9" maxlenght="15" name="lance" id="lance" value="" onKeyUp="javascript:VerValorDigit(this);"></div> <div class="botao_login" style="margin-left:3px;"><a href="javascript:void(executa_lance())">Dar lance</a><br/></div>
+            <div style="clear:both"></div>
+            
+
+            <div id="box_opcoes" style="display:none">
+
+                <label class="label">Incremento:</label>R$ <input type="text" size="9" maxlenght="9" name="incremento" id="incremento" value="" onKeyUp="javascript:VerValorDigit(this);"><br/>
+                <label class="label">Incrementar até:</label>R$ <input type="text" size="9" maxlenght="9" name="incremento_ate" id="incremento_ate" value="" onKeyUp="javascript:VerValorDigit(this);"><br/><br/>
+
+                <div class="botao_login"><a href="javascript:void(jQuery('#box_opcoes').toggle('slow'))">Cancelar</a></div>
+                <div class="botao_login" style="margin-left:3px;"><a href="javascript:void(salva_opcoes_leilao())">Salvar</a></div>
+                <br style="clear:both">
+            </div>
+         </div>
+        </div>
+        <br/>
+                
+
+
+    
+        <div id="box_lances">
+                            
+
+            
+    
+
+
+<section id="featured-content" class="layout-four demo-featured-content">
+<div class="wrapper">
+<div class="row">
+<div class="col-sm-6">
+
+<div id="tabs" style="width:100%;max-height:500px;overflow-y:scroll;overflow-x:hidden;border: 1px solid #2e2d2d;">
+  <ul>
+    <li><a href="#tabs-1">Últimos Lances</a></li>
+    <li><a href="#tabs-2">Lances por usuários</a></li>
+  </ul>
+  <div id="tabs-1">
+    <p>
+    <table cellpadding="5" cellspacing="0" width="100%">
+        
+        <tr bgcolor="#eaeaea" height="20">
+            <td><b>Usu&aacute;rio</b></td>
+            <td><b>Data</b></td>
+            <td><b>Valor</b></td>
+            <td><b>Tipo</b></td>
+        </tr>
+
+                            
+
+    </table>    
+    
+    </p>
+  </div>
+  <div id="tabs-2">    
+    <p>
+    <table cellpadding="5" cellspacing="0" width="100%">
+        
+        <tr bgcolor="#eaeaea" height="20">
+            <td><b>Usu&aacute;rio</b></td>
+            <td><b>Quantidade</b></td>
+            <td><b>Valor</b></td>
+        </tr>
+
+    </table>        
+    
+    </p>
+  </div>
+</div>
+
+
+</div>
+</div>
+</div>
+</section>
+<br/>
+
+        </div>
+         
+
+
+    
+</div>
+<div class="col-sm-6 texto">
+    
+    
+    <p class="titulo"><b>Carro VECTRA MILENIUM</b></p>
+    
+            <p class="nro_processo">N&ordm; DO PROCESSO: 0018918-88.2021.8.19.0203</p>
+        
+    <p><p>BEM M&Oacute;VEL VE&Iacute;CULO MARCA GM MODELO VECTRA MILENIUM, PLACA LNO 6579, avalia&ccedil;ao sugerida as fls 204 no valor nbde R$ 14.000,00 (quatorze mil reais). Informa&ccedil;ao nos autos que o referido bem m&oacute;vel encontra-se na Rua Barao altura do numero 207 na Pra&ccedil;a Seca- Jacarepagu&aacute;-RJ.</p></p>
+    
+    
+        
+    <br/>
+    
+            <button onClick="void(window.open('/upload/edital/111_edital.pdf'))" target="_blank" class="botao_leilao">Edital</button>
+    
+    
+        
+        
+    
+    
+    
+    
+    
+        
+        
+        
+    
+    
+        
+
+            <br style="clear:both"/><br/>
+        <p align="center" style="color:#FFF;background-color:#b62626;font-family:Helvetica;font-size:1.1em;">
+        Não deixe seu lance para o último segundo<br/>
+        Após o horário final do leilão, o mesmo se encerrará após 3 minutos sem lance.<br/><br/>
+        Obs.: A hora base é do servidor e não do relógio do seu computador.
+        
+        </p>    
+    
+    
+    
+    
+
+
+
+
+
+</div>
+</div>
+
+
+
+
+
+</div> 
+
+   
+           
+
+
+
+
+
+
+
+</div>
+</section>
+
+<br style="clear:both"/><br/>
+
+
+
+</div>
+        </div>
+                    
+    <footer id="colophon" class="site-footer" role="contentinfo">
+    <section id="featured-content" class="layout-three demo-featured-content">
+         <div class="wrapper">
+            <article id="featured-post-1" class="post hentry post-demo">
+                <div class="entry-container">
+            <h3>Leilões</h3><hr class="rodape_hr">
+
+<ul>
+<li><a title="Eletrônico" href="/index.php?tipo=leilao-online" class="rodape_subitens"><i class="fa fa-laptop" aria-hidden="true"></i>&nbsp;&nbsp;Online</a></li>
+<li><a title="Judiciais" href="/index.php?tipo=leilao-judicial" class="rodape_subitens"><i class="fa fa-balance-scale" aria-hidden="true"></i> Judiciais</a></li>
+<li><a title="Extrajudiciais" href="/index.php?tipo=leilao-extrajudicial" class="rodape_subitens"><i class="fa fa-handshake-o" aria-hidden="true"></i> Extrajudiciais</a></li>
+<li><a title="Veículos" href="/index.php?tipo=leilao-de-veiculo" class="rodape_subitens"><i class="fa fa-line-chart" aria-hidden="true"></i> Veículos</a></li>
+
+</ul>
+
+        </div>
+        </article>
+            <article id="featured-post-2" class="post hentry post-demo">
+                <div class="entry-container">
+                    <h3>Institucional</h3><hr class="rodape_hr">
+        <ul>
+        <li><a title="Quem Somos" href="quem-somos.php" class="rodape_subitens"><i class="fa fa-building" aria-hidden="true"></i> Quem Somos</a></li>
+        <li><a title="Funcionamento" href="funcionamento.php" class="rodape_subitens"><i class="fa fa-sitemap" aria-hidden="true"></i> Funcionamento</a></li>
+        <li><a title="Fale Conosco" href="contato.php" class="rodape_subitens"><i class="fa fa-address-book" aria-hidden="true"></i> Fale Conosco</a></li>
+        <li><a title="Acessar" href="javascript:void(chama_exibe_login())" class="rodape_subitens" rel="modal"><i class="fa fa-lock" aria-hidden="true"></i> Acessar</a></li>
+        <li><a title="Cadastre-se" href="cadastro.php" class="rodape_subitens"><i class="fa fa-id-badge" aria-hidden="true"></i> Cadastre-se</a></li>
+        
+        </ul>
+        </div>
+        </article>
+
+            
+
+            <article id="featured-post-3" class="post hentry post-demo" style="font-family: "Oxygen";">
+                <div class="entry-container">
+            <h3>Contato</h3><hr class="rodape_hr">
+            Telefone<br/>
+            <i class="fa fa-phone" aria-hidden="true"></i> (21) 2544-3640 / Cel: (21) 99997-8666
+            <br/><br/>
+            E-mail<br/>
+            <i class="fa fa-envelope" aria-hidden="true"></i> karlapepe.lel@gmail.com
+            <br/><br/>
+
+
+        </div>
+        </article>
+
+          
+
+        </div>
+</section>
+
+
+        <div id="site-generator">
+            <div class="wrapper">
+                <div id="footer-content" class="copyright">
+                
+                
+                <div class="rodape-esquerda">Karla Pepe - Leiloeira Pública</div>
+                
+                
+                <div class="rodape-direita">Av das Américas, 1155 – sala 603, Barra Space Center - Rio de Janeiro - RJ</div>
+                
+                
+                
+                </div>
+            </div>
+        </div>
+        
+        <div style="text-align:center;padding-top:15px;padding-bottom:15px;color:#FFFFFF;font-family: Arial;font-size:13px;background-color:#000000">desenvolvido por <a href="https://www.labasoft.com.br" target="_blank"><img src="/imagens/logo-labasoft-criacao-de-sites.png" width="78" height="20" border="0" align="absmiddle"></a></div>
+            </footer>
+            </div>
+        
+<a href="#masthead" id="scrollup" class="genericon"><span class="screen-reader-text">Deslizar para cima</span></a><nav id="mobile-header-right-nav" class="mobile-menu" role="navigation"><ul id="header-right-nav" class="menu"><li class="menu-item menu-item-type-post_type menu-item-object-page menu-item-36"><a href="/index.php?tipo=leilao-judicial">Leilões Judiciais</a></li>
+<li class="menu-item menu-item-type-post_type menu-item-object-page menu-item-35"><a href="/index.php?tipo=leilao-extrajudicial">Leilões Extrajudiciais</a></li>
+<li class="menu-item menu-item-type-post_type menu-item-object-page menu-item-37"><a href="/index.php?tipo=leilao-online">Leilões Online</a></li>
+<li class="menu-item menu-item-type-post_type menu-item-object-page menu-item-34"><a href="/index.php?tipo=leilao-de-veiculo">Leilões de Veículos</a></li>
+<li class="menu-item menu-item-type-post_type menu-item-object-page menu-item-127"><a href="/index.php?tipo=outros-leiloes">Diversos Leilões</a></li>
+<li class="menu-item menu-item-type-custom menu-item-object-custom menu-item-141"><a href="javascript:void(trataAcessarMobile())" rel="modal">Acessar</a></li>
+<li class="menu-item menu-item-type-custom menu-item-object-custom menu-item-152"><a href="cadastro.php">Cadastre-se</a></li>
+</ul></nav>
+
+
+
+
+
+
+
+
+
+</body>
+</html>

@@ -45,6 +45,9 @@ on:
       - 'scripts/lib/leilovia-parse.mjs'
       - 'scripts/lib/motor/fontes/leilovia.mjs'
       - 'scripts/scraper-leilovia.mjs'
+      - 'scripts/lib/labasoft-parse.mjs'
+      - 'scripts/lib/motor/fontes/labasoft.mjs'
+      - 'scripts/scraper-labasoft.mjs'
       - 'scripts/lib/baston-parse.mjs'
       - 'scripts/lib/cassiano-parse.mjs'
       - 'scripts/lib/arnaldo-parse.mjs'
@@ -86,7 +89,7 @@ on:
   workflow_dispatch:
     inputs:
       fontes:
-        description: 'csv: softgt,nortedeminas,leilaoeletronico,suportev2,leilovia,baston,cassiano,arnaldo,novaserrana(recon),alfa,hasta,nordeste,nordeste_veiculos,jeleiloes,leilaoindex,rocha,albertomacedo,francoleiloes,simon,globo,leje,freitas,leiloar,lgcorretor,nakakogue,astavero,suporteoferta,comprei'
+        description: 'csv: softgt,nortedeminas,leilaoeletronico,suportev2,leilovia,labasoft,baston,cassiano,arnaldo,novaserrana(recon),alfa,hasta,nordeste,nordeste_veiculos,jeleiloes,leilaoindex,rocha,albertomacedo,francoleiloes,simon,globo,leje,freitas,leiloar,lgcorretor,nakakogue,astavero,suporteoferta,comprei'
         required: false
         default: 'alfa,nordeste'
       gravar:
@@ -339,6 +342,16 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           LEILOVIA_DRYRUN: ${{ env.DRYRUN_PADRAO }}
         run: node scripts/scraper-leilovia.mjs
+
+      # 25/10 (#356): Plataforma Labasoft (PHP) — Schulmann, Karla Pepe e Leilões Braga (RJ). HTML estático, sem
+      # Cloudflare; grátis, sem Bright Data. Seco: Schulmann 14/14 prontos (amostra de ~62); Karla e Braga 0 hoje.
+      - name: Labasoft (Schulmann, Karla Pepe, Leilões Braga)
+        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'labasoft')) }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          LABASOFT_DRYRUN: ${{ env.DRYRUN_PADRAO }}
+        run: node scripts/scraper-labasoft.mjs
 
       - name: LG Corretor Judicial (venda direta judicial)
         # 28/09: alienação judicial por iniciativa particular (CPC 880), incluída por decisão do dono.

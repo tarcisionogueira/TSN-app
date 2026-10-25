@@ -118,6 +118,7 @@
     "testar:leiloar": "node scripts/testes/leiloar-parse.mjs",
     "testar:leiloar2": "node scripts/testes/leiloar-segundo-template.mjs",
     "testar:leilovia": "node scripts/testes/leilovia-parse.mjs",
+    "testar:labasoft": "node scripts/testes/labasoft-parse.mjs",
     "testar:hastapublica": "node scripts/testes/hastapublica-parse.mjs",
     "testar:hasta-fotos": "node scripts/testes/hasta-fotos.mjs",
     "testar:lgcorretor": "node scripts/testes/lgcorretor-parse.mjs",

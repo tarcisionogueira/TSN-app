@@ -1,0 +1,3898 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<link href="/modulos/icones/css/font-awesome.min.css" rel="stylesheet" type="text/css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1">
+<title>Schulmann Leilões</title>
+<link rel='dns-prefetch' href='//fonts.googleapis.com' />
+<link rel='stylesheet' id='ssbaFont-css'  href='//fonts.googleapis.com/css?family=Indie+Flower&#038;ver=4.9.26' type='text/css' media='all' />
+<link rel='stylesheet' id='clean-journal-fonts-css'  href='//fonts.googleapis.com/css?family=Open+Sans%3A300%2C400%2C700%2C300italic%2C400italic%2C700italic%7CDroid+Sans%3A400%2C700&#038;subset=latin%2Clatin-ext' type='text/css' media='all' />
+<link rel='stylesheet' id='clean-journal-style-css'  href='/css/style.css?ver=4.9.26' type='text/css' media='all' />
+<link rel='stylesheet' id='genericons-css'  href='/css/genericons.css?ver=3.4.1' type='text/css' media='all' />
+<link rel='stylesheet' id='sidr-css'  href='/css/jquery.sidr.light.min.css?ver=2.1.0' type='text/css' media='all' />
+
+
+
+
+
+
+
+
+<link rel="stylesheet" href="https://code.jquery.com/ui/1.13.3/themes/base/jquery-ui.css">
+
+
+
+
+<link rel="shortcut icon" href="./imagens/favicon.png">
+</head>
+
+<body class="home blog custom-background wp-custom-logo two-columns content-left excerpt-image-left mobile-menu-one">
+<div id="mascara"></div>
+<div id="box_info">
+<p style="margin-top:10px" align="center">Informe seu e-mail e senha:</p>
+<div id="box_login">
+    <div class="form-group">
+        <div class="col-sm-1"></div>
+        <label for="" class="col-sm-2 control-label">E-mail:</label>
+        <div class="col-sm-7"><input type="text" name="login_email" id="login_email" class="form-control"></div>
+    </div>
+    <div class="form-group">
+        <div class="col-sm-1"></div>
+        <label for="" class="col-sm-2 control-label">Senha:</label>
+        <div class="col-sm-7"><input type="password" name="login_senha" id="login_senha" class="form-control"></div>
+    </div>
+    <div class="form-group">
+        <div class="col-sm-1"></div>
+        <label for="" class="col-sm-2 control-label"></label>
+        <div class="col-sm-7"><a href="javascript:void(esqueci_senha())">esqueci senha</a></div>
+    </div>
+    <div class="form-group">
+        <div class="col-sm-4 col-xs-6">
+            <button class="botao_leilao fechar_pop_login" onClick="void(fechaMobile())">Fechar</button>
+        </div>
+        <div class="col-sm-4 col-xs-6">
+            <button onClick="void(login_topo())" class="botao_leilao">Entrar</button>
+        </div>
+    </div>
+</div>
+</div>
+</div>
+
+	<nav class="nav-primary search-enabled" role="navigation">
+        <div class="wrapper" style="width:1200px;">
+            <h1 class="assistive-text">Menu principal</h1>
+            <div class="screen-reader-text skip-link"><a href="#content" title="Pular para o conteúdo">Pular para o conteúdo</a></div>
+            <ul id="menu-principal" class="menu clean-journal-nav-menu">
+<li class="menu-item menu-item-type-post_type menu-item-object-page"><a href="thumbs.php?tipo=leiloes-judiciais">Leilões Judiciais</a></li>
+<li class="menu-item menu-item-type-post_type menu-item-object-page"><a href="thumbs.php?tipo=leiloes-extrajudiciais">Leilões Extrajudiciais</a></li>
+<li class="menu-item menu-item-type-post_type menu-item-object-page"><a href="thumbs.php?tipo=leiloes-online">Leilões Online</a></li>
+<li class="menu-item menu-item-type-post_type menu-item-object-page"><a href="thumbs.php?tipo=alienacao-fiduciaria">Alienação Fiduciária</a></li>
+<li class="menu-item menu-item-type-post_type menu-item-object-page"><a href="thumbs.php?tipo=leiloes-de-veiculos">Veículos</a></li>
+<li class="menu-item menu-item-type-post_type menu-item-object-page"><a href="thumbs.php?tipo=diversos-leiloes">Diversos Leilões</a></li>
+<li class="menu-item menu-item-type-post_type menu-item-object-page"><a href="thumbs.php?tipo=venda-direta">Venda Direta</a></li>
+    <li class="menu-item menu-item-type-custom menu-item-object-custom"><a href="javascript:void(chama_exibe_login())" rel="modal">Login</a></li>
+    <li class="menu-item menu-item-type-custom menu-item-object-custom"><a href="cadastro.php">Cadastro</a></li>
+
+</ul>                <div id="search-toggle" class="genericon">
+                    <a class="screen-reader-text" href="#search-container">Buscar</a>
+                </div>
+
+                <div id="search-container" class="displaynone">
+                    
+<form role="search" method="post" class="search-form" action="thumbs.php">
+	<label>
+		<span class="screen-reader-text">Pesquisar por:</span>
+		<input type="search" class="search-field" placeholder="Pesquisar..." value="" name="termo" title="Pesquisar por:">
+	</label>
+	<input type="submit" class="search-submit" value="Pesquisar">
+</form>                </div>
+    	</div>
+    </nav>
+            <div id="page" class="hfeed site">
+                        <div id="header-top" class="header-top-bar">
+                    <div class="wrapper">
+                        <div class="header-top-left full-width">
+                            <section id="widget-default-text" class="widget widget_text header_top_widget_area">
+                                <div class="widget-wrap">
+                                    <div class="textwidget">
+                                        <p><i class="fa fa-phone" style="color:#FFFFFF"></i> 21 2532-1705 / 2532-1739 &nbsp;&nbsp;<b>|</b>&nbsp;&nbsp; <i class="fa fa-envelope" style="color:#FFFFFF"></i> schulmann@schulmann.com.br &nbsp;&nbsp;<b>|</b>&nbsp;&nbsp; <i class="fa fa-user" style="color:#FFFFFF"></i> <a href="cadastro.php">Cadastre-se</a> &nbsp;&nbsp;<b>|</b>&nbsp;&nbsp; 
+    <i class="fa fa-gavel" style="color:#FFFFFF"></i> <a rel="modal" href="javascript:void(chama_exibe_login())">Login</a>
+</p>
+                                    </div>
+                                </div>
+                            </section>
+                        </div>
+                    </div>
+                </div>
+                    <header id="masthead" role="banner">
+            <div class="wrapper">
+
+
+<div class="matriculado_rj_sp">
+        <img src="imagens/estado-rj.jpg" style="height:100%;max-height:60px" alt="Estado do Rio de Janeiro" title="Estado do Rio de Janeiro" style="margin-right: 10px;"/>
+        <img src="imagens/estado-sp.jpg" style="height:100%;max-height:60px" hspace="10" alt="Estado de São Paulo" title="Estado de São Paulo"/>
+
+        <br/>Matriculado para atuar nos estados do Rio de Janeiro e São Paulo.<br/>
+</div>
+
+
+
+            
+    <div id="mobile-header-left-menu" class="mobile-menu-anchor primary-menu">
+        <a href="#mobile-header-left-nav" id="header-left-menu" class="genericon genericon-menu">
+            <span class="mobile-menu-text">Menu</span>
+        </a>
+    </div>
+    <div id="site-branding" class="logo-left">
+				<div id="site-logo"><a href="/" class="custom-logo-link" rel="home" itemprop="url"><img width="490" height="60" src="/imagens/cropped-logo2.png" class="custom-logo" alt="" itemprop="logo" srcset="/imagens/cropped-logo2.png 490w, /imagens/cropped-logo2-300x37.png 300w" sizes="(max-width: 490px) 100vw, 490px" /></a></div>
+		<div id="site-header">
+			<h1 class="site-title"><a href="/"></a></h1>
+			<h2 class="site-description"></h2>
+		</div></div>    <aside class="sidebar sidebar-header-right widget-area">
+        <section class="widget widget_search" id="header-right-search">
+            <div class="widget-wrap">
+                
+<form role="search" method="post" class="search-form" action="/leilao/busca-de-leiloes/">
+	<label>
+		<span class="screen-reader-text">Pesquisar por:</span>
+		<input type="search" class="search-field" placeholder="Pesquisar..." value="" name="termo" title="Pesquisar por:">
+	</label>
+	<input type="submit" class="search-submit" value="Pesquisar">
+</form>            </div>
+        </section>
+    </aside>
+            </div>
+        </header>
+
+
+
+
+
+<section id="feature-slider">
+    <div class="wrapper">
+        <div class="cycle-slideshow" data-cycle-log="false" data-cycle-pause-on-hover="true" data-cycle-swipe="true"
+            data-cycle-auto-height=container data-cycle-fx="tileBlind" data-cycle-speed="1000" data-cycle-timeout="4000"
+            data-cycle-loader="true" data-cycle-slides="> article" >
+
+            
+            <div class="cycle-prev"></div>
+            <div class="cycle-next"></div>
+
+            
+            <div class="cycle-pager"></div>
+
+            <article class="post demo-image-1 hentry slides displayblock">
+                                                <figure class="Slider Image 1"><a href="https://schulmannleiloes.com.br/detalhe.php?id=5831&imovel=VENDA-DIRETA---LOJA-EM-IP" target="_blank"><img src="https://schulmannleiloes.com.br/upload/banners/115_P.jpg"/></a></figure></article><article class="post demo-image-2 hentry slides displaynone">
+                                                <figure class="Slider Image 2"><a href="https://schulmannleiloes.com.br/detalhe.php?id=7123&imovel=IM%C3%93VEL-EM-BOTAFOGO" target="_blank"><img src="https://schulmannleiloes.com.br/upload/banners/117_P.jpg"/></a></figure></article>        </div>
+    </div>
+</section>        
+
+<section id="featured-content" class="layout-five demo-featured-content">
+        <div class="wrapper">
+        <h1 id="featured-heading" class="entry-title labasoft_h1"><img src="/imagens/escudo.png" class="h1_escudo" align="absmiddle"> Leilão de Imóveis</h1>
+        </div>
+        </section>
+        <section id="featured-content" class="layout-five demo-featured-content">
+        <div class="wrapper labasoft_box_container"><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=4642&imovel=SALAS-NO-CENTRO'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=4642&imovel=SALAS-NO-CENTRO" target="_self" title="SALAS NO CENTRO">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/4642_P.jpg" alt="R Anf. Carvalho, 29-SL 511/512" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    SALAS NO CENTRO                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">R Anf. Carvalho, 29-SL 511/512</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 09/01/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 100.800,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 100.800,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=4643&imovel=SALAS-NO-CENTRO'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=4643&imovel=SALAS-NO-CENTRO" target="_self" title="SALAS NO CENTRO">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/4643_P.jpg" alt="R Anf. Carvalho, 29 - SL 517" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    SALAS NO CENTRO                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">R Anf. Carvalho, 29 - SL 517</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 09/01/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 100.800,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 100.800,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=4644&imovel=SALAS-NO-CENTRO'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=4644&imovel=SALAS-NO-CENTRO" target="_self" title="SALAS NO CENTRO">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/4644_P.jpg" alt=" R Anf. Carvalho, 29 - 513/514" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    SALAS NO CENTRO                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo"> R Anf. Carvalho, 29 - 513/514</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 09/01/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 100.800,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 100.800,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=5668&imovel=SOBRELOJA-NO-CENTRO'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=5668&imovel=SOBRELOJA-NO-CENTRO" target="_self" title="SOBRELOJA NO CENTRO">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/5668_P.jpg" alt=" AVENIDA CALÓGERAS Nº 15/SLOJA" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    SOBRELOJA NO CENTRO                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo"> AVENIDA CALÓGERAS Nº 15/SLOJA</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 09/01/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 629.800,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 629.800,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=5186&imovel=MACAÉ'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=5186&imovel=MACAÉ" target="_self" title="MACAÉ">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/5186_P.jpg" alt="Av N Sen da Glória, 801/ E-02" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    MACAÉ                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">Av N Sen da Glória, 801/ E-02</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 09/01/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 1.575.600,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 1.575.600,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=5195&imovel=ILHA-DO-GOVERNADOR'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=5195&imovel=ILHA-DO-GOVERNADOR" target="_self" title="ILHA DO GOVERNADOR">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/5195_P.jpg" alt="Rua Aristarco Ramos nº 430/301" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    ILHA DO GOVERNADOR                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">Rua Aristarco Ramos nº 430/301</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 09/01/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 1.282.600,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 1.282.600,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=6481&imovel=IMÓVEL-NO-CENTRO'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=6481&imovel=IMÓVEL-NO-CENTRO" target="_self" title="IMÓVEL NO CENTRO">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/6481_P.jpg" alt="RUA DA CONCEIÇÃO, 116" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    IMÓVEL NO CENTRO                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">RUA DA CONCEIÇÃO, 116</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 09/01/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 448.000,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 448.000,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=5757&imovel=17-SALAS-NO-CENTRO'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=5757&imovel=17-SALAS-NO-CENTRO" target="_self" title="17 SALAS NO CENTRO">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/5757_P.jpg" alt="SALAS NA AV. ALM. BARROSO" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    17 SALAS NO CENTRO                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">SALAS NA AV. ALM. BARROSO</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 09/01/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 1.550.100,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 1.550.100,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=3967&imovel=ANGRA-DOS-REIS'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=3967&imovel=ANGRA-DOS-REIS" target="_self" title="ANGRA DOS REIS">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/3967_P.png" alt="IMÓVEL EM ANGRA DOS REIS" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    ANGRA DOS REIS                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">IMÓVEL EM ANGRA DOS REIS</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 09/01/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 4.651.000,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 4.651.000,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=6603&imovel=IMÓVEL-EM-VIGARIO-GERAL'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=6603&imovel=IMÓVEL-EM-VIGARIO-GERAL" target="_self" title="IMÓVEL EM VIGARIO GERAL">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/6603_P.png" alt="RUA VALENTIM MAGALHAES 581" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    IMÓVEL EM VIGARIO GERAL                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">RUA VALENTIM MAGALHAES 581</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 09/01/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 8.201.000,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 8.201.000,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=6864&imovel=IMÓVEL-EM-IRAJÁ'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=6864&imovel=IMÓVEL-EM-IRAJÁ" target="_self" title="IMÓVEL EM IRAJÁ">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/6864_P.png" alt="RUA PEREIRA DE ARAÚJO, 40" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    IMÓVEL EM IRAJÁ                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">RUA PEREIRA DE ARAÚJO, 40</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 09/01/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 350.100,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 350.100,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=6631&imovel=IMOVEL-EM-INHAUMA'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=6631&imovel=IMOVEL-EM-INHAUMA" target="_self" title="IMOVEL EM INHAUMA">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/6631_P.png" alt="RUA JOSE DOS REIS 1973" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    IMOVEL EM INHAUMA                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">RUA JOSE DOS REIS 1973</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 09/01/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 2.499.000,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 2.499.000,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=5103&imovel=CENTRO'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=5103&imovel=CENTRO" target="_self" title="CENTRO">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/5103_P.jpg" alt="AV 13 DE MAIO, 33/1402" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    CENTRO                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">AV 13 DE MAIO, 33/1402</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 09/01/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 86.820,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 86.820,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=6797&imovel=IMÓVEL-NA-BARRA'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=6797&imovel=IMÓVEL-NA-BARRA" target="_self" title="IMÓVEL NA BARRA">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/6797_P.png" alt="AV.  Armando Lombardi, 333" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    IMÓVEL NA BARRA                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">AV.  Armando Lombardi, 333</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 04/02/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 16.667.000,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 16.667.000,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=6461&imovel=Área-de-terras-em-Campos'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=6461&imovel=Área-de-terras-em-Campos" target="_self" title="Área de terras em Campos">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/6461_P.png" alt=" Parque Presidente Vargas" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    Área de terras em Campos                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo"> Parque Presidente Vargas</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 09/02/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 456.320,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 456.320,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=3709&imovel=PRÉDIO-EM-CAMPOS'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=3709&imovel=PRÉDIO-EM-CAMPOS" target="_self" title="PRÉDIO EM CAMPOS">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/3709_P.jpg" alt="RUA RIACHUELO, 598" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    PRÉDIO EM CAMPOS                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">RUA RIACHUELO, 598</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 25/02/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 2.280.100,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 2.280.100,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=6406&imovel=TERRENO-EM-MAGARATIBA'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=6406&imovel=TERRENO-EM-MAGARATIBA" target="_self" title="TERRENO EM MAGARATIBA">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/6406_P.png" alt="TERRENO EM MAGARATIBA" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    TERRENO EM MAGARATIBA                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">TERRENO EM MAGARATIBA</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 11/03/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 220.100,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 220.100,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=5240&imovel=SALA-NO-EDIF.-CENTRAL15'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=5240&imovel=SALA-NO-EDIF.-CENTRAL15" target="_self" title="SALA NO EDIF. CENTRAL15">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/5240_P.jpg" alt="AV. RIO BRANCO, 156/3115" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    SALA NO EDIF. CENTRAL15                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">AV. RIO BRANCO, 156/3115</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 24/03/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 55.100,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 55.100,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=5241&imovel=SALA-NO-EDIF.-CENTRAL14'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=5241&imovel=SALA-NO-EDIF.-CENTRAL14" target="_self" title="SALA NO EDIF. CENTRAL14">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/5241_P.jpg" alt="AV. RIO BRANCO, 156/3117" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    SALA NO EDIF. CENTRAL14                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">AV. RIO BRANCO, 156/3117</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 24/03/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 55.100,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 55.100,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=5242&imovel=SALA-NO-EDIF.-CENTRAL-13'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=5242&imovel=SALA-NO-EDIF.-CENTRAL-13" target="_self" title="SALA NO EDIF. CENTRAL 13">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/5242_P.jpg" alt="AV. RIO BRANCO, 156/3118" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    SALA NO EDIF. CENTRAL 13                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">AV. RIO BRANCO, 156/3118</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 24/03/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 55.100,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 55.100,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=5243&imovel=SALA-NO-EDIF.-CENTRAL12'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=5243&imovel=SALA-NO-EDIF.-CENTRAL12" target="_self" title="SALA NO EDIF. CENTRAL12">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/5243_P.jpg" alt="AV. RIO BRANCO, 156/3119" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    SALA NO EDIF. CENTRAL12                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">AV. RIO BRANCO, 156/3119</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 24/03/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 55.100,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 55.100,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=5506&imovel=SALA-NO-EDIF.-CENTRAL04'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=5506&imovel=SALA-NO-EDIF.-CENTRAL04" target="_self" title="SALA NO EDIF. CENTRAL04">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/5506_P.jpg" alt="AV. RIO BRANCO, 156/3123" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    SALA NO EDIF. CENTRAL04                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">AV. RIO BRANCO, 156/3123</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 24/03/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 55.100,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 55.100,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=5508&imovel=SALA-NO-EDIF.-CENTRAL02'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=5508&imovel=SALA-NO-EDIF.-CENTRAL02" target="_self" title="SALA NO EDIF. CENTRAL02">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/5508_P.jpg" alt="AV. RIO BRANCO, 156/3122" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    SALA NO EDIF. CENTRAL02                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">AV. RIO BRANCO, 156/3122</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 24/03/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 55.100,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 55.100,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=5509&imovel=SALA-NO-EDIF.-CENTRAL01'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=5509&imovel=SALA-NO-EDIF.-CENTRAL01" target="_self" title="SALA NO EDIF. CENTRAL01">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/5509_P.jpg" alt="AV. RIO BRANCO, 156/3228" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    SALA NO EDIF. CENTRAL01                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">AV. RIO BRANCO, 156/3228</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 24/03/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 55.100,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 55.100,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=6908&imovel=SALA-NO-EDIF.-CENTRAL11'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=6908&imovel=SALA-NO-EDIF.-CENTRAL11" target="_self" title="SALA NO EDIF. CENTRAL11">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/6908_P.jpg" alt="AV. RIO BRANCO, 156/3121" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    SALA NO EDIF. CENTRAL11                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">AV. RIO BRANCO, 156/3121</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 24/03/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 55.100,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 55.100,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=6909&imovel=SALA-NO-EDIF.-CENTRAL10'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=6909&imovel=SALA-NO-EDIF.-CENTRAL10" target="_self" title="SALA NO EDIF. CENTRAL10">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/6909_P.jpg" alt="AV. RIO BRANCO, 156/3126" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    SALA NO EDIF. CENTRAL10                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">AV. RIO BRANCO, 156/3126</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 24/03/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 55.100,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 55.100,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=6918&imovel=CASA-NA-TAQUARA'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=6918&imovel=CASA-NA-TAQUARA" target="_self" title="CASA NA TAQUARA">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/6918_P.png" alt="RUA CAÇU, 150/286" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    CASA NA TAQUARA                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">RUA CAÇU, 150/286</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 26/03/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 338.100,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 338.100,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=5602&imovel=TERESOPOLIS'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=5602&imovel=TERESOPOLIS" target="_self" title="TERESOPOLIS">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/5602_P.jpg" alt="Lt nº 10 da qd VII, Imbuí" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    TERESOPOLIS                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">Lt nº 10 da qd VII, Imbuí</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 09/04/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 85.100,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 85.100,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=6179&imovel=VENDA-DIRETA---CAMPO-GRAN'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #18181b; color: #ffffff;font-size: 13px;">
+                Online<br/>Extrajudicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=6179&imovel=VENDA-DIRETA---CAMPO-GRAN" target="_self" title="VENDA DIRETA - CAMPO GRAN">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/6179_P.jpg" alt="R Francisco Mota ,850-04-304  " class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    VENDA DIRETA - CAMPO GRAN                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">R Francisco Mota ,850-04-304  </p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 14/04/2026 14:00
+                    &agrave; 14/04/2027 14:00        
+            
+
+                    <br/>R$ 54.100,00        
+    
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=6951&imovel=SALA-NA-BARRA-01'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=6951&imovel=SALA-NA-BARRA-01" target="_self" title="SALA NA BARRA 01">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/6951_P.png" alt="AV DAS AMÉRICAS, 12.900/302/2 " class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    SALA NA BARRA 01                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">AV DAS AMÉRICAS, 12.900/302/2 </p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 14/04/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 1.800.100,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 1.800.100,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=6952&imovel=SALA-NA-BARRA-02'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=6952&imovel=SALA-NA-BARRA-02" target="_self" title="SALA NA BARRA 02">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/6952_P.png" alt="AV DAS AMÉRICAS, 12.900/401/2 " class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    SALA NA BARRA 02                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">AV DAS AMÉRICAS, 12.900/401/2 </p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 14/04/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 1.500.100,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 1.500.100,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=6953&imovel=SALA-NA-BARRA-03'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=6953&imovel=SALA-NA-BARRA-03" target="_self" title="SALA NA BARRA 03">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/6953_P.png" alt="AV DAS AMÉRICAS, 12.900/402/2 " class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    SALA NA BARRA 03                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">AV DAS AMÉRICAS, 12.900/402/2 </p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 14/04/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 1.825.900,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 1.825.900,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=6954&imovel=SALA-NA-BARRA-04'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=6954&imovel=SALA-NA-BARRA-04" target="_self" title="SALA NA BARRA 04">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/6954_P.png" alt="AV DAS AMÉRICAS, 12.900/301/2 " class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    SALA NA BARRA 04                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">AV DAS AMÉRICAS, 12.900/301/2 </p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 14/04/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 1.591.300,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 1.591.300,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=6956&imovel=TERRENO-NA-FREGUESIA'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=6956&imovel=TERRENO-NA-FREGUESIA" target="_self" title="TERRENO NA FREGUESIA">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/6956_P.png" alt="RUA FRANCISCA SALES, 945" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    TERRENO NA FREGUESIA                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">RUA FRANCISCA SALES, 945</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 14/04/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 1.900.100,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 1.900.100,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=4008&imovel=SALA-EM-CAXIAS'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=4008&imovel=SALA-EM-CAXIAS" target="_self" title="SALA EM CAXIAS">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/4008_P.jpg" alt="S 304 da Av Pres kennedy 1495" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    SALA EM CAXIAS                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">S 304 da Av Pres kennedy 1495</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 21/05/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 59.100,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 59.100,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=6598&imovel=SALA-EM-RESENDE'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=6598&imovel=SALA-EM-RESENDE" target="_self" title="SALA EM RESENDE">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/6598_P.png" alt="SALA 103 DA RUA RAFAEL, 15" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    SALA EM RESENDE                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">SALA 103 DA RUA RAFAEL, 15</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 21/05/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 90.100,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 90.100,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=6990&imovel=IMÓVEL-NO-GRAJAÚ'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #000000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=6990&imovel=IMÓVEL-NO-GRAJAÚ" target="_self" title="IMÓVEL NO GRAJAÚ">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/6990_P.png" alt="RUA PROF VALADARES, 262" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    IMÓVEL NO GRAJAÚ                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">RUA PROF VALADARES, 262</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 01/06/2026 1:00
+                    &agrave; 06/12/2026 00:00        
+            
+
+                    <br/>R$ 13.750.000,00        
+    
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=6994&imovel=GALPÕES-EM-CAMPO-GRANDE'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #000000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=6994&imovel=GALPÕES-EM-CAMPO-GRANDE" target="_self" title="GALPÕES EM CAMPO GRANDE">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/6994_P.png" alt="Est. Do Pedregoso, 1000/1001" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    GALPÕES EM CAMPO GRANDE                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">Est. Do Pedregoso, 1000/1001</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 22/06/2026 23:00
+                    &agrave; 22/12/2026 23:00        
+            
+
+                    <br/>R$ 3.751.341,03        
+    
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=7007&imovel=CASA-EM-TERESÓPOLIS'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #000000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=7007&imovel=CASA-EM-TERESÓPOLIS" target="_self" title="CASA EM TERESÓPOLIS">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/7007_P.png" alt="CASA EM TERESÓPOLIS" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    CASA EM TERESÓPOLIS                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">CASA EM TERESÓPOLIS</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 08/07/2026 00:00
+                    &agrave; 10/12/2026 23:00        
+            
+
+                    <br/>R$ 825.000,00        
+    
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=7017&imovel=APARTAMENTO-EM-COPACABANA'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #000000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=7017&imovel=APARTAMENTO-EM-COPACABANA" target="_self" title="APARTAMENTO EM COPACABANA">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/7017_P.png" alt="R. Cons. Lafaiete, 15/402 " class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    APARTAMENTO EM COPACABANA                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">R. Cons. Lafaiete, 15/402 </p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 28/07/2026 01:00
+                    &agrave; 28/12/2026 23:59        
+            
+
+                    <br/>R$ 850.100,00        
+    
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=7041&imovel=VENDA-DIRETA---TIJUCA'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #000000; color: #ffffff;font-size: 13px;">
+                Online<br/>Particular              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=7041&imovel=VENDA-DIRETA---TIJUCA" target="_self" title="VENDA DIRETA - TIJUCA">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/7041_P.png" alt="Rua Morais e Silva, 139/502 " class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    VENDA DIRETA - TIJUCA                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">Rua Morais e Silva, 139/502 </p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 06/08/2026 14:00
+                    &agrave; 06/12/2026 14:00        
+            
+
+                    <br/>R$ 600.000,00        
+    
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=6987&imovel=APTO.-EM-IGUABA'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #000000; color: #ffffff;font-size: 13px;">
+                Online<br/>Extrajudicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=6987&imovel=APTO.-EM-IGUABA" target="_self" title="APTO. EM IGUABA">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/6987_P.png" alt="R. HILARIO G DE SOUZA, 66/B" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    APTO. EM IGUABA                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">R. HILARIO G DE SOUZA, 66/B</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 10/08/2026 14:00
+                    &agrave; 10/11/2026 14:00        
+            
+
+                    <br/>R$ 80.100,00        
+    
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=7034&imovel=VENDA-DIRETA--NA-TIJUCA'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #000000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=7034&imovel=VENDA-DIRETA--NA-TIJUCA" target="_self" title="VENDA DIRETA  NA TIJUCA">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/7034_P.png" alt="50% DA RUA DO BISPO 316/602" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    VENDA DIRETA  NA TIJUCA                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">50% DA RUA DO BISPO 316/602</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 24/08/2026 14:00
+                    &agrave; 20/12/2026 14:00        
+            
+
+                    <br/>R$ 140.100,00        
+    
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=7107&imovel=VENDA-DIRETA-ANDAR-NA-P.-'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #000000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=7107&imovel=VENDA-DIRETA-ANDAR-NA-P.-" target="_self" title="VENDA DIRETA-ANDAR NA P. ">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/7107_P.png" alt="AV. PRES VARGAS,418/20º ANDAR" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    VENDA DIRETA-ANDAR NA P.                 </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">AV. PRES VARGAS,418/20º ANDAR</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 14/09/2026 12:00
+                    &agrave; 23/12/2026 12:00        
+            
+
+                    <br/>R$ 800.100,00        
+    
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=7103&imovel=TERRENO-EM-ANGRA-DOS-REIS'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=7103&imovel=TERRENO-EM-ANGRA-DOS-REIS" target="_self" title="TERRENO EM ANGRA DOS REIS">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/7103_P.png" alt="LOTE 52 DA GLEBA F CAETÉS" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    TERRENO EM ANGRA DOS REIS                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">LOTE 52 DA GLEBA F CAETÉS</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 20/09/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 256.500,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 256.500,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=7108&imovel=IMÓVEL-NO-CENTRO'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Extrajudicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=7108&imovel=IMÓVEL-NO-CENTRO" target="_self" title="IMÓVEL NO CENTRO">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/7108_P.jpg" alt="RUA ESTACIO DE SA, 33, 37 E 39" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    IMÓVEL NO CENTRO                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">RUA ESTACIO DE SA, 33, 37 E 39</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 24/09/2026 12:00
+                    &agrave; 26/10/2026 12:00        
+            
+
+                    <br/>R$ 2.828.500,00        
+    
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=7110&imovel=APTO-NO-CENTRO'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Extrajudicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=7110&imovel=APTO-NO-CENTRO" target="_self" title="APTO NO CENTRO">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/7110_P.jpg" alt="RUA DO SENADO 230 - APTO 620" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    APTO NO CENTRO                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">RUA DO SENADO 230 - APTO 620</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 24/09/2026 12:00
+                    &agrave; 26/10/2026 12:00        
+            
+
+                    <br/>R$ 240.000,00        
+    
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=5831&imovel=VENDA-DIRETA---LOJA-EM-IP'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #000000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=5831&imovel=VENDA-DIRETA---LOJA-EM-IP" target="_self" title="VENDA DIRETA - LOJA EM IP">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/5831_P.jpg" alt="R. VISC.DE PIRAJA Nº 330/ L313" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    VENDA DIRETA - LOJA EM IP                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">R. VISC.DE PIRAJA Nº 330/ L313</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 08/10/2026 14:00
+                    &agrave; 08/12/2026 14:00        
+            
+
+                    <br/>R$ 480.100,00        
+    
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=7123&imovel=IMÓVEL-EM-BOTAFOGO'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=7123&imovel=IMÓVEL-EM-BOTAFOGO" target="_self" title="IMÓVEL EM BOTAFOGO">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/7123_P.png" alt="RUA GAL. POLIDORO, 74" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    IMÓVEL EM BOTAFOGO                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">RUA GAL. POLIDORO, 74</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 16/10/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 62.500.100,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 62.500.100,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=6756&imovel=IMÓVEL-BONSUCESSO'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=6756&imovel=IMÓVEL-BONSUCESSO" target="_self" title="IMÓVEL BONSUCESSO">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/6756_P.jpg" alt="Rua Barros Barreto nº 79 " class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    IMÓVEL BONSUCESSO                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">Rua Barros Barreto nº 79 </p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 03/11/2026 11:00
+                    &agrave; 03/11/2026 11:10        
+            
+
+                    <br/>R$ 4.500.000,00        
+    
+    <br><b>2&ordm; data:</b><br/> 10/11/2026 11:00
+                    &agrave; 10/11/2026 11:10        
+            
+
+                    <br/>R$ 2.250.000,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=5948&imovel=IMÓVEL-JACAREPAGUÁ'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=5948&imovel=IMÓVEL-JACAREPAGUÁ" target="_self" title="IMÓVEL JACAREPAGUÁ">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/5948_P.jpg" alt="Rua Igarapé-açu 352/301 bl. 12" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    IMÓVEL JACAREPAGUÁ                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">Rua Igarapé-açu 352/301 bl. 12</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 10/11/2026 11:00
+                    &agrave; 10/11/2026 11:15        
+            
+
+                    <br/>R$ 180.000,00        
+    
+    <br><b>2&ordm; data:</b><br/> 10/11/2026 11:20
+                    &agrave; 10/11/2026 11:35        
+            
+
+                    <br/>R$ 90.000,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=7121&imovel=IIMÓVEL--COPACABANA-'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=7121&imovel=IIMÓVEL--COPACABANA-" target="_self" title="IIMÓVEL- COPACABANA ">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/7121_P.jpg" alt="Rua Barata Ribeiro 348/502" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    IIMÓVEL- COPACABANA                 </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">Rua Barata Ribeiro 348/502</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 18/11/2026 13:10
+                    &agrave; 18/11/2026 13:30        
+            
+
+                    <br/>R$ 500.000,00        
+    
+    <br><b>2&ordm; data:</b><br/> 25/11/2026 13:10
+                    &agrave; 25/11/2026 13:30        
+            
+
+                    <br/>R$ 250.000,00                
+    </p>
+            </div>
+        </div>
+    </article></div></section><section id="featured-content" class="layout-five demo-featured-content">
+    <div class="wrapper">
+    <h1 id="featured-heading" class="entry-title labasoft_h1"><img src="/imagens/escudo.png" class="h1_escudo" align="absmiddle"> Leilão da 3&ordf; Vara Federal de Execução Fiscal</h1>
+    </div>
+    </section>
+    <section id="featured-content" class="layout-five demo-featured-content">
+    <div class="wrapper labasoft_box_container"><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=4642&imovel=SALAS-NO-CENTRO'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=4642&imovel=SALAS-NO-CENTRO" target="_self" title="SALAS NO CENTRO">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/4642_P.jpg" alt="R Anf. Carvalho, 29-SL 511/512" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    SALAS NO CENTRO                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">R Anf. Carvalho, 29-SL 511/512</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 09/01/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 100.800,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 100.800,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=4643&imovel=SALAS-NO-CENTRO'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=4643&imovel=SALAS-NO-CENTRO" target="_self" title="SALAS NO CENTRO">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/4643_P.jpg" alt="R Anf. Carvalho, 29 - SL 517" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    SALAS NO CENTRO                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">R Anf. Carvalho, 29 - SL 517</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 09/01/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 100.800,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 100.800,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=4644&imovel=SALAS-NO-CENTRO'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=4644&imovel=SALAS-NO-CENTRO" target="_self" title="SALAS NO CENTRO">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/4644_P.jpg" alt=" R Anf. Carvalho, 29 - 513/514" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    SALAS NO CENTRO                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo"> R Anf. Carvalho, 29 - 513/514</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 09/01/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 100.800,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 100.800,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=5668&imovel=SOBRELOJA-NO-CENTRO'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=5668&imovel=SOBRELOJA-NO-CENTRO" target="_self" title="SOBRELOJA NO CENTRO">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/5668_P.jpg" alt=" AVENIDA CALÓGERAS Nº 15/SLOJA" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    SOBRELOJA NO CENTRO                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo"> AVENIDA CALÓGERAS Nº 15/SLOJA</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 09/01/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 629.800,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 629.800,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=5186&imovel=MACAÉ'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=5186&imovel=MACAÉ" target="_self" title="MACAÉ">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/5186_P.jpg" alt="Av N Sen da Glória, 801/ E-02" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    MACAÉ                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">Av N Sen da Glória, 801/ E-02</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 09/01/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 1.575.600,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 1.575.600,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=5195&imovel=ILHA-DO-GOVERNADOR'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=5195&imovel=ILHA-DO-GOVERNADOR" target="_self" title="ILHA DO GOVERNADOR">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/5195_P.jpg" alt="Rua Aristarco Ramos nº 430/301" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    ILHA DO GOVERNADOR                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">Rua Aristarco Ramos nº 430/301</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 09/01/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 1.282.600,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 1.282.600,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=6481&imovel=IMÓVEL-NO-CENTRO'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=6481&imovel=IMÓVEL-NO-CENTRO" target="_self" title="IMÓVEL NO CENTRO">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/6481_P.jpg" alt="RUA DA CONCEIÇÃO, 116" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    IMÓVEL NO CENTRO                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">RUA DA CONCEIÇÃO, 116</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 09/01/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 448.000,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 448.000,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=5757&imovel=17-SALAS-NO-CENTRO'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=5757&imovel=17-SALAS-NO-CENTRO" target="_self" title="17 SALAS NO CENTRO">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/5757_P.jpg" alt="SALAS NA AV. ALM. BARROSO" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    17 SALAS NO CENTRO                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">SALAS NA AV. ALM. BARROSO</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 09/01/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 1.550.100,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 1.550.100,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=3967&imovel=ANGRA-DOS-REIS'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=3967&imovel=ANGRA-DOS-REIS" target="_self" title="ANGRA DOS REIS">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/3967_P.png" alt="IMÓVEL EM ANGRA DOS REIS" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    ANGRA DOS REIS                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">IMÓVEL EM ANGRA DOS REIS</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 09/01/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 4.651.000,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 4.651.000,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=6597&imovel=DIVERSAS-CADEIRAS'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=6597&imovel=DIVERSAS-CADEIRAS" target="_self" title="DIVERSAS CADEIRAS">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/6597_P.png" alt="DIVERSAS CADEIRAS" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    DIVERSAS CADEIRAS                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">DIVERSAS CADEIRAS</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 09/01/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 10.100,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 10.100,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=6603&imovel=IMÓVEL-EM-VIGARIO-GERAL'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=6603&imovel=IMÓVEL-EM-VIGARIO-GERAL" target="_self" title="IMÓVEL EM VIGARIO GERAL">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/6603_P.png" alt="RUA VALENTIM MAGALHAES 581" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    IMÓVEL EM VIGARIO GERAL                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">RUA VALENTIM MAGALHAES 581</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 09/01/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 8.201.000,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 8.201.000,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=6864&imovel=IMÓVEL-EM-IRAJÁ'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=6864&imovel=IMÓVEL-EM-IRAJÁ" target="_self" title="IMÓVEL EM IRAJÁ">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/6864_P.png" alt="RUA PEREIRA DE ARAÚJO, 40" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    IMÓVEL EM IRAJÁ                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">RUA PEREIRA DE ARAÚJO, 40</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 09/01/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 350.100,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 350.100,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=6631&imovel=IMOVEL-EM-INHAUMA'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=6631&imovel=IMOVEL-EM-INHAUMA" target="_self" title="IMOVEL EM INHAUMA">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/6631_P.png" alt="RUA JOSE DOS REIS 1973" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    IMOVEL EM INHAUMA                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">RUA JOSE DOS REIS 1973</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 09/01/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 2.499.000,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 2.499.000,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=5103&imovel=CENTRO'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=5103&imovel=CENTRO" target="_self" title="CENTRO">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/5103_P.jpg" alt="AV 13 DE MAIO, 33/1402" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    CENTRO                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">AV 13 DE MAIO, 33/1402</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 09/01/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 86.820,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 86.820,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=6797&imovel=IMÓVEL-NA-BARRA'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=6797&imovel=IMÓVEL-NA-BARRA" target="_self" title="IMÓVEL NA BARRA">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/6797_P.png" alt="AV.  Armando Lombardi, 333" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    IMÓVEL NA BARRA                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">AV.  Armando Lombardi, 333</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 04/02/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 16.667.000,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 16.667.000,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=6461&imovel=Área-de-terras-em-Campos'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=6461&imovel=Área-de-terras-em-Campos" target="_self" title="Área de terras em Campos">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/6461_P.png" alt=" Parque Presidente Vargas" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    Área de terras em Campos                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo"> Parque Presidente Vargas</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 09/02/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 456.320,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 456.320,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=3709&imovel=PRÉDIO-EM-CAMPOS'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=3709&imovel=PRÉDIO-EM-CAMPOS" target="_self" title="PRÉDIO EM CAMPOS">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/3709_P.jpg" alt="RUA RIACHUELO, 598" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    PRÉDIO EM CAMPOS                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">RUA RIACHUELO, 598</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 25/02/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 2.280.100,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 2.280.100,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=6406&imovel=TERRENO-EM-MAGARATIBA'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=6406&imovel=TERRENO-EM-MAGARATIBA" target="_self" title="TERRENO EM MAGARATIBA">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/6406_P.png" alt="TERRENO EM MAGARATIBA" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    TERRENO EM MAGARATIBA                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">TERRENO EM MAGARATIBA</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 11/03/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 220.100,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 220.100,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=5240&imovel=SALA-NO-EDIF.-CENTRAL15'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=5240&imovel=SALA-NO-EDIF.-CENTRAL15" target="_self" title="SALA NO EDIF. CENTRAL15">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/5240_P.jpg" alt="AV. RIO BRANCO, 156/3115" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    SALA NO EDIF. CENTRAL15                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">AV. RIO BRANCO, 156/3115</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 24/03/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 55.100,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 55.100,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=5241&imovel=SALA-NO-EDIF.-CENTRAL14'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=5241&imovel=SALA-NO-EDIF.-CENTRAL14" target="_self" title="SALA NO EDIF. CENTRAL14">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/5241_P.jpg" alt="AV. RIO BRANCO, 156/3117" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    SALA NO EDIF. CENTRAL14                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">AV. RIO BRANCO, 156/3117</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 24/03/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 55.100,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 55.100,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=5242&imovel=SALA-NO-EDIF.-CENTRAL-13'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=5242&imovel=SALA-NO-EDIF.-CENTRAL-13" target="_self" title="SALA NO EDIF. CENTRAL 13">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/5242_P.jpg" alt="AV. RIO BRANCO, 156/3118" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    SALA NO EDIF. CENTRAL 13                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">AV. RIO BRANCO, 156/3118</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 24/03/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 55.100,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 55.100,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=5243&imovel=SALA-NO-EDIF.-CENTRAL12'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=5243&imovel=SALA-NO-EDIF.-CENTRAL12" target="_self" title="SALA NO EDIF. CENTRAL12">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/5243_P.jpg" alt="AV. RIO BRANCO, 156/3119" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    SALA NO EDIF. CENTRAL12                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">AV. RIO BRANCO, 156/3119</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 24/03/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 55.100,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 55.100,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=5506&imovel=SALA-NO-EDIF.-CENTRAL04'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=5506&imovel=SALA-NO-EDIF.-CENTRAL04" target="_self" title="SALA NO EDIF. CENTRAL04">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/5506_P.jpg" alt="AV. RIO BRANCO, 156/3123" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    SALA NO EDIF. CENTRAL04                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">AV. RIO BRANCO, 156/3123</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 24/03/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 55.100,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 55.100,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=5508&imovel=SALA-NO-EDIF.-CENTRAL02'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=5508&imovel=SALA-NO-EDIF.-CENTRAL02" target="_self" title="SALA NO EDIF. CENTRAL02">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/5508_P.jpg" alt="AV. RIO BRANCO, 156/3122" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    SALA NO EDIF. CENTRAL02                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">AV. RIO BRANCO, 156/3122</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 24/03/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 55.100,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 55.100,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=5509&imovel=SALA-NO-EDIF.-CENTRAL01'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=5509&imovel=SALA-NO-EDIF.-CENTRAL01" target="_self" title="SALA NO EDIF. CENTRAL01">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/5509_P.jpg" alt="AV. RIO BRANCO, 156/3228" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    SALA NO EDIF. CENTRAL01                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">AV. RIO BRANCO, 156/3228</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 24/03/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 55.100,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 55.100,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=6908&imovel=SALA-NO-EDIF.-CENTRAL11'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=6908&imovel=SALA-NO-EDIF.-CENTRAL11" target="_self" title="SALA NO EDIF. CENTRAL11">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/6908_P.jpg" alt="AV. RIO BRANCO, 156/3121" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    SALA NO EDIF. CENTRAL11                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">AV. RIO BRANCO, 156/3121</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 24/03/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 55.100,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 55.100,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=6909&imovel=SALA-NO-EDIF.-CENTRAL10'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=6909&imovel=SALA-NO-EDIF.-CENTRAL10" target="_self" title="SALA NO EDIF. CENTRAL10">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/6909_P.jpg" alt="AV. RIO BRANCO, 156/3126" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    SALA NO EDIF. CENTRAL10                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">AV. RIO BRANCO, 156/3126</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 24/03/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 55.100,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 55.100,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=6918&imovel=CASA-NA-TAQUARA'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=6918&imovel=CASA-NA-TAQUARA" target="_self" title="CASA NA TAQUARA">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/6918_P.png" alt="RUA CAÇU, 150/286" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    CASA NA TAQUARA                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">RUA CAÇU, 150/286</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 26/03/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 338.100,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 338.100,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=5602&imovel=TERESOPOLIS'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=5602&imovel=TERESOPOLIS" target="_self" title="TERESOPOLIS">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/5602_P.jpg" alt="Lt nº 10 da qd VII, Imbuí" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    TERESOPOLIS                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">Lt nº 10 da qd VII, Imbuí</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 09/04/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 85.100,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 85.100,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=6951&imovel=SALA-NA-BARRA-01'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=6951&imovel=SALA-NA-BARRA-01" target="_self" title="SALA NA BARRA 01">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/6951_P.png" alt="AV DAS AMÉRICAS, 12.900/302/2 " class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    SALA NA BARRA 01                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">AV DAS AMÉRICAS, 12.900/302/2 </p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 14/04/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 1.800.100,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 1.800.100,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=6952&imovel=SALA-NA-BARRA-02'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=6952&imovel=SALA-NA-BARRA-02" target="_self" title="SALA NA BARRA 02">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/6952_P.png" alt="AV DAS AMÉRICAS, 12.900/401/2 " class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    SALA NA BARRA 02                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">AV DAS AMÉRICAS, 12.900/401/2 </p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 14/04/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 1.500.100,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 1.500.100,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=6953&imovel=SALA-NA-BARRA-03'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=6953&imovel=SALA-NA-BARRA-03" target="_self" title="SALA NA BARRA 03">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/6953_P.png" alt="AV DAS AMÉRICAS, 12.900/402/2 " class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    SALA NA BARRA 03                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">AV DAS AMÉRICAS, 12.900/402/2 </p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 14/04/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 1.825.900,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 1.825.900,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=6954&imovel=SALA-NA-BARRA-04'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=6954&imovel=SALA-NA-BARRA-04" target="_self" title="SALA NA BARRA 04">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/6954_P.png" alt="AV DAS AMÉRICAS, 12.900/301/2 " class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    SALA NA BARRA 04                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">AV DAS AMÉRICAS, 12.900/301/2 </p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 14/04/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 1.591.300,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 1.591.300,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=6956&imovel=TERRENO-NA-FREGUESIA'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=6956&imovel=TERRENO-NA-FREGUESIA" target="_self" title="TERRENO NA FREGUESIA">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/6956_P.png" alt="RUA FRANCISCA SALES, 945" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    TERRENO NA FREGUESIA                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">RUA FRANCISCA SALES, 945</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 14/04/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 1.900.100,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 1.900.100,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=4008&imovel=SALA-EM-CAXIAS'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=4008&imovel=SALA-EM-CAXIAS" target="_self" title="SALA EM CAXIAS">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/4008_P.jpg" alt="S 304 da Av Pres kennedy 1495" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    SALA EM CAXIAS                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">S 304 da Av Pres kennedy 1495</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 21/05/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 59.100,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 59.100,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=6598&imovel=SALA-EM-RESENDE'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=6598&imovel=SALA-EM-RESENDE" target="_self" title="SALA EM RESENDE">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/6598_P.png" alt="SALA 103 DA RUA RAFAEL, 15" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    SALA EM RESENDE                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">SALA 103 DA RUA RAFAEL, 15</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 21/05/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 90.100,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 90.100,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=6998&imovel=BENS-MÓVEIS-INDUSTRIAIS'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=6998&imovel=BENS-MÓVEIS-INDUSTRIAIS" target="_self" title="BENS MÓVEIS INDUSTRIAIS">
+            <img src="https://schulmannleiloes.com.br/imagens/foto-indisponivel.jpg" alt="BENS MÓVEIS INDUSTRIAIS" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    BENS MÓVEIS INDUSTRIAIS                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">BENS MÓVEIS INDUSTRIAIS</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 30/06/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 344.700,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 344.700,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=7023&imovel=VEICULO-GM-CLASSIC-2006/2'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=7023&imovel=VEICULO-GM-CLASSIC-2006/2" target="_self" title="VEICULO GM CLASSIC 2006/2">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/7023_P.png" alt="VEICULO GM CLASSIC 2006/2006" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    VEICULO GM CLASSIC 2006/2                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">VEICULO GM CLASSIC 2006/2006</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 30/07/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 7.100,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 7.100,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=7103&imovel=TERRENO-EM-ANGRA-DOS-REIS'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=7103&imovel=TERRENO-EM-ANGRA-DOS-REIS" target="_self" title="TERRENO EM ANGRA DOS REIS">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/7103_P.png" alt="LOTE 52 DA GLEBA F CAETÉS" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    TERRENO EM ANGRA DOS REIS                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">LOTE 52 DA GLEBA F CAETÉS</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 20/09/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 256.500,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 256.500,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=7122&imovel=-4.000-LITROS-DE-ETANOL'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=7122&imovel=-4.000-LITROS-DE-ETANOL" target="_self" title=" 4.000 LITROS DE ETANOL">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/7122_P.png" alt=" 4.000 LITROS DE ETANOL" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                     4.000 LITROS DE ETANOL                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo"> 4.000 LITROS DE ETANOL</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 16/10/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 9.000,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 9.000,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=7123&imovel=IMÓVEL-EM-BOTAFOGO'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=7123&imovel=IMÓVEL-EM-BOTAFOGO" target="_self" title="IMÓVEL EM BOTAFOGO">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/7123_P.png" alt="RUA GAL. POLIDORO, 74" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    IMÓVEL EM BOTAFOGO                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">RUA GAL. POLIDORO, 74</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 16/10/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 62.500.100,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 62.500.100,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=7124&imovel=BMW-535I-GT-SN21.-ANO-201'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=7124&imovel=BMW-535I-GT-SN21.-ANO-201" target="_self" title="BMW 535I GT SN21. ANO 201">
+            <img src="https://schulmannleiloes.com.br/imagens/foto-indisponivel.jpg" alt="BMW 535I GT SN21. ANO 2010" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    BMW 535I GT SN21. ANO 201                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">BMW 535I GT SN21. ANO 2010</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 22/10/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 42.000,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 42.000,00                
+    </p>
+            </div>
+        </div>
+    </article></div></section><section id="featured-content" class="layout-five demo-featured-content">
+    <div class="wrapper">
+    <h1 id="featured-heading" class="entry-title labasoft_h1"><img src="/imagens/escudo.png" class="h1_escudo" align="absmiddle"> Leilão de Veículos</h1>
+    </div>
+    </section>
+    <section id="featured-content" class="layout-five demo-featured-content">
+    <div class="wrapper labasoft_box_container"><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=7023&imovel=VEICULO-GM-CLASSIC-2006/2'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=7023&imovel=VEICULO-GM-CLASSIC-2006/2" target="_self" title="VEICULO GM CLASSIC 2006/2">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/7023_P.png" alt="VEICULO GM CLASSIC 2006/2006" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    VEICULO GM CLASSIC 2006/2                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">VEICULO GM CLASSIC 2006/2006</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 30/07/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 7.100,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 7.100,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=7124&imovel=BMW-535I-GT-SN21.-ANO-201'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=7124&imovel=BMW-535I-GT-SN21.-ANO-201" target="_self" title="BMW 535I GT SN21. ANO 201">
+            <img src="https://schulmannleiloes.com.br/imagens/foto-indisponivel.jpg" alt="BMW 535I GT SN21. ANO 2010" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    BMW 535I GT SN21. ANO 201                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">BMW 535I GT SN21. ANO 2010</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 22/10/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 42.000,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 42.000,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=7118&imovel=VEICULO-VW'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=7118&imovel=VEICULO-VW" target="_self" title="VEICULO VW">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/7118_P.jpg" alt="MODELO GOL" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    VEICULO VW                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">MODELO GOL</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 27/10/2026 11:00
+                    &agrave; 27/10/2026 11:10        
+            
+
+                    <br/>R$ 40.000,00        
+    
+    <br><b>2&ordm; data:</b><br/> 03/11/2026 11:00
+                    &agrave; 03/11/2026 11:10        
+            
+
+                    <br/>R$ 20.000,00                
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=7120&imovel=VEÍCULO-'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=7120&imovel=VEÍCULO-" target="_self" title="VEÍCULO ">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/7120_P.jpg" alt="VEICULO" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    VEÍCULO                 </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">VEICULO</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 09/11/2026 13:00
+                    &agrave; 09/11/2026 13:15        
+            
+
+                    <br/>R$ 29.984,00        
+    
+    <br><b>2&ordm; data:</b><br/> 16/11/2026 13:00
+                    &agrave; 16/11/2026 13:15        
+            
+
+                    <br/>R$ 14.992,00                
+    </p>
+            </div>
+        </div>
+    </article></div></section><section id="featured-content" class="layout-five demo-featured-content">
+    <div class="wrapper">
+    <h1 id="featured-heading" class="entry-title labasoft_h1"><img src="/imagens/escudo.png" class="h1_escudo" align="absmiddle"> Leilão de Bens Móveis</h1>
+    </div>
+    </section>
+    <section id="featured-content" class="layout-five demo-featured-content">
+    <div class="wrapper labasoft_box_container">    <article id="featured-post-1" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=7006&imovel=IMPRESSORAS-INDUSTRIAIS'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=7006&imovel=IMPRESSORAS-INDUSTRIAIS" target="_self" title="IMPRESSORAS INDUSTRIAIS">
+            <img src="https://schulmannleiloes.com.br/imagens/foto-indisponivel.jpg" alt="IMPRESSORAS INDUSTRIAIS" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+                        <header class="entry-header">
+                <h1 class="entry-title">
+                    IMPRESSORAS INDUSTRIAIS                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo" style="line-height:17px">IMPRESSORAS INDUSTRIAIS</p>
+                <p class="labasoft_subtitulo" style="line-height:17px"></p>
+                <p align="center" style="line-height:17px"><b>1&ordm; data:</b><br/> 03/07/2026 14:00
+                    &agrave; 18/11/2026 14:00        
+            
+
+                    <br/>R$ 892.000,00        
+    
+    <br><b>2&ordm; data:</b><br/> 19/11/2026 14:00
+                    &agrave; 01/12/2026 14:00        
+            
+
+                    <br/>R$ 892.000,00                
+    </p>
+            </div>
+                        
+        </div>
+    </article>
+        <article id="featured-post-2" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=7117&imovel=ARQUIBANCADAS'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=7117&imovel=ARQUIBANCADAS" target="_self" title="ARQUIBANCADAS">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/7117_P.jpg" alt="80 cadeiras" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+                        <header class="entry-header">
+                <h1 class="entry-title">
+                    ARQUIBANCADAS                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo" style="line-height:17px">80 cadeiras</p>
+                <p class="labasoft_subtitulo" style="line-height:17px"></p>
+                <p align="center" style="line-height:17px"><b>1&ordm; data:</b><br/> 27/10/2026 11:00
+                    &agrave; 27/10/2026 11:10        
+            
+
+                    <br/>R$ 12.000,00        
+    
+    <br><b>2&ordm; data:</b><br/> 03/11/2026 11:00
+                    &agrave; 03/11/2026 11:10        
+            
+
+                    <br/>R$ 6.000,00                
+    </p>
+            </div>
+                        
+        </div>
+    </article>
+        <article id="featured-post-3" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=7119&imovel=Congelador-marca-Projet-'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #ff0000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=7119&imovel=Congelador-marca-Projet-" target="_self" title="Congelador marca Projet ">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/7119_P.jpg" alt="modelo UCP-40S" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+                        <header class="entry-header">
+                <h1 class="entry-title">
+                    Congelador marca Projet                 </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo" style="line-height:17px">modelo UCP-40S</p>
+                <p class="labasoft_subtitulo" style="line-height:17px"></p>
+                <p align="center" style="line-height:17px"><b>1&ordm; data:</b><br/> 27/10/2026 11:00
+                    &agrave; 27/10/2026 11:10        
+            
+
+                    <br/>R$ 30.000,00        
+    
+    <br><b>2&ordm; data:</b><br/> 03/11/2026 11:00
+                    &agrave; 03/11/2026 11:10        
+            
+
+                    <br/>R$ 15.000,00                
+    </p>
+            </div>
+                        
+        </div>
+    </article>
+    </div></section><section id="featured-content" class="layout-five demo-featured-content">
+    <div class="wrapper">
+    <h1 id="featured-heading" class="entry-title labasoft_h1"><img src="/imagens/escudo.png" class="h1_escudo" align="absmiddle"> Leilão de Arte & Afins</h1>
+    </div>
+    </section>
+    <section id="featured-content" class="layout-five demo-featured-content">
+    <div class="wrapper labasoft_box_container">
+
+    </div></section><section id="featured-content" class="layout-five demo-featured-content">
+    <div class="wrapper">
+    <h1 id="featured-heading" class="entry-title labasoft_h1"><img src="/imagens/escudo.png" class="h1_escudo" align="absmiddle"> Venda Direta</h1>
+    </div>
+    </section>
+    <section id="featured-content" class="layout-five demo-featured-content">
+    <div class="wrapper labasoft_box_container">
+
+    <article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=6179&imovel=VENDA-DIRETA---CAMPO-GRAN'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #18181b; color: #ffffff;font-size: 13px;">
+                Online<br/>Extrajudicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=6179&imovel=VENDA-DIRETA---CAMPO-GRAN" target="_self" title="VENDA DIRETA - CAMPO GRAN">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/6179_P.jpg" alt="R Francisco Mota ,850-04-304  " class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    VENDA DIRETA - CAMPO GRAN                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">R Francisco Mota ,850-04-304  </p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 14/04/2026 14:00
+                    &agrave; 14/04/2027 14:00        
+            
+
+                    <br/>R$ 54.100,00        
+    
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=6990&imovel=IMÓVEL-NO-GRAJAÚ'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #000000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=6990&imovel=IMÓVEL-NO-GRAJAÚ" target="_self" title="IMÓVEL NO GRAJAÚ">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/6990_P.png" alt="RUA PROF VALADARES, 262" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    IMÓVEL NO GRAJAÚ                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">RUA PROF VALADARES, 262</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 01/06/2026 1:00
+                    &agrave; 06/12/2026 00:00        
+            
+
+                    <br/>R$ 13.750.000,00        
+    
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=6994&imovel=GALPÕES-EM-CAMPO-GRANDE'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #000000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=6994&imovel=GALPÕES-EM-CAMPO-GRANDE" target="_self" title="GALPÕES EM CAMPO GRANDE">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/6994_P.png" alt="Est. Do Pedregoso, 1000/1001" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    GALPÕES EM CAMPO GRANDE                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">Est. Do Pedregoso, 1000/1001</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 22/06/2026 23:00
+                    &agrave; 22/12/2026 23:00        
+            
+
+                    <br/>R$ 3.751.341,03        
+    
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=7007&imovel=CASA-EM-TERESÓPOLIS'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #000000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=7007&imovel=CASA-EM-TERESÓPOLIS" target="_self" title="CASA EM TERESÓPOLIS">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/7007_P.png" alt="CASA EM TERESÓPOLIS" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    CASA EM TERESÓPOLIS                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">CASA EM TERESÓPOLIS</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 08/07/2026 00:00
+                    &agrave; 10/12/2026 23:00        
+            
+
+                    <br/>R$ 825.000,00        
+    
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=7017&imovel=APARTAMENTO-EM-COPACABANA'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #000000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=7017&imovel=APARTAMENTO-EM-COPACABANA" target="_self" title="APARTAMENTO EM COPACABANA">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/7017_P.png" alt="R. Cons. Lafaiete, 15/402 " class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    APARTAMENTO EM COPACABANA                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">R. Cons. Lafaiete, 15/402 </p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 28/07/2026 01:00
+                    &agrave; 28/12/2026 23:59        
+            
+
+                    <br/>R$ 850.100,00        
+    
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=7041&imovel=VENDA-DIRETA---TIJUCA'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #000000; color: #ffffff;font-size: 13px;">
+                Online<br/>Particular              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=7041&imovel=VENDA-DIRETA---TIJUCA" target="_self" title="VENDA DIRETA - TIJUCA">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/7041_P.png" alt="Rua Morais e Silva, 139/502 " class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    VENDA DIRETA - TIJUCA                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">Rua Morais e Silva, 139/502 </p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 06/08/2026 14:00
+                    &agrave; 06/12/2026 14:00        
+            
+
+                    <br/>R$ 600.000,00        
+    
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=6987&imovel=APTO.-EM-IGUABA'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #000000; color: #ffffff;font-size: 13px;">
+                Online<br/>Extrajudicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=6987&imovel=APTO.-EM-IGUABA" target="_self" title="APTO. EM IGUABA">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/6987_P.png" alt="R. HILARIO G DE SOUZA, 66/B" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    APTO. EM IGUABA                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">R. HILARIO G DE SOUZA, 66/B</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 10/08/2026 14:00
+                    &agrave; 10/11/2026 14:00        
+            
+
+                    <br/>R$ 80.100,00        
+    
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=7034&imovel=VENDA-DIRETA--NA-TIJUCA'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #000000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=7034&imovel=VENDA-DIRETA--NA-TIJUCA" target="_self" title="VENDA DIRETA  NA TIJUCA">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/7034_P.png" alt="50% DA RUA DO BISPO 316/602" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    VENDA DIRETA  NA TIJUCA                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">50% DA RUA DO BISPO 316/602</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 24/08/2026 14:00
+                    &agrave; 20/12/2026 14:00        
+            
+
+                    <br/>R$ 140.100,00        
+    
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=7107&imovel=VENDA-DIRETA-ANDAR-NA-P.-'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #000000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=7107&imovel=VENDA-DIRETA-ANDAR-NA-P.-" target="_self" title="VENDA DIRETA-ANDAR NA P. ">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/7107_P.png" alt="AV. PRES VARGAS,418/20º ANDAR" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    VENDA DIRETA-ANDAR NA P.                 </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">AV. PRES VARGAS,418/20º ANDAR</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 14/09/2026 12:00
+                    &agrave; 23/12/2026 12:00        
+            
+
+                    <br/>R$ 800.100,00        
+    
+    </p>
+            </div>
+        </div>
+    </article><article id="featured-post-" class="post hentry post-demo labasoft_box_thumbs" onClick="window.location.href='detalhe.php?id=5831&imovel=VENDA-DIRETA---LOJA-EM-IP'">
+                    <div style="position:relative">
+             <div class="labasoft_faixa2">
+              <div style="background: #000000; color: #ffffff;font-size: 13px;">
+                Online<br/>Judicial              </div>
+             </div>
+            </div>
+                <figure class="featured-content-image">
+            <a href="detalhe.php?id=5831&imovel=VENDA-DIRETA---LOJA-EM-IP" target="_self" title="VENDA DIRETA - LOJA EM IP">
+            <img src="https://schulmannleiloes.com.br/upload/leilao/peq/5831_P.jpg" alt="R. VISC.DE PIRAJA Nº 330/ L313" class="wp-post-image labasoft_img labasoft_thumbs"></a>
+        </figure>
+        <div class="entry-container">
+            <header class="entry-header">
+                <h1 class="entry-title">
+                    VENDA DIRETA - LOJA EM IP                </h1>
+            </header>
+            <div class="entry-content">
+                <p class="labasoft_subtitulo">R. VISC.DE PIRAJA Nº 330/ L313</p>
+                <p class="labasoft_subtitulo"></p>
+                <p align="center"><b>1&ordm; data:</b><br/> 08/10/2026 14:00
+                    &agrave; 08/12/2026 14:00        
+            
+
+                    <br/>R$ 480.100,00        
+    
+    </p>
+            </div>
+        </div>
+    </article></div></section><section id="featured-content" class="layout-four demo-featured-content">
+    <div class="wrapper">
+    <h1 id="featured-heading" class="entry-title labasoft_h1"><i class="fa fa-tags" style="color:#FFFFFF"></i> Avisos</h1>
+    </div>
+    </section>
+
+    <section id="featured-content" class="layout-three demo-featured-content">
+     <div class="wrapper">
+        <article id="featured-post-1" class="post hentry post-demo" style="margin:0px;">
+     <div class="entry-container">    
+        <div id="aviso_tarja" style="height:285px;background-color:#f202b2;text-align:justify;padding:10px;border-radius:5px;border: 1px solid #000000;">
+            <p align="center" style="color:#120d0d;font-size:16px"><b>INDICAÇÃO</b></p>
+
+            <p style="color:#120d0d;font-size:12px"> Se você deseja arrematar um imóvel ou veículo e não tem experiência, entre em contato: 
+
+Whatsapp: +552198881-1341 
+
+ 
+                        </p>
+
+                    </div>
+     </div>
+    </article>
+    <article id="featured-post-3" class="post hentry post-demo" style="margin:0px;height:auto">
+ <div class="entry-container">    
+    <div id="aviso_tarja" style="height:285px;background-color:#FFFFFF;text-align:justify;padding:10px;border-radius:5px;border: 1px solid #2c2c54;">
+        <p align="center" style="background-color:#2c2c54;color:#FFFFFF"><b>Cadastro para Leilão Online</b></p><br/>
+        
+        <p align="center">
+        <i class="fa fa-gavel"></i> <a rel="modal" href="javascript:void(jQuery('html,body').stop().animate({scrollTop: jQuery('#masthead').offset().top}, 2000));void(exibe_login())">Já tenho cadastro</a> | 
+        <a href="/cadastro.php">Não tenho cadastro</a>
+        </p>
+                
+        <br/>
+        
+        <p align="center" style="background-color:#2c2c54;color:#FFFFFF"><b>Cadastro para receber Newsletter</b></p><br/>
+        
+        <form method="post" name="formulario_newsletter">
+        <p align="center">
+        
+        <input type="text" name="news_nome2" id="news_nome2" placeholder="Digite seu nome" style="width: 150px;"><br>
+        <input type="text" name="news_email2" id="news_email2" placeholder="Digite seu e-mail" style="margin-top:3px;width: 150px;"><div class="botao_salvar_newsletter" style="margin-right:auto;margin-left:auto;"><a href="javascript:void(newsletter2())" style="margin:0px;padding:0px;font-size:15px;color:#FFFFFF">Salvar</a></div>
+        
+        </p>
+        </form>
+          
+    </div>
+ </div>
+</article>
+</div></section><footer id="colophon" class="site-footer" role="contentinfo">
+<section id="featured-content" class="layout-three demo-featured-content">
+<div class="wrapper">
+<article id="featured-post-1" class="post hentry post-demo">
+    <div class="entry-container">
+    <h3>Leilões</h3><hr class="rodape_hr">
+    <ul>
+    <li><a title="Eletrônico" href="thumbs.php?tipo=leiloes-online" class="rodape_subitens"><i class="fa fa-laptop" aria-hidden="true"></i>&nbsp;&nbsp;Online</a></li>
+    <li><a title="Presenciais" href="thumbs.php?tipo=leiloes-presenciais" class="rodape_subitens"><i class="fa fa-legal" aria-hidden="true"></i>&nbsp;&nbsp;Presenciais</a></li>
+    <li><a title="Judiciais" href="thumbs.php?tipo=leiloes-judiciais" class="rodape_subitens"><i class="fa fa-balance-scale" aria-hidden="true"></i> Judiciais</a></li>
+    <li><a title="Extrajudiciais" href="thumbs.php?tipo=leiloes-extrajudiciais" class="rodape_subitens"><i class="fa fa-handshake-o" aria-hidden="true"></i> Extrajudiciais</a></li>
+    <li><a title="Próximos" href="thumbs.php?tipo=proximos-leiloes" class="rodape_subitens"><i class="fa fa-line-chart" aria-hidden="true"></i> Próximos</a></li>
+    </ul>
+	</div>
+</article>
+<article id="featured-post-2" class="post hentry post-demo">
+    <div class="entry-container">
+    <h3>Institucional</h3><hr class="rodape_hr">
+    <ul>
+    <li><a title="Contato" href="contato.php" class="rodape_subitens"><i class="fa fa-envelope-open" aria-hidden="true"></i> Formulário de Contato</a></li>
+    <li><a title="Política de Privacidade" href="politica-de-privacidade.php" class="rodape_subitens"><i class="fa fa-lock" aria-hidden="true" style="font-size:20px"></i>&nbsp;&nbsp;Política de Privacidade</a></li>
+    <li><a title="Termo de Uso" href="termo-de-uso.php" class="rodape_subitens"><i class="fa fa-file-text-o" aria-hidden="true"></i>&nbsp;&nbsp;Termo de Uso</a></li>
+    <li><a title="Equipe" href="equipe.php" class="rodape_subitens"><i class="fa fa-group" aria-hidden="true"></i> Equipe</a></li>
+    <li><a title="Vídeos" href="videos.php" class="rodape_subitens"><i class="fa fa-video-camera" aria-hidden="true"></i> Vídeos</a></li>
+    </ul>
+    </div>
+</article>
+<article id="featured-post-3" class="post hentry post-demo">
+    <div class="entry-container">
+        <h3>&nbsp;</h3><hr class="rodape_hr">
+
+        Matriculado para atuar nos estados do Rio de Janeiro e São Paulo.<br/>
+        <img src="imagens/estado-rj.jpg" style="width:100%;max-width:100px" alt="Estado do Rio de Janeiro" title="Estado do Rio de Janeiro" style="margin-right: 10px;"/>
+        <img src="imagens/estado-sp.jpg" style="width:100%;max-width:100px" hspace="10" alt="Estado de São Paulo" title="Estado de São Paulo"/>
+    </div>
+</article>
+
+</div>
+</section>
+
+
+<div id="site-generator">
+    <div class="wrapper">
+        <div id="footer-content" class="copyright">
+        <div class="rodape-esquerda">Leonardo Schulmann - Leiloeiro Público</div>                
+        <div class="rodape-direita">Travessa do Pa&ccedil;o 23, Gr.812, Castelo - Rio de Janeiro - RJ - 21 2532-1705 / 2532-1739 / 2532-1961 - <a href="mailto:schulmann@schulmann.com.br" style="color:#FFFFFF">schulmann@schulmann.com.br</a></div>
+        </div>
+    </div>
+</div>
+
+<div style="text-align:center;padding-top:15px;padding-bottom:15px;color:#FFFFFF;font-family: Arial;font-size:13px;background-color:#000000">desenvolvido por <a href="https://www.labasoft.com.br" target="_blank"><img src="/imagens/logo-labasoft-criacao-de-sites.png" width="78" height="20" border="0" align="absmiddle"></a></div>
+    </footer>
+    </div>
+        
+
+<a href="#masthead" id="scrollup" class="genericon"><span class="screen-reader-text">Deslizar para cima</span></a><nav id="mobile-header-left-nav" class="mobile-menu" role="navigation">
+<ul id="header-left-nav" class="menu">
+<li class="menu-item menu-item-type-post_type menu-item-object-page"><a href="thumbs.php?tipo=leiloes-judiciais">Leilões Judiciais</a></li>
+<li class="menu-item menu-item-type-post_type menu-item-object-page"><a href="thumbs.php?tipo=leiloes-extrajudiciais">Leilões Extrajudiciais</a></li>
+<li class="menu-item menu-item-type-post_type menu-item-object-page"><a href="thumbs.php?tipo=leiloes-eletronicos">Leilões Online</a></li>
+<li class="menu-item menu-item-type-post_type menu-item-object-page"><a href="thumbs.php?tipo=alienacao-fiduciaria">Alienação Fiduciária</a></li>
+<li class="menu-item menu-item-type-post_type menu-item-object-page"><a href="thumbs.php?tipo=leiloes-de-veiculos">Veículos</a></li>
+<li class="menu-item menu-item-type-post_type menu-item-object-page"><a href="thumbs.php?tipo=diversos-leiloes">Diversos Leilões</a></li>
+<li class="menu-item menu-item-type-post_type menu-item-object-page"><a href="thumbs.php?tipo=venda-direta">Venda Direta</a></li>
+    <li class="menu-item menu-item-type-custom menu-item-object-custom"><a href="javascript:void(trataAcessarMobile())" rel="modal">Login</a></li>
+    <li class="menu-item menu-item-type-custom menu-item-object-custom"><a href="cadastro.php">Cadastro</a></li>
+
+
+
+
+</ul></nav>
+
+
+
+
+
+
+
+</body>
+</html>
