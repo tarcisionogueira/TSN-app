@@ -94,7 +94,7 @@ const dataHora = (s) => {
 
 // Cidade com acento: o cabeçalho traz "UBERLANDIA-MG" (sem acento); a descrição costuma trazer
 // "Uberlândia". Usa a grafia da descrição quando ela normaliza para a mesma cidade.
-function cidadeComAcento(cidadeCaps, descricao) {
+export function cidadeComAcento(cidadeCaps, descricao) {
   const alvo = normCidade(cidadeCaps);
   const palavras = alvo.split(' ').length;
   const toks = String(descricao || '').split(/[^A-Za-zÀ-ÿ']+/).filter(Boolean);
@@ -161,7 +161,7 @@ export function cidadeDoLote({ url, local, texto }) {
   return { cidade: null, estado: l.uf || null };
 }
 
-const tipoDoTexto = (descricao) => TIPOS.map(([re, nome]) => ({ nome, pos: descricao.search(re) })).filter((t) => t.pos >= 0)
+export const tipoDoTexto = (descricao) => TIPOS.map(([re, nome]) => ({ nome, pos: descricao.search(re) })).filter((t) => t.pos >= 0)
   .sort((a, b) => a.pos - b.pos)[0]?.nome
   // Sem tipo reconhecido: "Imóvel" só se a descrição DIZ imóvel. Até 08/10 o padrão era 'Imóvel'
   // para tudo, e esse rótulo inventado no título fazia o `naoEhImovel` do motor deixar passar
@@ -172,7 +172,7 @@ const tipoDoTexto = (descricao) => TIPOS.map(([re, nome]) => ({ nome, pos: descr
 // "A fração correspondente à 50% (cinquenta por cento), de uma gleba…" (IPC 1270/1271): o portão ehFracaoIdeal só
 // reconhece "fração/parte ideal" — a fatia declarada no começo da descrição vira "Fração ideal" no título.
 const RE_FATIA = /^\W*(?:matr[íi]cula[^:]{0,20}:\s*)?(?:a\s+)?(?:fra[çc][ãa]o|parte)\s+(?:ideal\s+)?(?:correspondente\s+)?(?:[àa]\s+|de\s+)?\d{1,2}(?:[.,]\d+)?\s*%/i;
-function tituloDe(descricao, cidade, estado) {
+export function tituloDe(descricao, cidade, estado) {
   if (RE_FATIA.test(descricao)) return `Fração ideal - ${tipoDoTexto(descricao)}${cidade ? ` - ${cidade}/${estado}` : ''}`;
   // Tipo = a palavra-chave que aparece PRIMEIRO na descrição ("Um terreno situado… Residencial
   // Lago Azul" é terreno — o nome do loteamento não pode virar "Casa"; dry-run 28/09).
@@ -180,7 +180,7 @@ function tituloDe(descricao, cidade, estado) {
   const bairro = (descricao.match(/\bbairro\s+([A-ZÀ-Ý][\wÀ-ÿ' ]{2,40}?)(?=[,.;]| na | no | à )/i) || [])[1];
   return `${tipo}${bairro ? ` - ${titleCase(bairro.trim().toLowerCase())}` : ''}${cidade ? ` - ${cidade}/${estado}` : ''}`;
 }
-const matriculaDe = (t) => ((t.match(/matr[íi]cula(?:d[oa]\s+sob\s+o)?\s*(?:n[º°.]?\s*)?(\d[\d.]{2,})/i) || [])[1] || numeroMatriculaDoTexto(t) || '')
+export const matriculaDe = (t) => ((t.match(/matr[íi]cula(?:d[oa]\s+sob\s+o)?(?:\s+imobili[áa]ria)?(?:\s+de)?\s*(?:n\.?\s*[º°o]?\.?\s*)?(\d[\d.]{2,})/i) || [])[1] || numeroMatriculaDoTexto(t) || '')
   .replace(/\.+$/, '') || null;
 // Data de praça plausível: a "venda direta" da plataforma vem com 01/01/2045 (e "30/11/-0001" no relógio).
 const dataPlausivel = (iso) => (iso && Number(iso.slice(0, 4)) <= new Date().getFullYear() + 3 ? iso : null);
