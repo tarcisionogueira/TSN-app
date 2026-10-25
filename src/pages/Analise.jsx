@@ -42,7 +42,8 @@ import { soAceitaAVista } from '../data/pagamento.js';
 import { dataBrParaIso } from '../../api/_data-br.js';
 import { definirTrabalhoNaoSalvo } from '../utils/swAtualizacao';
 import EnviarEmailCasoLote from '../components/EnviarEmailCasoLote';
-import { podeVerLeiloeiro } from '../utils/leiloeiroAcesso';
+import { podeVerLeiloeiro, CHECKOUT_LEILOEIRO } from '../utils/leiloeiroAcesso';
+import { usePlanos } from '../contexts/PlanosContext';
 
 // Rótulos do tipo de ocupação no Raio-X jurídico (Fase 1).
 const OCUP_LABEL_A = {
@@ -209,6 +210,20 @@ export default function Analise() {
     };
   };
   const imovelInicial = mascararLeiloeiro(imovelRecuperado || location.state?.imovel);
+  // PRO NO PICO DE INTENÇÃO (25/10, arena — passo 7). Amostra esgotada e fim do 1º relatório são os dois momentos
+  // em que o explorador mais quer o próximo passo; o modal mandava a /planos (sem preço, sem rastro). Agora vai
+  // DIRETO ao checkout do Pro com `volta=<lote>` (o checkout aprovado devolve a pessoa a este imóvel) e grava o
+  // clique em `lp_cta` com um alvo por ponto de origem. Preço só do planos_config (`doBanco`) — nunca escrito à mão.
+  const planosCtx = usePlanos();
+  const precoProNum = planosCtx?.top2?.doBanco && Number(planosCtx.top2.preco) > 0 ? Number(planosCtx.top2.preco) : null;
+  const fmtPreco = (v) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  const precoPro = precoProNum ? `${fmtPreco(precoProNum)}/mês` : null;
+  const ehUuid = (v) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v || ''));
+  const voltaImovel = [idDaUrl, imovelInicial?.id].find(ehUuid) || '';
+  const irCheckoutPro = (alvo) => {
+    registrarEvento('lp_cta', { alvo, detalhe: `imovel=${voltaImovel};role=${role || ''}` });
+    nav(`${CHECKOUT_LEILOEIRO}${voltaImovel ? `&volta=${voltaImovel}` : ''}&origem=${alvo}`);
+  };
   // Arremate atribuído pela equipe: gera os relatórios EM NOME DO cliente (paraUserId)
   // para que eles pertençam a ele (aparecem nas Análises/acompanhamento do cliente).
   const paraUserId = location.state?.paraUserId || null;
@@ -233,6 +248,7 @@ export default function Analise() {
 
   const [cotaMercado, setCotaMercado] = useState(null);
   const [upgrade, setUpgrade] = useState(null); // popup de compra: null | { tipo:'plano'|'cota', titulo }
+  const [entendaAberto, setEntendaAberto] = useState(false); // "Entenda cada número deste relatório" (explorador)
 
   const limiteRole = Number(cotaMercado?.limite || 0);
   const analisesUsadas = Number(cotaMercado?.usado || 0);
@@ -2335,7 +2351,7 @@ export default function Analise() {
         <div style={{ padding:'10px 16px', borderRadius:10, background: analisesBloqueado ? '#fee2e2' : role === 'explorador' ? '#eff6ff' : '#fef3c7', color: analisesBloqueado ? '#dc2626' : role === 'explorador' ? '#084BA6' : '#92400e', fontSize:12, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
           <span>{analisesBloqueado
             ? (ehAmostra
-                ? `🔒 Você usou seus ${limiteRole} relatórios de amostra. Compre créditos para gerar mais.`
+                ? `🔒 Você usou seus ${limiteRole} relatórios de amostra.`
                 : `🔒 Limite de ${limiteRole} análises mensais atingido.`)
             : (analisesUsadas >= limiteRole && analisesBonus <= 0 && temCredito)
               // Cota acabou, mas há CRÉDITO: o servidor gera e debita. Dizer isso é o que
@@ -2354,9 +2370,16 @@ export default function Analise() {
           }</span>
           {analisesBloqueado && (
             role === 'explorador'
-              ? <button onClick={() => nav('/creditos')} style={{ padding:'6px 14px', background:'#dc2626', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', whiteSpace:'nowrap' }}>
-                  Comprar créditos
-                </button>
+              // Amostra esgotada (25/10): o Pro é a ação PRINCIPAL; crédito avulso vira link secundário.
+              ? <span style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:4 }}>
+                  <button onClick={() => irCheckoutPro('analise_amostra_esgotada')} style={{ padding:'7px 14px', background:'#0D63DB', color:'white', border:'none', borderRadius:8, fontWeight:800, fontSize:12, cursor:'pointer', whiteSpace:'nowrap' }}>
+                    Assinar Investidor Pro{precoPro ? ` · ${precoPro}` : ''}
+                  </button>
+                  <span style={{ fontSize:11, fontWeight:600, color:'#475569', textAlign:'right' }}>10 relatórios/mês{precoProNum ? ` (cerca de ${fmtPreco(precoProNum / 10)} cada)` : ''} + jurídico + leiloeiro</span>
+                  <button onClick={() => nav('/creditos')} style={{ background:'none', border:'none', padding:0, color:'#64748b', fontSize:11, fontWeight:600, textDecoration:'underline', cursor:'pointer' }}>
+                    ou comprar créditos avulsos
+                  </button>
+                </span>
               : <button onClick={() => setUpgrade({ tipo:'cota', titulo:null })} style={{ padding:'6px 14px', background:'#dc2626', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', whiteSpace:'nowrap' }}>
                   Fazer upgrade
                 </button>
@@ -4075,6 +4098,9 @@ export default function Analise() {
             valores/datas + forma de pagamento, direto do DOCUMENTO do lote. ── */}
         {(mercado?.condicoesEdital && ((mercado.condicoesEdital.pracas || []).some(p => p.valor > 0 || p.data) || mercado.condicoesEdital.formaPagamento || mercado.condicoesEdital.custos)) && (() => {
           const ce = mercado.condicoesEdital;
+          // O link do edital identifica o leiloeiro (25/10): só plano pago. Relatório antigo sem `fonte` cai no link
+          // do lote que a view mascarada já entrega a quem paga — sem leitura extra.
+          const linkEditalVer = verLeiloeiro ? (ce.fonte || imovelInicial?.linkEdital || null) : null;
           const pr = (ce.pracas || []).filter(p => p.valor > 0 || p.data);
           const dataBr = (d) => (d ? String(d).split('-').reverse().join('/') : null);
           // Custos e encargos que o servidor leu no edital. Os RECORRENTES já foram
@@ -4142,7 +4168,56 @@ export default function Analise() {
               {ce.identidade?.nomeCondominio && (
                 <div style={{ fontSize:11.5, color:'#0c4a6e', marginTop:6 }}><strong>Empreendimento no documento:</strong> {ce.identidade.nomeCondominio} — usado como âncora da pesquisa de comparáveis.</div>
               )}
-              <div style={{ fontSize:10.5, color:'#64748b', marginTop:8 }}>Extraído automaticamente do edital do lote — confirme no documento antes do lance{ce.fonte ? <> (<a href={hrefDoc(ce.fonte)} target="_blank" rel="noreferrer" style={{ color:'#0369a1' }}>abrir edital</a>)</> : null}.</div>
+              <div style={{ fontSize:10.5, color:'#64748b', marginTop:8 }}>Extraído automaticamente do edital do lote — confirme no documento antes do lance{linkEditalVer ? <> (<a href={hrefDoc(linkEditalVer)} target="_blank" rel="noreferrer" style={{ color:'#0369a1' }}>abrir edital</a>)</> : null}.</div>
+            </div>
+          );
+        })()}
+        {/* ── CUSTO TOTAL ESTIMADO DO ARREMATE (25/10, aprovado pelo dono a partir da pesquisa de mercado) ──
+            O leigo compara o LANCE com o preço de mercado e esquece o que vem junto. Só reaproveita o que este
+            relatório JÁ calculou (mesma régua da tabela de viabilidade: `metricas`) — nenhuma IA, nenhum custo.
+            Componente desconhecido aparece como "não informado", NUNCA como R$ 0: zero aqui seria a forma nº 4 do
+            CLAUDE.md (o vazio entregue como resposta), e o leitor somaria um custo que não sabemos. */}
+        {(() => {
+          const lance = Number(metricas?.vArremate) || Number(d.valorArrematacao) || 0;
+          if (!(lance > 0)) return null;
+          const ceC = mercado?.condicoesEdital || null;
+          const comEdital = ceC && ceC.regrasOrigem !== 'padrao_leiloeiro' ? Number(ceC.regrasPagamento?.comissaoPct) || 0 : 0;
+          const pctCom = Number(d.taxaLeiloeiroPercentual ?? COMISSAO_LEILOEIRO_PCT);
+          const pctItbi = Number(d.itbiPercentual ?? ITBI_REGISTRO_PCT);
+          const pctTxt = (v) => String(v).replace('.', ',');
+          const linhas = [
+            ['Lance (sem disputa)', lance, null],
+            ['Comissão do leiloeiro', Number(metricas?.taxaLeiloeiro) || 0, comEdital > 0 && comEdital === pctCom ? `${pctTxt(pctCom)}% lido no edital` : `${pctTxt(pctCom)}% — padrão de mercado; confirme no edital`],
+            Number(d.taxaAdministrativaPercentual) > 0 && ['Taxa administrativa', Number(metricas?.taxaAdministrativa) || 0, `${pctTxt(d.taxaAdministrativaPercentual)}%`],
+            Number(d.despesasAdministrativas) > 0 && ['Despesas administrativas', Number(metricas?.despesasAdm) || 0, null],
+            ['ITBI + registro', Number(metricas?.itbiRegistro) || 0, `${pctTxt(pctItbi)}% estimado`],
+            ['Débitos conhecidos (IPTU/condomínio)', Number(d.debitosAssumidos) > 0 ? (Number(metricas?.debitos) || Number(d.debitosAssumidos)) : null, Number(d.debitosAssumidos) > 0 ? 'por conta do arrematante' : 'só a leitura do edital/matrícula diz'],
+            ['Reforma', Number(d.manutencaoEstimada) > 0 ? (Number(metricas?.manutencao) || Number(d.manutencaoEstimada)) : null, Number(d.manutencaoEstimada) > 0 ? 'estimativa deste relatório' : null],
+            ['Desocupação', null, 'depende de quem ocupa o imóvel'],
+          ].filter(Boolean);
+          const conhecidos = linhas.filter(([, v]) => v != null && v > 0);
+          const total = conhecidos.reduce((a, [, v]) => a + v, 0);
+          const faltam = linhas.filter(([, v]) => v == null).length;
+          return (
+            <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:14, padding:'14px 18px' }}>
+              <div style={{ fontSize:11, fontWeight:800, letterSpacing:1, textTransform:'uppercase', color:'#475569', marginBottom:8 }}>Custo total estimado do arremate</div>
+              <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
+                {linhas.map(([rot, v, obs]) => (
+                  <div key={rot} style={{ display:'flex', justifyContent:'space-between', gap:10, fontSize:12.5, flexWrap:'wrap' }}>
+                    <span style={{ color:'#334155', minWidth:0 }}>{rot}{obs ? <span style={{ color:'#94a3b8', fontSize:11.5 }}> · {obs}</span> : null}</span>
+                    <span style={{ fontWeight:700, color: v == null ? '#94a3b8' : '#111111', whiteSpace:'nowrap' }}>{v == null ? 'não informado' : `R$ ${fmt(v)}`}</span>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display:'flex', justifyContent:'space-between', gap:10, borderTop:'1px solid #e2e8f0', marginTop:10, paddingTop:8, fontSize:13.5, fontWeight:900, color:'#111111', flexWrap:'wrap' }}>
+                <span>{faltam > 0 ? 'Total do que já se sabe' : 'Total estimado'}</span>
+                <span>{faltam > 0 ? 'a partir de ' : ''}R$ {fmt(total)}</span>
+              </div>
+              {faltam > 0 && (
+                <div style={{ fontSize:11, color:'#64748b', marginTop:6, lineHeight:1.5 }}>
+                  {faltam} {faltam === 1 ? 'item não informado fica' : 'itens não informados ficam'} fora da soma — o custo real pode ser maior. A análise documental lê débitos e ocupação no edital e na matrícula.
+                </div>
+              )}
             </div>
           );
         })()}
@@ -5288,7 +5363,48 @@ export default function Analise() {
           meia decisão e a impressão de decisão inteira, que é o pior desfecho possível.
           Só aparece quando ainda FALTA gerar o documental — pronto, o card vira convite a
           agendar (o CTA roxo no painel documental). */}
-      {!isStaffAnalise && !relDocumentalGerado && (
+      {/* FIM DO 1º RELATÓRIO DO EXPLORADOR (25/10, arena — passo 7): no lugar de um botão desabilitado ("disponível a
+          partir do Pro"), o convite com preço e checkout direto — é o pico de intenção. "Entenda cada número" explica
+          as seções que JÁ estão na tela (nada de IA, nada de custo). */}
+      {!isStaffAnalise && !relDocumentalGerado && ROLES_SEM_DOCUMENTAL.includes(role) && (
+        <div style={{ background:'#eef2ff', border:'2px solid #c7d2fe', borderRadius:16, padding:'18px 20px', marginTop:14 }}>
+          <div style={{ display:'flex', gap:14, alignItems:'flex-start' }}>
+            <Scale size={22} color="#1e3a8a" style={{ flexShrink:0, marginTop:2 }}/>
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ fontSize:14.5, fontWeight:900, color:'#1e3a8a', marginBottom:4, lineHeight:1.4 }}>Você já sabe quanto vale. Antes do lance falta saber quem conduz o leilão e se a documentação esconde uma bomba.</div>
+              <div style={{ fontSize:12.5, color:'#1e40af', lineHeight:1.7, marginBottom:12 }}>
+                No <strong>Investidor Pro{precoPro ? ` (${precoPro})` : ''}</strong>: quem é o leiloeiro e o link do lote, o edital e a matrícula, a análise jurídica (ônus, ocupação, dívidas que passam para o arrematante) e 10 relatórios por mês.
+              </div>
+              <div style={{ display:'flex', gap:12, alignItems:'center', flexWrap:'wrap' }}>
+                <button onClick={() => irCheckoutPro('analise_pos_relatorio')}
+                  style={{ padding:'11px 18px', background:'#0D63DB', color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:13, cursor:'pointer', display:'inline-flex', alignItems:'center', gap:8 }}>
+                  <Sparkles size={15}/> Assinar o Investidor Pro{precoPro ? ` · ${precoPro}` : ''}
+                </button>
+                <button onClick={() => setEntendaAberto(v => !v)}
+                  style={{ background:'none', border:'none', padding:0, color:'#1e3a8a', fontSize:12.5, fontWeight:700, textDecoration:'underline', cursor:'pointer' }}>
+                  {entendaAberto ? 'Fechar a explicação' : 'Entenda cada número deste relatório'}
+                </button>
+              </div>
+            </div>
+          </div>
+          {entendaAberto && (
+            <div style={{ marginTop:14, background:'white', border:'1px solid #c7d2fe', borderRadius:12, padding:'12px 14px', fontSize:12.5, color:'#334155', lineHeight:1.65 }}>
+              {[
+                ['Valores de referência (topo)', 'a avaliação do leilão, o lance mínimo da praça e a venda estimada no mercado — os três números que você compara.'],
+                ['Custo total estimado do arremate', 'o que sai do seu bolso além do lance: comissão do leiloeiro, ITBI e registro, débitos e reforma. O que não sabemos aparece como "não informado", nunca como zero.'],
+                ['Avaliação Mercadológica', 'imóveis comparáveis à venda e para alugar na região, em níveis de proximidade; quanto mais amostras, mais firme o valor.', 'sec-mercado'],
+                ['Análise de Viabilidade', 'lance sem disputa × com disputa (o teto até onde a conta ainda fecha), o lucro na revenda e o retorno (ROI).', 'sec-viabilidade'],
+                ['Fluxo de caixa', 'mês a mês, quanto entra e quanto sai até a venda — mostra o dinheiro que fica parado.'],
+              ].map(([t, ds, alvo]) => (
+                <div key={t} style={{ marginBottom:6 }}>
+                  <strong>{t}:</strong> {ds}{alvo && <> <button onClick={() => { try { document.getElementById(alvo)?.scrollIntoView({ behavior:'smooth', block:'start' }); } catch { /* rolagem é cortesia */ } }} style={{ background:'none', border:'none', padding:0, color:'#0D63DB', fontSize:12, fontWeight:700, cursor:'pointer', textDecoration:'underline' }}>ver</button></>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      {!isStaffAnalise && !relDocumentalGerado && !ROLES_SEM_DOCUMENTAL.includes(role) && (
         <div style={{ background:'#eef2ff', border:'2px solid #c7d2fe', borderRadius:16, padding:'18px 20px', display:'flex', gap:14, alignItems:'flex-start', marginTop:14 }}>
           <Scale size={22} color="#1e3a8a" style={{ flexShrink:0, marginTop:2 }}/>
           <div style={{ flex:1, minWidth:0 }}>
@@ -5329,7 +5445,10 @@ export default function Analise() {
             style={{ background:'white', borderRadius:18, width:'100%', maxWidth:440, overflow:'hidden', boxShadow:'0 20px 60px rgba(0,0,0,0.3)' }}>
             <div style={{ background:'linear-gradient(135deg,#0D63DB,#084BA6)', padding:'22px 24px', color:'white' }}>
               <div style={{ display:'inline-flex', alignItems:'center', gap:8, background:'rgba(255,255,255,0.18)', borderRadius:20, padding:'4px 12px', fontSize:11, fontWeight:800, letterSpacing:0.5, textTransform:'uppercase' }}>
-                <Sparkles size={13}/> Investidor Pro
+                <Sparkles size={13}/> Investidor Pro{precoPro ? ` · ${precoPro}` : ''}
+              </div>
+              <div style={{ fontSize:13, fontWeight:700, marginTop:10, lineHeight:1.45 }}>
+                Quem é o leiloeiro, o link do lote, o edital, a matrícula e a análise jurídica — e 10 relatórios por mês.
               </div>
               <div style={{ fontSize:20, fontWeight:900, marginTop:12, lineHeight:1.2 }}>
                 {upgrade.tipo === 'cota'
@@ -5364,9 +5483,9 @@ export default function Analise() {
                   </div>
                 ))}
               </div>
-              <button onClick={() => { setUpgrade(null); nav('/planos'); }}
+              <button onClick={() => { const t = upgrade?.tipo; setUpgrade(null); irCheckoutPro(t === 'cota' ? 'analise_modal_cota' : 'analise_modal_plano'); }}
                 style={{ width:'100%', marginTop:18, padding:'13px', background:'#0D63DB', color:'white', border:'none', borderRadius:12, fontWeight:800, fontSize:15, cursor:'pointer' }}>
-                Assinar o Investidor Pro →
+                Assinar o Investidor Pro{precoPro ? ` · ${precoPro}` : ''} →
               </button>
               <button onClick={() => setUpgrade(null)}
                 style={{ width:'100%', marginTop:8, padding:'10px', background:'none', color:'#94a3b8', border:'none', fontSize:13, fontWeight:600, cursor:'pointer' }}>

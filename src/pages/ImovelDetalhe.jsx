@@ -826,6 +826,49 @@ function AnaliseJuridicaCard({ fj }) {
   );
 }
 
+// TEASER DOCUMENTAL (25/10, arena — passo 6). Para quem NÃO pode ver o leiloeiro, o bloco "Confirmado na
+// documentação" e a Análise jurídica viravam a porta dos fundos: link do edital/matrícula (que identifica o
+// leiloeiro) e o conteúdo inteiro de graça. Agora viram UMA frase com contagens — nada de detalhe, nada de URL.
+// A ocupação e o débito de condomínio são NOMEADOS porque são o medo nº 1 de quem compra em leilão (pesquisa
+// de mercado do dono). Três estados distintos, e "não lido" nunca vira "0 pontos" (forma nº 4/10 do CLAUDE.md):
+//   • null           → a documentação ainda não foi lida;
+//   • { lido, ... }  → lida; `pontos` = quantos pontos de atenção (0 é resposta de verdade só aqui).
+// Aceita tanto a ficha_juridica completa quanto o resumo {lido, pontos, nivelRisco} que a view mascarada
+// passará a devolver (plano do juiz, passo 4) — sem depender de qual chegou.
+function resumoDocumental(fj, df, ocupacaoLote) {
+  const fjOk = fj && typeof fj === 'object' && fj.lido !== false;
+  const dfOk = df && typeof df === 'object' && Object.keys(df).length > 0;
+  if (!fjOk && !dfOk) return null;
+  const cst = (dfOk && df.custos) || {};
+  const pos = (v) => Number(v) > 0;
+  const ocupado = (fjOk && fj.ocupacaoTipo && fj.ocupacaoTipo !== 'desocupado')
+    || /^ocupad/i.test(String(ocupacaoLote || ''));
+  const debCondominio = pos(cst.condominioDebito);
+  const debOutro = pos(cst.iptuDebito) || (fjOk && (pos(fj.debitosAssumidos) || !!fj.debitosALevantar));
+  const outros = [
+    fjOk && !!fj.fraudeExecucao,
+    fjOk && !!fj.direitoPreferencia,
+    fjOk && pos(fj.certidoesPendentes),
+  ].filter(Boolean).length;
+  const nomeados = [ocupado && 'imóvel ocupado', debCondominio && 'débito de condomínio em aberto',
+    !debCondominio && debOutro && 'há débito em aberto'].filter(Boolean);
+  const contados = nomeados.length + outros;
+  const pontos = Math.max(contados, fjOk && Number.isFinite(Number(fj.pontos)) ? Number(fj.pontos) : 0);
+  return { lido: true, nomeados, pontos, restantes: Math.max(0, pontos - nomeados.length) };
+}
+
+function textoTeaserDocumental(r) {
+  if (!r) return 'A documentação deste lote ainda não foi lida. No Investidor Pro você abre o edital e a matrícula e gera a análise jurídica antes do lance.';
+  const partes = [...r.nomeados];
+  if (r.restantes > 0) {
+    const n = r.restantes;
+    partes.push(r.nomeados.length ? `${n} ${n === 1 ? 'outro ponto' : 'outros pontos'} de atenção` : `${n} ${n === 1 ? 'ponto' : 'pontos'} de atenção`);
+  }
+  return partes.length
+    ? `Já lemos a documentação deste lote: ${partes.join(' · ')}. Veja os detalhes no Investidor Pro.`
+    : 'Já lemos a documentação deste lote. Veja o que ela diz (custos, débitos e ocupação) no Investidor Pro.';
+}
+
 export default function ImovelDetalhe() {
   const nav = useNavigate();
   const loc = useLocation();
@@ -876,6 +919,23 @@ export default function ImovelDetalhe() {
   const [proxTry, setProxTry] = useState(0); // incrementa p/ "tentar novamente"
 
   const id = loc.state?.imovel?.id || paramId;
+
+  // CADEADO QUE VENDE (25/10, arena — passo 6). Os dois botões de cadeado exigiam `imovelBruto?.urlLote`, que a
+  // view mascarada devolve NULO para quem não paga: nunca apareciam, inclusive na barra fixa do celular. Agora a
+  // condição é só `!verLeiloeiro`. No lote da Caixa o leiloeiro já é público (o vendedor é o banco), então o
+  // cadeado vende o que de fato falta: edital, matrícula e jurídico. Cada rótulo grava um alvo próprio.
+  const ehLoteCaixa = imovelBruto?.fonte === 'CEF' || /caixa/i.test(imovelBruto?.fonte || '');
+  const rotuloCadeado = ehLoteCaixa ? 'Edital, matrícula e jurídico · Investidor Pro' : 'Leiloeiro, edital e matrícula · Investidor Pro';
+  const rotuloCadeadoCurto = ehLoteCaixa ? 'Edital' : 'Leiloeiro';
+  const irParaPro = (onde) => {
+    const alvo = ehLoteCaixa ? 'imovel_bar_cef' : 'imovel_bar_leiloeiro';
+    registrarEvento('lp_cta', { alvo, detalhe: `origem=${onde};imovel=${id || ''};logado=${user ? 1 : 0}` });
+    if (!user) {
+      nav(`/login?modo=cadastro&plano=top2&next=${encodeURIComponent(`/imovel/${id || ''}`)}`);
+      return;
+    }
+    nav(`${CHECKOUT_LEILOEIRO}&volta=${encodeURIComponent(id || '')}&origem=${alvo}`);
+  };
 
   // Compartilhar o imóvel: usa o menu nativo do celular (WhatsApp etc.) quando existe;
   // no desktop copia o link. Link SEM hash (/i/:id): o preview do WhatsApp mostra
@@ -1779,8 +1839,9 @@ export default function ImovelDetalhe() {
                 extrajudicial) vêm da matrícula lida no laudo documental. */}
             <FichaTecnicaCEF ficha={imovel.fichaCef} />
 
-            {/* Análise jurídica (raio-X): aparece após o laudo documental. */}
-            <AnaliseJuridicaCard fj={imovel.fichaJuridica} />
+            {/* Análise jurídica (raio-X): aparece após o laudo documental. Sem plano pago, vira o teaser do card
+                "Leiloeiro, edital e matrícula" logo abaixo (contagens, sem detalhe). */}
+            {verLeiloeiro && <AnaliseJuridicaCard fj={imovel.fichaJuridica} />}
 
             {/* Simulação rápida, estimativa pela avaliação do leilão (NÃO é a mercadológica) */}
             {imovel.valorMinimo > 0 && imovel.valorAvaliacao > 0 && (() => {
@@ -1901,18 +1962,23 @@ export default function ImovelDetalhe() {
             )}
 
             {/* Documentos — o edital e a matrícula do lote identificam o leiloeiro: só plano pago (21/10). */}
-            {!verLeiloeiro && (
-              <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: '20px 24px', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-                <Lock size={20} color="#0D63DB" style={{ flexShrink: 0 }} />
-                <div style={{ flex: '1 1 220px', minWidth: 0 }}>
-                  <div style={{ fontSize: 15, fontWeight: 800, color: '#111111' }}>Leiloeiro, edital e matrícula</div>
-                  <div style={{ fontSize: 13, color: '#64748b', marginTop: 2, lineHeight: 1.5 }}>Assine o Investidor Pro para ver quem é o leiloeiro, abrir o lote no site dele e ler o edital e a matrícula.</div>
+            {/* Teaser documental (25/10): o que a leitura achou, só em CONTAGEM — o detalhe e o link ficam no Pro. */}
+            {!verLeiloeiro && (() => {
+              const resumo = resumoDocumental(imovel.fichaJuridica, imovel.docFatos, imovel.ocupacao);
+              return (
+                <div style={{ background: 'white', borderRadius: 16, border: `1px solid ${resumo?.pontos ? '#fed7aa' : '#e2e8f0'}`, padding: '20px 24px', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+                  <Lock size={20} color="#0D63DB" style={{ flexShrink: 0 }} />
+                  <div style={{ flex: '1 1 220px', minWidth: 0 }}>
+                    <div style={{ fontSize: 15, fontWeight: 800, color: '#111111' }}>{ehLoteCaixa ? 'Edital, matrícula e jurídico' : 'Leiloeiro, edital e matrícula'}</div>
+                    <div style={{ fontSize: 13, color: resumo?.pontos ? '#9a3412' : '#64748b', marginTop: 2, lineHeight: 1.5, fontWeight: resumo?.pontos ? 700 : 400 }}>{textoTeaserDocumental(resumo)}</div>
+                    {!ehLoteCaixa && <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4, lineHeight: 1.5 }}>No Investidor Pro: quem é o leiloeiro, o link do lote, o edital, a matrícula e a análise jurídica.</div>}
+                  </div>
+                  <button onClick={() => irParaPro('card_documentos')} style={{ padding: '10px 16px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                    {resumo ? 'Ver os detalhes' : (ehLoteCaixa ? 'Desbloquear os documentos' : 'Desbloquear o leiloeiro')}
+                  </button>
                 </div>
-                <button onClick={() => nav(CHECKOUT_LEILOEIRO)} style={{ padding: '10px 16px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                  Desbloquear o leiloeiro
-                </button>
-              </div>
-            )}
+              );
+            })()}
             {verLeiloeiro && temCardDocumentos && (
               <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: '24px' }}>
                 <h2 style={{ fontSize: 16, fontWeight: 800, color: '#111111', margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -2120,7 +2186,7 @@ export default function ImovelDetalhe() {
                 Regra que não pode cair: DESPESA RECORRENTE (carrego) e DÉBITO EM ABERTO são
                 blocos separados e rotulados. Misturar os dois faria a ficha prometer um
                 custo mensal que na verdade é uma dívida a assumir. */}
-            {(() => {
+            {verLeiloeiro && (() => {
               const df = imovel.docFatos;
               if (!df) return null;
               const idt = df.identidade || {}, cst = df.custos || {}, pag = df.pagamento || {}, mat = df.matricula || {};
@@ -2192,7 +2258,7 @@ export default function ImovelDetalhe() {
                   )}
                   <div style={{ fontSize: 10.5, color: '#94a3b8', marginTop: 14 }}>
                     Leitura automática do documento{imovel.docFatosEm ? ` em ${fmtData(imovel.docFatosEm)}` : ''}
-                    {fonte ? <> · <a href={hrefDoc(fonte)} target="_blank" rel="noreferrer" style={{ color: '#0D63DB' }}>abrir o documento</a></> : null}. Não substitui a conferência do edital e da matrícula.
+                    {fonte && verLeiloeiro ? <> · <a href={hrefDoc(fonte)} target="_blank" rel="noreferrer" style={{ color: '#0D63DB' }}>abrir o documento</a></> : null}. Não substitui a conferência do edital e da matrícula.
                   </div>
                 </div>
               );
@@ -2280,10 +2346,10 @@ export default function ImovelDetalhe() {
               })()}
 
               {/* Ir ao leiloeiro — sem plano pago, o mesmo lugar vira o convite (21/10). */}
-              {!verLeiloeiro && imovelBruto?.urlLote && (
-                <button onClick={() => nav(CHECKOUT_LEILOEIRO)}
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '13px', marginBottom: 10, background: '#111111', color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
-                  <Lock size={15} /> Ver quem é o leiloeiro
+              {!verLeiloeiro && (
+                <button onClick={() => irParaPro('sidebar')}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '13px', marginBottom: 10, background: '#111111', color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 13.5, cursor: 'pointer', textAlign: 'center', lineHeight: 1.35 }}>
+                  <Lock size={15} style={{ flexShrink: 0 }} /> {rotuloCadeado}
                 </button>
               )}
               {imovel.urlLote && (
@@ -2424,10 +2490,11 @@ export default function ImovelDetalhe() {
           "Solicitar Análise") ficam sempre à mão, sem o usuário precisar rolar até o
           fim. No desktop a sidebar sticky já resolve, então a barra fica oculta. */}
       <div className="acoes-mobile-bar">
-        {!verLeiloeiro && imovelBruto?.urlLote && (
-          <button onClick={() => nav(CHECKOUT_LEILOEIRO)}
-            style={{ flex: '0 0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '13px 16px', background: '#111111', color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 14, whiteSpace: 'nowrap', cursor: 'pointer' }}>
-            <Lock size={16} /> Leiloeiro
+        {/* 360 px: 28 de margem + 10 de vão + este botão (~118 px) deixam ~204 px para "Analisar grátis" (~150 px). */}
+        {!verLeiloeiro && (
+          <button onClick={() => irParaPro('barra_mobile')} aria-label={rotuloCadeado}
+            style={{ flex: '0 0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '13px 14px', background: '#111111', color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 14, whiteSpace: 'nowrap', cursor: 'pointer' }}>
+            <Lock size={16} /> {rotuloCadeadoCurto}
           </button>
         )}
         {imovel.urlLote && (
