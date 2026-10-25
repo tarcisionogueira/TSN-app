@@ -20,12 +20,24 @@ export default function MinhasAnalisesVeiculos({ userId }) {
     let vivo = true;
     (async () => {
       // `error` conferido: lista vazia por erro de leitura não pode parecer "nenhum relatório".
+      // O veículo vem da VITRINE (25/10): o embed em `veiculos_leilao` só funcionava para a equipe — o
+      // assinante, que é quem tem relatório, recebia a lista sem título nem foto (ou erro de permissão).
       const { data, error } = await supabase.from('analises_veiculo')
-        .select('veiculo_id, status, erro, updated_at, result, veiculos_leilao(titulo, fotos, valor_minimo, data_leilao, cidade, estado, ativo)')
+        .select('veiculo_id, status, erro, updated_at, result')
         .eq('user_id', userId).order('updated_at', { ascending: false }).limit(200);
       if (!vivo) return;
       if (error) { setErro(error.message); setLista([]); return; }
-      setLista(data || []);
+      const ids = [...new Set((data || []).map((a) => a.veiculo_id).filter(Boolean))];
+      let porId = {};
+      if (ids.length) {
+        const { data: vs, error: e2 } = await supabase.from('veiculos_vitrine')
+          .select('id, titulo, fotos, valor_minimo, data_leilao, cidade, estado, ativo').in('id', ids);
+        if (!vivo) return;
+        // Sem os dados do veículo a lista ainda serve (abre o relatório); o motivo fica no console.
+        if (e2) console.warn('[minhas-analises-veiculos] vitrine não lida:', e2.message);
+        porId = Object.fromEntries((vs || []).map((v) => [v.id, v]));
+      }
+      setLista((data || []).map((a) => ({ ...a, veiculos_leilao: porId[a.veiculo_id] || null })));
     })();
     return () => { vivo = false; };
   }, [userId]);
