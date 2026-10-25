@@ -30,7 +30,9 @@ function calcVista(cfg) {
  * Dados de UX (cor, recursos, homepage, etc.) vêm do cursos.js estático.
  */
 export async function fetchPlanosComConfig() {
-  const { data } = await supabase.from('planos_config').select('*');
+  const { data, error } = await supabase.from('planos_config').select('*');
+  // Falha de leitura devolve o estático SEM a marca `doBanco` — quem exibe preço decide se mostra (25/10).
+  if (error) console.warn('[planos] planos_config ilegível, usando catálogo estático:', error.message);
   if (!data) return PLANOS;
 
   const merged = { ...PLANOS };
@@ -42,6 +44,10 @@ export async function fetchPlanosComConfig() {
     const preco = cfg.preco != null ? Number(cfg.preco) : base.preco;
     merged[cfg.plano_key] = {
       ...base,
+      // 25/10: marca que o preço desta entrada VEIO do planos_config. Sem a marca, quem lê não distingue o
+      // valor do banco do valor estático de cursos.js (que esta função devolve inteiro quando a leitura
+      // falha) — e a landing não pode exibir preço que não foi lido (R$ 49,90 velho × R$ 89,90 cobrado).
+      doBanco: cfg.preco != null,
       nome: cfg.nome || base.nome,
       preco,
       precoLabel: fmt(preco),

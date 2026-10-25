@@ -3,11 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import {
   Car, Home, Search, BarChart3, ShieldCheck, FileText, TrendingUp, Gavel,
   CheckCircle2, ArrowRight, ChevronDown, ChevronUp, Sparkles, BadgeCheck,
-  GraduationCap, Calculator, MapPin, Smartphone,
+  GraduationCap, Calculator, MapPin, Smartphone, Lock,
 } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { useIsMobile } from '../utils/useIsMobile';
 import { registrarEvento } from '../utils/tracker';
+import { usePlanos } from '../contexts/PlanosContext';
 
 // ─────────────────────────────────────────────────────────────────────────────────────────
 // PÁGINA INICIAL (reescrita em 23/10, decisão do dono). O que mudou e por quê:
@@ -19,7 +20,22 @@ import { registrarEvento } from '../utils/tracker';
 //  • De 13 seções para 8; Calculadora, Índice e App viraram uma faixa de "ferramentas grátis".
 //  • Cada seção vista e cada botão clicado viram evento (`lp_secao` / `lp_cta`) para medir a ordem
 //    com dado em vez de achismo.
+//
+// 25/10 (arena das páginas pré-login, decisão aprovada pelo dono) — A PÁGINA PASSA A VENDER O PAGO:
+//  • PROVA (quem somos, 4 itens fixos) separada do ACERVO (o que existe agora, faixa própria). Antes o acervo
+//    tomava o lugar do "< 5 min" com uma frase de ~55 caracteres que quebrava em 3-4 linhas.
+//  • VITRINE com 6 lotes reais logo depois do topo — não é catálogo (6, não 33 mil): é o "33 mil+" virando
+//    lote concreto. Vem do retrato diário de landing_numeros (view mascarada, sem leiloeiro/link/edital).
+//  • Preço real (planos_config via usePlanos) no topo e nos cards; valor não lido = nenhum preço, nunca
+//    um número escrito aqui.
+//  • Página enxugada: "Antes do lance" fundido em "Como funciona", equipe atrás de flag, FAQ com 5.
+//  • Até o REVOKE de 20261025_imoveis_leilao_fecha_colunas_anon.sql ser aplicado, nada aqui promete
+//    "leiloeiro" como exclusivo do Pro (a coluna ainda sai pela API pública): a promessa é "link do lote,
+//    edital e matrícula".
 // ─────────────────────────────────────────────────────────────────────────────────────────
+
+// "Quem está do seu lado" fica fora até a #297 (fotos e nomes reais da equipe). Reversível: true volta.
+const MOSTRAR_EQUIPE = false;
 
 // DEPOIMENTOS — pendente (23/10): o dono sobe os vídeos no YouTube e envia os links com os casos
 // (cidade, valor, desconto). Enquanto a lista estiver vazia, a seção NÃO aparece (seção vazia ou
@@ -36,13 +52,6 @@ const PERGUNTAS = [
   { q: 'Até quanto posso dar de lance e ainda lucrar?', icon: Gavel },
 ];
 
-// Exemplos de Bid Score (assinatura visual da marca — o "Serasa dos leilões").
-const BID_EXEMPLOS = [
-  { nota: '9,4', cor: '#10b981', bg: '#f0fdf4', t: 'Excelente oportunidade', d: 'Sem ônus relevantes na matrícula. Desconto de 38% sobre o mercado.' },
-  { nota: '6,4', cor: '#f59e0b', bg: '#fffbeb', t: 'Boa, com atenção', d: 'Imóvel ocupado: prever custo e prazo de desocupação.' },
-  { nota: '3,1', cor: '#ef4444', bg: '#fef2f2', t: 'Risco elevado', d: 'Três processos pendentes e penhora ativa. Recomendação: passar.' },
-];
-
 const PASSOS = [
   { n: '01', icon: Search, cor: '#0D63DB', titulo: 'Encontre', desc: 'Imóveis e veículos de leiloeiros de todo o Brasil, com filtros por cidade, tipo, valor e data.' },
   { n: '02', icon: FileText, cor: '#8b5cf6', titulo: 'Analise', desc: 'A IA lê edital e matrícula e entrega viabilidade, riscos e o Bid Score em minutos.' },
@@ -57,20 +66,35 @@ const EQUIPE = [
   { emoji: '🎓', cargo: 'Formação', desc: 'Quem forma arrematadores há 8 anos e conduz o clube de negócios' },
 ];
 
+// FAQ com 5 (25/10): as duas que decidem a compra no topo. Saíram (estão no git): Bid Score, veículos, cotas
+// de IA e "em quais lugares" — a página repetia a mesma promessa em 4 seções.
 const FAQS = [
-  { q: 'O que é o Bid Score?', r: 'É uma nota de 0 a 10 (🟢🟡🔴) que resume risco e oportunidade de cada lote, juntando análise jurídica, viabilidade financeira, ocupação e documentação. O relatório Mercadológico + Financeiro (grátis) gera a nota parcial; o Documental + Jurídico (Investidor Pro) completa o Bid Score.' },
+  { q: 'Posso cancelar quando quiser?', r: 'Sim. No plano mensal não há fidelidade nem multa. No anual, você cancela a renovação a qualquer momento e mantém o acesso até o fim dos 12 meses.' },
+  { q: 'O que o grátis não mostra?', r: 'O Explorador busca leilões em todo o Brasil e gera 3 relatórios de amostra (mercado e viabilidade financeira), sem cartão. O link de cada lote, o edital e a matrícula, além do relatório documental e jurídico que completa o Bid Score, ficam no Investidor Pro.' },
   { q: 'Preciso ter experiência em leilões?', r: 'Não. A plataforma guia iniciantes e investidores experientes, e a formação da BidPro ensina o caminho completo. O plano Explorador é gratuito.' },
-  { q: 'Como funciona a assessoria?', r: 'A equipe acompanha você do estudo do bem ao registro final: estratégia de lance, documentação, regularização e imissão de posse. É contratada por arrematação, dentro da plataforma: crie sua conta para ver valores e condições — e ter um especialista da equipe no seu caso.' },
-  { q: 'Como funciona o leilão de veículos?', r: 'O leiloeiro só apresenta veículos que já estão no pátio dele — você não precisa fazer a retomada. Arrematou e pagou, retira ou contrata o frete; por isso dá para comprar de qualquer estado. Cada lote mostra a FIPE ao lado do lance mínimo.' },
   { q: 'A análise da IA substitui um advogado?', r: 'Não. A IA é o primeiro filtro: identifica riscos em minutos e mostra o que merece estudo mais profundo. Nos planos com assessoria, a análise jurídica é conduzida pela nossa equipe.' },
-  { q: 'As análises por IA são ilimitadas?', r: 'Não. Cada análise consome dados pagos de fontes externas, então cada plano inclui uma quantidade de relatórios. Se uma fonte estiver instável, avisamos e liberamos o relatório assim que possível (em até 24 a 48h).' },
-  { q: 'Posso cancelar quando quiser?', r: 'Sim. Os planos mensais não têm fidelidade nem multa.' },
-  { q: 'Em quais lugares posso arrematar?', r: 'Em todo o Brasil. O leilão segue a legislação federal, igual em todos os estados, e já temos operações realizadas em 11 estados.' },
+  { q: 'Como funciona a assessoria?', r: 'A equipe acompanha você do estudo do bem ao registro final: estratégia de lance, documentação, regularização e imissão de posse. É contratada por arrematação, dentro da plataforma: crie sua conta para ver valores e condições — e ter um especialista da equipe no seu caso.' },
 ];
 
 // "31.808" → "31 mil+": o número muda todo dia; arredondar para baixo nunca promete a mais.
 const milMais = (n) => (n >= 1000 ? `${Math.floor(n / 1000)} mil+` : n > 0 ? `${n}` : null);
 const centenaMais = (n) => (n >= 100 ? `${Math.floor(n / 100) * 100}+` : n > 0 ? `${n}` : null);
+
+// Idade do retrato de landing_numeros, em horas (null = sem carimbo legível). O acervo e a vitrine mudam
+// todo dia; um retrato velho com cara de "agora" é exatamente o número plausível e errado da forma nº 10.
+const horasDesde = (iso) => { const t = Date.parse(iso || ''); return Number.isFinite(t) ? (Date.now() - t) / 3600000 : null; };
+const MAX_IDADE_H = 48;
+const brl0 = (v) => 'R$ ' + Math.round(Number(v) || 0).toLocaleString('pt-BR');
+const brl2 = (v) => 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const TIPO_LABEL = { apartamento: 'Apartamento', casa: 'Casa', terreno: 'Terreno', comercial: 'Comercial', rural: 'Rural' };
+// Dias até o leilão pelo calendário LOCAL (data ISO "AAAA-MM-DD" do retrato; texto inválido = null).
+const diasAte = (d) => {
+  const m = String(d || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return null;
+  const alvo = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  return Math.round((alvo - hoje) / 86400000);
+};
 
 const AZUL = '#0D63DB';
 const ESCURO = 'linear-gradient(135deg, #080f1a 0%, #0a1f3d 60%, #0d2a50 100%)';
@@ -84,16 +108,61 @@ export default function Landing() {
   const mobile = useIsMobile();
   const [faqAberto, setFaqAberto] = useState(null);
   const [num, setNum] = useState(null);
+  // `carregou` separa "ainda não respondeu" de "respondeu sem vitrine": só o segundo vira evento de ausência.
+  const [carregou, setCarregou] = useState(false);
+  const planosCtx = usePlanos();
 
-  // Números do acervo (calculados 1x/dia — landing_numeros). Falhou → a faixa mostra só o que é fixo.
+  // Números do acervo + vitrine (retrato 1x/dia — landing_numeros). Falhou → a prova fica completa e a faixa
+  // do acervo e a vitrine somem; o sumiço vira evento (`lp_vitrine_ausente`) e o health-check acusa
+  // (`landing_cache`), para "sumiu" nunca ser silêncio.
   useEffect(() => {
     let vivo = true;
     supabase.rpc('landing_numeros').then(({ data, error }) => {
+      if (!vivo) return;
       if (error) console.warn('[landing] números do acervo indisponíveis:', error.message);
-      if (vivo && data && data.imoveis) setNum(data);
+      setNum(error ? { _erro: error.message } : (data || {}));
+      setCarregou(true);
+    }, (e) => {
+      if (!vivo) return;
+      console.warn('[landing] números do acervo: falha de rede', e?.message || e);
+      setNum({ _erro: String(e?.message || 'rede') });
+      setCarregou(true);
     });
     return () => { vivo = false; };
   }, []);
+
+  // ACERVO (faixa própria) — só com imóveis E veículos lidos; o retrato vale por 48 h.
+  const idadeNum = horasDesde(num?.em);
+  const numFresco = idadeNum != null && idadeNum <= MAX_IDADE_H;
+  const acervo = numFresco && milMais(num?.imoveis) && milMais(num?.veiculos)
+    ? [[milMais(num.imoveis), 'imóveis'], [milMais(num.veiculos), 'veículos'], ...(centenaMais(num.leiloeiros) ? [[centenaMais(num.leiloeiros), 'leiloeiros']] : [])]
+    : null;
+  const atualizadoLabel = numFresco
+    ? (new Date(num.em).toDateString() === new Date().toDateString() ? 'atualizado hoje' : 'atualizado ontem')
+    : null;
+
+  // VITRINE — lista do retrato, com carimbo próprio de no máx. 48 h.
+  const idadeVit = horasDesde(num?.vitrine_em);
+  const vitrine = Array.isArray(num?.vitrine) && idadeVit != null && idadeVit <= MAX_IDADE_H
+    ? num.vitrine.filter((l) => l && l.id) : [];
+  const motivoSemVitrine = !carregou ? null
+    : num?._erro ? 'rpc_erro'
+    : !Array.isArray(num?.vitrine) ? 'sem_chave'
+    : idadeVit == null || idadeVit > MAX_IDADE_H ? 'retrato_velho'
+    : vitrine.length === 0 ? 'vazia' : null;
+  useEffect(() => {
+    if (motivoSemVitrine) {
+      console.warn('[landing] vitrine fora do ar:', motivoSemVitrine, num?.vitrine_erro || '');
+      registrarEvento('lp_vitrine_ausente', { alvo: motivoSemVitrine, detalhe: String(num?.vitrine_erro || '').slice(0, 120) });
+    }
+  }, [motivoSemVitrine]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // PREÇO — só o que VEIO do planos_config (`doBanco`). O catálogo estático de cursos.js é o que o contexto
+  // devolve quando a leitura falha, e exibir esse valor é o "R$ 49,90 na tela, R$ 89,90 no checkout".
+  const precoDe = (key) => { const p = planosCtx?.[key]; return p?.doBanco && Number(p.preco) > 0 ? p : null; };
+  const pro = precoDe('top2');
+  const proMesAnual = pro && Number(pro.precoAnual) > 0 ? Number(pro.precoAnual) / 12 : null;
+  const veic = precoDe('veiculos');
 
   // Avisa o banner "Instalar app" (PwaInstall) para só aparecer depois que a pessoa rolar.
   useEffect(() => {
@@ -102,9 +171,13 @@ export default function Landing() {
   }, []);
 
   // Medição da ordem: cada seção que entra na tela vira UM evento por visita.
+  // Re-observa quando o RPC responde (25/10): acervo e vitrine só existem DEPOIS dele — observadas só no
+  // mount, as duas seções novas nunca virariam `lp_secao` (zero que não seria medição). O Set fica num ref
+  // para a segunda passada não repetir as seções já contadas.
+  const vistasRef = React.useRef(new Set());
   useEffect(() => {
     if (typeof IntersectionObserver === 'undefined') return undefined;
-    const vistas = new Set();
+    const vistas = vistasRef.current;
     const obs = new IntersectionObserver((ents) => {
       for (const e of ents) {
         const id = e.target.getAttribute('data-lp-secao');
@@ -113,11 +186,15 @@ export default function Landing() {
     }, { threshold: 0.35 });
     document.querySelectorAll('[data-lp-secao]').forEach((el) => obs.observe(el));
     return () => obs.disconnect();
-  }, []);
+  }, [carregou]);
 
   const cta = (alvo, fn) => () => { registrarEvento('lp_cta', { alvo }); fn(); };
   // `next` = para onde o botão prometeu levar (sobrevive à confirmação de e-mail via CHAVE_DESTINO).
   const cadastro = (alvo, next) => cta(alvo, () => nav(`/login?modo=cadastro${next ? `&next=${encodeURIComponent(next)}` : ''}`));
+  // Cadastro JÁ com o plano: o Login abre em cadastro, mostra "Plano X selecionado" e o next leva ao checkout.
+  const cadastroPlano = (alvo, key) => cta(alvo, () => nav(key === 'explorador'
+    ? '/login?modo=cadastro&plano=explorador'
+    : `/login?modo=cadastro&plano=${key}&next=${encodeURIComponent(`/checkout?plano=${key}`)}`));
 
   // ASSESSORIA (23/10, dono): sem preço público e só para quem tem conta — o especialista é acesso de
   // quem CONTRATA. A página leva ao CADASTRO; valores e contratação ficam dentro da plataforma (a tela de
@@ -142,13 +219,13 @@ export default function Landing() {
     } catch (e) { setDv(s => ({ ...s, enviando: false, erro: e.message })); }
   };
 
+  // PROVA = quem somos. Quatro itens FIXOS, rótulo de uma linha; o "< 5 min" não some mais quando o banco
+  // responde (o acervo tem faixa própria logo abaixo).
   const PROVA = [
-    { v: 'R$ 70M+', l: 'em arrematações assessoradas' },
-    { v: '11', l: 'estados com operações realizadas' },
+    { v: 'R$ 70M+', l: 'arrematados com assessoria' },
+    { v: '11', l: 'estados' },
     { v: '8 anos', l: 'formando arrematadores' },
-    num && milMais(num.imoveis) && milMais(num.veiculos)
-      ? { v: `${milMais(num.imoveis)}`, l: `imóveis e ${milMais(num.veiculos)} veículos monitorados${centenaMais(num.leiloeiros) ? ` em ${centenaMais(num.leiloeiros)} leiloeiros` : ''}` }
-      : { v: '< 5 min', l: 'para a análise completa' },
+    { v: '< 5 min', l: 'por análise' },
   ];
 
   const btnPrim = { padding: '15px 30px', background: AZUL, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 16, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 9, boxShadow: '0 8px 28px rgba(13,99,219,0.45)' };
@@ -178,7 +255,11 @@ export default function Landing() {
               <button onClick={cadastro('topo_cadastro')} style={btnPrim}>Criar conta grátis <ArrowRight size={17} /></button>
               <button onClick={cta('topo_planos', () => nav('/planos'))} style={btnSec()}>Ver planos e preços</button>
             </div>
-            <p style={{ color: '#64748b', fontSize: 12.5, marginTop: 14 }}>Comece grátis · sem cartão de crédito</p>
+            {/* Linha de preço (25/10): o valor vem do planos_config; sem ele, só a parte grátis — nunca um fallback. */}
+            <p data-lp-preco={proMesAnual ? 'ok' : 'sem_preco'} style={{ color: '#94a3b8', fontSize: 13, lineHeight: 1.6, marginTop: 14, maxWidth: 560, marginLeft: mobile ? 'auto' : 0, marginRight: mobile ? 'auto' : 0 }}>
+              <strong style={{ color: '#e2e8f0' }}>Grátis:</strong> 3 relatórios de amostra, sem cartão
+              {proMesAnual && <> · <strong style={{ color: '#e2e8f0' }}>Investidor Pro</strong> a partir de {brl2(proMesAnual)}/mês: link do lote, edital e matrícula · cancele quando quiser</>}
+            </p>
           </div>
 
           {/* Visual do PRODUTO (não de um lote à venda): é o relatório que o cliente recebe. */}
@@ -209,7 +290,7 @@ export default function Landing() {
                   <span style={{ color: '#64748b' }}>{l}</span><span style={{ fontWeight: 800, color: c }}>{v}</span>
                 </div>
               ))}
-              <div style={{ fontSize: 10.5, color: '#94a3b8', marginTop: 8, textAlign: 'center' }}>Exemplo ilustrativo de relatório</div>
+              <div style={{ fontSize: 10.5, color: '#94a3b8', marginTop: 8, textAlign: 'center' }}>Exemplo de relatório (ilustrativo)</div>
             </div>
             {!mobile && (
               <div style={{ position: 'absolute', left: -34, bottom: -22, background: '#0f172a', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 14, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10, boxShadow: '0 12px 30px rgba(0,0,0,0.4)' }}>
@@ -228,11 +309,92 @@ export default function Landing() {
           {PROVA.map(({ v, l }) => (
             <div key={l} style={{ textAlign: 'center' }}>
               <div style={{ fontSize: mobile ? 24 : 30, fontWeight: 900, color: 'white', letterSpacing: '-0.5px' }}>{v}</div>
-              <div style={{ fontSize: 12, color: '#7c8ba1', marginTop: 4, lineHeight: 1.4 }}>{l}</div>
+              <div style={{ fontSize: 13, color: '#cbd5e1', marginTop: 4, lineHeight: 1.35 }}>{l}</div>
             </div>
           ))}
         </div>
+
+        {/* ACERVO — faixa própria (bloco_numeros do verdict): 3 colunas iguais de número + UMA palavra, também
+            em 390px. Some inteira sem imóveis/veículos lidos ou com retrato de mais de 48 h. */}
+        {acervo && (
+          <div data-lp-secao="acervo" style={{ maxWidth: 1140, margin: mobile ? '28px auto 0' : '36px auto 0', position: 'relative', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: mobile ? 22 : 28, textAlign: 'center' }}>
+            <div style={{ fontSize: 11, fontWeight: 800, color: '#7dd3fc', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 14 }}>Em leilão agora</div>
+            <a href={vitrine.length ? '#vitrine' : '/leiloes'}
+              onClick={(e) => {
+                registrarEvento('lp_cta', { alvo: 'acervo_faixa' });
+                if (vitrine.length) { e.preventDefault(); document.getElementById('vitrine')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+              }}
+              style={{ display: 'grid', gridTemplateColumns: `repeat(${acervo.length}, minmax(0, 1fr))`, gap: mobile ? 8 : 24, maxWidth: 640, margin: '0 auto', textDecoration: 'none' }}>
+              {acervo.map(([v, l]) => (
+                <div key={l}>
+                  <div style={{ fontSize: mobile ? 24 : 28, fontWeight: 900, color: 'white', letterSpacing: '-0.5px', lineHeight: 1.1 }}>{v}</div>
+                  <div style={{ fontSize: 13, color: '#cbd5e1', marginTop: 4 }}>{l}</div>
+                </div>
+              ))}
+            </a>
+            <div style={{ fontSize: 12, color: '#7c8ba1', marginTop: 14 }}>
+              {atualizadoLabel} · <a href="/leiloes" onClick={() => registrarEvento('lp_cta', { alvo: 'acervo_ver_lotes' })} style={{ color: '#93c5fd', textDecoration: 'none', fontWeight: 700 }}>ver lotes →</a>
+            </div>
+          </div>
+        )}
       </section>
+
+      {/* ── 1b. VITRINE "EM LEILÃO AGORA": 6 lotes reais, cadeado no que é Pro ─────────── */}
+      {vitrine.length > 0 && (
+        <section id="vitrine" data-lp-secao="vitrine" style={{ ...secao('white', '64px 20px'), overflow: 'hidden' }}>
+          <div style={{ maxWidth: 1140, margin: '0 auto' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginBottom: 24 }}>
+              <div>
+                <div style={rotulo()}>Em leilão agora</div>
+                <h2 style={{ ...h2(), margin: 0 }}>Lotes reais, nos próximos dias</h2>
+              </div>
+              {!mobile && <a href="/leiloes" onClick={() => registrarEvento('lp_cta', { alvo: 'vitrine_todos' })} style={{ color: AZUL, fontWeight: 800, fontSize: 14.5, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6 }}>Ver todos os leilões abertos <ArrowRight size={15} /></a>}
+            </div>
+            <div style={mobile
+              ? { display: 'flex', gap: 14, overflowX: 'auto', scrollSnapType: 'x mandatory', WebkitOverflowScrolling: 'touch', margin: '0 -18px', padding: '4px 18px 14px', scrollPaddingLeft: 18 }
+              : { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 20 }}>
+              {vitrine.map((l) => {
+                const dias = diasAte(l.data_leilao);
+                return (
+                  <a key={l.id} href={`/leilao/${l.id}`} onClick={() => registrarEvento('lp_cta', { alvo: 'vitrine_card', detalhe: String(l.id) })}
+                    style={{ flex: mobile ? '0 0 80%' : undefined, scrollSnapAlign: 'start', minWidth: 0, background: 'white', borderRadius: 18, border: '1px solid #e2e8f0', overflow: 'hidden', textDecoration: 'none', color: '#0f172a', display: 'flex', flexDirection: 'column', boxShadow: '0 4px 16px rgba(15,23,42,0.06)' }}>
+                    <div style={{ position: 'relative', paddingTop: '62%', background: '#e2e8f0' }}>
+                      {l.foto && (
+                        <img src={l.foto} alt={`${TIPO_LABEL[l.tipo] || 'Imóvel'} em ${l.cidade}`} loading="lazy"
+                          onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+                      )}
+                      {Number(l.desconto_pct) > 0 && (
+                        <span style={{ position: 'absolute', top: 10, left: 10, background: '#059669', color: 'white', fontSize: 12, fontWeight: 900, padding: '4px 10px', borderRadius: 20 }}>-{Math.round(Number(l.desconto_pct))}%</span>
+                      )}
+                      {dias != null && dias >= 0 && (
+                        <span style={{ position: 'absolute', top: 10, right: 10, background: 'rgba(15,23,42,0.82)', color: 'white', fontSize: 11.5, fontWeight: 800, padding: '4px 10px', borderRadius: 20 }}>
+                          {dias === 0 ? 'leilão hoje' : dias === 1 ? 'leilão amanhã' : `leilão em ${dias} dias`}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ padding: '14px 16px 16px', display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
+                      <div style={{ fontSize: 13, color: '#64748b', fontWeight: 700 }}>{TIPO_LABEL[l.tipo] || 'Imóvel'} · {l.cidade}/{l.uf}</div>
+                      <div style={{ fontSize: 12, color: '#94a3b8' }}>Lance mínimo</div>
+                      <div style={{ fontSize: 22, fontWeight: 900, letterSpacing: '-0.3px', marginTop: -4 }}>{brl0(l.lance_minimo)}</div>
+                      {Number(l.avaliacao) > 0 && <div style={{ fontSize: 12.5, color: '#64748b' }}>Avaliação {brl0(l.avaliacao)}</div>}
+                      <div style={{ marginTop: 'auto', paddingTop: 10, borderTop: '1px solid #f1f5f9', display: 'flex', alignItems: 'flex-start', gap: 7, fontSize: 12, color: '#475569', lineHeight: 1.45 }}>
+                        <Lock size={13} color={AZUL} style={{ flexShrink: 0, marginTop: 2 }} />
+                        <span>Link do lote, edital e matrícula: <strong style={{ color: AZUL }}>Investidor Pro</strong></span>
+                      </div>
+                    </div>
+                  </a>
+                );
+              })}
+            </div>
+            {mobile && (
+              <div style={{ textAlign: 'center', marginTop: 8 }}>
+                <a href="/leiloes" onClick={() => registrarEvento('lp_cta', { alvo: 'vitrine_todos' })} style={{ color: AZUL, fontWeight: 800, fontSize: 14.5, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6 }}>Ver todos os leilões abertos <ArrowRight size={15} /></a>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
 
       {/* ── 2. AS TRÊS FORMAS DE ARREMATAR (o centro comercial) ──────────────────── */}
       <section data-lp-secao="tres_formas" style={secao('white')}>
@@ -310,45 +472,6 @@ export default function Landing() {
         </section>
       )}
 
-      {/* ── 3. O PRODUTO FUNCIONANDO: as perguntas que travam + o Bid Score ──────── */}
-      <section data-lp-secao="produto" style={{ ...secao(ESCURO), position: 'relative' }}>
-        <div style={{ maxWidth: 1100, margin: '0 auto', display: 'grid', gridTemplateColumns: duasColunas, gap: mobile ? 36 : 60, alignItems: 'center' }}>
-          <div>
-            <div style={rotulo('#34d399')}>Antes do lance</div>
-            <h2 style={h2('white')}>Oportunidade nunca faltou. <span style={{ color: '#60a5fa' }}>Resposta, sim.</span></h2>
-            <p style={{ color: '#94a3b8', fontSize: 15.5, lineHeight: 1.75, margin: '0 0 22px' }}>Quem desiste do leilão desiste porque não consegue responder a estas perguntas. A BidPro responde todas — e resume tudo numa nota de 0 a 10, como o Serasa dos leilões.</p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {PERGUNTAS.map(({ q, icon: Icon }) => (
-                <div key={q} style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: '11px 14px' }}>
-                  <Icon size={17} color="#60a5fa" style={{ flexShrink: 0 }} />
-                  <span style={{ fontSize: 14, color: '#e2e8f0', fontWeight: 600 }}>{q}</span>
-                  <CheckCircle2 size={16} color="#34d399" style={{ marginLeft: 'auto', flexShrink: 0 }} />
-                </div>
-              ))}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginTop: 18 }}>
-              <BadgeCheck size={20} color="#34d399" style={{ flexShrink: 0, marginTop: 1 }} />
-              <div style={{ fontSize: 13.5, color: '#94a3b8', lineHeight: 1.6 }}><strong style={{ color: 'white' }}>IA + especialistas.</strong> A inteligência faz a maior parte da análise em minutos; nossos especialistas validam os casos críticos.</div>
-            </div>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {BID_EXEMPLOS.map(({ nota, cor, bg, t, d }) => (
-              <div key={nota} style={{ background: 'white', borderRadius: 16, padding: '16px 18px', display: 'flex', alignItems: 'center', gap: 16, boxShadow: '0 10px 30px rgba(0,0,0,0.3)' }}>
-                <div style={{ width: 66, height: 66, borderRadius: 15, background: bg, border: `2px solid ${cor}`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <div style={{ fontSize: 24, fontWeight: 900, color: cor, lineHeight: 1 }}>{nota}</div>
-                  <div style={{ fontSize: 8.5, color: '#94a3b8', fontWeight: 800, marginTop: 2 }}>BID SCORE</div>
-                </div>
-                <div>
-                  <div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a', marginBottom: 2 }}>{t}</div>
-                  <div style={{ fontSize: 13, color: '#64748b', lineHeight: 1.5 }}>{d}</div>
-                </div>
-              </div>
-            ))}
-            <p style={{ color: '#64748b', fontSize: 12, textAlign: 'center', margin: '4px 0 0' }}>Exemplos ilustrativos. Cada lote recebe o seu Bid Score após a análise.</p>
-          </div>
-        </div>
-      </section>
-
       {/* ── 4. IMÓVEIS E VEÍCULOS: as duas linhas de produto ─────────────────────── */}
       <section data-lp-secao="imoveis_veiculos" style={secao('#f8fafc')}>
         <div style={{ maxWidth: 1100, margin: '0 auto' }}>
@@ -396,6 +519,16 @@ export default function Landing() {
           <div style={{ textAlign: 'center', marginBottom: 40 }}>
             <div style={rotulo()}>Como funciona</div>
             <h2 style={h2()}>Do primeiro filtro ao bem arrematado</h2>
+            {/* "Antes do lance" fundido aqui (25/10): as perguntas que travam viram uma linha, sem os 3 Bid Scores
+                ilustrativos — a mesma promessa aparecia em 4 seções. */}
+            <p style={{ color: '#64748b', fontSize: 15, maxWidth: 640, margin: '0 auto 16px', lineHeight: 1.7 }}>Quem desiste do leilão desiste porque não consegue responder a estas perguntas. A BidPro responde todas antes do lance, e resume tudo no Bid Score, uma nota de 0 a 10.</p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', maxWidth: 820, margin: '0 auto' }}>
+              {PERGUNTAS.map(({ q, icon: Icon }) => (
+                <span key={q} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: '#f1f5f9', borderRadius: 20, padding: '7px 13px', fontSize: 13, color: '#334155', fontWeight: 600 }}>
+                  <Icon size={14} color={AZUL} style={{ flexShrink: 0 }} /> {q}
+                </span>
+              ))}
+            </div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: mobile ? 'minmax(0, 1fr)' : 'repeat(4, minmax(0, 1fr))', gap: 16 }}>
             {PASSOS.map(({ n, icon: Icon, cor, titulo, desc }) => (
@@ -410,7 +543,12 @@ export default function Landing() {
             ))}
           </div>
 
-          <div style={{ marginTop: 56, background: '#f8fafc', borderRadius: 22, padding: mobile ? '28px 20px' : '36px 36px', display: 'grid', gridTemplateColumns: mobile ? 'minmax(0, 1fr)' : 'minmax(0, 0.9fr) minmax(0, 1.4fr)', gap: 28, alignItems: 'center', border: '1px solid #eef2f7' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, maxWidth: 760, margin: '22px auto 0' }}>
+            <BadgeCheck size={19} color="#059669" style={{ flexShrink: 0, marginTop: 1 }} />
+            <div style={{ fontSize: 13.5, color: '#64748b', lineHeight: 1.6 }}><strong style={{ color: '#0f172a' }}>IA + especialistas.</strong> A inteligência faz a maior parte da análise em minutos; nossos especialistas validam os casos críticos.</div>
+          </div>
+
+          {MOSTRAR_EQUIPE && <div style={{ marginTop: 56, background: '#f8fafc', borderRadius: 22, padding: mobile ? '28px 20px' : '36px 36px', display: 'grid', gridTemplateColumns: mobile ? 'minmax(0, 1fr)' : 'minmax(0, 0.9fr) minmax(0, 1.4fr)', gap: 28, alignItems: 'center', border: '1px solid #eef2f7' }}>
             <div>
               <div style={rotulo()}>Quem está do seu lado</div>
               <h3 style={{ fontSize: 'clamp(22px,3vw,28px)', fontWeight: 900, margin: '0 0 10px', lineHeight: 1.2 }}>8 anos formando arrematadores no Brasil</h3>
@@ -425,41 +563,67 @@ export default function Landing() {
                 </div>
               ))}
             </div>
-          </div>
+          </div>}
         </div>
       </section>
 
-      {/* ── 6. PLANOS (sem preço: a fonte de verdade é a tela /planos) ───────────── */}
+      {/* ── 6. PLANOS — preço REAL do planos_config (25/10); sem leitura, o card fica sem preço ──────── */}
       <section data-lp-secao="planos" style={secao('#f8fafc')}>
         <div style={{ maxWidth: 1140, margin: '0 auto' }}>
           <div style={{ textAlign: 'center', marginBottom: 40 }}>
             <div style={rotulo()}>Planos</div>
             <h2 style={h2()}>Comece grátis. Evolua no seu ritmo.</h2>
-            <p style={{ color: '#64748b', fontSize: 15 }}>Preços e condições sempre atualizados na página de planos.</p>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: mobile ? 'minmax(0, 1fr)' : 'repeat(4, minmax(0, 1fr))', gap: 16 }}>
             {[
-              { nome: 'Explorador', tag: 'Grátis', cor: '#64748b', itens: ['Busca de leilões em todo o Brasil', 'Relatório de mercado + viabilidade', 'Calculadora de arrematação', 'Cursos gratuitos'] },
-              { nome: 'Investidor Pro', tag: 'Mais popular', cor: AZUL, destaque: true, itens: ['Tudo do Explorador', 'Relatório documental e jurídico por IA', 'Bid Score completo', 'Alertas de oportunidade por e-mail'] },
-              { nome: 'Leilão de Veículos', tag: 'Novo', cor: '#0f766e', itens: ['Busca com FIPE em todo o Brasil', 'Leiloeiro e documentos de cada lote', 'Relatórios de veículos por IA', 'Combo com o Investidor Pro'] },
-              { nome: 'Assessoria', tag: 'Por arrematação · para clientes', cor: '#d97706', itens: ['Tudo do Combo: imóveis + veículos', 'Analista dedicado', 'Do lance à imissão na posse', 'Registro via plataforma'] },
-            ].map(({ nome, tag, cor, itens, destaque }) => (
-              <div key={nome} style={{ background: 'white', borderRadius: 18, border: destaque ? `2px solid ${cor}` : '1px solid #e2e8f0', padding: '22px 20px', position: 'relative', boxShadow: destaque ? `0 10px 30px ${cor}22` : 'none' }}>
+              { key: 'explorador', nome: 'Explorador', tag: 'Para começar', cor: '#64748b', preco: 'Grátis', sub: 'sem cartão',
+                itens: ['Busca de leilões em todo o Brasil', '3 relatórios de amostra: mercado + viabilidade', 'Calculadora de arrematação', 'Cursos gratuitos'],
+                fora: ['Link do lote, edital e matrícula', 'Relatório documental e jurídico'],
+                botao: 'Criar conta grátis' },
+              { key: 'top2', nome: 'Investidor Pro', tag: 'Mais popular', cor: AZUL, destaque: true,
+                preco: pro ? `${pro.precoLabel}/mês` : null,
+                sub: pro && proMesAnual ? `${brl2(proMesAnual)}/mês no anual` : null,
+                itens: ['Link do lote, edital e matrícula liberados', 'Relatório documental e jurídico por IA', 'Bid Score completo', 'Alertas de oportunidade por e-mail'],
+                botao: 'Assinar o Investidor Pro' },
+              { key: 'veiculos', nome: 'Leilão de Veículos', tag: 'Novo', cor: '#0f766e',
+                preco: veic ? `${veic.precoLabel}/mês` : null, sub: null,
+                itens: ['Busca com FIPE em todo o Brasil', 'Leiloeiro e documentos de cada lote', 'Relatórios de veículos por IA', 'Combo com o Investidor Pro'],
+                botao: 'Assinar Veículos' },
+              { key: 'assessorado', nome: 'Assessoria', tag: 'Para clientes', cor: '#d97706', preco: 'Por arrematação', sub: 'valores dentro da plataforma',
+                itens: ['Tudo do Combo: imóveis + veículos', 'Analista dedicado', 'Do lance à imissão na posse', 'Registro via plataforma'],
+                botao: 'Criar conta e conhecer' },
+            ].map(({ key, nome, tag, cor, preco, sub, itens, fora, destaque, botao }) => (
+              <div key={nome} style={{ background: 'white', borderRadius: 18, border: destaque ? `2px solid ${cor}` : '1px solid #e2e8f0', padding: '22px 20px', position: 'relative', display: 'flex', flexDirection: 'column', boxShadow: destaque ? `0 10px 30px ${cor}22` : 'none' }}>
+                {destaque && <div style={{ position: 'absolute', top: -12, left: 20, background: cor, color: 'white', fontSize: 10, fontWeight: 800, padding: '4px 12px', borderRadius: 20, textTransform: 'uppercase', letterSpacing: 1 }}>{tag}</div>}
                 <div style={{ fontSize: 12.5, fontWeight: 900, color: cor, textTransform: 'uppercase', letterSpacing: 1.3 }}>{nome}</div>
-                <div style={{ fontSize: 12.5, color: '#94a3b8', fontWeight: 700, margin: '4px 0 14px' }}>{tag}</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {!destaque && <div style={{ fontSize: 12.5, color: '#94a3b8', fontWeight: 700, marginTop: 4 }}>{tag}</div>}
+                <div style={{ minHeight: 58, margin: '10px 0 14px' }}>
+                  {preco && <div style={{ fontSize: 24, fontWeight: 900, color: '#0f172a', letterSpacing: '-0.4px', lineHeight: 1.15 }}>{preco}</div>}
+                  {sub && <div style={{ fontSize: 12.5, color: '#64748b', marginTop: 3 }}>{sub}</div>}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
                   {itens.map(it => (
                     <div key={it} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
                       <CheckCircle2 size={14} color={cor} style={{ flexShrink: 0, marginTop: 2 }} />
                       <span style={{ fontSize: 13, color: '#334155', lineHeight: 1.45 }}>{it}</span>
                     </div>
                   ))}
+                  {(fora || []).map(it => (
+                    <div key={it} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                      <Lock size={13} color="#94a3b8" style={{ flexShrink: 0, marginTop: 2 }} />
+                      <span style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.45 }}>{it} <span style={{ fontWeight: 700 }}>(Investidor Pro)</span></span>
+                    </div>
+                  ))}
                 </div>
+                <button onClick={key === 'assessorado' ? cadastro('planos_card_assessorado', '/planos?plano=assessorado') : cadastroPlano(`planos_card_${key}`, key)}
+                  style={{ marginTop: 'auto', padding: '12px 14px', background: destaque ? cor : 'white', color: destaque ? 'white' : cor, border: `1.5px solid ${cor}`, borderRadius: 11, fontWeight: 800, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
+                  {botao} <ArrowRight size={14} />
+                </button>
               </div>
             ))}
           </div>
           <div style={{ textAlign: 'center', marginTop: 28 }}>
-            <button onClick={cta('planos_ver', () => nav('/planos'))} style={btnPrim}>Ver planos e preços <ArrowRight size={16} /></button>
+            <button onClick={cta('planos_ver', () => nav('/planos'))} style={btnSec(false)}>Comparar todos os planos <ArrowRight size={16} /></button>
           </div>
         </div>
       </section>

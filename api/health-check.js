@@ -225,6 +225,32 @@ async function handler(req) {
   }));
 
   // ── 3b. Anomalias detectadas ao gerar RELATÓRIOS (o agente que aprende sinaliza) ──
+  // ── LANDING — retrato do acervo e da vitrine (25/10, arena pré-login, passo 12) ──
+  // A página inicial esconde a faixa do acervo e a vitrine quando o retrato de landing_numeros passa de 48 h
+  // ou vem vazio — de propósito, para não mostrar número velho com cara de "agora". Esconder é o certo para o
+  // visitante e o PIOR para nós: sumir em silêncio é exatamente "o vazio que não sabe que falhou". Este item é
+  // o par que grita: retrato com mais de 36 h (o cron é diário; 36 h = uma passada perdida) ou vitrine com
+  // menos de 4 lotes acusa. Lê app_config direto (custo zero, sem RPC nova).
+  itens.push(await check('Landing — cache do acervo e vitrine (landing_cache)', async () => {
+    const r = await sb(`app_config?key=eq.landing_numeros&select=value,updated_at&limit=1`);
+    if (!r.ok) throw new Error(`leitura de app_config HTTP ${r.status}`);
+    const [linha] = await r.json();
+    if (!linha) return { status: 'erro', detalhe: 'app_config.landing_numeros não existe — landing_numeros_atualizar nunca rodou (monitor-fontes-cron).' };
+    let v;
+    try { v = typeof linha.value === 'string' ? JSON.parse(linha.value) : linha.value; } catch (e) { throw new Error(`landing_numeros ilegível: ${e.message}`, { cause: e }); }
+    const idadeH = (iso) => { const t = Date.parse(iso || ''); return Number.isFinite(t) ? (Date.now() - t) / 3600000 : null; };
+    const hNum = idadeH(v?.em), hVit = idadeH(v?.vitrine_em);
+    const nVit = Array.isArray(v?.vitrine) ? v.vitrine.length : 0;
+    const problemas = [];
+    if (hNum == null || hNum > 36) problemas.push(`números com ${hNum == null ? 'carimbo ilegível' : `${Math.round(hNum)} h`} (faixa do acervo some aos 48 h)`);
+    if (hVit == null || hVit > 36) problemas.push(`vitrine com ${hVit == null ? 'carimbo ausente' : `${Math.round(hVit)} h`}`);
+    if (nVit < 4) problemas.push(`vitrine com ${nVit} lote(s) (mínimo 4)`);
+    if (v?.vitrine_erro) problemas.push(`última seleção falhou: ${String(v.vitrine_erro).slice(0, 120)}`);
+    if (!(Number(v?.imoveis) > 0) || !(Number(v?.veiculos) > 0)) problemas.push(`acervo sem contagem (imóveis ${v?.imoveis ?? '—'}, veículos ${v?.veiculos ?? '—'})`);
+    if (problemas.length) return { status: 'aviso', detalhe: `Landing: ${problemas.join(' · ')}. Conferir landing_numeros_atualizar no monitor-fontes-cron.` };
+    return { status: 'ok', detalhe: `Retrato de ${Math.round(hNum)} h · vitrine com ${nVit} lotes` };
+  }));
+
   // Ex.: avaliação ausente no leiloeiro (desconto sai zerado), CNJ sem retorno no
   // documental. Só SINALIZA para revisão — não gera relatório (custo zero).
   itens.push(await check('Relatórios — anomalias detectadas', async () => {
