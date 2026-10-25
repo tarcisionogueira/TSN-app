@@ -3,7 +3,7 @@ import { useAuth } from './AuthContext';
 import { apiCall } from '../utils/apiCall';
 import { registrarEvento } from '../utils/tracker.js';
 import { supabase } from '../utils/supabase';
-import { termosUsoPendente, abrirTermosModal } from '../components/TermosAtualizadosModal';
+import { termosUsoPendente, abrirTermosModal, nuncaAceitouTermos } from '../components/TermosAtualizadosModal';
 import { setItemSeguro } from '../utils/storageSeguro.js';
 import { ehErroDeSessao } from '../lib/sessao-expirada';
 
@@ -108,7 +108,9 @@ export function AnalisesProvider({ children }) {
   const barrarPorTermos = useCallback(async (tipo, alvo, meta, payload, marcar) => {
     if (await exigirTermos()) return false;
     represado.current = { tipo, meta, payload };
-    marcar({ ...meta, status: 'erro', erro: 'Aceite os termos atualizados para gerar — assim que aceitar, a geração começa sozinha.' });
+    marcar({ ...meta, status: 'erro', erro: nuncaAceitouTermos()
+      ? 'Confirme os termos na janela que abriu — assim que confirmar, seu relatório começa sozinho.'
+      : 'Aceite os termos atualizados para gerar — assim que aceitar, a geração começa sozinha.' });
     registrarEvento('analise_gerar', { alvo, detalhe: `represado: termos pendentes imovel=${meta.imovelId}` });
     return true;
   }, [exigirTermos]);

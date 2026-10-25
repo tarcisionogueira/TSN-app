@@ -18,7 +18,11 @@ const VERSAO_VIGENTE = versaoTermoProduto('termos_uso');
 
 // Cache do gate (evita 1 select por clique em "Gerar"). null = ainda não sabido.
 let _pendenteCache = null;
-export function invalidarCacheTermos() { _pendenteCache = null; }
+let _nuncaAceitou = false; // termos_uso_versao nulo: conta que NUNCA aceitou (ex.: recém-cadastrada)
+export function invalidarCacheTermos() { _pendenteCache = null; _nuncaAceitou = false; }
+// 25/10 (dono, opção C): quem nunca aceitou (19 de 23 cadastros novos) não está diante de termos
+// "atualizados" — está no 1º relatório. Mesmo gate e mesmo texto jurídico; muda só o enquadramento.
+export function nuncaAceitouTermos() { return _nuncaAceitou; }
 
 // Usado pelo gate de relatórios: true = usuário precisa aceitar os termos vigentes.
 export async function termosUsoPendente(userId) {
@@ -27,6 +31,7 @@ export async function termosUsoPendente(userId) {
   try {
     const { data } = await supabase.from('perfis').select('termos_uso_versao').eq('id', userId).maybeSingle();
     _pendenteCache = (data ? data.termos_uso_versao : null) !== VERSAO_VIGENTE;
+    _nuncaAceitou = !!data && !data.termos_uso_versao;
   } catch { _pendenteCache = false; } // indisponível → não trava o produto por falha nossa
   return _pendenteCache;
 }
@@ -99,12 +104,13 @@ export default function TermosAtualizadosModal() {
   }, [user, salvando]);
 
   if (!aberto || !user || impersonate) return null;
+  const primeiro = origem === 'relatorio' && nuncaAceitouTermos();
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
       <div style={{ background: 'white', borderRadius: 16, maxWidth: 560, width: '100%', maxHeight: '86vh', overflowY: 'auto', padding: '26px 26px 20px', boxShadow: '0 24px 70px rgba(0,0,0,0.3)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
-          <h3 style={{ margin: 0, fontSize: 18, fontWeight: 900, color: '#111' }}>📜 Atualizamos os termos da plataforma</h3>
+          <h3 style={{ margin: 0, fontSize: 18, fontWeight: 900, color: '#111' }}>{primeiro ? '📜 Antes do seu 1º relatório, confirme os termos' : '📜 Atualizamos os termos da plataforma'}</h3>
           <button onClick={fechar} title="Fechar sem aceitar" style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#94a3b8', lineHeight: 1 }}>✕</button>
         </div>
 
@@ -112,7 +118,9 @@ export default function TermosAtualizadosModal() {
         <p style={{ fontSize: 13.5, color: '#475569', lineHeight: 1.6, margin: '12px 0 0' }}>
           Os <a href="#/termos" target="_blank" rel="noreferrer" style={{ color: '#0D63DB', fontWeight: 700 }}>Termos de Uso</a> e a{' '}
           <a href="#/privacidade" target="_blank" rel="noreferrer" style={{ color: '#0D63DB', fontWeight: 700 }}>Política de Privacidade</a>{' '}
-          foram atualizados (versão <b>{VERSAO_VIGENTE}</b>). A nova versão deixa mais claros pontos importantes para você:
+          {primeiro
+            ? <>(versão <b>{VERSAO_VIGENTE}</b>) deixam claros alguns pontos importantes — leva só alguns segundos:</>
+            : <>foram atualizados (versão <b>{VERSAO_VIGENTE}</b>). A nova versão deixa mais claros pontos importantes para você:</>}
         </p>
         <ul style={{ fontSize: 12.5, color: '#475569', lineHeight: 1.6, margin: '8px 0 0', paddingLeft: 18 }}>
           <li>os relatórios e análises são <b>informação e apoio à decisão</b> — não são garantia de resultado nem recomendação de investimento;</li>
@@ -131,7 +139,12 @@ export default function TermosAtualizadosModal() {
           )}
         </div>
 
-        {origem === 'relatorio' && (
+        {primeiro && (
+          <div style={{ marginTop: 12, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '10px 12px', fontSize: 12.5, color: '#166534' }}>
+            ✅ Assim que você confirmar, o <b>seu relatório começa a ser gerado sozinho</b> — não precisa clicar em Gerar de novo.
+          </div>
+        )}
+        {origem === 'relatorio' && !primeiro && (
           <div style={{ marginTop: 12, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '10px 12px', fontSize: 12.5, color: '#92400e' }}>
             ⚠️ Para <b>gerar relatórios</b> é necessário aceitar os termos atualizados. Sem o aceite, a geração permanece bloqueada.
           </div>
@@ -147,7 +160,7 @@ export default function TermosAtualizadosModal() {
         <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
           <button onClick={aceitar} disabled={salvando}
             style={{ flex: 1, padding: '12px', background: salvando ? '#94a3b8' : '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 14, cursor: salvando ? 'wait' : 'pointer' }}>
-            {salvando ? 'Registrando…' : 'Li e aceito os termos atualizados'}
+            {salvando ? 'Registrando…' : primeiro ? 'Li e aceito — gerar meu relatório' : 'Li e aceito os termos atualizados'}
           </button>
           <button onClick={fechar} style={{ padding: '12px 16px', background: 'white', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
             Agora não
