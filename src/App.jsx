@@ -240,7 +240,12 @@ function PrivateRoute({ children, roles }) {
   const { isLoggedIn, role, loading, ativo } = useAuth();
   const loc = useLocation();
   if (loading) return null;
-  if (!isLoggedIn) return <Navigate to={`/login?next=${encodeURIComponent(loc.pathname + loc.search)}`} replace />;
+  // 25/10 (dono, print da tela "Entrar"): visitante que clicou num LOTE ou numa busca é quase sempre gente nova —
+  // abre no CADASTRO com o motivo; "Já tenho conta" segue a um clique e o next é preservado nos dois modos.
+  if (!isLoggedIn) {
+    const deLote = /^\/(imovel|veiculo|analise|analise-veiculo|buscar|mapa|indice)(\/|$)/.test(loc.pathname);
+    return <Navigate to={`/login?${deLote ? 'modo=cadastro&motivo=lote&' : ''}next=${encodeURIComponent(loc.pathname + loc.search)}`} replace />;
+  }
   // Bloqueio de conta inativa é GLOBAL (rotas fora do MainLayout: /admin, /leiloeiro...)
   if (!ativo) return <ContaInativa />;
   // Cadastro incompleto NÃO redireciona mais: um popup (CompletarCadastroModal) pede os
@@ -384,7 +389,9 @@ function MainLayout() {
               cadastro. Leiloeiro, link, documentos, pátio e o relatório por IA só com o plano Veículos/Combo — a
               trava mora no banco (veiculos_vitrine / veiculo_leiloeiro). As rotas /admin seguem para a equipe. */}
           <Route path="/veiculos" element={<BuscaVeiculos />} />
-          <Route path="/veiculo/:id" element={<PrivateRoute><VeiculoDetalhe /></PrivateRoute>} />
+          {/* 25/10 (dono): ficha do veículo PÚBLICA, como /leilao/:id dos imóveis — o visitante vê o lote (dados da
+              veiculos_vitrine, sem leiloeiro/link/placa) e o pedido de conta só vem no clique que desbloqueia. */}
+          <Route path="/veiculo/:id" element={<VeiculoDetalhe />} />
           <Route path="/analise-veiculo" element={<PrivateRoute><AnaliseVeiculo /></PrivateRoute>} />
           <Route path="/carteira-propostas" element={<PrivateRoute roles={['admin','analista','consultor']}><div style={{ padding: 20, display: 'flex', justifyContent: 'center' }}><CarteiraPropostas /></div></PrivateRoute>} />
           <Route path="/admin/retomada-veiculos" element={<PrivateRoute roles={['admin','analista']}><RetomadaVeiculos /></PrivateRoute>} />

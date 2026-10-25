@@ -583,6 +583,12 @@ export default function Login() {
     <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #111111 0%, #1e3a5f 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div style={{ background: 'white', borderRadius: 20, padding: '40px 36px', width: '100%', maxWidth: 420, boxShadow: '0 24px 60px rgba(0,0,0,0.3)' }}>
 
+        {/* Veio de um lote (25/10): diz POR QUE está aqui — antes caía num "Entrar" mudo pedindo senha. */}
+        {!planoEscolhido && params.get('motivo') === 'lote' && modo === 'cadastro' && (
+          <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '10px 14px', marginBottom: 20, fontSize: 13, color: '#084BA6', fontWeight: 600 }}>
+            🔍 Crie sua conta grátis para continuar — leva 1 minuto e você volta direto para onde estava.
+          </div>
+        )}
         {/* Banner plano escolhido */}
         {planoEscolhido && (
           <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '10px 14px', marginBottom: 20, fontSize: 13, color: '#084BA6', fontWeight: 600 }}>

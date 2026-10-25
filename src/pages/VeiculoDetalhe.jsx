@@ -15,6 +15,7 @@ import { podeProporVeiculo } from '../utils/propostaVeiculo';
 import { localDoPatio } from '../utils/patioVeiculo';
 import DescricaoOrganizada from '../components/DescricaoOrganizada';
 import { ehEquipeVeiculos, rotaBuscaVeiculos, dadosRestritosVeiculos, useAcessoVeiculos, CHECKOUT_VEICULOS } from '../utils/veiculosAcesso';
+import { registrarEvento } from '../utils/tracker.js';
 
 // 20/10 (dono): a tela passou a atender CLIENTE também (rota /veiculo/:id, login obrigatório). A equipe
 // segue lendo a tabela completa; o cliente lê a vitrine pública e recebe leiloeiro/link/documentos/pátio
@@ -116,7 +117,11 @@ export default function VeiculoDetalhe() {
   const equipe = ehEquipeVeiculos(role);
   const acesso = useAcessoVeiculos(user, role);
   const semPlano = !compartilhado && !equipe && acesso === false;
-  const desbloquear = () => nav(CHECKOUT_VEICULOS);
+  // Visitante (25/10, ficha pública): o desbloqueio passa pelo cadastro com o plano e volta ao checkout.
+  const desbloquear = () => {
+    registrarEvento('lp_cta', { alvo: `veiculo_ficha_desbloquear${user ? '' : '_anon'}` });
+    nav(user ? CHECKOUT_VEICULOS : `/login?modo=cadastro&plano=veiculos&next=${encodeURIComponent(CHECKOUT_VEICULOS)}`);
+  };
   const [v, setV] = useState(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState(null);
@@ -173,7 +178,7 @@ export default function VeiculoDetalhe() {
   // "ao abrir o veículo trazer a FIPE dele"). A trava de cota diária vive no servidor
   // (api/veiculo-fipe.js + registrar_uso_fipe) — aqui só reage ao resultado.
   useEffect(() => {
-    if (!v?.id || compartilhado) return;
+    if (!v?.id || compartilhado || !user) return; // visitante: FIPE on-demand exige login (api/veiculo-fipe)
     // Recarrega ao abrir quando o valor passou de 25 dias (24/09, dono: "a FIPE deve ser recarregada
     // ao abrir a página"): a tabela muda todo mês. 25 dias = a validade do fipe_cache no servidor,
     // então reabrir no mesmo mês não gasta consulta da cota gratuita.
@@ -207,7 +212,7 @@ export default function VeiculoDetalhe() {
   // caso esteja divergente"). Mesmo endpoint/gate de ImovelDetalhe.jsx (cooldown/teto de
   // tentativas no servidor); só dispara quando já está 'indeterminado' e o leilão já encerrou.
   useEffect(() => {
-    if (!v?.id || compartilhado || v.resultado_leilao !== 'indeterminado') return;
+    if (!v?.id || compartilhado || !user || v.resultado_leilao !== 'indeterminado') return;
     if (!v.data_leilao || new Date(v.data_leilao).getTime() >= Date.now()) return;
     let cancelado = false;
     apiCall('/api/reapurar-resultado-leilao', { method: 'POST', body: JSON.stringify({ veiculoId: v.id }) })
@@ -348,7 +353,7 @@ export default function VeiculoDetalhe() {
             <h1 style={{ fontSize: isMobile ? 20 : 22, fontWeight: 900, color: '#111111', margin: 0 }}>
               {nomeVeiculo(v)}
             </h1>
-            {!compartilhado && <FavoritoBotao tipo="veiculo" itemId={v.id || id} />}
+            {!compartilhado && user && <FavoritoBotao tipo="veiculo" itemId={v.id || id} />}
           </div>
           <div style={{ fontSize: 13, color: '#64748b', display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             {anoLabel && <span>{anoLabel}</span>}
