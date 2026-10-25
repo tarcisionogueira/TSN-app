@@ -18,6 +18,7 @@ import DescricaoOrganizada from '../components/DescricaoOrganizada';
 import { fotoCandidatos } from '../utils/foto';
 import { trackImovelVisualizado } from '../utils/gtag';
 import { lerCotaMercado } from '../utils/cotaAnalise';
+import { registrarEvento } from '../utils/tracker';
 import { CUSTO_AQUISICAO_PCT, ALUGUEL_ALVO_PCT_MES, PREMISSAS_TEXTO, aluguelAlvoMensal, investidoTotal } from '../lib/rentabilidade';
 import { TIPOS_LIQUIDOS } from '../lib/intencao';
 import { carregarLeaflet } from '../utils/leafletSeguro';
@@ -1251,11 +1252,33 @@ export default function ImovelDetalhe() {
   // "de N" completo — no botão do CORPO da página, que é onde se decide gerar.
   // O estado de ESGOTADO fica: ali não é contagem, é aviso de que a ação não vai funcionar, e
   // esconder isso faria a pessoa clicar para descobrir.
+  //
+  // "GRÁTIS" NÃO É CONTADOR (25/10). A decisão de 14/08 tirou daqui o SALDO ("3 de 3"), mas o
+  // rótulo voltou junto para "Solicitar Análise" — exatamente o texto que o achado de 09/08
+  // mostrou que ninguém clicava (soa como pedido a uma equipe, e pago). Medido em 25/10: das 23
+  // contas novas em 30 dias, 14 abriram lote (74 visitas) e só 2 clicaram no botão de análise;
+  // no celular a barra fixa é o único botão à vista, e dizia "Solicitar Análise". "Analisar
+  // grátis" é mais curto que o antigo e não traz número nenhum — respeita as duas decisões.
   const rotuloAnaliseCurto = (() => {
     if (!cota || cota.ilimitado) return 'Solicitar Análise';
     if (cota.restantes <= 0) return cota.amostra ? 'Grátis esgotadas' : 'Cota esgotada';
-    return 'Solicitar Análise';
+    return cota.amostra ? 'Analisar grátis' : 'Analisar imóvel';
   })();
+  // FUNIL CADASTRO → 1º RELATÓRIO (25/10). O clique genérico grava o rótulo do botão, que muda
+  // com a cota e com a largura da tela ("Analisar grátis" / "Solicitar Análise" / "Leiloeiro"…),
+  // então medir "quem ainda não gerou nada clicou para analisar?" exigia adivinhar rótulos.
+  // `onboarding_cta` só sai para quem está na amostra grátis e AINDA NÃO usou nenhuma — é o
+  // degrau entre abrir o lote e gerar o primeiro relatório. `detalhe` leva os dias desde o
+  // cadastro e de qual botão veio (barra fixa do celular × corpo da página).
+  // ⚠️ Precisa constar em TIPOS de api/track.js; fora da allowlist o evento é descartado.
+  const irParaAnalise = (origem) => {
+    if (cota?.amostra && Number(cota.usado || 0) === 0) {
+      const criado = Date.parse(user?.created_at || '');
+      const dias = Number.isFinite(criado) ? Math.floor((Date.now() - criado) / 86400000) : '?';
+      registrarEvento('onboarding_cta', { alvo: 'analisar_gratis', detalhe: `origem=${origem};dias_cadastro=${dias};imovel=${imovel?.id || ''}` });
+    }
+    nav(`/analise?imovel=${encodeURIComponent(imovel?.id || '')}`, { state: { imovel } });
+  };
   // LEILÃO ENCERRADO (07/08): o servidor já recusava gerar relatório de lote vencido, mas a tela
   // seguia oferecendo o botão — o cliente só descobria depois de clicar, e para ele o relatório
   // "continuava disponível". Mesma regra dos dois lados (src/utils/leilaoEncerrado.js).
@@ -2311,7 +2334,7 @@ export default function ImovelDetalhe() {
                   </div>
                 ) : podeFazerAnalise ? (
                   <>
-                    <button onClick={() => nav(`/analise?imovel=${encodeURIComponent(imovel?.id || '')}`, { state: { imovel } })}
+                    <button onClick={() => irParaAnalise('corpo')}
                       style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '13px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
                       <BarChart2 size={15} /> {rotuloAnalise}
                     </button>
@@ -2419,7 +2442,7 @@ export default function ImovelDetalhe() {
               Leilão encerrado{encerrado.ultimaData ? ` em ${dataBR(encerrado.ultimaData)}` : ''}
             </div>
           ) : podeFazerAnalise ? (
-            <button onClick={() => nav(`/analise?imovel=${encodeURIComponent(imovel?.id || '')}`, { state: { imovel } })}
+            <button onClick={() => irParaAnalise('barra_mobile')}
               style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '13px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
               <BarChart2 size={16} /> {rotuloAnaliseCurto}
             </button>
