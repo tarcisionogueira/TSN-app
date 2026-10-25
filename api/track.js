@@ -43,7 +43,13 @@ const KEY = process.env.SUPABASE_SERVICE_KEY;
 // — então o filtro de anônimo o descartaria com 204 exatamente nas rotas privadas onde ele é a
 // informação. O clique em "Gerar relatório" que não gerou nada e não deixou linha no banco não
 // aparecia em lugar nenhum: nem em `analises_mercado`, nem aqui.
-const TIPOS = new Set(['pageview', 'click', 'submit', 'change', 'api_erro', 'api_vazio', 'api_falha_rede', 'pdf_gerado', 'pdf_falha', 'geracao_recuperada', 'limite_sessao', 'erro_ui', 'analise_estado', 'analise_gerar', 'analise_bloqueio', 'origem_lote', 'sessao_expirada', 'lp_secao', 'lp_cta']);
+// `lp_vitrine_ausente` (25/10): a vitrine de lotes da Landing sumiu (retrato vazio ou com mais de 48h) — a
+// seção some para o visitante, mas o sumiço deixa rastro aqui (o vigia `landing_cache` do health-check é o par).
+// `checkout_aberto` (25/10): o checkout montou com plano+ciclo — é o que fecha a conta "escolheu anual em /planos"
+// × "chegou no anual ao checkout" (antes o ciclo se perdia no caminho do login e nada registrava).
+// `onboarding_cta` (25/10): cadastrado recente levado ao "Analisar grátis" (ImovelDetalhe.jsx). Só LOGADO —
+// fica fora de TIPOS_ANON de propósito (sem conta não há onboarding).
+const TIPOS = new Set(['pageview', 'click', 'submit', 'change', 'api_erro', 'api_vazio', 'api_falha_rede', 'pdf_gerado', 'pdf_falha', 'geracao_recuperada', 'limite_sessao', 'erro_ui', 'analise_estado', 'analise_gerar', 'analise_bloqueio', 'origem_lote', 'sessao_expirada', 'lp_secao', 'lp_cta', 'lp_vitrine_ausente', 'checkout_aberto', 'onboarding_cta']);
 
 // Defesa em profundidade: NUNCA persistir token/segredo no log de atividade, mesmo que um cliente
 // antigo/adulterado mande (ex.: #access_token=... do fluxo implícito, ou um JWT eyJ...). Redige.
@@ -64,7 +70,7 @@ export default async function handler(req, res) {
     // retenção de 30d seguem valendo). Sem isto, quem clicava num link de venda e não
     // cadastrava era invisível — impossível distinguir "ninguém clicou" de "página quebrou".
     const anonId = typeof b.anon_id === 'string' ? (b.anon_id.replace(/[^\w-]/g, '').slice(0, 48) || null) : null;
-    const TIPOS_ANON = new Set(['pageview', 'click', 'submit', 'api_erro', 'api_falha_rede', 'erro_ui', 'origem_lote', 'sessao_expirada', 'lp_secao', 'lp_cta']);  // lp_*: só o visitante deslogado vê a Landing (24/10: 0 gravados desde 23/10)
+    const TIPOS_ANON = new Set(['pageview', 'click', 'submit', 'api_erro', 'api_falha_rede', 'erro_ui', 'origem_lote', 'sessao_expirada', 'lp_secao', 'lp_cta', 'lp_vitrine_ausente', 'checkout_aberto']);  // lp_*: só o visitante deslogado vê a Landing (24/10: 0 gravados desde 23/10)
     // Isento da porteira de rota pública — ver o comentário de `sessao_expirada` lá em cima.
     const SEM_EXIGIR_ROTA_PUBLICA = new Set(['sessao_expirada']);
     // `leiloes` entrou em 12/08 e é a correção mais cara da lista: são as ~33 mil páginas de
@@ -97,7 +103,13 @@ export default async function handler(req, res) {
     // (EducacaoPublico.jsx) — sem esta palavra, visitante anônimo que só via a vitrine e saía
     // não deixava rastro nenhum: nem pageview/clique em eventos_atividade, nem gclid/fbclid/utm
     // em visita_origem (o `return` de lista vazia acontece ANTES do bloco de origem, mais abaixo).
-    const ROTA_PUBLICA = /^\/($|p\/|leil(ao|oes)|live|educacao|r\/|planos|login|cadastro|termos|privacidade|convite|cadastro-parceiro|contrato|testemunha|ativar|redefinir|recuperar|\(auth-redirect\))/;
+    // `veiculos|calculadora|alavancagem|imovel|checkout` entraram em 25/10 (arena das páginas pré-login) e é a
+    // QUINTA vez do mesmo padrão: quatro páginas abertas a visitante (BuscaVeiculos, Calculadora, Alavancagem e a
+    // ficha pública /imovel/:id) e o /checkout público (link de venda de parceiro) descartavam com 204 todo evento
+    // anônimo. Sem elas, "ninguém clica em veículos" e "não estamos medindo veículos" eram indistinguíveis. Na
+    // primeira leitura depois do deploy, o salto nessas rotas é de COBERTURA, não de crescimento — anote a data.
+    // `veiculo/` (singular, ficha logada) continua fora de propósito: é rota privada.
+    const ROTA_PUBLICA = /^\/($|p\/|leil(ao|oes)|veiculos|calculadora|alavancagem|imovel\/|checkout|live|educacao|r\/|planos|login|cadastro|termos|privacidade|convite|cadastro-parceiro|contrato|testemunha|ativar|redefinir|recuperar|\(auth-redirect\))/;
     let lista = eventos;
     if (!userId) {
       if (!anonId) { res.status(204).end(); return; }

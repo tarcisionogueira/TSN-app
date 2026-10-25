@@ -35,12 +35,20 @@ export default function Login() {
   // HashRouter coloca query params dentro do hash, ex: /#/login?ref=ABC
   // useLocation().search parseia corretamente dentro do hash
   const params = new URLSearchParams(loc.search);
-  const planoEscolhido = params.get('plano');
+  const nextParam = params.get('next') || '';
+  // 25/10 (arena pré-login, passo 2) — REDE DE SEGURANÇA DO CLIQUE DE COMPRA. Todo botão de compra de quem não
+  // está logado acaba aqui com `next=/checkout?...` (Planos, BuscaVeiculos, PrivateRoute, links antigos). Antes,
+  // só `modo=cadastro`/`plano=` abriam o cadastro: quem queria PAGAR caía em "Entrar · Acesse sua conta", com
+  // campo de senha e sem o aviso do plano. Agora `next` começando com /checkout abre o cadastro e o plano vem de
+  // DENTRO do next — vale também para botões que ninguém lembrou de consertar. E o next inteiro (com ciclo=anual)
+  // é o destino pós-login: montar `/checkout?plano=X` de novo era onde o anual virava mensal.
+  const nextCheckout = /^\/checkout(\?|$)/.test(nextParam) ? nextParam : '';
+  const planoDoNext = nextCheckout ? new URLSearchParams(nextCheckout.split('?')[1] || '').get('plano') : null;
+  const planoEscolhido = params.get('plano') || planoDoNext;
   const promoParam = params.get('promo')?.toUpperCase() || '';
   const refParam = params.get('ref')?.toUpperCase() || '';
   const conviteParam = params.get('convite')?.toUpperCase() || '';
   const modoParam = params.get('modo');
-  const nextParam = params.get('next') || '';
   // Convite de leiloeiro-para-leiloeiro (10/09): o link que o leiloeiro compartilha é o
   // PRÓPRIO código de indicação dele (?leiloeiro=CODIGO), sem pool de tokens separado. Sem
   // ?ref= explícito, este código TAMBÉM vira a indicação (mesma pessoa nos dois papéis) —
@@ -66,9 +74,29 @@ export default function Login() {
     chegadaRef.current = true;
     registrarEvento('origem_lote', {
       alvo: imovelParam ? 'com_imovel' : 'sem_imovel',
-      detalhe: `modo=${modoParam || 'login'}${imovelParam ? `;imovel=${imovelParam}` : ''}`,
+      // `next` (25/10): a contagem 'modo=login;next=/checkout' tem de ficar em ZERO depois do conserto — é o
+      // vigia de que ninguém mais chega para pagar numa tela de "Entrar". Só o caminho (sem query) por economia.
+      // `modo` aqui é o modo EFETIVO de abertura, não só o parâmetro.
+      detalhe: `modo=${modoParam || (nextCheckout || planoEscolhido || leiloeiroParam ? 'cadastro' : 'login')}${imovelParam ? `;imovel=${imovelParam}` : ''}${nextParam ? `;next=${nextParam.split('?')[0].slice(0, 60)}` : ''}`,
     });
-  }, [imovelParam, modoParam]);
+  }, [imovelParam, modoParam, nextParam, nextCheckout, planoEscolhido, leiloeiroParam]);
+
+  // Destino de checkout depois do login/cadastro: o next INTEIRO quando ele é o checkout do mesmo plano (preserva
+  // ciclo=anual e o que mais vier), senão o checkout montado só com o plano, como antes.
+  const destinoCheckout = (planoKey, promo) => {
+    if (nextCheckout && (!planoDoNext || planoDoNext === planoKey)) {
+      return promo && !/[?&]promo=/.test(nextCheckout) ? `${nextCheckout}${nextCheckout.includes('?') ? '&' : '?'}promo=${promo}` : nextCheckout;
+    }
+    return `/checkout?plano=${planoKey}${promo ? `&promo=${promo}` : ''}`;
+  };
+  // "Continuar sem login" volta para a página de ONDE a pessoa veio (25/10). Antes ia sempre para '/': quem
+  // abriu o login a partir de um lote ou de /veiculos perdia o lugar. O PrivateRoute usa `replace`, então o
+  // voltar não cai de novo na rota privada.
+  const voltarSemLogin = () => {
+    const idx = window.history.state?.idx;
+    if (typeof idx === 'number' && idx > 0) nav(-1);
+    else nav('/');
+  };
 
   // Persiste o ref e convite em sessionStorage
   useEffect(() => {
@@ -102,7 +130,7 @@ export default function Login() {
     const t = pp.slice(0, i), id = pp.slice(i + 1);
     return (id && (t === 'ebook' || t === 'curso')) ? `/p/${t}/${id}` : '';
   };
-  const [modo, setModo] = useState(modoParam === 'cadastro' || planoEscolhido || leiloeiroParam ? 'cadastro' : 'login'); // 'login' | 'cadastro' | 'sucesso' | 'recuperar' | 'recuperar_sucesso'
+  const [modo, setModo] = useState(modoParam === 'cadastro' || nextCheckout || planoEscolhido || leiloeiroParam ? 'cadastro' : 'login'); // 'login' | 'cadastro' | 'sucesso' | 'recuperar' | 'recuperar_sucesso'
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   // Ambientes onde o login com Google costuma FALHAR no 2FA: o Google BLOQUEIA navegadores
@@ -296,7 +324,7 @@ export default function Login() {
       const promoPendente = promoParam || sessionStorage.getItem('tsn_promo_pendente') || '';
       let dest = '';
       if (produtoRedirect) dest = produtoRedirect;
-      else if (planoPendente) dest = `/checkout?plano=${planoPendente}${promoPendente ? `&promo=${promoPendente}` : ''}`;
+      else if (planoPendente) dest = destinoCheckout(planoPendente, promoPendente);
       else if (nextParam) dest = nextParam;
       if (dest) sessionStorage.setItem('tsn_oauth_redirect', dest);
       // redirectTo = origem atual, mas força www no domínio de produção: o apex
@@ -368,7 +396,7 @@ export default function Login() {
     } else if (destProduto) {
       nav(destProduto);
     } else if (planoPendente) {
-      nav(`/checkout?plano=${planoPendente}${promoPendente ? `&promo=${promoPendente}` : ''}`);
+      nav(destinoCheckout(planoPendente, promoPendente));
     } else if (nextParam) {
       // nextParam já vem decodificado de URLSearchParams — não decodificar de novo
       nav(nextParam);
@@ -518,7 +546,10 @@ export default function Login() {
       if (destProdCad) sessionStorage.setItem('tsn_redirect_produto', destProdCad);
       // sessionStorage não sobrevive ao link de confirmação aberto noutra aba: o destino vai também
       // para o localStorage e o AuthContext resgata no 1º login (plano pendente tem prioridade).
+      // Com plano: o destino só vai junto quando é o checkout (25/10) — é ele que carrega o ciclo=anual até o
+      // resgate do AuthContext, que antes remontava `/checkout?plano=X` e perdia o anual.
       if (!planoEscolhido && (destProdCad || nextParam)) salvarConvite(CHAVE_DESTINO, destProdCad || nextParam);
+      else if (planoEscolhido && nextCheckout) salvarConvite(CHAVE_DESTINO, nextCheckout);
       setModo('sucesso');
     } catch (err) {
       // Falha de CADASTRO (validação local, e-mail duplicado ou erro do Auth) deixa rastro no
@@ -743,7 +774,7 @@ export default function Login() {
                 Criar conta grátis
               </button>
             </div>
-            <button onClick={() => nav('/')}
+            <button onClick={voltarSemLogin}
               style={{ marginTop: 12, width: '100%', background: 'none', border: 'none', color: '#94a3b8', fontSize: 12, cursor: 'pointer' }}>
               Continuar sem login →
             </button>

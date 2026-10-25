@@ -8,6 +8,7 @@ import { chatDisponivelPara } from '../utils/chatDisponivel';
 import { ehRotaDeCampanha } from '../utils/rotaCampanha';
 import { usePlanos } from '../contexts/PlanosContext';
 import { supabase } from '../utils/supabase';
+import { registrarEvento } from '../utils/tracker';
 
 const FEEDBACK_KEY = 'tsn_feedback_email';
 const DEFAULT_FEEDBACK_EMAIL = 'tarcisioaraujo@reimob.com.br';
@@ -515,13 +516,28 @@ export default function Header() {
                 </div>
               )}
             </div>
-          ) : (
+          ) : (<>
             <button onClick={() => nav('/login')}
               style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 4, padding: '7px 14px', border: '1px solid #334155', borderRadius: 8, background: 'transparent', color: '#94a3b8', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
               <User size={14} /> Entrar
             </button>
-          )}
+            {/* 25/10 (arena pré-login, passo 4): só havia "Entrar" — o visitante que queria CRIAR conta pelo topo
+                caía na tela de senha. Agora o cadastro tem porta própria, medida (lp_cta header_cadastro). */}
+            <button onClick={() => { registrarEvento('lp_cta', { alvo: 'header_cadastro', detalhe: 'desktop' }); nav('/login?modo=cadastro'); }}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: 'none', borderRadius: 8, background: '#0D63DB', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+              Criar conta
+            </button>
+          </>)}
         </nav>
+
+        {/* Criar conta no CELULAR (25/10): fica na barra, ao lado do hambúrguer — dentro do menu ninguém acha. */}
+        {!loading && !user && (
+          <button onClick={() => { registrarEvento('lp_cta', { alvo: 'header_cadastro', detalhe: 'mobile' }); nav('/login?modo=cadastro'); }}
+            className="show-mobile"
+            style={{ display: 'none', alignItems: 'center', marginLeft: 'auto', marginRight: 12, padding: '6px 12px', border: 'none', borderRadius: 8, background: '#0D63DB', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            Criar conta
+          </button>
+        )}
 
         {/* Mobile menu button */}
         <button onClick={() => setOpen(!open)} style={{ display: 'none', background: 'none', border: 'none', color: 'white', cursor: 'pointer' }} className="show-mobile">
@@ -643,9 +659,14 @@ export default function Header() {
             ? <button onClick={handleLogout} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#ef4444', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
                 <LogOut size={16} /> Sair
               </button>
-            : <button onClick={() => { nav('/login'); setOpen(false); }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#94a3b8', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
-                <User size={16} /> Entrar / Cadastrar
-              </button>
+            : <>
+                <button onClick={() => { registrarEvento('lp_cta', { alvo: 'header_cadastro', detalhe: 'menu_mobile' }); nav('/login?modo=cadastro'); setOpen(false); }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: '#0D63DB', color: 'white', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+                  <User size={16} /> Criar conta grátis
+                </button>
+                <button onClick={() => { nav('/login'); setOpen(false); }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#94a3b8', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
+                  <User size={16} /> Entrar
+                </button>
+              </>
           }
         </div>
       )}

@@ -169,7 +169,7 @@ function IdentificacaoCpfAssessoria({ nav, refCode }) {
 export default function Checkout() {
   const nav = useNavigate();
   const [params] = useSearchParams();
-  const { user, role, refreshPerfil, nome: nomePerfil } = useAuth();
+  const { user, role, refreshPerfil, nome: nomePerfil, loading: authCarregando } = useAuth();
   const planoKey = params.get('plano');
   // Retorno pós-ativação (?apos=<plano>): ao ativar um plano, volta direto para contratar o
   // seguinte. (Até 06/10 era o fluxo Pro→assessoria; links antigos com ?apos seguem valendo.) Assim o
@@ -218,6 +218,18 @@ export default function Checkout() {
   const [contratoFalhou, setContratoFalhou] = useState(false);
   // `?ciclo=anual` (21/10): /planos com o seletor no Anual abre o checkout já no anual.
   const [modalidade, setModalidade] = useState(() => (params.get('ciclo') === 'anual' ? 'anual' : 'mensal')); // 'mensal' | 'anual' | 'vista'
+  // `checkout_aberto` (25/10, arena pré-login): uma vez por montagem, com plano + ciclo PEDIDO na URL. Fecha a
+  // conta "escolheu anual em /planos" (lp_cta planos_*_anual) × "chegou ao checkout no anual" — antes o ciclo se
+  // perdia no caminho do login e nada deixava rastro. Retorno do gateway (?status=) não conta como abertura.
+  const checkoutAbertoRef = useRef(false);
+  useEffect(() => {
+    if (checkoutAbertoRef.current || mpStatus || authCarregando) return; // espera a sessão: senão logado=0 mentiria
+    checkoutAbertoRef.current = true;
+    registrarEvento('checkout_aberto', {
+      alvo: String(planoKey || '(sem plano)'),
+      detalhe: `ciclo=${params.get('ciclo') === 'anual' || /_anual$/.test(String(planoKey || '')) ? 'anual' : 'mensal'};logado=${user ? 1 : 0}`,
+    });
+  }, [planoKey, mpStatus, params, user, authCarregando]);
   const [aceitouTermos, setAceitouTermos] = useState(false);
   const [asaasIds, setAsaasIds] = useState(null); // { subscriptionId, paymentId }
   const [verificando, setVerificando] = useState(false);

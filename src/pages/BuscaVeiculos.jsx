@@ -9,6 +9,7 @@ import { parseDataLocal } from '../utils/format';
 import { useIsMobile } from '../utils/useIsMobile';
 import { lerSessao, gravarSessao, useRolagemDaLista } from '../utils/estadoLista';
 import { useAuth } from '../contexts/AuthContext';
+import { registrarEvento } from '../utils/tracker';
 import SeletorAcervo from '../components/SeletorAcervo';
 import { ehEquipeVeiculos, fonteVeiculos, rotaVeiculo, dadosRestritosVeiculos, useAcessoVeiculos, CHECKOUT_VEICULOS } from '../utils/veiculosAcesso';
 
@@ -394,7 +395,13 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
   const { user, role } = useAuth();
   const equipe = ehEquipeVeiculos(role);
   const acesso = useAcessoVeiculos(user, role);
-  const desbloquear = () => nav(user ? CHECKOUT_VEICULOS : `/login?next=${encodeURIComponent(CHECKOUT_VEICULOS)}`);
+  // 25/10 (arena pré-login): o clique de desbloqueio passa a ser medido (lp_cta) e o visitante vai direto ao
+  // CADASTRO (o Login também abriria em cadastro por causa do next=/checkout — aqui fica explícito).
+  const desbloquear = () => {
+    registrarEvento('lp_cta', { alvo: `veiculos_desbloquear${user ? '' : '_anon'}` });
+    const planoVeic = new URLSearchParams(String(CHECKOUT_VEICULOS).split('?')[1] || '').get('plano') || 'veiculos';
+    nav(user ? CHECKOUT_VEICULOS : `/login?modo=cadastro&plano=${encodeURIComponent(planoVeic)}&next=${encodeURIComponent(CHECKOUT_VEICULOS)}`);
+  };
   // Filtros e página sobrevivem a abrir um veículo e voltar (pedido do dono, 24/09) — por aba,
   // em sessionStorage (ver utils/estadoLista.js). Mescla com o vazio para chave nova não faltar.
   const [filtros, setFiltros] = useState(() => {

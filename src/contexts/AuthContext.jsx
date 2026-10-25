@@ -458,8 +458,13 @@ export function AuthProvider({ children }) {
             // Já está no plano que pediu (webhook chegou antes, ou pagou por outro caminho):
             // não manda para o checkout cobrar de novo.
             const roleBase = String(p.role || '').replace(/_anual$/, '');
-            if (roleBase !== String(planoPend) && !/^\/?checkout/.test(window.location.hash.replace(/^#/, ''))) {
-              window.location.hash = `/checkout?plano=${encodeURIComponent(planoPend)}`;
+            if (roleBase !== String(planoPend).replace(/_anual$/, '') && !/^\/?checkout/.test(window.location.hash.replace(/^#/, ''))) {
+              // 25/10: se o Login guardou o checkout INTEIRO do mesmo plano (com ciclo=anual), é ele que vale —
+              // remontar `/checkout?plano=X` aqui era o ponto onde o anual escolhido virava mensal.
+              const destCk = lerConvite(CHAVE_DESTINO);
+              let planoDoDest = null;
+              try { planoDoDest = /^\/checkout\?/.test(destCk || '') ? new URLSearchParams(destCk.split('?')[1]).get('plano') : null; } catch { planoDoDest = null; /* destino ilegível = usa o plano */ }
+              window.location.hash = planoDoDest === planoPend ? destCk : `/checkout?plano=${encodeURIComponent(planoPend)}`;
             }
           }
           // DESTINO pedido antes do cadastro por e-mail (24/10). Só resgata quem chegou na raiz

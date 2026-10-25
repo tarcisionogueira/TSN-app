@@ -8,6 +8,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { fetchPlanosComConfig } from '../utils/planosConfig';
 import { usePlanos } from '../contexts/PlanosContext';
 import { salvarRef } from '../utils/ref';
+import { registrarEvento } from '../utils/tracker';
 
 // FAQs montados com os valores reais do planos_config (evita valores fixos
 // divergentes). Os labels de preço chegam já formatados.
@@ -26,7 +27,11 @@ const buildFAQS = ({ precoMesLabel, mesAnualLabel, anoLabel, economiaPctLabel, l
   ]),
   { q: 'Posso pagar parcelado no cartão?', r: 'Sim. Aceitamos crédito, débito e PIX. Parcelamento em até 12× disponível, a partir da 4ª parcela os juros são assumidos pelo cliente conforme a operadora.' },
   { q: 'O que é o relatório de viabilidade?', r: 'Nossa IA analisa edital, matrícula e documentos do imóvel e gera um relatório completo com análise mercadológica, financeira e jurídica em menos de 5 minutos.' },
-  { q: 'Qual a diferença entre pagar mensal e anual?', r: `No plano anual você economiza ${economiaPctLabel}, paga o equivalente a ${mesAnualLabel}/mês (${anoLabel} cobrados uma única vez) em vez de ${precoMesLabel}/mês no mensal.` },
+  // Só entra com os valores LIDOS do planos_config (25/10): sem eles, a pergunta sai da lista em vez de
+  // responder com número inventado.
+  ...(precoMesLabel && mesAnualLabel && anoLabel ? [
+    { q: 'Qual a diferença entre pagar mensal e anual?', r: `No plano anual você economiza ${economiaPctLabel}, paga o equivalente a ${mesAnualLabel}/mês (${anoLabel} cobrados uma única vez) em vez de ${precoMesLabel}/mês no mensal.` },
+  ] : []),
 ];
 
 export default function Planos() {
@@ -147,30 +152,44 @@ export default function Planos() {
   const ativoPlano = (key) => PLANOS[key]?.ativo !== false; // mostra durante o load (undefined)
 
   // Valores reais do Investidor Pro (planos_config) para o FAQ
-  const _precoMes = Number(PLANOS.top2?.preco) || 49.90;
-  const _precoAno = Number(PLANOS.top2?.precoAnual) || 899;
-  const _economiaPct = _precoMes ? (1 - _precoAno / (_precoMes * 12)) * 100 : 0;
+  // 25/10 (arena pré-login): os fallbacks `|| 49.90` e `|| 899` eram valores VELHOS — se o planos_config não
+  // carregasse, o FAQ prometia R$ 49,90 e o checkout cobrava R$ 89,90. Valor não lido = nenhum preço.
+  const _precoMes = Number(PLANOS.top2?.preco) > 0 ? Number(PLANOS.top2.preco) : null;
+  const _precoAno = Number(PLANOS.top2?.precoAnual) > 0 ? Number(PLANOS.top2.precoAnual) : null;
+  const _economiaPct = _precoMes && _precoAno ? (1 - _precoAno / (_precoMes * 12)) * 100 : 0;
   const FAQS = buildFAQS({
-    precoMesLabel: fmtR(_precoMes),
-    mesAnualLabel: fmtR(_precoAno / 12),
-    anoLabel: fmtR(_precoAno),
+    precoMesLabel: _precoMes ? fmtR(_precoMes) : null,
+    mesAnualLabel: _precoAno ? fmtR(_precoAno / 12) : null,
+    anoLabel: _precoAno ? fmtR(_precoAno) : null,
     economiaPctLabel: `${Number(_economiaPct).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`,
     logado: !!user,
   });
 
+  // 25/10 (arena pré-login, passo 1) — O CLIQUE DE COMPRA ABRIA A TELA ERRADA. O visitante sem conta ia para
+  // `/login?next=/checkout?plano=X`, sem modo=cadastro e sem plano=: caía em "Entrar · Acesse sua conta", com
+  // campo de senha e sem o aviso do plano escolhido. E o next levava só `plano=key` — o `ciclo=anual` ficava
+  // em `params` e se perdia: quem escolheu R$ 74,92/mês no anual chegava ao checkout no mensal de R$ 89,90.
+  // Agora o visitante vai ao CADASTRO com o plano e o next leva os MESMOS params do logado (ciclo incluso).
+  // O lp_cta sai ANTES de navegar (a fila do tracker sobrevive à troca de rota — é SPA).
+  const urlCompra = (params) => {
+    const plano = params.get('plano');
+    return user ? `/checkout?${params}`
+      : `/login?modo=cadastro&plano=${encodeURIComponent(plano)}&next=${encodeURIComponent(`/checkout?${params}`)}`;
+  };
   const ir = (key) => {
     const plano = PLANOS[key];
     if (!plano) return;
-    if (plano.preco === 0) { nav(user ? '/membros' : '/login'); return; }
+    registrarEvento('lp_cta', { alvo: `planos_${key}_${periodo}${user ? '' : '_anon'}` });
+    if (plano.preco === 0) { nav(user ? '/membros' : '/login?modo=cadastro&plano=explorador'); return; }
     const params = new URLSearchParams({ plano: key });
     if (periodo === 'anual' && Number(plano.precoAnual) > 0) params.set('ciclo', 'anual'); // abre o checkout no anual
-    nav(user ? `/checkout?${params}` : `/login?next=${encodeURIComponent(`/checkout?plano=${key}`)}`);
+    nav(urlCompra(params));
   };
 
   const irAnual = (key) => {
     const aKey = `${key}_anual`;
-    const params = new URLSearchParams({ plano: aKey });
-    nav(user ? `/checkout?${params}` : `/login?next=${encodeURIComponent(`/checkout?plano=${aKey}`)}`);
+    registrarEvento('lp_cta', { alvo: `planos_${aKey}${user ? '' : '_anon'}` });
+    nav(urlCompra(new URLSearchParams({ plano: aKey })));
   };
 
   const atual = (key) => user && (key === role || `${key}_anual` === role);
@@ -342,7 +361,9 @@ export default function Planos() {
               <CheckItem txt="Quem é o leiloeiro e acesso ao lote (Investidor Pro)" off />
               <CheckItem txt="Análise Documental e Jurídica (Investidor Pro)" off />
             </div>
-            <button onClick={() => ctaTipo('explorador') === 'downgrade' ? irDowngrade() : nav('/checkout?plano=explorador')} disabled={atual('explorador')}
+            <button onClick={() => ctaTipo('explorador') === 'downgrade' ? irDowngrade()
+              : user ? nav('/checkout?plano=explorador')
+              : (registrarEvento('lp_cta', { alvo: 'planos_explorador_anon' }), nav('/login?modo=cadastro&plano=explorador'))} disabled={atual('explorador')}
               style={{ width: '100%', padding: '14px', border: 'none', borderRadius: 12, background: atual('explorador') ? '#f1f5f9' : '#111', color: atual('explorador') ? '#94a3b8' : 'white', fontWeight: 800, fontSize: 15, cursor: atual('explorador') ? 'default' : 'pointer' }}>
               {atual('explorador') ? 'Seu plano atual' : ctaTipo('explorador') === 'downgrade' ? 'Fazer downgrade' : 'Começar grátis →'}
             </button>
@@ -359,7 +380,7 @@ export default function Planos() {
             <div style={CABECALHO}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6 }}>
               <div style={{ ...PRECO_TOPO, color: 'white' }}>
-                {periodo === 'anual' ? pLabel('top2', 'precoMensalAnualLabel', 'R$ 37,49') : pLabel('top2', 'precoLabel', 'R$ 49,90')}
+                {periodo === 'anual' ? pLabel('top2', 'precoMensalAnualLabel', '') : pLabel('top2', 'precoLabel', '')}
               </div>
               <div style={{ fontSize: 14, color: '#93c5fd' }}>/mês</div>
             </div>
