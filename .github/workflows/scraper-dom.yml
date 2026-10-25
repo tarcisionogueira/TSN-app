@@ -309,7 +309,9 @@ jobs:
           SIMON_DRYRUN: ${{ env.DRYRUN_PADRAO }}
         run: node scripts/scraper-simon.mjs
 
-      - name: Leiloar (Uberlândia Leilões)
+      - name: Leiloar (Uberlândia, Nasar, Rodrigo, Marques Barreto, Lucas Ignacio, Moacira, IPC)
+        # 25/10 (#356): + 6 tenants — o 2º template da plataforma (Bootstrap "responsivo") e o IPC. Seco no HTML real:
+        # Nasar 22 prontos, Moacira 5, Rodrigo 3, Marques Barreto 2, IPC 2, Lucas Ignacio 0 (só móveis/cancelados hoje).
         # 28/09: Plataforma Leiloar, HTML estático sem Cloudflare neste tenant — grátis (semBD).
         # Fora do RODA_TUDO: o dry-run de 28/09 (run 36440506134) levou HTTP 403 do IP do runner
         # (Azure) na home — o MESMO site respondeu 200 ao servidor do banco (AWS) no recon.
@@ -322,6 +324,7 @@ jobs:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           LEILOAR_DRYRUN: ${{ env.DRYRUN_PADRAO }}
+          LEILOAR_MAX_LOTES: '80'
         run: node scripts/scraper-leiloar.mjs
 
       - name: LG Corretor Judicial (venda direta judicial)

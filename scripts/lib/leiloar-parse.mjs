@@ -11,35 +11,80 @@
  *
  * ⚠️ crleiloes.com.br roda a MESMA plataforma, mas com Cloudflare até no IP residencial (27/09)
  * — não entra aqui; o parser serve se um dia o acesso abrir.
+ *
+ * SEGUNDO TEMPLATE (25/10, pendência 356): a mesma plataforma tem um tema Bootstrap "responsivo"
+ * (o mesmo da página de leilão do /externo/ do Sanches) — sem `l-cabecalho-*`. Nele:
+ *   • cabeçalho do leilão: <h6 class="text-center mb-3"><strong>NOME</strong>, `<b>1º Leilão</b><p>data`
+ *     (ou `<b>Data</b>` repetido por praça) e `<b>LOCAL:</b> CIDADE-UF` — o LOCAL é do LEILÃO, não do lote
+ *     (Nasar: 28 imóveis da Porto Seguro em 9 cidades com LOCAL "SÃO PAULO-SP"); a cidade do LOTE vem no slug
+ *     da URL ("…-em-sao-caetano-do-sul"), que a plataforma gera do campo cidade do bem;
+ *   • valores em `<p class="mb-0 destaque"><b>RÓTULO: </b>R$ X</p>` — "Avaliação", "Lance Mínimo",
+ *     "Lance Inicial", "1º Leilão"/"2º Leilão", "Valor de Venda", "Lance mínimo (avaliação)" e até
+ *     rótulo VAZIO (Rodrigo: "<b>: </b>R$ 193.000,00" duas vezes);
+ *   • status do LOTE no badge `p-2 float-lg-right`; categoria em <h5 class="mb-4">.
+ * Tenants que rodam na RAIZ (sem /externo/): Lucas Ignacio e Moacira (`/leilao/<id>`, `/lote/<id>`).
+ * Leilão/lote de TESTE da plataforma ("LEILÃO TESTE", "SIMULADOR DE LEILÃO", "SIMULE SEUS LANCES AQUI",
+ * "lote-teste-normal") fica fora já na enumeração e, de novo, no detalhe.
  */
 import { inferirTipo, checarQualidade } from './leilaopro-parse.mjs';
 import { num, plaus, titleCase, montarRowDom } from './dom-parse-util.mjs';
-import { decodificarEntidades, extrairAreaM2 } from '../../api/_texto-imovel.js';
+import { decodificarEntidades, extrairAreaM2, numeroMatriculaDoTexto } from '../../api/_texto-imovel.js';
 import { normCidade } from './inferir-uf.mjs';
+import MUNICIPIOS from '../../api/_municipios.js';
 
+// `catalogo`: tenant na raiz do domínio usa '/'; o padrão do motor é '/externo/'.
 export const TENANTS = {
   uberlandia: { fonte: 'UBERLANDIALEILOES', leiloeiro: 'Uberlândia Leilões (Rodrigo de Oliveira Lopes)', base: 'https://www.leiloesuberlandia.com.br' },
+  // 2º template (25/10, #356). Nomes e matrículas: leiloeiro_junta.
+  nasar: { fonte: 'NASARLEILOES', leiloeiro: 'Ives Harrison Nasar dos Santos (JUCEC 30)', base: 'https://nasarleiloes.com.br' },
+  rodrigo: { fonte: 'RODRIGOLEILOES', leiloeiro: 'Rodrigo Octávio Bouças Ignacio (JUCIS-DF 186)', base: 'https://rodrigoleiloes.com.br' },
+  marquesbarreto: { fonte: 'MARQUESBARRETO', leiloeiro: 'Luciene Marques de Sousa Barreto (JUCIS-DF 95)', base: 'https://marquesbarretoleiloes.com.br' },
+  lucasignacio: { fonte: 'LUCASIGNACIO', leiloeiro: 'Lucas Henrique Ignacio de Souza (JUCIS-DF 99)', base: 'https://lucasignacioleiloes.com.br', catalogo: '/' },
+  moacira: { fonte: 'MOACIRA', leiloeiro: 'Moacira Tegoni Goedert (JUCIS-DF 63)', base: 'https://www.moacira.lel.br', catalogo: '/' },
+  // 1º template, mas com o endereço no LOCAL ("Rua Guapore nº 64, Bairro …, PONTA PORA-MS") e as praças
+  // como "Início/Encerramento 1º Leilão".
+  ipc: { fonte: 'IPCLEILOES', leiloeiro: 'IPC Leilões (Cibele Rigolin Pereira de Figueiredo, JUCEMS 038)', base: 'https://ipcleiloes.com.br' },
 };
+
+// Leilão/lote de TESTE da plataforma (brasilialeiloes, rodrigo, IPC, marquesbarreto, lucasignacio — 24/10) e de
+// TREINAMENTO (Moacira, leilão 593: "Bem #1 (apenas para fins de treinamento)", 11 lotes com lance fictício).
+export const ehTeste = (s) => /\bteste\b|simulador|simule\b|treinamento|apenas para fins|\bbem \d+ apenas para\b/i.test(String(s || '').replace(/[-_]+/g, ' '));
 
 const limpar = (s) => decodificarEntidades(String(s || '').replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
 
-// Nível 1: leilões na home. Nível 2: lotes no leilão. Chave = id numérico.
+// Nível 1: leilões na home. Nível 2: lotes no leilão. Chave = id numérico. Prefixo `/externo` opcional
+// (Lucas Ignacio e Moacira rodam na raiz) e href absoluto aceito (Moacira linka "https://www.moacira.lel.br/lote/…").
+// Slug de teste ("leilao-teste", "simulador-de-leilao", "simule-seus-lances-aqui", "lote-teste-normal") fica fora.
+const RE_EVENTO = /href=["']((?:https?:\/\/[^/"']+)?(\/externo)?\/leilao\/(\d+)(?:\/([a-z0-9-]*))?)["']/gi;
+const RE_LOTE = /href=["']((?:https?:\/\/[^/"']+)?(?:\/externo)?\/lote\/(\d+)(\/[a-z0-9-]+)?)["']/gi;
 export function extrairUrlsDeEvento(html, base) {
   const urls = new Map();
-  for (const m of String(html || '').matchAll(/href=["'](\/externo\/leilao\/(\d+)(?:\/[a-z0-9-]*)?)["']/gi)) {
-    if (!urls.has(m[2])) urls.set(m[2], new URL(`/externo/leilao/${m[2]}`, base).href);
+  const teste = new Set();
+  for (const m of String(html || '').matchAll(RE_EVENTO)) {
+    if (ehTeste(m[4])) { teste.add(m[3]); continue; }
+    if (!urls.has(m[3])) urls.set(m[3], new URL(`${m[2] || ''}/leilao/${m[3]}`, base).href);
   }
+  for (const id of teste) urls.delete(id);
   return urls;
 }
 export function extrairUrlsDeLote(html, base) {
   const urls = new Map();
-  for (const m of String(html || '').matchAll(/href=["'](\/externo\/lote\/(\d+)(\/[a-z0-9-]+)?)["']/gi)) {
-    // Prefere a URL com slug (a que o site linka no card); sem slug também abre.
-    if (!urls.has(m[2]) || m[3]) urls.set(m[2], new URL(m[1], base).href);
+  const teste = new Set();
+  for (const m of String(html || '').matchAll(RE_LOTE)) {
+    if (ehTeste(m[3])) { teste.add(m[2]); continue; }
+    // Prefere a URL com slug (a que o site linka no card; o slug carrega a cidade do bem); sem slug também abre.
+    let u; try { u = new URL(m[1], base); } catch { continue; } // href inválido: ignora
+    if (u.host.replace(/^www\./, '') !== new URL(base).host.replace(/^www\./, '')) continue;
+    u = new URL(u.pathname, base).href; // mesmo host do tenant (moacira.lel.br × www.moacira.lel.br)
+    const anterior = urls.get(m[2]);
+    // Slug com "-em-<cidade>" ganha do slug com o nome do leilão (Moacira: home "leilao-20a-vara-civel-de-brasilia",
+    // leilão "imovel-localizado-em-qs-314-em-samambaia").
+    if (!anterior || (m[3] && (!/-em-[a-z]/.test(anterior) || /-em-[a-z]/.test(m[3])))) urls.set(m[2], u);
   }
+  for (const id of teste) urls.delete(id);
   return urls;
 }
-export const idDaUrl = (url) => (String(url).match(/\/externo\/lote\/(\d+)/) || [])[1] || null;
+export const idDaUrl = (url) => (String(url).match(/\/lote\/(\d+)/) || [])[1] || null;
 
 // "23/09/2026 às 14:00:00" → ISO com fuso de Brasília.
 const dataHora = (s) => {
@@ -61,28 +106,109 @@ function cidadeComAcento(cidadeCaps, descricao) {
 }
 
 const TIPOS = [[/apartamento|\bapto\b/i, 'Apartamento'], [/\bcasa\b|resid[êe]ncia/i, 'Casa'], [/sobrado/i, 'Sobrado'],
-  [/sala comercial|\bsala\b/i, 'Sala Comercial'], [/galp[ãa]o|barrac[ãa]o/i, 'Galpão'], [/\bloja\b/i, 'Loja'],
-  [/ch[áa]cara/i, 'Chácara'], [/fazenda|im[óo]vel rural|gleba/i, 'Imóvel Rural'], [/terreno|\blote n/i, 'Terreno']];
+  [/sala comercial|conjunto comercial|\bsala\b/i, 'Sala Comercial'], [/galp[ãa]o|barrac[ãa]o/i, 'Galpão'], [/\bloja\b/i, 'Loja'],
+  // 25/10 (Nasar/Porto Seguro): "Imóvel monousuário comercial", "Prédio comercial".
+  [/pr[ée]dio/i, 'Prédio'], [/im[óo]vel\s+(?:monousu[áa]rio\s+)?comercial/i, 'Imóvel Comercial'],
+  [/ch[áa]cara/i, 'Chácara'], [/fazenda|im[óo]vel rural|lote rural|gleba/i, 'Imóvel Rural'],
+  // "Imóvel descrito como Vaga de Garagem n° 3, Lote n° 2" (Marques Barreto) — o título tem de dizer vaga para o
+  // portão ehVagaGaragem (scraper-core) descartar; antes saía "Terreno" pelo "Lote n°".
+  [/\bvagas?\s+(?:de\s+)?garagem|\bbox\s+(?:de\s+)?garagem/i, 'Vaga de Garagem'],
+  // "Área do Terreno: 213,46m2" é medida, não tipo (Nasar: conjunto comercial saía "Terreno").
+  [/(?<![áa]rea\s+d[eo]\s+)terreno|\blote n/i, 'Terreno']];
 
-export function parseDetalhe(html, url) {
-  const h = String(html || '');
+// ── CIDADE DO LOTE — só com prova do IBGE ───────────────────────────────────────────────────────
+const UFS_DA_CIDADE = new Map(); // "campinas" → Set(['SP'])
+for (const k of Object.keys(MUNICIPIOS)) {
+  const [uf, c] = k.split('|');
+  if (!UFS_DA_CIDADE.has(c)) UFS_DA_CIDADE.set(c, new Set());
+  UFS_DA_CIDADE.get(c).add(uf);
+}
+const semAcento = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+// "Rua Guapore nº 64, Bairro Manoel Padial Urel, PONTA PORA-MS" (IPC) → ["PONTA PORA", "MS"]: o LOCAL pode trazer o
+// endereço inteiro antes da cidade; ela é o último pedaço depois da vírgula.
+export function cidadeUfDoLocal(local) {
+  const m = String(local || '').split(',').pop().trim().match(/^(.+?)\s*-\s*([A-Z]{2})$/);
+  return m ? { cidade: m[1].trim(), uf: m[2] } : { cidade: null, uf: null };
+}
+
+// Cidade do lote: 1º o slug da URL ("…-em-sao-caetano-do-sul", gerado do campo cidade do BEM), com a UF do LOCAL
+// quando a cidade existe nela; senão a UF escrita junto da cidade no texto ("Campinas/SP", "Ponta Porã (MS)"); senão
+// a única UF do IBGE que tem a cidade. 2º o LOCAL do leilão, se existir no IBGE. Nada disso = sem cidade (nunca o
+// LOCAL de outro lote do mesmo leilão, nem o endereço inteiro como cidade).
+// O IBGE do DF é um município só (Brasília) e o texto quase nunca escreve "Brasília" com acento ("Samambaia, Distrito Federal").
+const comAcento = (cidade, uf, texto) => (uf === 'DF' && normCidade(cidade) === 'brasilia' ? 'Brasília' : cidadeComAcento(String(cidade).toUpperCase(), texto));
+export function cidadeDoLote({ url, local, texto }) {
+  const l = cidadeUfDoLocal(local);
+  const slug = (String(url || '').match(/\/lote\/\d+\/([a-z0-9-]+)/) || [])[1] || '';
+  const ms = slug.match(/-em-([a-z0-9-]+)$/);
+  if (ms) {
+    const cand = ms[1].replace(/-/g, ' ');
+    const ufs = UFS_DA_CIDADE.get(normCidade(cand)) || new Set();
+    let uf = l.uf && ufs.has(l.uf) ? l.uf : null;
+    if (!uf) {
+      const t = semAcento(texto);
+      uf = [...ufs].find((u) => new RegExp(`\\b${cand}\\s*(?:/|-|–|\\(|,)\\s*${u.toLowerCase()}\\b`).test(t)) || null;
+    }
+    if (!uf && ufs.size === 1) uf = [...ufs][0];
+    if (uf) return { cidade: comAcento(cand, uf, texto), estado: uf };
+  }
+  if (l.cidade && Object.prototype.hasOwnProperty.call(MUNICIPIOS, `${l.uf}|${normCidade(l.cidade)}`)) {
+    return { cidade: comAcento(l.cidade, l.uf, texto), estado: l.uf };
+  }
+  // DF: o IBGE tem um município só; região administrativa ("SAMAMBAIA-DF", "…-em-samambaia") é Brasília.
+  if (l.uf === 'DF') return { cidade: 'Brasília', estado: 'DF' };
+  return { cidade: null, estado: l.uf || null };
+}
+
+const tipoDoTexto = (descricao) => TIPOS.map(([re, nome]) => ({ nome, pos: descricao.search(re) })).filter((t) => t.pos >= 0)
+  .sort((a, b) => a.pos - b.pos)[0]?.nome
+  // Sem tipo reconhecido: "Imóvel" só se a descrição DIZ imóvel. Até 08/10 o padrão era 'Imóvel'
+  // para tudo, e esse rótulo inventado no título fazia o `naoEhImovel` do motor deixar passar
+  // carro, moto, sofá e aparador (12 de 19 ativos da UBERLANDIALEILOES eram bens móveis
+  // anunciados como "Imóvel - Machado/MG"). Com "Bem", o filtro do motor decide pelo texto real.
+  || (/im[óo]ve(?:l|is)/i.test(descricao) ? 'Imóvel' : 'Bem');
+
+// "A fração correspondente à 50% (cinquenta por cento), de uma gleba…" (IPC 1270/1271): o portão ehFracaoIdeal só
+// reconhece "fração/parte ideal" — a fatia declarada no começo da descrição vira "Fração ideal" no título.
+const RE_FATIA = /^\W*(?:matr[íi]cula[^:]{0,20}:\s*)?(?:a\s+)?(?:fra[çc][ãa]o|parte)\s+(?:ideal\s+)?(?:correspondente\s+)?(?:[àa]\s+|de\s+)?\d{1,2}(?:[.,]\d+)?\s*%/i;
+function tituloDe(descricao, cidade, estado) {
+  if (RE_FATIA.test(descricao)) return `Fração ideal - ${tipoDoTexto(descricao)}${cidade ? ` - ${cidade}/${estado}` : ''}`;
+  // Tipo = a palavra-chave que aparece PRIMEIRO na descrição ("Um terreno situado… Residencial
+  // Lago Azul" é terreno — o nome do loteamento não pode virar "Casa"; dry-run 28/09).
+  const tipo = tipoDoTexto(descricao);
+  const bairro = (descricao.match(/\bbairro\s+([A-ZÀ-Ý][\wÀ-ÿ' ]{2,40}?)(?=[,.;]| na | no | à )/i) || [])[1];
+  return `${tipo}${bairro ? ` - ${titleCase(bairro.trim().toLowerCase())}` : ''}${cidade ? ` - ${cidade}/${estado}` : ''}`;
+}
+const matriculaDe = (t) => ((t.match(/matr[íi]cula(?:d[oa]\s+sob\s+o)?\s*(?:n[º°.]?\s*)?(\d[\d.]{2,})/i) || [])[1] || numeroMatriculaDoTexto(t) || '')
+  .replace(/\.+$/, '') || null;
+// Data de praça plausível: a "venda direta" da plataforma vem com 01/01/2045 (e "30/11/-0001" no relógio).
+const dataPlausivel = (iso) => (iso && Number(iso.slice(0, 4)) <= new Date().getFullYear() + 3 ? iso : null);
+
+// ── 1º TEMPLATE (l-cabecalho-*) ──────────────────────────────────────────────────────────────────
+function parseClassico(h, url) {
   const nomeLeilao = limpar((h.match(/class="l-cabecalho-nome">([\s\S]*?)<\/span>/i) || [])[1]);
   const local = limpar((h.match(/class="l-cabecalho-infos-local">([\s\S]*?)<\/span>/i) || [])[1]).replace(/^[\s,]+/, '');
-  const mLocal = local.match(/^(.+?)\s*-\s*([A-Z]{2})$/);
-  const descricao = limpar((h.match(/<div id="l-lote-descricao">[\s\S]*?<p>([\s\S]*?)<\/p>/i) || [])[1]);
-  const cidade = mLocal ? cidadeComAcento(mLocal[1], descricao) : null;
-  const estado = mLocal ? mLocal[2] : null;
+  const curta = limpar((h.match(/<div id="l-lote-descricao">[\s\S]*?<p>([\s\S]*?)<\/p>/i) || [])[1]);
+  const completa = limpar((h.match(/<div id="l-lote-descricao-completa">[\s\S]*?<p>([\s\S]*?)<\/p>/i) || [])[1]);
+  const descricao = completa.length > curta.length ? completa : curta;
+  const textoMeio = limpar((h.match(/<div class="l-cabecalho-texto-meio">([\s\S]*?)<\/div>/i) || [])[1]);
+  const { cidade, estado } = cidadeDoLote({ url, local, texto: `${descricao} ${textoMeio}` });
 
   // Datas: "1ª HASTA: …", "ATÉ: …", "2ª HASTA : …", "ATÉ: …" (ou "1°hasta"/"até"). O fim de cada
   // hasta ("ATÉ") é o prazo real de lance — é ele que vira data_leilao / data_leilao_2.
+  // IPC (25/10): "Início 1º Leilão: …" / "Encerramento 1º Leilão: …".
   const itens = [...(h.match(/<ul class="l-cabecalho-datas">([\s\S]*?)<\/ul>/i)?.[1] ?? '').matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi)].map((m) => limpar(m[1]));
-  const fins = itens.filter((t) => /^at[ée]\s*:/i.test(t)).map(dataHora).filter(Boolean);
-  const inicios = itens.filter((t) => /hasta/i.test(t)).map(dataHora).filter(Boolean);
+  const fins = itens.filter((t) => /^(?:at[ée]|encerramento)[^:]{0,30}:/i.test(t)).map(dataHora).map(dataPlausivel).filter(Boolean);
+  const inicios = itens.filter((t) => /hasta|^in[íi]cio/i.test(t)).map(dataHora).map(dataPlausivel).filter(Boolean);
 
   const valores = h.match(/<ul id="l-cabecalho-infos-valores"[^>]*>([\s\S]*?)<\/ul>/i)?.[1] ?? '';
   const rotulado = (rot) => plaus(num((valores.match(new RegExp(`${rot}[^<]*<\\/span>\\s*<strong>\\s*R\\$\\s*([\\d.]+,\\d{2})`, 'i')) || [])[1]));
   const avaliacao = rotulado('Avalia[çc][ãa]o');
   const minimo = rotulado('Lance M[íi]nimo');
+  // IPC: só a avaliação no quadro; o mínimo da 2ª praça vem no texto do leilão ("Para o 2º Leilão: ofertas a partir de
+  // R$ 132.000,00 (60% do valor da avaliação)").
+  const minimo2 = plaus(num((textoMeio.match(/2[ºªo°]\s*(?:leil[ãa]o|pra[çc]a)[^$\d]{0,60}R\$\s*([\d.]+,\d{2})/i) || [])[1]));
 
   const foto = (h.match(/<div id="l-lote-galeria">[\s\S]*?<img src="([^"]+)"/i) || [])[1] || null;
   const fotoAbs = foto && !/default\.(jpe?g|png)/i.test(foto) ? new URL(foto.replace('/externo/../', '/'), url).href : null;
@@ -90,22 +216,11 @@ export function parseDetalhe(html, url) {
   const edital = pdf ? new URL(pdf.replace(/\/externo\/bens\/\.\.\/\.\.\//, '/'), url).href : null;
   const status = limpar((h.match(/<span id="l-status"[^>]*>([\s\S]*?)<\/span>/i) || [])[1]).toUpperCase();
 
-  // Tipo = a palavra-chave que aparece PRIMEIRO na descrição ("Um terreno situado… Residencial
-  // Lago Azul" é terreno — o nome do loteamento não pode virar "Casa"; dry-run 28/09).
-  const tipo = TIPOS.map(([re, nome]) => ({ nome, pos: descricao.search(re) })).filter((t) => t.pos >= 0)
-    .sort((a, b) => a.pos - b.pos)[0]?.nome
-    // Sem tipo reconhecido: "Imóvel" só se a descrição DIZ imóvel. Até 08/10 o padrão era 'Imóvel'
-    // para tudo, e esse rótulo inventado no título fazia o `naoEhImovel` do motor deixar passar
-    // carro, moto, sofá e aparador (12 de 19 ativos da UBERLANDIALEILOES eram bens móveis
-    // anunciados como "Imóvel - Machado/MG"). Com "Bem", o filtro do motor decide pelo texto real.
-    || (/im[óo]ve(?:l|is)/i.test(descricao) ? 'Imóvel' : 'Bem');
-  const bairro = (descricao.match(/\bbairro\s+([A-ZÀ-Ý][\wÀ-ÿ' ]{2,40}?)(?=[,.;]| na | no | à )/i) || [])[1];
-  const titulo = `${tipo}${bairro ? ` - ${titleCase(bairro.trim().toLowerCase())}` : ''}${cidade ? ` - ${cidade}/${estado}` : ''}`;
-  const mat = (descricao.match(/matr[íi]cula\s*(?:n[º°.]?\s*)?([\d.]{3,})/i) || [])[1] || null;
-
   return {
-    titulo, cidade, estado,
+    nomeLeilao, status,
+    titulo: tituloDe(curta || descricao, cidade, estado), cidade, estado,
     valor_avaliacao: avaliacao, valor_minimo: minimo || avaliacao,
+    valor_minimo_2: minimo2 && minimo2 !== (minimo || avaliacao) ? minimo2 : null,
     modalidade: /extrajudicial/i.test(nomeLeilao) ? 'extrajudicial' : 'judicial',
     area_m2: extrairAreaM2(descricao) || 0,
     descricao: descricao ? `${nomeLeilao ? `${nomeLeilao}. ` : ''}${descricao}`.slice(0, 8000) : null,
@@ -113,11 +228,83 @@ export function parseDetalhe(html, url) {
     data_leilao_2: fins[1] || null,
     link_foto: fotoAbs, link_edital: edital || url,
     anexos: edital ? [{ tipo: 'edital', nome: 'Edital do leilão', url: edital }] : [],
-    numero_matricula: mat,
-    // Status do lote diferente de ABERTO (VENDIDO, ENCERRADO, SUSPENSO, RETIRADO…) = fora.
-    encerrado: !!status && !/ABERTO|EM LOTEAMENTO|AGUARDANDO/.test(status),
+    numero_matricula: matriculaDe(descricao),
   };
 }
 
-export const montarRow = (url, det, tenant) => montarRowDom(url, det, tenant, idDaUrl(url), inferirTipo);
+// ── 2º TEMPLATE (Bootstrap "responsivo") ──────────────────────────────────────────────────────────
+const CATEGORIA_NAO_IMOVEL = /ve[íi]cul|moto|autom[óo]v|caminh|[ôo]nibus|m[áa]quin|equipament|eletr[ôo]|m[óo]veis|sucata|semovent|animai|j[óo]ias|recicl/i;
+function parseResponsivo(h, url) {
+  const origem = new URL(url).origin;
+  const nomeLeilao = limpar((h.match(/<h6 class="text-center mb-3">\s*<strong>([\s\S]*?)<\/strong>/i) || [])[1]);
+  const local = limpar((h.match(/<b>\s*LOCAL:\s*<\/b>([^<]*)/i) || [])[1]);
+  const categoria = limpar((h.match(/<h5 class="mb-4">([^<]*)<\/h5>/i) || [])[1]);
+  const status = limpar((h.match(/class="badge badge-\w+ p-2 float-lg-right"[^>]*>([^<]*)</i) || [])[1]).toUpperCase();
+  const curta = limpar((h.match(/Descri[çc][ãa]o do bem:\s*<\/h6>\s*<p[^>]*>([\s\S]*?)<\/p>/i) || [])[1]);
+  const completa = limpar((h.match(/DESCRI[ÇC][ÃA]O COMPLETA\s*<\/h6>([\s\S]*?)(?=<div class="col-4|<h6[^>]*>\s*MANIFESTOS|<footer)/i) || [])[1]);
+  const descricao = completa.length > curta.length ? completa : curta;
+  const { cidade, estado } = cidadeDoLote({ url, local, texto: `${curta} ${completa}` });
+
+  // Praças do cabeçalho: "<b>1º Leilão</b><p> 10/11/2026 às 10:00:00" ou "<b>Data</b><p> …" (uma por praça).
+  const pracas = [...h.matchAll(/<b>\s*([^<]{0,30}?)\s*<\/b>\s*<p>\s*(\d{2}\/\d{2}\/\d{4}\s*(?:[àa]s)?\s*\d{2}:\d{2})/gi)]
+    .filter((m) => /leil|data|pra[çc]a/i.test(m[1])).map((m) => dataPlausivel(dataHora(m[2]))).filter(Boolean);
+
+  // Valores por rótulo. "Incremento" não é preço. Rótulo de praça ("1º Leilão") ou VAZIO (Rodrigo) = valores em
+  // ordem de praça; na 1ª praça judicial o mínimo É a avaliação. "Valor de Venda" (venda direta) não é avaliação.
+  const vals = [...h.matchAll(/<p class="mb-0 destaque">\s*<b>([^<]*)<\/b>\s*R\$\s*([\d.]+,\d{2})/gi)]
+    .map((m) => ({ rot: limpar(m[1]).replace(/:\s*$/, '').trim(), v: plaus(num(m[2])) }))
+    .filter((x) => x.v && !/incremento/i.test(x.rot));
+  const mins = vals.filter((x) => !/^avalia/i.test(x.rot)).map((x) => x.v);
+  const soPracas = vals.length && vals.every((x) => !x.rot || /leil[ãa]o|pra[çc]a/i.test(x.rot));
+  const avaliacao = vals.find((x) => /^avalia|\(avalia/i.test(x.rot))?.v || (soPracas ? mins[0] : 0);
+  const venda = /venda\s+direta/i.test(nomeLeilao) || vals.some((x) => /venda/i.test(x.rot));
+
+  const foto = (h.match(/src="([^"]*bem_foto\/(?!thumb)[^"]+)"/i) || [])[1];
+  const pdf = (h.match(/href="([^"]*arquivos_leilao\/[^"]+\.pdf)"/i) || [])[1];
+  const edital = pdf ? `${origem}/arquivos/arquivos_leilao/${pdf.split('/').pop()}` : null;
+
+  return {
+    nomeLeilao, status,
+    // Categoria do site OU ficha de veículo sem tipo de imóvel no texto: a Nasar publica moto ("Marca: HONDA … Placa …
+    // Chassi …") na categoria "Imóveis Diversos".
+    naoImovel: (!!categoria && CATEGORIA_NAO_IMOVEL.test(categoria) && !/im[óo]ve/i.test(categoria))
+      // Sem NENHUM tipo de imóvel no texto do bem ("1 (uma) mesa de cabeceira", moto com placa e chassi) não é imóvel.
+      || tipoDoTexto(curta || descricao) === 'Bem',
+    titulo: tituloDe(curta || descricao, cidade, estado), cidade, estado,
+    valor_avaliacao: avaliacao, valor_minimo: mins[0] || avaliacao,
+    valor_minimo_2: mins[1] && mins[1] !== mins[0] ? mins[1] : null,
+    modalidade: venda ? 'venda_direta' : /extrajudicial|fiduci|banco/i.test(nomeLeilao) ? 'extrajudicial' : 'judicial',
+    area_m2: extrairAreaM2(descricao) || 0,
+    descricao: descricao ? `${nomeLeilao ? `${nomeLeilao}. ` : ''}${descricao}`.slice(0, 8000) : null,
+    data_leilao: venda ? null : pracas[0] || null,
+    data_leilao_2: venda ? null : pracas[1] || null,
+    link_foto: foto ? `${origem}/arquivos/bem_foto/${foto.split('/').pop()}` : null,
+    link_edital: edital || url,
+    anexos: edital ? [{ tipo: 'edital', nome: 'Edital / arquivo do leilão', url: edital }] : [],
+    numero_matricula: matriculaDe(descricao),
+  };
+}
+
+export function parseDetalhe(html, url, { agora = new Date() } = {}) {
+  const h = String(html || '');
+  const classico = /class="l-cabecalho-nome"/.test(h);
+  if (!classico && !/<b>\s*LOCAL:\s*<\/b>|class="mb-0 destaque"/i.test(h)) return null; // nenhum dos dois templates
+  const { nomeLeilao, status, ...det } = classico ? parseClassico(h, url) : parseResponsivo(h, url);
+  // Leilão/lote de teste da plataforma: nunca vira lote.
+  if (ehTeste(nomeLeilao) || ehTeste((String(url).match(/\/lote\/\d+\/([a-z0-9-]+)/) || [])[1])) return { encerrado: true, teste: true };
+  // Status do lote diferente de ABERTO (VENDIDO, ENCERRADO, SUSPENSO, RETIRADO, CANCELADO…) = fora.
+  if (status && !/ABERTO|EM LOTEAMENTO|AGUARDANDO|EM BREVE/.test(status)) return { ...det, encerrado: true };
+  // 1ª praça vencida e 2ª por vir: o lance de agora é o da 2ª.
+  const t = (d) => (d ? Date.parse(d) : NaN);
+  if (det.data_leilao_2 && t(det.data_leilao) < agora && t(det.data_leilao_2) >= agora) {
+    Object.assign(det, { data_leilao: det.data_leilao_2, valor_minimo: det.valor_minimo_2 || det.valor_minimo, data_leilao_2: null, valor_minimo_2: null });
+  }
+  const ultima = t(det.data_leilao_2 || det.data_leilao);
+  return { ...det, encerrado: Number.isFinite(ultima) && ultima < agora };
+}
+
+export const montarRow = (url, det, tenant) => ({
+  ...montarRowDom(url, det, tenant, idDaUrl(url), inferirTipo),
+  valor_minimo_2: det.valor_minimo_2 || null,
+});
 export { checarQualidade };

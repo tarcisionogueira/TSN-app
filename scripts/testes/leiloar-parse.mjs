@@ -2,6 +2,7 @@
 import fs from 'fs';
 import { TENANTS, extrairUrlsDeEvento, extrairUrlsDeLote, parseDetalhe, montarRow, checarQualidade } from '../lib/leiloar-parse.mjs';
 const T = TENANTS.uberlandia, F = (n) => fs.readFileSync(new URL(`./fixtures/leiloar-${n}.html`, import.meta.url), 'utf8');
+const NA_CAPTURA = new Date('2026-09-28T12:00:00-03:00'); // fixtures de 28/09: praças ainda por vir
 let ok = 0, falhas = 0;
 const eq = (nome, a, b) => { const passou = JSON.stringify(a) === JSON.stringify(b); passou ? ok++ : falhas++; if (!passou) console.log(`✗ ${nome}: ${JSON.stringify(a)} ≠ ${JSON.stringify(b)}`); };
 
@@ -10,7 +11,7 @@ eq('leilão judicial: 3 lotes', [...extrairUrlsDeLote(F('leilao-judicial'), T.ba
 eq('leilão extrajudicial: 1 lote', [...extrairUrlsDeLote(F('leilao-extrajudicial'), T.base).keys()], ['1523']);
 
 const uJ = 'https://www.leiloesuberlandia.com.br/externo/lote/1507/descricao-do-imovel-1-um-em-uberlandia';
-const j = montarRow(uJ, parseDetalhe(F('lote-judicial'), uJ), T);
+const j = montarRow(uJ, parseDetalhe(F('lote-judicial'), uJ, { agora: NA_CAPTURA }), T);
 eq('judicial: título', j.titulo, 'Apartamento - Tubalina - Uberlândia/MG');
 eq('judicial: valores', [j.valor_avaliacao, j.valor_minimo, j.desconto_percentual], [254313.19, 127156.59, 50]);
 eq('judicial: área privativa', j.area_m2, 50.44);
@@ -20,13 +21,13 @@ eq('judicial: foto real, edital PDF', [!!j.link_foto && !/\.\.\//.test(j.link_fo
 eq('judicial: passa na qualidade', checarQualidade(j, { estrito: false }).descartar, false);
 
 const uE = 'https://www.leiloesuberlandia.com.br/externo/lote/1523/um-terreno-situado-nesta-cidade-em-uberlandia';
-const e = montarRow(uE, parseDetalhe(F('lote-extrajudicial'), uE), T);
+const e = montarRow(uE, parseDetalhe(F('lote-extrajudicial'), uE, { agora: NA_CAPTURA }), T);
 eq('extrajudicial: terreno (não "Casa" pelo nome do loteamento)', e.titulo, 'Terreno - Uberlândia/MG');
 eq('extrajudicial: modalidade/área', [e.modalidade, e.area_m2], ['extrajudicial', 250]);
 eq('extrajudicial: foto default.jpg = sem foto', e.link_foto, null);
 
 // 08/10: bem móvel sem tipo reconhecido não pode ganhar "Imóvel" no título (12/19 ativos eram carro/moto/sofá).
-const movel = (desc) => parseDetalhe(F('lote-judicial').replace(/(<div id="l-lote-descricao">[\s\S]*?<p>)[\s\S]*?(<\/p>)/i, `$1${desc}$2`), uJ).titulo;
+const movel = (desc) => parseDetalhe(F('lote-judicial').replace(/(<div id="l-lote-descricao">[\s\S]*?<p>)[\s\S]*?(<\/p>)/i, `$1${desc}$2`), uJ, { agora: NA_CAPTURA }).titulo;
 eq('móvel: veículo vira "Bem"', movel('LOTE 1 - Veículo FIAT/PALIO FIRE, placa DFQ-5268, ano 2002/2003.').split(' - ')[0], 'Bem');
 eq('móvel: sofá vira "Bem"', movel('BEM 1: Um sofá de veludo cor azul, estrutura em madeira maciça.').split(' - ')[0], 'Bem');
 eq('sem tipo mas diz imóvel: "Imóvel"', movel('BEM: Um imóvel situado na Rua X, nº 10.').split(' - ')[0], 'Imóvel');

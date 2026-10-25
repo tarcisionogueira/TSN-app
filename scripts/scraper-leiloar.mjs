@@ -1,5 +1,6 @@
 /**
- * Scraper PLATAFORMA LEILOAR (leiloesuberlandia.com.br) — fonte `fetch`, custo ZERO (semBD).
+ * Scraper PLATAFORMA LEILOAR — Uberlândia, Nasar, Rodrigo, Marques Barreto, Lucas Ignacio, Moacira e IPC
+ * (dois templates da plataforma; ver lib/leiloar-parse.mjs) — fonte `fetch`, custo ZERO (semBD).
  * Wrapper fino do motor; fonte em lib/motor/fontes/leiloar.mjs; parser em lib/leiloar-parse.mjs.
  *
  * Env: LEILOAR_MAX_LOTES (60) · LEILOAR_DRYRUN (default '1') · LEILOAR_DEBUG.
