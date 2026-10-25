@@ -60,6 +60,9 @@ const MARGEM_MS = 12 * 3600000;
 const corte = Date.now() - dias * 86400000 + MARGEM_MS;
 
 async function acervosDoGate() {
+  // Lista explícita "A,B,C" (25/10): o gate LEFFA sozinho fazia o freio do LeilãoPro pular os 45 tenants
+  // novos porque o LEFFA estava fresco — 0 lote coletado de 45 leiloeiros, run verde em 28 s.
+  if (fonte.includes(',')) return fonte.split(',').map((s) => s.trim()).filter(Boolean);
   try {
     const r = await fetch(
       `${URL_BASE}/rest/v1/coleta_cliente?fonte=eq.${encodeURIComponent(fonte)}&select=fontes_acervo`,

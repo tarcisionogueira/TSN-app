@@ -63,7 +63,10 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-        run: node scripts/coleta-recente.mjs LEFFA 7 >> "$GITHUB_OUTPUT"
+        # Todas as fontes dos tenants, não só LEFFA: com LEFFA fresco pelo runner de casa o freio pulava os 45
+        # tenants novos (25/10). Fonte sem lote ativo conta como VELHA, então o cron roda — custo contido pela
+        # busca grátis primeiro e pelo teto do propósito 'leilaopro' no Bright Data.
+        run: node scripts/coleta-recente.mjs "LEFFA,OSCAR,ILEILOES,LUISLEIL,VERSALLES,HASTAPUBLICALEL,RAUPP,RENOVAR,QLEILAO,NSLEILOES,JACLEILOES,BIDGO,SOLEILOES,SANTOSBORIN,GRANDESLEIL,MERCADOLEIL,PIETOSO,MPLEILAO,SANTAMARIALEIL,SCHOLANTE,REGIONALLEIL,SCHONARDIE,VSLEILOES,BARTMANN,RZLEILOES,GABRIELROSA,GTLEILOES,SCOTTOLEIL,RABUSKE,FERRONATO,CLADEMIR,TONIALLEIL,ARNOLDOLEIL,DLDLEILOEIRO,RITTALEIL,JULEILOES,SCHEIDLEIL,SUPERLEIL,VIDALLEIL,KIRINUSLEIL,BLMLEILOES,BARBIERILEIL,MACHADORS,MICHELLILEIL,CLOVISLEIL,FELIPEROTTA,EDUARDOVIVIAN,FARIASLEIL,TREVISANLEIL" 7 >> "$GITHUB_OUTPUT"
       - name: Rodar scraper LEILAOPRO
         if: github.event.inputs.forcar == '1' || steps.freio.outputs.pular != '1'
         env:
