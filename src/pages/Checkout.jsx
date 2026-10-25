@@ -10,7 +10,7 @@ import { trackCheckoutIniciado, trackPlanContratado, trackCadastro } from '../ut
 import { Loader2, CheckCircle2, ExternalLink, Briefcase, ShieldCheck, TrendingUp, Headphones, ArrowUpRight, ArrowDownRight, AlertTriangle, RefreshCw, MapPin } from 'lucide-react';
 import LogoB from '../components/LogoB';
 import { PLANOS as PLANOS_STATIC } from '../data/cursos';
-import OfertaCombo, { podeOferecerCombo, ComboCheckbox, AvisoProParaCombo } from '../components/OfertaCombo';
+import OfertaCombo, { podeOferecerCombo, ComboCheckbox, AvisoProParaCombo, AvisoProAnualParaVeiculos } from '../components/OfertaCombo';
 import { supabase } from '../utils/supabase';
 import { fetchPlanosComConfig } from '../utils/planosConfig';
 import { apiCall } from '../utils/apiCall';
@@ -1573,6 +1573,12 @@ export default function Checkout() {
             <div style={{ background: '#f1f5f9', borderRadius: 10, padding: '10px 14px', marginBottom: 12, fontSize: 12, color: '#64748b' }}>
               Plano atual: <strong>{planoAtual.nome}</strong> ({planoAtual.precoLabel})
             </div>
+          )}
+          {/^combo/.test(String(planoKey || '')) && role === 'top2_anual' && !resultadoMudanca && (
+            <AvisoProAnualParaVeiculos PLANOS={PLANOS} onTrocar={() => {
+              registrarEvento('lp_cta', { alvo: 'checkout_proanual_veiculos' });
+              const p = new URLSearchParams(params); p.set('plano', 'veiculos'); nav(`/checkout?${p}`, { replace: true }); window.scrollTo(0, 0);
+            }} />
           )}
           {/^combo/.test(String(planoKey || '')) && role === 'top2' && !resultadoMudanca && (
             <AvisoProParaCombo PLANOS={PLANOS} anual={temToggleAnual && modalidade === 'anual'} />

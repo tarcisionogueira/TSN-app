@@ -11,7 +11,7 @@ import { TERMO_PARCEIRO_VERSAO, TERMO_PARCEIRO_PREAMBULO, TERMO_PARCEIRO, DECLAR
 import { LATAO } from '../utils/marca';
 import { usePlanos } from '../contexts/PlanosContext';
 import { registrarEvento } from '../utils/tracker';
-import { ehEquipeVeiculos, CHECKOUT_COMBO } from '../utils/veiculosAcesso';
+import { ehEquipeVeiculos, CHECKOUT_COMBO, CHECKOUT_VEICULOS } from '../utils/veiculosAcesso';
 import { ROLES_PAGOS_IMOVEIS } from '../utils/leiloeiroAcesso';
 
 // Rótulo da home por plano (usa o role EFETIVO — respeita o modo suporte).
@@ -248,6 +248,7 @@ export default function HomeCliente() {
   const brl = (v) => `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const pro = precoDe('top2');
   const combo = precoDe('combo');
+  const veicPlano = precoDe('veiculos');
   const assessoria = planos?.assessorado;
 
   // Cota por balde, "não lido" quando a leitura falhou (nunca 0).
@@ -577,7 +578,14 @@ export default function HomeCliente() {
                 desc="Investidor Pro de imóveis junto com o seu Leilão de Veículos. Seu plano Veículos atual é encerrado automaticamente: uma cobrança só."
                 cor="#7c3aed" onClick={() => { registrarEvento('lp_cta', { alvo: 'home_escada_veiculos_combo' }); nav(CHECKOUT_COMBO); }} />
             )}
-            {ehPro && acessoVeic === false && (
+            {/* Pro ANUAL (dono, 25/10): "o pro anual mantém até o fim do ano pago". O degrau dele é o plano
+                Veículos — Pro anual + Veículos = o mesmo que o Combo, sem pagar o Pro de novo. */}
+            {effectiveRole === 'top2_anual' && acessoVeic === false && (
+              <Acao Icon={Car} titulo={`Leilão de Veículos: some ao seu Pro anual${veicPlano ? ` · ${brl(veicPlano.preco)}/mês` : ''}`}
+                desc="Seu Pro anual segue até o fim do período pago. Com Veículos você fica com o mesmo que o Combo, sem pagar o Pro de novo."
+                cor="#7c3aed" onClick={() => { registrarEvento('lp_cta', { alvo: 'home_escada_proanual_veiculos' }); nav(CHECKOUT_VEICULOS); }} />
+            )}
+            {ehPro && effectiveRole !== 'top2_anual' && acessoVeic === false && (
               <Acao Icon={Car} titulo={`Combo: some veículos${effectiveRole === 'top2' && combo && pro && combo.preco > pro.preco ? ` por +${brl(combo.preco - pro.preco)}/mês` : combo ? ` · ${brl(combo.preco)}/mês` : ''}`}
                 desc="Seu Pro atual é encerrado automaticamente: uma cobrança só. Leiloeiro, pátio e relatório por IA de cada carro."
                 cor="#7c3aed" onClick={() => { registrarEvento('lp_cta', { alvo: 'home_escada_pro_combo' }); nav(CHECKOUT_COMBO); }} />

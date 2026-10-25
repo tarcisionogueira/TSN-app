@@ -18,7 +18,9 @@ const BENEFICIOS = [
 export const podeOferecerCombo = (planoKey, role, PLANOS) =>
   ['explorador', 'top2', 'veiculos'].includes(planoKey)
   && PLANOS?.combo?.ativo !== false
-  && !/^(clube|assessorado)/.test(role || '');
+  && !/^(clube|assessorado)/.test(role || '')
+  // Pro ANUAL mantém o ano pago (dono, 25/10): para ele o caminho é o plano Veículos, não o Combo.
+  && role !== 'top2_anual';
 
 export default function OfertaCombo({ planoKey, PLANOS, onEscolher, escuro = false }) {
   const num = (k) => Number(PLANOS?.[k]?.preco) || 0;
@@ -100,6 +102,24 @@ export function ComboCheckbox({ marcado, base, PLANOS, onChange, anual = false }
  * veículos e outro Combo — MP em mp-webhook.js na autorização do mandato, Asaas em asaas-webhook.js no 1º
  * pagamento confirmado). Não há pró-rata: o que faltava era DIZER isso. Diferença sempre de `PLANOS` ao vivo.
  */
+/** Pro ANUAL que abriu o checkout do Combo (dono, 25/10: "o pro anual mantém até o fim do ano pago"):
+ * o Combo cobraria de novo o Pro que ele já pagou. Recomenda o plano Veículos, que somado ao Pro anual
+ * dá o mesmo acesso. Se mesmo assim assinar o Combo, a renovação do Pro anual é cancelada e o acesso
+ * segue até o fim do período pago (mp-webhook: cancelamento mantém até next_payment_date). */
+export function AvisoProAnualParaVeiculos({ PLANOS, onTrocar }) {
+  const v = Number(PLANOS?.veiculos?.preco) || 0;
+  const fmt = (n) => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  return (
+    <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 12, padding: '12px 14px', marginBottom: 16, fontSize: 12.5, color: '#78350f', lineHeight: 1.6 }}>
+      <strong style={{ display: 'block', fontSize: 13.5 }}>Você já tem o Investidor Pro anual, válido até o fim do período pago.</strong>
+      Para somar veículos, assine só o Leilão de Veículos{v > 0 ? ` (${fmt(v)}/mês)` : ''}: juntos dão o mesmo acesso do Combo, sem pagar o Pro de novo.
+      <button onClick={onTrocar} style={{ display: 'block', marginTop: 8, padding: '8px 12px', border: 'none', borderRadius: 8, background: '#b45309', color: 'white', fontWeight: 800, fontSize: 12.5, cursor: 'pointer' }}>
+        Trocar para Leilão de Veículos →
+      </button>
+    </div>
+  );
+}
+
 export function AvisoProParaCombo({ PLANOS, anual = false }) {
   const num = (k) => Number(anual ? PLANOS?.[k]?.precoAnual : PLANOS?.[k]?.preco) || 0;
   const fmt = (v) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
