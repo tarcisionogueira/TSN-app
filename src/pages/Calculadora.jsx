@@ -5,6 +5,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import { calcularMetricasCenario, calcularTetoLance, fluxoLocacao, calcularTIR, fmt, fmtPct } from '../utils/calculos';
 import { salvarRef, lerRef } from '../utils/ref';
+import { ROLES_PAGOS_IMOVEIS } from '../utils/leiloeiroAcesso';
+import { registrarEvento } from '../utils/tracker';
 
 const ROLES_COM_ACESSO = ['top2', 'assessorado', 'clube', 'consultor', 'analista', 'advogado', 'admin'];
 
@@ -642,7 +644,8 @@ export default function Calculadora() {
       {/* ── Upsell Investidor Pro ── */}
       {(() => {
         const r = effectiveRole || role;
-        const isPago = ['top2','assessorado','clube','consultor','analista','advogado','admin'].includes(r);
+        // 25/10: a lista à mão esquecia os ANUAIS (top2_anual etc.) — o assinante anual via o upsell do plano que já paga.
+        const isPago = [...ROLES_PAGOS_IMOVEIS, 'consultor', 'analista', 'advogado', 'admin'].includes(r);
         const refAtivo = refAtualUrl || lerRef();
         const temRef = !!refAtivo;
 
@@ -735,6 +738,34 @@ export default function Calculadora() {
           </div>
         );
       })()}
+
+      {/* VER LOTES REAIS (25/10, arena "comunicação"): a conta da calculadora termina num lote de verdade.
+          Logado → a busca; visitante → cadastro grátis (que leva à busca) ou os leilões de veículos, abertos. */}
+      <div style={{ marginTop: 24, background: 'white', border: '1px solid #e2e8f0', borderRadius: 16, padding: '18px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 220 }}>
+          <div style={{ fontSize: 16, fontWeight: 900, color: '#111' }}>Agora teste a conta num lote real</div>
+          <div style={{ fontSize: 13, color: '#475569', lineHeight: 1.55, marginTop: 3 }}>Aprenda a não perder dinheiro com casos reais: escolha um leilão aberto e compare o lance com o que a calculadora mostrou.</div>
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {user ? (
+            <button onClick={() => { registrarEvento('lp_cta', { alvo: 'calc_ver_lotes' }); nav('/buscar'); }}
+              style={{ padding: '11px 18px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>
+              Ver lotes reais →
+            </button>
+          ) : (
+            <>
+              <button onClick={() => { registrarEvento('lp_cta', { alvo: 'calc_ver_lotes_cadastro' }); nav(`/login?modo=cadastro&next=${encodeURIComponent('/buscar')}`); }}
+                style={{ padding: '11px 18px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>
+                Criar conta grátis e ver lotes reais →
+              </button>
+              <button onClick={() => { registrarEvento('lp_cta', { alvo: 'calc_ver_veiculos' }); nav('/veiculos'); }}
+                style={{ padding: '11px 16px', background: '#eff6ff', color: '#084BA6', border: '1px solid #bfdbfe', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+                Ver leilões de veículos
+              </button>
+            </>
+          )}
+        </div>
+      </div>
 
       {/* No celular, 32px de padding de cada lado comiam ~1/6 da largura útil do card e
           espremiam os campos (23/08). 18px devolvem o espaço sem mudar nada no desktop. */}

@@ -1,5 +1,5 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { BarChart3, Loader2, CheckCircle2, XCircle, Search, Building2, Plus, Home, Briefcase, Trophy, FileWarning } from 'lucide-react';
 import { useAnalises } from '../contexts/AnalisesContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -12,6 +12,8 @@ import { lerComRenovacao } from '../lib/sessao-expirada';
 import AcompanhamentoFavoritos from '../components/AcompanhamentoFavoritos';
 import FavoritoBotao from '../components/FavoritoBotao';
 import MinhasAnalisesVeiculos from '../components/MinhasAnalisesVeiculos';
+import { useAcessoVeiculos, ehEquipeVeiculos } from '../utils/veiculosAcesso';
+import { lerCotaMercado } from '../utils/cotaAnalise';
 
 // Etapa do acompanhamento assistido (caso) em rótulo curto para o cliente.
 const ETAPA_CURTA = {
@@ -34,7 +36,7 @@ const CHIP = {
 
 export default function MinhasAnalises() {
   const { analises, documentais, laudos, emAndamento, remover } = useAnalises();
-  const { effectiveUserId, impersonate, role } = useAuth();
+  const { user, effectiveUserId, impersonate, role, effectiveRole, roleSimulado } = useAuth();
   // Registro de arremate: só Assessoria e Leilão Club (05/10, #34 — o servidor confere de novo).
   const podeDeclararArremate = ['assessorado', 'clube', 'admin'].includes(role);
   const nav = useNavigate();
@@ -42,8 +44,27 @@ export default function MinhasAnalises() {
   // Estrela num card → a seção Acompanhamento relê (remonta pela chave).
   const [favVersao, setFavVersao] = React.useState(0);
   // Imóveis × Veículos (10/10): relatório de veículo só existe para quem acessa /analise-veiculo.
-  const veVeiculos = ['admin', 'analista'].includes(role);
-  const [aba, setAba] = React.useState('imoveis');
+  // 25/10: era `['admin','analista'].includes(role)` — e o ASSINANTE de Veículos/Combo, que gera o
+  // relatório desde 20/10, não tinha onde revê-lo. Agora: equipe OU acesso a veículos (tem_acesso_veiculos).
+  // Enquanto o acesso é lido (`null`), a aba não aparece; falha de leitura vira `false` no hook — aqui só
+  // esconde a aba (o relatório continua no banco e reaparece na próxima leitura), não apaga nada.
+  const acessoVeiculos = useAcessoVeiculos(user, role);
+  const veVeiculos = ehEquipeVeiculos(role) || acessoVeiculos === true;
+  const [searchParams] = useSearchParams();
+  const [aba, setAba] = React.useState(() => (searchParams.get('aba') === 'veiculos' ? 'veiculos' : 'imoveis'));
+
+  // Vazio do EXPLORADOR (25/10): diz quantos relatórios grátis ainda restam, quando o número foi LIDO.
+  // Sem leitura, a frase não leva número nenhum (nunca 0 por falha).
+  const ehExplorador = (effectiveRole || role) === 'explorador';
+  const [amostraRestam, setAmostraRestam] = React.useState(null);
+  React.useEffect(() => {
+    if (!ehExplorador || !effectiveUserId || roleSimulado) { setAmostraRestam(null); return; }
+    let vivo = true;
+    lerCotaMercado(supabase, effectiveUserId).then((c) => {
+      if (vivo) setAmostraRestam(c?.amostra && c.restantes != null ? { restam: c.restantes, limite: Number(c.limite || 0) } : null);
+    });
+    return () => { vivo = false; };
+  }, [ehExplorador, effectiveUserId, roleSimulado]);
 
   // Acompanhamento assistido: se o imóvel analisado já virou um caso (fluxo /caso),
   // conectamos os dois no mesmo lugar — o cliente pula direto para o acompanhamento.
@@ -359,7 +380,11 @@ export default function MinhasAnalises() {
         <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 16, padding: '48px 24px', textAlign: 'center' }}>
           <BarChart3 size={40} color="#cbd5e1" />
           <div style={{ fontSize: 15, fontWeight: 800, color: '#334155', margin: '14px 0 6px' }}>Você ainda não tem análises</div>
-          <div style={{ fontSize: 13, color: '#64748b', marginBottom: 18, lineHeight: 1.5 }}>Busque um imóvel e gere sua primeira análise de viabilidade.</div>
+          <div style={{ fontSize: 13, color: '#64748b', marginBottom: 18, lineHeight: 1.5 }}>
+            {ehExplorador && amostraRestam && amostraRestam.restam > 0
+              ? <>Você tem <strong>{amostraRestam.restam} {amostraRestam.restam === 1 ? 'relatório grátis' : 'relatórios grátis'}</strong>. Escolha um imóvel real e veja em minutos quanto ele vale e até quanto dar de lance.</>
+              : 'Busque um imóvel e gere sua primeira análise de viabilidade.'}
+          </div>
           <button onClick={() => nav('/buscar')} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '12px 22px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>
             <Search size={16} /> Buscar imóveis
           </button>

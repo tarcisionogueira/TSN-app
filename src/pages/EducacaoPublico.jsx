@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { GraduationCap, BookOpen, Gift, Sparkles } from 'lucide-react';
+import { GraduationCap, BookOpen, Gift, Sparkles, PlayCircle } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { driveImage } from '../utils/driveUrl';
 import { AZUL, NAVY, LATAO, VERDE, corSuave } from '../utils/marca';
+import { registrarEvento } from '../utils/tracker';
 
 // Placeholder de capa (mesmo espírito de EbookCover em Membros.jsx) para quem ainda não
 // tem capa_url ou cuja imagem falhar — nunca deixa caixa branca. Tons dentro da PALETA DA
@@ -60,6 +61,26 @@ export default function EducacaoPublico() {
   const nav = useNavigate();
   const [itens, setItens] = useState(null); // null = carregando
   const [erro, setErro] = useState('');
+  // AULA AO VIVO GRÁTIS antes do eBook (25/10, arena "comunicação"): para quem quer APRENDER, o 1º passo
+  // gratuito vem antes do produto pago. Data do banco (`live_proxima` resolve a recorrência), nunca fixa:
+  // sem aula ativa e futura, o cartão não aparece. Falha de leitura fica no console — o catálogo segue.
+  const [aula, setAula] = useState(null);
+  useEffect(() => {
+    let vivo = true;
+    supabase.rpc('live_proxima', { p_slug: 'leilao-ao-vivo' }).then(({ data, error }) => {
+      if (!vivo) return;
+      if (error) { console.warn('[educacao] live_proxima:', error.message); return; }
+      if (data?.slug && data?.data_hora && Date.parse(data.data_hora) > Date.now()) setAula(data);
+    }, (e) => console.warn('[educacao] live_proxima (rede):', e?.message || e));
+    return () => { vivo = false; };
+  }, []);
+  const quandoAula = (() => {
+    if (!aula?.data_hora) return '';
+    try {
+      return new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Bahia', weekday: 'long', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+        .format(new Date(aula.data_hora)).replace(/^(\w)/, (c) => c.toUpperCase());
+    } catch { return ''; }
+  })();
 
   useEffect(() => {
     let vivo = true;
@@ -122,6 +143,19 @@ export default function EducacaoPublico() {
             para investir com segurança.
           </p>
         </div>
+
+        {aula && (
+          <button onClick={() => { registrarEvento('lp_cta', { alvo: 'educacao_aula_ao_vivo' }); nav(`/live/${aula.slug}`); }}
+            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', textAlign: 'left', cursor: 'pointer', background: `linear-gradient(135deg, ${NAVY} 0%, ${AZUL} 100%)`, color: 'white', border: 'none', borderRadius: 16, padding: '18px 20px', marginBottom: 28 }}>
+            <PlayCircle size={34} color={LATAO} style={{ flexShrink: 0 }} />
+            <div style={{ flex: 1, minWidth: 220 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: LATAO, textTransform: 'uppercase', letterSpacing: 1 }}>Aula ao vivo e gratuita{quandoAula ? ` · ${quandoAula}` : ''}</div>
+              <div style={{ fontSize: 18, fontWeight: 900, marginTop: 4 }}>{aula.titulo || 'Aprenda a não perder dinheiro em leilão'}</div>
+              <div style={{ fontSize: 13.5, color: '#cbd5e1', marginTop: 3 }}>Aprenda a não perder dinheiro, com casos reais. Comece por aqui antes de comprar qualquer material.</div>
+            </div>
+            <span style={{ background: 'white', color: NAVY, fontWeight: 800, fontSize: 13.5, padding: '10px 16px', borderRadius: 10 }}>Quero participar →</span>
+          </button>
+        )}
 
         {itens === null && <p style={{ textAlign: 'center', color: '#94a3b8', padding: 40 }}>Carregando...</p>}
         {erro && <p style={{ textAlign: 'center', color: '#dc2626', padding: 20 }}>{erro}</p>}

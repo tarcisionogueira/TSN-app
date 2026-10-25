@@ -16,6 +16,7 @@ import { localDoPatio } from '../utils/patioVeiculo';
 import DescricaoOrganizada from '../components/DescricaoOrganizada';
 import { ehEquipeVeiculos, rotaBuscaVeiculos, dadosRestritosVeiculos, useAcessoVeiculos, CHECKOUT_VEICULOS } from '../utils/veiculosAcesso';
 import { registrarEvento } from '../utils/tracker.js';
+import { usePlanos } from '../contexts/PlanosContext';
 
 // 20/10 (dono): a tela passou a atender CLIENTE também (rota /veiculo/:id, login obrigatório). A equipe
 // segue lendo a tabela completa; o cliente lê a vitrine pública e recebe leiloeiro/link/documentos/pátio
@@ -67,6 +68,7 @@ const COLUNAS_PUBLICAS = [
   'fotos', 'data_leilao', 'sinistro', 'is_sucata', 'financiavel', 'combustivel', 'cambio', 'cor', 'motor_alerta',
   'ipva_situacao', 'tipo_veiculo', 'valor_fipe', 'fipe_codigo', 'fipe_mes_referencia', 'fipe_status', 'fipe_atualizado_em', 'fipe_faixa_min', 'fipe_faixa_max',
   'resultado_leilao', 'valor_lance_vencedor', 'teve_lance', 'forma_pagamento', 'opcionais', 'status_patio',
+  'motor_status', // 25/10: "o que conferir" (motor declarado pelo leiloeiro)
 ].join(',');
 
 const COLUNAS = [
@@ -79,6 +81,7 @@ const COLUNAS = [
   'resultado_leilao', 'valor_lance_vencedor', 'teve_lance',
   // página interna completa (24/09): local do pátio, documentos e condições do leiloeiro
   'raw', 'anexos', 'forma_pagamento', 'opcionais', 'status_patio',
+  'motor_status',
 ].join(',');
 
 // FIPE 'aproximado'/'sem_match'/'sem_dados' explicados na tela — nunca um número sem contexto
@@ -119,6 +122,10 @@ export default function VeiculoDetalhe() {
   // No link compartilhado o dado já vem sem leiloeiro: quem não assina vê o cadeado (não um campo vazio).
   const semPlano = !equipe && (compartilhado ? acesso !== true : acesso === false);
   // Visitante (25/10, ficha pública): o desbloqueio passa pelo cadastro com o plano e volta ao checkout.
+  // Preço SÓ do planos_config (25/10, regra do dono "todo preço vem de usePlanos") — era "R$ 29,90" fixo.
+  const planosCtx = usePlanos();
+  const precoVeic = planosCtx?.veiculos?.doBanco && Number(planosCtx.veiculos.preco) > 0 ? Number(planosCtx.veiculos.preco) : null;
+  const precoVeicLabel = precoVeic ? `R$ ${precoVeic.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mês` : null;
   const desbloquear = () => {
     registrarEvento('lp_cta', { alvo: `veiculo_ficha_desbloquear${user ? '' : '_anon'}` });
     nav(user ? CHECKOUT_VEICULOS : `/login?modo=cadastro&plano=veiculos&next=${encodeURIComponent(CHECKOUT_VEICULOS)}`);
@@ -275,6 +282,20 @@ export default function VeiculoDetalhe() {
   const mostrarFipe = v.valor_fipe > 0 && ['ok', 'aproximado', 'leiloeiro'].includes(v.fipe_status);
   const mostrarFaixa = !mostrarFipe && v.fipe_status === 'faixa_modelo' && Number(v.fipe_faixa_max) > 0;
   const leilaoEncerrado = v.data_leilao && new Date(v.data_leilao).getTime() < Date.now();
+  // DESCONTO NA FIPE + QUEM VENDE (25/10, pesquisa de mercado aprovada pelo dono): o que atrai o
+  // comprador de carro é o desconto na FIPE; o que o assusta é dívida e sinistro/enchente. Os dois lado
+  // a lado. Desconto só com FIPE exibível e lance abaixo dela; origem só a classificada no banco.
+  const descFipe = mostrarFipe && Number(v.valor_minimo) > 0 && Number(v.valor_fipe) > Number(v.valor_minimo)
+    ? Math.round((1 - Number(v.valor_minimo) / Number(v.valor_fipe)) * 100) : null;
+  const origem = ORIGEM_VENDA[v.origem_venda] && v.origem_venda !== 'nao_identificado' ? ORIGEM_VENDA[v.origem_venda] : null;
+  // "O QUE CONFERIR": só o que o dado TEM; o resto diz "não informado" (nunca "sem sinistro" por ausência).
+  const MOTOR_TXT = { funciona: 'motor funcionando (declarado pelo leiloeiro, não é garantia)', nao_funciona: 'motor não funciona ou avariado (declarado)', nao_testado: 'motor não testado (declarado)', servivel: 'motor servível, como peça (não quer dizer que funciona)' };
+  const conferir = [
+    { item: 'IPVA', valor: v.ipva_situacao ? `${String(v.ipva_situacao).toLowerCase()} (informado pelo leiloeiro)` : 'não informado' },
+    { item: 'Multas e outros débitos', valor: 'não informado: confira no edital e no Detran antes do lance' },
+    { item: 'Sinistro', valor: v.sinistro ? `${v.sinistro} (informado pelo leiloeiro)` : v.is_sucata ? 'sucata: só certificado de baixa, sem ATPV-E' : 'não informado', alerta: (!!v.sinistro && !/sem sinistro/i.test(v.sinistro)) || !!v.is_sucata },
+    { item: 'Laudo / estado mecânico', valor: MOTOR_TXT[v.motor_status] || (v.motor_alerta ? 'há menção de dano no motor na ficha' : 'laudo cautelar não informado'), alerta: v.motor_status === 'nao_funciona' || !!v.motor_alerta },
+  ];
   const rotuloAnalise = (() => {
     if (!cota || cota.ilimitado) return 'Solicitar Análise';
     if (cota.restantes <= 0) return cota.amostra ? 'Análises grátis esgotadas' : 'Cota do mês esgotada';
@@ -385,9 +406,6 @@ export default function VeiculoDetalhe() {
           })()}
 
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {ORIGEM_VENDA[v.origem_venda] && v.origem_venda !== 'nao_identificado' && (
-              <span title={ORIGEM_VENDA[v.origem_venda].dica} style={{ fontSize: 11, fontWeight: 700, background: ORIGEM_VENDA[v.origem_venda].fundo, color: ORIGEM_VENDA[v.origem_venda].cor, padding: '3px 9px', borderRadius: 8 }}>{ORIGEM_VENDA[v.origem_venda].rotulo}</span>
-            )}
             {v.sinistro && (() => { const c = corSinistro(v.sinistro); return (
               <span style={{ fontSize: 11, fontWeight: 700, background: c.bg, color: c.fg, padding: '3px 9px', borderRadius: 8, textTransform: 'capitalize' }}>{v.sinistro}</span>
             ); })()}
@@ -409,6 +427,17 @@ export default function VeiculoDetalhe() {
             <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4 }}>Lance Mínimo</div>
             <div style={{ fontWeight: 900, color: '#111111', fontSize: 24 }}>{fmtBRL(v.valor_minimo)}</div>
             {v.valor_avaliacao > 0 && <div style={{ fontSize: 12.5, color: '#64748b', marginTop: 2 }}>Avaliação do leiloeiro: {fmtBRL(v.valor_avaliacao)}</div>}
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginTop: 8 }}>
+              {descFipe != null && descFipe > 0 && (
+                <span title="Quanto o lance mínimo está abaixo do valor FIPE de referência" style={{ fontSize: 12, fontWeight: 900, background: descFipe >= 30 ? '#dcfce7' : '#fef3c7', color: descFipe >= 30 ? '#15803d' : '#92400e', padding: '3px 9px', borderRadius: 8 }}>
+                  {v.fipe_status === 'aproximado' ? '≈ ' : ''}{descFipe}% abaixo da FIPE
+                </span>
+              )}
+              {origem
+                ? <span title={origem.dica} style={{ fontSize: 12, fontWeight: 700, background: origem.fundo, color: origem.cor, padding: '3px 9px', borderRadius: 8 }}>Quem vende: {origem.rotulo}</span>
+                : <span style={{ fontSize: 12, color: '#94a3b8' }}>Quem vende: não informado</span>}
+            </div>
+            {origem && <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 4, lineHeight: 1.45 }}>{origem.dica}</div>}
 
             <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px dashed #e2e8f0' }}>
               <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4 }}>Valor FIPE de referência</div>
@@ -445,6 +474,16 @@ export default function VeiculoDetalhe() {
 
           <div style={{ fontSize: 12.5, color: '#64748b' }}>🗓 {fmtDataLeilao(v.data_leilao)}</div>
 
+          <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 12, padding: '12px 14px' }}>
+            <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 6 }}>O que conferir antes do lance</div>
+            {conferir.map((c) => (
+              <div key={c.item} style={{ fontSize: 12.5, color: '#334155', lineHeight: 1.5, padding: '3px 0', display: 'flex', gap: 6 }}>
+                <span style={{ color: c.alerta ? '#b91c1c' : '#94a3b8', flexShrink: 0 }}>{c.alerta ? '⚠' : '•'}</span>
+                <span><strong>{c.item}:</strong> <span style={{ color: c.valor.startsWith('não informado') || c.valor.startsWith('laudo cautelar não') ? '#94a3b8' : c.alerta ? '#b91c1c' : '#334155' }}>{c.valor}</span></span>
+              </div>
+            ))}
+          </div>
+
           {/* Ações — nenhuma no link compartilhado (acervo não é público: sem leiloeiro, sem análise). */}
           {!compartilhado && (<>
           {semPlano ? (
@@ -454,8 +493,21 @@ export default function VeiculoDetalhe() {
                 Com o plano Leilão de Veículos você vê quem é o leiloeiro, abre o lote, os documentos e o endereço do pátio, e gera o relatório por IA deste carro (10 por mês).
               </div>
               <button onClick={desbloquear} style={{ marginTop: 10, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '12px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>
-                <Lock size={15} /> Desbloquear por R$ 29,90/mês
+                <Lock size={15} /> {precoVeicLabel ? `Desbloquear por ${precoVeicLabel}` : 'Desbloquear o leiloeiro'}
               </button>
+              {/* EXEMPLO ESTÁTICO do relatório por IA (25/10, dono): mostra o que o plano entrega sem usar
+                  dado real — nenhum lote, leiloeiro, placa ou valor daqui sai do acervo. */}
+              <div style={{ marginTop: 12, background: 'white', border: '1px dashed #93c5fd', borderRadius: 10, padding: '11px 12px' }}>
+                <div style={{ fontSize: 10.5, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4 }}>Exemplo ilustrativo · veículo fictício</div>
+                <div style={{ fontSize: 13, fontWeight: 900, color: '#15803d', marginTop: 5 }}>Recomendação: vale o lance até R$ 38.500</div>
+                <div style={{ fontSize: 12, color: '#334155', lineHeight: 1.55, marginTop: 4 }}>
+                  FIPE de referência R$ 52.000 · comissão do leiloeiro e taxas de pátio somadas ao custo · débitos do edital listados (ex.: IPVA em aberto a cargo do arrematante) · reparos estimados pelas fotos · margem de revenda no teto do lance.
+                </div>
+                <div style={{ fontSize: 12, color: '#b45309', marginTop: 4 }}>⚠ Ponto de atenção do exemplo: sinistro de média monta, exige vistoria antes do lance.</div>
+                <button onClick={desbloquear} style={{ marginTop: 8, background: 'none', border: 'none', padding: 0, color: '#0D63DB', fontWeight: 800, fontSize: 12.5, cursor: 'pointer' }}>
+                  Gerar este relatório para este carro →
+                </button>
+              </div>
             </div>
           ) : (
           <a href={v.link_lote || undefined} target="_blank" rel="noopener noreferrer"

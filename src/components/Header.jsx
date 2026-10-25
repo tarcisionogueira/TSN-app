@@ -9,6 +9,7 @@ import { ehRotaDeCampanha } from '../utils/rotaCampanha';
 import { usePlanos } from '../contexts/PlanosContext';
 import { supabase } from '../utils/supabase';
 import { registrarEvento } from '../utils/tracker';
+import { ROLES_PAGOS_IMOVEIS } from '../utils/leiloeiroAcesso';
 
 const FEEDBACK_KEY = 'tsn_feedback_email';
 const DEFAULT_FEEDBACK_EMAIL = 'tarcisioaraujo@reimob.com.br';
@@ -237,7 +238,9 @@ export default function Header() {
 
   const abrirInstalarApp = () => window.dispatchEvent(new Event('tsn:pwa-install'));
 
-  const ROLES_CALC = ['explorador', 'top2', 'assessorado', 'clube', 'consultor', 'analista', 'advogado', 'admin'];
+  // 25/10: a lista à mão deixava de fora os planos ANUAIS (top2_anual, assessorado_anual, clube_anual) —
+  // o assinante anual perdia a Calculadora do menu. Pago vem da fonte única (ROLES_PAGOS_IMOVEIS).
+  const ROLES_CALC = ['explorador', ...ROLES_PAGOS_IMOVEIS, 'consultor', 'analista', 'advogado', 'admin'];
   const linksPublicos = [
     { path: '/', label: 'Home', icon: Home, tourId: 'home' },
     { path: '/calculadora', label: 'Calculadora', icon: Calculator, tourId: 'calculadora' },
@@ -316,6 +319,25 @@ export default function Header() {
   // usuário visualizado — o banner laranja é quem lembra que é a equipe navegando).
   const nomeUsuario = impersonate?.nome || nomePerfil || user?.user_metadata?.nome || user?.email?.split('@')[0] || 'Usuário';
   const roleEtiqueta = impersonate ? (impersonate.role || 'explorador') : role;
+  // Etiqueta do EXPLORADOR que assina Veículos (25/10): o add-on não é role (perfis.acesso_veiculos_ate),
+  // e a etiqueta dizia "Explorador" a quem paga. Lê `tem_acesso_veiculos` da conta exibida; enquanto lê
+  // ou se a leitura falhar, NÃO mostra nome de plano (falha não pode rebaixar ninguém na tela).
+  const idEtiqueta = impersonate ? effectiveUserId : user?.id;
+  const [veicEtiqueta, setVeicEtiqueta] = React.useState(undefined); // undefined=lendo/erro · bool
+  React.useEffect(() => {
+    if (roleEtiqueta !== 'explorador' || !idEtiqueta || roleSimulado) { setVeicEtiqueta(false); return; }
+    let vivo = true;
+    setVeicEtiqueta(undefined);
+    supabase.rpc('tem_acesso_veiculos', { p_user_id: idEtiqueta }).then(({ data, error }) => {
+      if (!vivo) return;
+      if (error) { console.warn('[header] tem_acesso_veiculos:', error.message); return; }
+      setVeicEtiqueta(data === true);
+    }, (e) => console.warn('[header] tem_acesso_veiculos (rede):', e?.message || e));
+    return () => { vivo = false; };
+  }, [roleEtiqueta, idEtiqueta, roleSimulado]);
+  const textoEtiqueta = roleEtiqueta === 'explorador'
+    ? (veicEtiqueta === true ? 'Leilão de Veículos' : veicEtiqueta === false ? 'Explorador' : '')
+    : (ROLE_LABELS_STATIC[roleEtiqueta] || planosCtx?.[roleEtiqueta]?.nome || roleEtiqueta);
 
   // Sai DEPOIS de todos os hooks — antes deles o React quebraria a ordem entre renders.
   // Custo: os hooks acima rodam à toa numa rota de campanha; benefício: a regra fica numa
@@ -476,9 +498,9 @@ export default function Header() {
                   <div style={{ padding: '8px 12px', fontSize: 12, color: '#64748b', borderBottom: '1px solid #f1f5f9', marginBottom: 4 }}>
                     <div style={{ fontWeight: 700, color: '#111111' }}>{nomeUsuario}</div>
                     {!impersonate && <div style={{ fontSize: 11 }}>{user.email}</div>}
-                    {!loading && roleEtiqueta && roleEtiqueta !== 'aluno' && (
+                    {!loading && roleEtiqueta && roleEtiqueta !== 'aluno' && textoEtiqueta && (
                       <div style={{ fontSize: 10, background: '#f1f5f9', borderRadius: 4, padding: '2px 6px', marginTop: 4, display: 'inline-block', fontWeight: 700, textTransform: 'uppercase' }}>
-                        {ROLE_LABELS_STATIC[roleEtiqueta] || planosCtx?.[roleEtiqueta]?.nome || roleEtiqueta}
+                        {textoEtiqueta}
                       </div>
                     )}
                   </div>

@@ -10,6 +10,7 @@ import { useIsMobile } from '../utils/useIsMobile';
 import { lerSessao, gravarSessao, useRolagemDaLista } from '../utils/estadoLista';
 import { useAuth } from '../contexts/AuthContext';
 import { registrarEvento } from '../utils/tracker';
+import { usePlanos } from '../contexts/PlanosContext';
 import SeletorAcervo from '../components/SeletorAcervo';
 import { ehEquipeVeiculos, fonteVeiculos, rotaVeiculo, dadosRestritosVeiculos, useAcessoVeiculos, CHECKOUT_VEICULOS } from '../utils/veiculosAcesso';
 
@@ -393,6 +394,9 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
   const nav = useNavigate();
   const isMobile = useIsMobile();
   const { user, role } = useAuth();
+  // Preço SÓ do planos_config (25/10, "todo preço vem de usePlanos") — era "R$ 29,90/mês" fixo no convite.
+  const planosCtx = usePlanos();
+  const precoVeic = planosCtx?.veiculos?.doBanco && Number(planosCtx.veiculos.preco) > 0 ? Number(planosCtx.veiculos.preco) : null;
   const equipe = ehEquipeVeiculos(role);
   const acesso = useAcessoVeiculos(user, role);
   // 25/10 (arena pré-login): o clique de desbloqueio passa a ser medido (lp_cta) e o visitante vai direto ao
@@ -552,7 +556,7 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 14, padding: '12px 16px' }}>
           <div style={{ fontSize: 13, color: '#1e3a8a', lineHeight: 1.5, flex: 1, minWidth: 0 }}>
             <strong>Descubra quem é o leiloeiro de cada carro</strong> e gere o relatório por IA antes de dar o lance.
-            <span style={{ color: '#475569' }}> Plano Leilão de Veículos — R$ 29,90/mês.</span>
+            <span style={{ color: '#475569' }}> Plano Leilão de Veículos{precoVeic ? ` — R$ ${precoVeic.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mês` : ''}.</span>
           </div>
           <button onClick={desbloquear} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>
             <Lock size={14} /> Desbloquear o leiloeiro
@@ -783,9 +787,6 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
                   {/* Sinal do próprio leiloeiro (11/09) — sinistro, sucata, financiamento e
                       alerta de motor. Nunca inventado: o que ele não informa fica de fora. */}
                   <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
-                    {ORIGEM_VENDA[v.origem_venda] && v.origem_venda !== 'nao_identificado' && (
-                      <span title={ORIGEM_VENDA[v.origem_venda].dica} style={{ fontSize: 9, fontWeight: 700, background: ORIGEM_VENDA[v.origem_venda].fundo, color: ORIGEM_VENDA[v.origem_venda].cor, padding: '1px 6px', borderRadius: 8 }}>{ORIGEM_VENDA[v.origem_venda].rotulo}</span>
-                    )}
                     {v.sinistro && (() => { const c = corSinistro(v.sinistro); return (
                       <span title="Classificação do sinistro, informada pelo leiloeiro" style={{ fontSize: 9, fontWeight: 700, background: c.bg, color: c.fg, padding: '1px 6px', borderRadius: 8, textTransform: 'capitalize' }}>{v.sinistro}</span>
                     ); })()}
@@ -832,6 +833,16 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
                     <div style={{ fontWeight: 900, color: '#111111', fontSize: isMobile ? 18 : 15 }}>{fmtBRL(v.valor_minimo)}</div>
                     {v.valor_minimo_2 > 0 && <div style={{ fontSize: 10, color: '#0f766e', fontWeight: 700 }}>2ª praça {fmtBRL(v.valor_minimo_2)}{v.data_leilao_2 ? ` · ${new Date(v.data_leilao_2).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}` : ''}</div>}
                     {v.valor_fipe > 0 && <div style={{ fontSize: 10, color: '#64748b' }}>FIPE{v.fipe_status === 'aproximado' ? ' ~' : v.fipe_status === 'leiloeiro' ? ' (leiloeiro)' : ''} {fmtBRL(v.valor_fipe)}</div>}
+                    {/* Desconto na FIPE + QUEM VENDE lado a lado (25/10, pesquisa de mercado aprovada pelo dono):
+                        o desconto atrai, a origem (financeira, seguradora, pátio…) diz o risco. Só origem classificada. */}
+                    {(descFipe > 0 || (ORIGEM_VENDA[v.origem_venda] && v.origem_venda !== 'nao_identificado')) && (
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center', marginTop: 3 }}>
+                        {descFipe > 0 && <span title="Lance mínimo abaixo da FIPE de referência" style={{ fontSize: 9, fontWeight: 800, background: '#dcfce7', color: '#15803d', padding: '1px 6px', borderRadius: 8 }}>-{descFipe}% FIPE</span>}
+                        {ORIGEM_VENDA[v.origem_venda] && v.origem_venda !== 'nao_identificado' && (
+                          <span title={ORIGEM_VENDA[v.origem_venda].dica} style={{ fontSize: 9, fontWeight: 700, background: ORIGEM_VENDA[v.origem_venda].fundo, color: ORIGEM_VENDA[v.origem_venda].cor, padding: '1px 6px', borderRadius: 8 }}>{ORIGEM_VENDA[v.origem_venda].rotulo}</span>
+                        )}
+                      </div>
+                    )}
                     {v.valor_avaliacao > 0 && <div style={{ fontSize: 10, color: '#64748b' }}>Aval. {fmtBRL(v.valor_avaliacao)}</div>}
                   </div>
                   <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center', marginTop: 2 }}>
