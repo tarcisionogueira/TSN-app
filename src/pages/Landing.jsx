@@ -29,9 +29,9 @@ import { usePlanos } from '../contexts/PlanosContext';
 //  • Preço real (planos_config via usePlanos) no topo e nos cards; valor não lido = nenhum preço, nunca
 //    um número escrito aqui.
 //  • Página enxugada: "Antes do lance" fundido em "Como funciona", equipe atrás de flag, FAQ com 5.
-//  • Até o REVOKE de 20261025_imoveis_leilao_fecha_colunas_anon.sql ser aplicado, nada aqui promete
-//    "leiloeiro" como exclusivo do Pro (a coluna ainda sai pela API pública): a promessa é "link do lote,
-//    edital e matrícula".
+//  • O REVOKE de 20261025_imoveis_leilao_fecha_colunas_anon.sql foi aplicado pelo dono em 25/10 (conferido: anon
+//    sem SELECT em fonte/numero_matricula; busca por raio de visitante funcionando; auditoria 0/0) — a landing
+//    passou a prometer "leiloeiro, edital e matrícula" como Investidor Pro.
 // ─────────────────────────────────────────────────────────────────────────────────────────
 
 // "Quem está do seu lado" fica fora até a #297 (fotos e nomes reais da equipe). Reversível: true volta.
@@ -262,7 +262,7 @@ export default function Landing() {
             {/* Linha de preço (25/10): o valor vem do planos_config; sem ele, só a parte grátis — nunca um fallback. */}
             <p data-lp-preco={proMesAnual ? 'ok' : 'sem_preco'} style={{ color: '#94a3b8', fontSize: 13, lineHeight: 1.6, marginTop: 14, maxWidth: 560, marginLeft: mobile ? 'auto' : 0, marginRight: mobile ? 'auto' : 0 }}>
               <strong style={{ color: '#e2e8f0' }}>Grátis:</strong> 3 relatórios de amostra, sem cartão
-              {proMesAnual && <> · <strong style={{ color: '#e2e8f0' }}>Investidor Pro</strong> a partir de {brl2(proMesAnual)}/mês: link do lote, edital e matrícula · cancele quando quiser</>}
+              {proMesAnual && <> · <strong style={{ color: '#e2e8f0' }}>Investidor Pro</strong> a partir de {brl2(proMesAnual)}/mês: leiloeiro, edital e matrícula · cancele quando quiser</>}
             </p>
           </div>
 
@@ -384,7 +384,7 @@ export default function Landing() {
                       {Number(l.avaliacao) > 0 && <div style={{ fontSize: 12.5, color: '#64748b' }}>Avaliação {brl0(l.avaliacao)}</div>}
                       <div style={{ marginTop: 'auto', paddingTop: 10, borderTop: '1px solid #f1f5f9', display: 'flex', alignItems: 'flex-start', gap: 7, fontSize: 12, color: '#475569', lineHeight: 1.45 }}>
                         <Lock size={13} color={AZUL} style={{ flexShrink: 0, marginTop: 2 }} />
-                        <span>Link do lote, edital e matrícula: <strong style={{ color: AZUL }}>Investidor Pro</strong></span>
+                        <span>Leiloeiro, edital e matrícula: <strong style={{ color: AZUL }}>Investidor Pro</strong></span>
                       </div>
                     </div>
                   </a>
@@ -582,12 +582,12 @@ export default function Landing() {
             {[
               { key: 'explorador', nome: 'Explorador', tag: 'Para começar', cor: '#64748b', preco: 'Grátis', sub: 'sem cartão',
                 itens: ['Busca de leilões em todo o Brasil', '3 relatórios de amostra: mercado + viabilidade', 'Calculadora de arrematação', 'Cursos gratuitos'],
-                fora: ['Link do lote, edital e matrícula', 'Relatório documental e jurídico'],
+                fora: ['Quem é o leiloeiro, edital e matrícula', 'Relatório documental e jurídico'],
                 botao: 'Criar conta grátis' },
               { key: 'top2', nome: 'Investidor Pro', tag: 'Mais popular', cor: AZUL, destaque: true,
                 preco: pro ? `${pro.precoLabel}/mês` : null,
                 sub: pro && proMesAnual ? `${brl2(proMesAnual)}/mês no anual` : null,
-                itens: ['Link do lote, edital e matrícula liberados', 'Relatório documental e jurídico por IA', 'Bid Score completo', 'Alertas de oportunidade por e-mail'],
+                itens: ['Leiloeiro, link do lote, edital e matrícula liberados', 'Relatório documental e jurídico por IA', 'Bid Score completo', 'Alertas de oportunidade por e-mail'],
                 botao: 'Assinar o Investidor Pro' },
               { key: 'veiculos', nome: 'Leilão de Veículos', tag: 'Novo', cor: '#0f766e',
                 preco: veic ? `${veic.precoLabel}/mês` : null, sub: null,
