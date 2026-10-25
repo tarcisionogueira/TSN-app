@@ -92,3 +92,22 @@ export function ComboCheckbox({ marcado, base, PLANOS, onChange, anual = false }
     </label>
   );
 }
+
+/**
+ * PRO → COMBO SEM COBRANÇA DUPLA (25/10, arena — passo 10). Quem já paga o Investidor Pro mensal teme pagar os dois.
+ * Não paga: quando a recorrência do Combo é confirmada, o webhook cancela as outras recorrências que o Combo
+ * substitui (api/_recorrencia-unica.js → cancelarOutrasRecorrencias com `alcancaTrilha`: o Combo alcança top2,
+ * veículos e outro Combo — MP em mp-webhook.js na autorização do mandato, Asaas em asaas-webhook.js no 1º
+ * pagamento confirmado). Não há pró-rata: o que faltava era DIZER isso. Diferença sempre de `PLANOS` ao vivo.
+ */
+export function AvisoProParaCombo({ PLANOS, anual = false }) {
+  const num = (k) => Number(anual ? PLANOS?.[k]?.precoAnual : PLANOS?.[k]?.preco) || 0;
+  const fmt = (v) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  const diferenca = num('combo') - num('top2');
+  return (
+    <div style={{ background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: 12, padding: '12px 14px', marginBottom: 16, fontSize: 12.5, color: '#4c1d95', lineHeight: 1.6 }}>
+      {diferenca > 0 && <strong style={{ display: 'block', fontSize: 13.5 }}>Veículos por +{fmt(diferenca)}{anual ? '/ano' : '/mês'} em relação ao seu Pro.</strong>}
+      Seu Pro atual é encerrado automaticamente após o 1º pagamento do Combo: uma cobrança só.
+    </div>
+  );
+}

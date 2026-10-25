@@ -87,7 +87,10 @@ export default function Login() {
     if (nextCheckout && (!planoDoNext || planoDoNext === planoKey)) {
       return promo && !/[?&]promo=/.test(nextCheckout) ? `${nextCheckout}${nextCheckout.includes('?') ? '&' : '?'}promo=${promo}` : nextCheckout;
     }
-    return `/checkout?plano=${planoKey}${promo ? `&promo=${promo}` : ''}`;
+    // Cadeado de um lote (25/10): `next=/imovel/<uuid>` + `plano=top2` → o checkout leva `volta` e, aprovado, devolve
+    // a pessoa ao imóvel que motivou a compra (Checkout.jsx). Só UUID — nunca caminho livre.
+    const voltaDoNext = (/^\/(imovel|veiculo)\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i.exec(nextParam) || [])[2] || '';
+    return `/checkout?plano=${planoKey}${promo ? `&promo=${promo}` : ''}${voltaDoNext ? `&volta=${voltaDoNext}&origem=cadastro_lote` : ''}`;
   };
   // "Continuar sem login" volta para a página de ONDE a pessoa veio (25/10). Antes ia sempre para '/': quem
   // abriu o login a partir de um lote ou de /veiculos perdia o lugar. O PrivateRoute usa `replace`, então o
@@ -502,11 +505,20 @@ export default function Login() {
         throw new Error('A senha deve ter ao menos 8 caracteres, com letra maiúscula, minúscula, número e caractere especial.');
       }
       if (!aceite) throw new Error('É necessário aceitar os Termos de Uso e a Política de Privacidade.');
+      // DESTINO QUE ATRAVESSA A CONFIRMAÇÃO DE E-MAIL (25/10, arena — passo 11). O localStorage (CHAVE_PLANO /
+      // CHAVE_DESTINO, abaixo) só vale NESTE navegador: quem lê o e-mail no celular abre o link em outro e caía na
+      // Home como explorador. O destino vai também no user_metadata (lido pelo AuthContext no 1º login, quando o
+      // localStorage vier vazio) e no próprio link de confirmação (`?destino=`). Só caminho interno.
+      const destProdPre = destinoProduto(produtoParam);
+      const destinoPosCadastro = destProdPre
+        || (planoEscolhido ? destinoCheckout(planoEscolhido, promoParam || '') : '')
+        || (/^\/(?!\/)/.test(nextParam) ? nextParam : '');
+      const destinoSeguro = /^\/(?!\/)/.test(destinoPosCadastro) ? destinoPosCadastro.slice(0, 300) : '';
       const { data: signUpData, error } = await supabase.auth.signUp({
         email: form.email,
         password: form.senha,
         options: {
-          emailRedirectTo: `${window.location.origin}/`,
+          emailRedirectTo: `${window.location.origin}/${destinoSeguro ? `?destino=${encodeURIComponent(destinoSeguro)}` : ''}`,
           // Só envia captchaToken quando o Turnstile está configurado (env var presente) — do
           // contrário o Supabase recusaria por token ausente numa instância que nem pede
           // captcha. Ver TurnstileWidget.jsx sobre o rollout seguro sem a site key.
@@ -523,6 +535,8 @@ export default function Login() {
             // o trigger `handle_new_user` (migração handle_new_user_grava_termos_aceitos).
             termos_uso_versao: versaoTermoProduto('termos_uso'),
             ref_codigo: refCodigo || undefined,
+            pos_cadastro_destino: destinoSeguro || undefined,
+            pos_cadastro_plano: planoEscolhido || undefined,
           },
         },
       });
@@ -536,6 +550,9 @@ export default function Login() {
         throw new Error('Este e-mail já está cadastrado. Faça login ou recupere a senha.');
       }
       trackCadastro(form.email, form.nome);
+      // Este navegador resgata pelo localStorage (abaixo); o user_metadata é para OUTRO aparelho — marca aqui para o
+      // AuthContext não repetir o redirecionamento numa visita futura à raiz (25/10).
+      if (signUpData?.user?.id) { try { localStorage.setItem(`tsn_pos_cadastro_usado_${signUpData.user.id}`, '1'); } catch { /* storage bloqueado */ } }
       // Preserva o plano na URL de confirmação de email (HashRouter usa /#/)
       if (planoEscolhido) {
         salvarConvite(CHAVE_PLANO, planoEscolhido);
@@ -549,7 +566,7 @@ export default function Login() {
       // Com plano: o destino só vai junto quando é o checkout (25/10) — é ele que carrega o ciclo=anual até o
       // resgate do AuthContext, que antes remontava `/checkout?plano=X` e perdia o anual.
       if (!planoEscolhido && (destProdCad || nextParam)) salvarConvite(CHAVE_DESTINO, destProdCad || nextParam);
-      else if (planoEscolhido && nextCheckout) salvarConvite(CHAVE_DESTINO, nextCheckout);
+      else if (planoEscolhido && (nextCheckout || /[?&]volta=/.test(destinoSeguro))) salvarConvite(CHAVE_DESTINO, destinoSeguro || nextCheckout);
       setModo('sucesso');
     } catch (err) {
       // Falha de CADASTRO (validação local, e-mail duplicado ou erro do Auth) deixa rastro no

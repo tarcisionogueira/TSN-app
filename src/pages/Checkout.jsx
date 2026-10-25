@@ -10,7 +10,7 @@ import { trackCheckoutIniciado, trackPlanContratado, trackCadastro } from '../ut
 import { Loader2, CheckCircle2, ExternalLink, Briefcase, ShieldCheck, TrendingUp, Headphones, ArrowUpRight, ArrowDownRight, AlertTriangle, RefreshCw, MapPin } from 'lucide-react';
 import LogoB from '../components/LogoB';
 import { PLANOS as PLANOS_STATIC } from '../data/cursos';
-import OfertaCombo, { podeOferecerCombo, ComboCheckbox } from '../components/OfertaCombo';
+import OfertaCombo, { podeOferecerCombo, ComboCheckbox, AvisoProParaCombo } from '../components/OfertaCombo';
 import { supabase } from '../utils/supabase';
 import { fetchPlanosComConfig } from '../utils/planosConfig';
 import { apiCall } from '../utils/apiCall';
@@ -33,6 +33,8 @@ const PLANOS_PAGOS = ['top2', 'clube', 'assessorado'];
 // "troca de plano" da assinatura atual: criam uma nova; a antiga da mesma trilha é cancelada pelo webhook
 // depois do 1º pagamento (o Combo substitui o Pro e o Veículos). O acesso vive em perfis.acesso_veiculos_ate.
 const PLANOS_VEICULOS = ['veiculos', 'combo'];
+const RE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const CHAVE_VOLTA = 'tsn_checkout_volta';
 
 // Mapeia mensagens técnicas de erro do Asaas para orientações amigáveis
 const MENSAGENS_RECUSA = [
@@ -179,6 +181,36 @@ export default function Checkout() {
   const irParaCombo = () => { const p = new URLSearchParams(params); p.set('plano', 'combo'); nav(`/checkout?${p}`); window.scrollTo(0, 0); };
   const promoCode = params.get('promo')?.toUpperCase() || '';
   const refCode = params.get('ref') || '';
+  // `volta=<uuid>` (25/10, arena — passo 7): quem veio do cadeado de um lote (ImovelDetalhe/Analise) volta a ELE
+  // depois do pagamento aprovado, e não à home. Só UUID (nunca caminho livre: seria um redirecionamento aberto).
+  // Vai também para o localStorage com prazo curto: o Mercado Pago abre em OUTRA aba e devolve
+  // `/checkout?plano=X&status=approved` sem o `volta` (o back_url é montado em api/mp.js).
+  const voltaParam = (params.get('volta') || '').trim();
+  const voltaId = RE_UUID.test(voltaParam) ? voltaParam.toLowerCase() : '';
+  const voltaEhVeiculo = planoKey === 'veiculos' || /^veiculos_/.test(String(planoKey || '')) || (planoKey === 'combo' && params.get('de') === 'veiculos');
+  const rotaVolta = voltaId ? `${voltaEhVeiculo ? '/veiculo/' : '/imovel/'}${voltaId}` : '';
+  useEffect(() => {
+    if (!rotaVolta) return;
+    try { localStorage.setItem(CHAVE_VOLTA, JSON.stringify({ rota: rotaVolta, ts: Date.now() })); } catch { /* storage bloqueado: segue só com a URL */ }
+  }, [rotaVolta]);
+  // Destino depois de aprovado: o `volta` da URL, senão o guardado nesta máquina há menos de 2 h.
+  const voltaGuardada = () => {
+    try {
+      const o = JSON.parse(localStorage.getItem(CHAVE_VOLTA) || 'null');
+      const rota = o && Date.now() - Number(o.ts) < 2 * 3600 * 1000 && /^\/(imovel|veiculo)\/[0-9a-f-]{36}$/.test(String(o.rota || '')) ? o.rota : '';
+      // Checkout abandonado não pode sequestrar a compra seguinte de OUTRA trilha (imóvel × veículo).
+      if (rota.startsWith('/imovel/') && /^veiculos/.test(String(planoKey || ''))) return '';
+      if (rota.startsWith('/veiculo/') && /^(top2|clube|assessorado)/.test(String(planoKey || ''))) return '';
+      return rota;
+    } catch { return ''; /* storage bloqueado: fica com o da URL */ }
+  };
+  const destinoVolta = () => {
+    const rota = rotaVolta || voltaGuardada();
+    try { localStorage.removeItem(CHAVE_VOLTA); } catch { /* storage bloqueado: nada a limpar */ }
+    return rota;
+  };
+  // `origem` (25/10): de qual botão a pessoa veio (alvo do lp_cta de origem). Só [a-z0-9_], curto.
+  const origemParam = String(params.get('origem') || '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 40);
   const mpStatus = params.get('status'); // 'approved' | 'rejected' | 'pending', vindo do redirect MP
   const [PLANOS, setPLANOS] = useState(PLANOS_STATIC);
   // À prova de falha: nunca indexa um PLANOS indefinido e sempre cai no estático.
@@ -227,7 +259,7 @@ export default function Checkout() {
     checkoutAbertoRef.current = true;
     registrarEvento('checkout_aberto', {
       alvo: String(planoKey || '(sem plano)'),
-      detalhe: `ciclo=${params.get('ciclo') === 'anual' || /_anual$/.test(String(planoKey || '')) ? 'anual' : 'mensal'};logado=${user ? 1 : 0}`,
+      detalhe: `ciclo=${params.get('ciclo') === 'anual' || /_anual$/.test(String(planoKey || '')) ? 'anual' : 'mensal'};logado=${user ? 1 : 0}${origemParam ? `;origem=${origemParam}` : ''}${voltaId ? ';volta=1' : ''}`,
     });
   }, [planoKey, mpStatus, params, user, authCarregando]);
   const [aceitouTermos, setAceitouTermos] = useState(false);
@@ -791,7 +823,7 @@ export default function Checkout() {
       } else {
         setPago(true);
         // Pro ativo agora → se veio do fluxo guiado da assessoria, segue direto p/ ela.
-        setTimeout(() => nav(destinoPos || (aposPlano ? `/checkout?plano=${aposPlano}` : '/membros')), 3000);
+        setTimeout(() => nav(destinoPos || (aposPlano ? `/checkout?plano=${aposPlano}` : (destinoVolta() || '/membros'))), 3000);
       }
     } catch (e) {
       // 20/08: o conserto de 18/08 tratou o SDK que não CARREGA (s.onerror). Faltava o outro
@@ -861,7 +893,14 @@ export default function Checkout() {
     if (planoKey === 'combo' && ['clube', 'clube_anual'].includes(role)) return 'Seu plano já inclui o Investidor Pro. Para veículos, assine o Leilão de Veículos (R$ 29,90/mês).';
     if (!user) return null;
     const { data: temAcesso, error: eAc } = await supabase.rpc('tem_acesso_veiculos');
-    if (eAc) console.warn('[checkout] leitura do acesso a veículos falhou:', eAc.message);
+    // FALHA FECHADA (25/10, arena — passo 10). Antes, erro na leitura seguia para o pagamento como se a pessoa não
+    // tivesse veículos: quem já tem o Combo/Veículos podia abrir uma 2ª assinatura cobrando em paralelo. Sem a
+    // resposta, não cobra — e diz por quê (o botão "Tentar novamente" do aviso fecha e deixa pagar de novo).
+    if (eAc) {
+      console.warn('[checkout] leitura do acesso a veículos falhou:', eAc.message);
+      registrarEvento('api_erro', { alvo: 'checkout_tem_acesso_veiculos', detalhe: String(eAc.message || eAc).slice(0, 160) });
+      return 'Não conseguimos confirmar agora se a sua conta já tem acesso a veículos. Para não cobrar você duas vezes, o pagamento não foi iniciado. Nada foi cobrado: tente novamente em alguns segundos.';
+    }
     if (temAcesso === true && (planoKey === 'veiculos' || ['top2', 'assessorado', 'clube'].includes(role))) {
       return planoKey === 'veiculos'
         ? 'O Leilão de Veículos já está ativo na sua conta (sozinho ou no Combo).'
@@ -898,7 +937,12 @@ export default function Checkout() {
       // veículos acabam no fim do período. Avisa antes; quem tem o Veículos separado não perde nada.
       if (ehTrocaCiclo && cicloAlvo === 'anual') {
         const { data: temAcesso, error: eAc } = await supabase.rpc('tem_acesso_veiculos');
-        if (eAc) console.warn('[checkout] leitura do acesso a veículos falhou:', eAc.message);
+        // Mesma falha fechada: sem saber se há Combo, não troca o ciclo às cegas.
+        if (eAc) {
+          console.warn('[checkout] leitura do acesso a veículos falhou:', eAc.message);
+          setErro('Não conseguimos confirmar agora se a sua conta tem acesso a veículos (ele pode acabar na troca para o anual). A troca não foi iniciada e nada foi cobrado: tente novamente em alguns segundos.');
+          return;
+        }
         if (temAcesso === true && !window.confirm('Se você assina o Combo Imóveis + Veículos, o plano anual substitui o Combo e o acesso a veículos acaba no fim do período já pago (assine o Leilão de Veículos à parte para manter). Continuar?')) return;
         return await gerarLink();
       }
@@ -1103,8 +1147,8 @@ export default function Checkout() {
         setLinkPagamento(data.linkPagamento);
         window.open(data.linkPagamento, '_blank', 'noopener');
       } else {
-        // Upgrade sem diferença a cobrar: mostra sucesso e redireciona
-        setTimeout(() => nav('/'), 3000);
+        // Upgrade sem diferença a cobrar: mostra sucesso e redireciona (ao lote de origem, se veio de um)
+        setTimeout(() => nav(destinoVolta() || '/'), 3000);
       }
     } catch (err) {
       setErro(err.message);
@@ -1146,7 +1190,7 @@ export default function Checkout() {
       if (!res.ok) { setPixAnualFase('erro'); return; }
       try { await logAceite(`${planoKey}_anual`, plano?.precoAnual, {}, 'mp'); } catch (_) {}
       try { await refreshPerfil?.(); } catch (_) {}
-      nav(aposPlano ? `/checkout?plano=${aposPlano}` : '/membros');
+      nav(aposPlano ? `/checkout?plano=${aposPlano}` : (destinoVolta() || '/membros'));
     } catch { setPixAnualFase('erro'); }
   };
 
@@ -1203,7 +1247,7 @@ export default function Checkout() {
       }
     }
     // Fluxo guiado: Pro recém-ativado → segue DIRETO para contratar o que motivou (assessoria).
-    setTimeout(() => nav(aposPlano ? `/checkout?plano=${aposPlano}` : '/'), 3500);
+    setTimeout(() => nav(aposPlano ? `/checkout?plano=${aposPlano}` : (destinoVolta() || '/')), 3500);
   };
 
   // Tela de aprovado — cobre tudo, redireciona para home (ou contrato)
@@ -1251,7 +1295,9 @@ export default function Checkout() {
         {ehContratoPlano ? (
           <>Pagamento aprovado! Preparando seu contrato para assinatura…</>
         ) : (
-          <>Seu plano <strong style={{ color: 'white' }}>{plano?.nome}</strong> está ativo.<br/>Redirecionando para o início em instantes…</>
+          (rotaVolta || voltaGuardada())
+            ? <>Pronto: seu plano <strong style={{ color: 'white' }}>{plano?.nome}</strong> está ativo.<br/>{/^\/veiculo\//.test(rotaVolta || voltaGuardada()) ? 'Voltando ao veículo que você estava vendo…' : 'Leiloeiro, edital e matrícula deste imóvel liberados. Voltando a ele…'}</>
+            : <>Seu plano <strong style={{ color: 'white' }}>{plano?.nome}</strong> está ativo.<br/>Redirecionando para o início em instantes…</>
         )}
       </p>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', color: '#6ee7b7', fontSize: 14 }}>
@@ -1527,6 +1573,9 @@ export default function Checkout() {
             <div style={{ background: '#f1f5f9', borderRadius: 10, padding: '10px 14px', marginBottom: 12, fontSize: 12, color: '#64748b' }}>
               Plano atual: <strong>{planoAtual.nome}</strong> ({planoAtual.precoLabel})
             </div>
+          )}
+          {/^combo/.test(String(planoKey || '')) && role === 'top2' && !resultadoMudanca && (
+            <AvisoProParaCombo PLANOS={PLANOS} anual={temToggleAnual && modalidade === 'anual'} />
           )}
           {mostrarComboCheckbox && !resultadoMudanca && (
             <ComboCheckbox marcado={planoKey === 'combo'} base={comboBase} PLANOS={PLANOS} onChange={alternarCombo} anual={temToggleAnual && modalidade === 'anual'} />

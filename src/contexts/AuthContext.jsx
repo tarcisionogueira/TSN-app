@@ -475,6 +475,34 @@ export function AuthProvider({ children }) {
             const atual = window.location.hash.replace(/^#/, '');
             if (!oauthDest && !planoPend && /^\/(?!\/)/.test(destPend) && (atual === '' || atual === '/')) window.location.hash = destPend;
           }
+          // 25/10 (arena — passo 11): o localStorage acima só existe no navegador do CADASTRO. Quem confirma o e-mail
+          // em outro aparelho chega aqui com ele vazio — e caía na Home como explorador. O Login.jsx manda o mesmo
+          // destino no user_metadata (`pos_cadastro_destino`/`pos_cadastro_plano`) e no link (`?destino=`). Vale uma
+          // vez por aparelho, só em conta de até 3 dias, só caminho interno, só se a pessoa chegou na raiz, e não
+          // manda ao checkout quem já está no plano pedido (webhook chegou antes).
+          try {
+            // Aparelho que já tinha o destino local (ou já o usou): o metadata não repete o redirecionamento depois.
+            if (oauthDest || planoPend || destPend) { try { localStorage.setItem(`tsn_pos_cadastro_usado_${u.id}`, '1'); } catch { /* idem */ } }
+            if (!oauthDest && !planoPend && !destPend) {
+              const md = u.user_metadata || {};
+              let destUrl = '';
+              try { destUrl = new URLSearchParams(window.location.search).get('destino') || ''; } catch { destUrl = ''; }
+              const destMeta = destUrl || String(md.pos_cadastro_destino || '')
+                || (md.pos_cadastro_plano ? `/checkout?plano=${encodeURIComponent(md.pos_cadastro_plano)}` : '');
+              const criadoMs = Date.parse(u.created_at || '');
+              const recente = Number.isFinite(criadoMs) && Date.now() - criadoMs < 3 * 86400000;
+              const marca = `tsn_pos_cadastro_usado_${u.id}`;
+              const jaUsado = (() => { try { return !!localStorage.getItem(marca); } catch { return false; } })();
+              const atual = window.location.hash.replace(/^#/, '');
+              const planoMeta = String(md.pos_cadastro_plano || '').replace(/_anual$/, '');
+              const jaNoPlano = !!planoMeta && /^\/checkout/.test(destMeta) && String(p.role || '').replace(/_anual$/, '') === planoMeta;
+              if (destMeta && recente && !jaUsado && !jaNoPlano && /^\/(?!\/)/.test(destMeta) && (atual === '' || atual === '/')) {
+                try { localStorage.setItem(marca, '1'); } catch { /* sem marca: a janela de 3 dias limita a repetição */ }
+                window.location.hash = destMeta;
+              }
+              if (destUrl) { try { window.history.replaceState(null, '', `${window.location.pathname}${window.location.hash}`); } catch { /* URL fica com ?destino — inofensivo */ } }
+            }
+          } catch (e) { console.warn('[pos-cadastro] destino não resgatado:', e?.message || e); }
           updateActivity();
         }
       }, 0);
