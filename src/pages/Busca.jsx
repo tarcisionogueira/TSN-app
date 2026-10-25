@@ -2387,11 +2387,14 @@ export default function Busca() {
                     {(() => {
                       // Sem plano pago (21/10, dono): o selo vira o cadeado — quem é o leiloeiro é do plano.
                       if (!podeVerLeiloeiro(role)) {
+                        // 25/10 (dono: "coloque igual para os imóveis"): mesmo cadeado CLICÁVEL da busca de veículos —
+                        // leva direto à assinatura do Investidor Pro, medido em lp_cta.
                         return (
-                          <div title="Assine para ver quem é o leiloeiro"
-                            style={{ position:'absolute', bottom:8, left:8, background:'rgba(15,23,42,0.82)', color:'white', fontSize:9, fontWeight:800, padding:'2px 8px', borderRadius:8, display:'flex', alignItems:'center', gap:4, whiteSpace:'nowrap' }}>
-                            <span aria-hidden="true" style={{ fontSize:8 }}>🔒</span>Leiloeiro no plano
-                          </div>
+                          <button type="button" title="Investidor Pro: veja quem é o leiloeiro, o edital e a matrícula"
+                            onClick={e => { e.stopPropagation(); e.preventDefault(); registrarEvento('lp_cta', { alvo: 'imoveis_desbloquear' }); nav('/checkout?plano=top2'); }}
+                            style={{ position:'absolute', bottom:8, left:8, background:'rgba(15,23,42,0.82)', color:'white', fontSize:9, fontWeight:800, padding:'3px 8px', borderRadius:8, border:'none', cursor:'pointer', display:'flex', alignItems:'center', gap:4, whiteSpace:'nowrap' }}>
+                            <span aria-hidden="true" style={{ fontSize:8 }}>🔒</span>Leiloeiro — desbloquear
+                          </button>
                         );
                       }
                       const isCaixa = im.fonte === 'CEF' || im.fonte === 'caixa';
