@@ -78,7 +78,7 @@ const FAQS = [
 
 // "31.808" → "31 mil+": o número muda todo dia; arredondar para baixo nunca promete a mais.
 const milMais = (n) => (n >= 1000 ? `${Math.floor(n / 1000)} mil+` : n > 0 ? `${n}` : null);
-const centenaMais = (n) => (n >= 100 ? `${Math.floor(n / 100) * 100}+` : n > 0 ? `${n}` : null);
+const centenaMais = (n) => (n >= 100 ? `${(Math.floor(n / 100) * 100).toLocaleString('pt-BR')}+` : n > 0 ? `${n}` : null);
 
 // Idade do retrato de landing_numeros, em horas (null = sem carimbo legível). O acervo e a vitrine mudam
 // todo dia; um retrato velho com cara de "agora" é exatamente o número plausível e errado da forma nº 10.
@@ -135,7 +135,11 @@ export default function Landing() {
   const idadeNum = horasDesde(num?.em);
   const numFresco = idadeNum != null && idadeNum <= MAX_IDADE_H;
   const acervo = numFresco && milMais(num?.imoveis) && milMais(num?.veiculos)
-    ? [[milMais(num.imoveis), 'imóveis'], [milMais(num.veiculos), 'veículos'], ...(centenaMais(num.leiloeiros) ? [[centenaMais(num.leiloeiros), 'leiloeiros']] : [])]
+    // 25/10 (dono: "autoridade e diversidade", comparando com o Leilão Imóvel): + cidades. Tudo vem do retrato diário
+    // de landing_numeros_atualizar(); coluna sem número lido some sozinha (nunca um valor fixo no código).
+    ? [[milMais(num.imoveis), 'imóveis'], [milMais(num.veiculos), 'veículos'],
+       ...(centenaMais(num.cidades) ? [[centenaMais(num.cidades), 'cidades']] : []),
+       ...(centenaMais(num.leiloeiros) ? [[centenaMais(num.leiloeiros), 'leiloeiros']] : [])]
     : null;
   const atualizadoLabel = numFresco
     ? (new Date(num.em).toDateString() === new Date().toDateString() ? 'atualizado hoje' : 'atualizado ontem')
@@ -324,7 +328,7 @@ export default function Landing() {
                 registrarEvento('lp_cta', { alvo: 'acervo_faixa' });
                 if (vitrine.length) { e.preventDefault(); document.getElementById('vitrine')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
               }}
-              style={{ display: 'grid', gridTemplateColumns: `repeat(${acervo.length}, minmax(0, 1fr))`, gap: mobile ? 8 : 24, maxWidth: 640, margin: '0 auto', textDecoration: 'none' }}>
+              style={{ display: 'grid', gridTemplateColumns: `repeat(${mobile && acervo.length === 4 ? 2 : acervo.length}, minmax(0, 1fr))`, gap: mobile ? 14 : 24, maxWidth: 760, margin: '0 auto', textDecoration: 'none' }}>
               {acervo.map(([v, l]) => (
                 <div key={l}>
                   <div style={{ fontSize: mobile ? 24 : 28, fontWeight: 900, color: 'white', letterSpacing: '-0.5px', lineHeight: 1.1 }}>{v}</div>
