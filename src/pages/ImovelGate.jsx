@@ -165,8 +165,9 @@ export default function ImovelGate() {
               <Lock size={16} /> Entre para ver o imóvel completo
             </div>
             <div style={{ fontSize: 12.5, color: '#334155', lineHeight: 1.5, marginBottom: 12 }}>
-              Com sua conta <strong>gratuita</strong>: endereço e mapa, documentos (edital e matrícula),
-              acesso à página do leiloeiro e a análise de viabilidade do investimento.
+              Com sua conta <strong>gratuita</strong>: endereço, mapa e 3 relatórios de viabilidade
+              (quanto vale e até quanto dar de lance). <strong>Investidor Pro</strong>: quem é o leiloeiro,
+              o link do lote, o edital, a matrícula e a análise jurídica.
             </div>
             <button onClick={irCadastro}
               style={{ width: '100%', background: '#0D63DB', color: '#fff', border: 'none', borderRadius: 11, padding: '12px 0', fontSize: 14, fontWeight: 800, cursor: 'pointer', marginBottom: 8 }}>

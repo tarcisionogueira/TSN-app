@@ -22,12 +22,14 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const TOKEN_RE = /^[A-Za-z0-9_-]{32}$/;
 const VALIDADE_DIAS = 30;
 
-// Mesmas colunas da tela, MENOS o que leva ao leiloeiro (link_lote, anexos). `raw` sai reduzido
+// Mesmas colunas da tela, MENOS o que leva ao leiloeiro (link_lote, anexos, o NOME do leiloeiro e
+// placa/chassi/renavam — com eles se acha o lote no site do leiloeiro em uma busca). O link circula
+// no WhatsApp para quem não tem conta: regra do dono (25/10), grátis/sem conta não vê leiloeiro. `raw` sai reduzido
 // ao que localDoPatio() lê (src/utils/patioVeiculo.js).
 const COLUNAS = [
-  'id', 'titulo', 'descricao', 'marca', 'modelo', 'ano_fabricacao', 'ano_modelo', 'placa', 'chassi', 'renavam', 'km',
+  'id', 'titulo', 'descricao', 'marca', 'modelo', 'ano_fabricacao', 'ano_modelo', 'km',
   'valor_minimo', 'valor_avaliacao', 'desconto_percentual', 'modalidade', 'origem_venda', 'cidade', 'estado',
-  'fotos', 'data_leilao', 'leiloeiro', 'sinistro', 'is_sucata', 'financiavel',
+  'fotos', 'data_leilao', 'sinistro', 'is_sucata', 'financiavel',
   'combustivel', 'cambio', 'cor', 'motor_alerta', 'ipva_situacao', 'tipo_veiculo',
   'valor_fipe', 'fipe_codigo', 'fipe_mes_referencia', 'fipe_status', 'fipe_atualizado_em',
   'resultado_leilao', 'valor_lance_vencedor', 'teve_lance',
@@ -47,21 +49,12 @@ async function ler(path) {
 const semLinks = (s) => (s == null ? s : String(s).replace(/\b(?:https?:\/\/|www\.)\S+/gi, '[link removido]'));
 
 function sanear(v) {
-  const raw = (v.raw && typeof v.raw === 'object') ? v.raw : {};
-  const loc = raw.product?.location;
   return {
     ...v,
     descricao: semLinks(v.descricao),
-    raw: {
-      lot_location_address: raw.lot_location_address ?? null,
-      // SUPERBID manda objeto aqui; só texto serve a localDoPatio (String(obj) = "[object Object]").
-      offerDescription: typeof raw.offerDescription === 'string' ? semLinks(raw.offerDescription) : null,
-      addr: raw.addr ?? null,
-      localidade: raw.localidade ?? null,
-      local: raw.local ?? null,
-      lot_location: raw.lot_location ?? null,
-      product: loc ? { location: { city: loc.city ?? null, locationGeo: loc.locationGeo ?? null } } : null,
-    },
+    // Pátio sai só como cidade/UF (as colunas cidade/estado): o endereço do pátio leva ao leiloeiro,
+    // e no app ele também é do plano Leilão de Veículos (25/10).
+    raw: {},
   };
 }
 

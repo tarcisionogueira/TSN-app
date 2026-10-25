@@ -116,7 +116,8 @@ export default function VeiculoDetalhe() {
   const isMobile = useIsMobile();
   const equipe = ehEquipeVeiculos(role);
   const acesso = useAcessoVeiculos(user, role);
-  const semPlano = !compartilhado && !equipe && acesso === false;
+  // No link compartilhado o dado já vem sem leiloeiro: quem não assina vê o cadeado (não um campo vazio).
+  const semPlano = !equipe && (compartilhado ? acesso !== true : acesso === false);
   // Visitante (25/10, ficha pública): o desbloqueio passa pelo cadastro com o plano e volta ao checkout.
   const desbloquear = () => {
     registrarEvento('lp_cta', { alvo: `veiculo_ficha_desbloquear${user ? '' : '_anon'}` });

@@ -306,7 +306,7 @@ export default function HomeCliente() {
         <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: '12px 16px' }}>
           <ShieldCheck size={16} color="#0D63DB" style={{ flexShrink: 0, marginTop: 2 }} />
           <div style={{ fontSize: 12, color: '#1e3a5f', lineHeight: 1.6 }}>
-            <strong>Arremate com segurança.</strong> Cada imóvel vem com relatórios de viabilidade e jurídico e, se quiser, você valida a operação com um analista antes do lance, para decidir com confiança.
+            <strong>Arremate com segurança.</strong> Cada imóvel tem relatório de viabilidade (e, no Investidor Pro, o jurídico) e, se quiser, você valida a operação com um analista antes do lance, para decidir com confiança.
           </div>
         </div>
 

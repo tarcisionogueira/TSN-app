@@ -1111,10 +1111,10 @@ async function paginaImovel(id) {
             <div class="score-lock"><div class="n">🔒</div><div class="tx"><b>BidScore</b> — nossa nota de 0 a 10 da viabilidade do arremate. Crie conta para ver.</div></div>
             <a class="cta" href="${SITE}/#/login?modo=cadastro&amp;imovel=${esc(im.id)}">Criar conta grátis e ver a ficha</a>
             <ul class="bullets">
-              <li>3 análises gratuitas, sem cartão</li>
-              <li>Endereço exato e mapa</li>
-              <li>Edital, matrícula e parecer jurídico</li>
-              <li>Lance máximo que preserva o lucro</li>
+              <li>Grátis: 3 análises, sem cartão</li>
+              <li>Grátis: endereço exato e mapa</li>
+              <li>Grátis: lance máximo que preserva o lucro</li>
+              <li>Investidor Pro: leiloeiro, edital, matrícula e parecer jurídico</li>
             </ul>
             ${prazoISO ? `<div style="margin-top:14px;text-align:center"><span class="prazo-badge" data-prazo="${prazoISO}" style="display:none"></span></div>` : ''}
           </div>
