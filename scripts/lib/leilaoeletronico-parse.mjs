@@ -60,6 +60,14 @@ export const TENANTS = {
   // seções dg-lote-*. Os 404 da 1ª triagem eram 30 e 31, lotes que saíram do site e o feed ainda lista. O motor já trata
   // isso (detalhe que não abre = sem detalhe, não grava). O feed tem ainda 5 "exemplo-de-leilao" (demo da plataforma).
   absoluta:   { fonte: 'ABSOLUTALEIL',   leiloeiro: 'Absoluta Leilões', base: 'https://www.absolutaleiloes.com.br', catalogo: '/sitemap.xml' }, // 12, SP/MA
+  // 25/10 (pendência 321, FENALEI/JUCISRS): Raota Leilões (Antonio Alexandre Raota, RS). Home e feed só "pelados" (400 a
+  // UA de navegador, como os demais). Feed com 16 itens abertos, ~10 imóveis em RS/SC; os veículos e o "diversos" (102)
+  // saem pelo filtro de não-imóvel. ⚠️ 3 imóveis são os MESMOS da Trevisan (LeilãoPro): rural de 110 mil m² em
+  // Veranópolis, terreno em Campo Bom e o apto da R. André Puente, 120 (Independência, Porto Alegre) — venda por
+  // alienação particular divulgada pelos dois leiloeiros; o resto do catálogo (Gramado, Garopaba, Cidreira, Instituto
+  // Metodista, Jardim Carvalho) não está na Trevisan. imperioleiloes.com (JUCEMAT) NÃO entra: é o mesmo leiloeiro e o
+  // mesmo feed da Absoluta (Rafael Cicolin; o <title> do feed é "Absoluta Leilões").
+  raota:      { fonte: 'RAOTALEIL',      leiloeiro: 'Raota Leilões (Antonio Alexandre Raota)', base: 'https://www.raotaleiloes.com.br', catalogo: '/sitemap.xml' }, // ~10, RS/SC
 };
 
 const limpo = (s) => decodificarEntidades(String(s || '').replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, ' '))

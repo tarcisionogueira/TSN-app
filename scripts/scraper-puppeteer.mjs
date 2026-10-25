@@ -5571,6 +5571,13 @@ const SUPORTE_TENANTS = [
   { domain: 'dalaqualeiloes.com.br', leiloeiro: "Dal'Aqua Leilões" },
   { domain: 'gsleiloes.com.br', leiloeiro: 'GS Leilões' },
   { domain: 'marcaleiloes.com.br', leiloeiro: 'Marca Leilões' },
+  // 25/10 (pendência 321, FENALEI: JUCEPI/JUCEP). Mesmo template, /buscador?categoria=2 lido pelo banco e passado na
+  // MESMA suporteParsePagina em Chrome (seco): Monteiro 12 cards (PB/PI; só 2 trazem "Cidade/UF" na descrição —
+  // Guarabira/PB e Cabedelo/PB —, os outros 10 têm o campo de local VAZIO e entram sem cidade/UF até a descrição dizer),
+  // VL 1 card (apto em João Pessoa/PB, R$ 150.000). Nenhum lote destes domínios estava no acervo. Os do buscador vazio
+  // hoje (atlantico, pineiro) continuam fora — entram com esta linha quando publicarem imóvel.
+  { domain: 'leiloesmonteiro.com.br', leiloeiro: 'Leilões Monteiro (Miguel Alexandrino Monteiro Neto)' },
+  { domain: 'vlleiloes.com.br', leiloeiro: 'VL Leilões (Vinícius Vidal Lacerda)' },
   // `donizetteleiloes.leilao.br` é o MESMO site do .com.br (mesmo `arrematante.` e mesmo
   // static). Fora de propósito: o `tenantKey` deriva do domínio antes do primeiro ponto, então
   // os dois gerariam o mesmo `fonte_id` e um sobrescreveria o outro sem nada aparecer.

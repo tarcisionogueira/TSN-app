@@ -37,6 +37,7 @@ jobs:
     # 24/10 (Juntas): +5 tenants em SUPORTE_TENANTS (Bueno, Facanha, Mais Leilao, Peterlongo, Ricart; ~100 imoveis) —
     # ~15 paginas de catalogo + ~100 visitas de detalhe (teto 60/tenant) = ~+3 min por rodada.
     # 24/10 (triagem575): +4 tenants (Braga, Dal'Aqua, GS, Marca; ~25 imoveis) = ~+1 min por rodada.
+    # 25/10 (pendencia 321, FENALEI): +2 tenants (Monteiro 12, VL 1) = ~+1 min por rodada.
     timeout-minutes: 150
 
     steps:
