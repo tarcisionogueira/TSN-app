@@ -517,7 +517,12 @@ export default async function handler(req, res) {
     const t = String(im.titulo || '').trim();
     return !d || (t && d.replace(t, '').replace(/[\s—·|-]+/g, '').length < 40);
   })();
-  const precisaTexto = !(Number(im.area_m2) > 0) || descEcoDoTitulo;
+  // ÁREA IMPOSSÍVEL PARA O VALOR (25/10): R$/m² abaixo de R$ 0,05 não existe nem em terra nua — é área de
+  // OUTRA coisa gravada no lote (LJUD Feira de Santana: 1.850 ha de uma notícia da página, R$ 357 mil). Tratada
+  // como ausente: a releitura abaixo corrige, e só grava se achar uma área de verdade (o trigger impede zerar).
+  const valorRef = Number(im.valor_avaliacao) || Number(im.valor_minimo) || 0;
+  const areaImpossivel = Number(im.area_m2) > 0 && valorRef > 0 && valorRef / Number(im.area_m2) < 0.05;
+  const precisaTexto = !(Number(im.area_m2) > 0) || areaImpossivel || descEcoDoTitulo;
 
   // Pula só quando já tem tudo (docs E data E texto) ou tentou há pouco (throttle de 12h).
   // O throttle de 12h continua valendo por cima: ele existe para não martelar a fonte, e essa
@@ -594,9 +599,13 @@ export default async function handler(req, res) {
   // Só preenche o que falta, como todo o resto deste patch: área só se não havia, e descrição
   // só quando a atual não passa de um eco do título (que é o estado de SUPERBID 1.492/1.494,
   // PESTANA 1.029/1.029, LJUD 981/981, BIASI 472/472). Dado bom nunca é sobrescrito.
-  if (!(Number(im.area_m2) > 0)) {
-    const areaPag = extrairAreaM2(String(html).replace(/<[^>]+>/g, ' '));
-    if (areaPag > 0) patch.area_m2 = areaPag;
+  // 25/10: a PÁGINA INTEIRA só vale com os padrões ancorados (permitirSolta:false) — com o último recurso
+  // solto, um bloco de notícias ("fazenda com 1.850 hectares") virou a área de um prédio em Feira de Santana.
+  // O texto do PRÓPRIO lote (corpo recortado, ou a descrição gravada) pode usar todas as formas.
+  if (!(Number(im.area_m2) > 0) || areaImpossivel) {
+    const textoLote = extrairDescricaoDoCorpo(html) || String(im.descricao || '');
+    const areaPag = extrairAreaM2(textoLote) || extrairAreaM2(String(html).replace(/<[^>]+>/g, ' '), { permitirSolta: false });
+    if (areaPag > 0 && areaPag !== Number(im.area_m2)) patch.area_m2 = areaPag;
   }
   // Reusa `descEcoDoTitulo` calculado no teste de completude acima — a mesma regra em dois
   // lugares divergiria no primeiro ajuste, e aí o endpoint decidiria visitar a página por um

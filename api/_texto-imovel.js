@@ -226,6 +226,14 @@ export function extrairAreaM2(texto, { permitirSolta = true, uf = null } = {}) {
     if (v) return v;
   }
   if (!permitirSolta) return 0;
+  // FRENTE × FUNDO (25/10, caso do dono: "terreno com 11 metros de frente e 25 metros de frente a fundo",
+  // LJUD Feira de Santana — sem m² escrito, ficava sem área e o enriquecimento pegou 1.850 ha de uma notícia
+  // da página). Só a forma explícita das duas medidas, perto uma da outra.
+  const ff = t.match(/(?<![\d.,])(\d{1,4}(?:,\d{1,2})?)\s*(?:m|mts|metros?)\s+de\s+frente\b.{0,60}?(?<![\d.,])(\d{1,4}(?:,\d{1,2})?)\s*(?:m|mts|metros?)\s+(?:de\s+)?(?:frente\s+(?:a|ao|aos)\s+fundos?|fundos?|profundidade|comprimento)/i);
+  if (ff) {
+    const v = plausivel(Math.round(Number(ff[1].replace(',', '.')) * Number(ff[2].replace(',', '.')) * 100) / 100);
+    if (v) return v;
+  }
   // Hectare ANTES do m² solto: em rural, "Fazenda c/ 304 ha. e 290 m²" — o m² solto é a sede.
   const ha = areaEmHectares(t);
   if (ha) return ha;

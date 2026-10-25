@@ -133,7 +133,7 @@ export default async function handler(req, res) {
           const ecoDoTitulo = !im.descricao || im.descricao.trim() === String(im.titulo || '').trim();
           // 20/09 (pedido do dono: descrição completa, como o leiloeiro publica).
           if (corpo && ecoDoTitulo) { patch.descricao = corpo.slice(0, 8000); comTexto++; }
-          const area = extrairAreaM2(corpo || '') || extrairAreaM2(html);
+          const area = extrairAreaM2(corpo || '') || extrairAreaM2(html, { permitirSolta: false }); // página inteira só com padrão ancorado (25/10)
           if (area > 0) { patch.area_m2 = area; comArea++; }
         }
       } else {
