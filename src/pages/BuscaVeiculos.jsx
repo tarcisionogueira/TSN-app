@@ -750,7 +750,8 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
                 onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}>
                 <div style={{ width: '100%', height: isMobile ? 180 : 150, position: 'relative' }}>
                   <LazyImage src={fotos} alt={v.titulo} style={{ width: '100%', height: '100%' }} />
-                  {desc != null && (
+                  {/* 25/10 (print do dono): lance = avaliação dava um selo "-0%" vermelho — sem desconto, sem selo. */}
+                  {desc != null && desc > 0 && (
                     <div style={{ position: 'absolute', top: 8, right: 8, background: desc >= 40 ? '#16a34a' : desc >= 20 ? '#d97706' : '#dc2626', color: 'white', fontWeight: 900, fontSize: 13, padding: '3px 8px', borderRadius: 8 }}>
                       -{desc}%{descFipe != null && <span style={{ fontSize: 9, fontWeight: 800, marginLeft: 3 }}>FIPE</span>}
                     </div>
