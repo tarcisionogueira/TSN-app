@@ -11,7 +11,7 @@ import './lib/env-runner.mjs';
 import { createClient } from '@supabase/supabase-js';
 import { rodarFonte } from './lib/motor/runner.mjs';
 import cfg, { TENANTS_POR_CHAVE } from './lib/motor/fontes/msis.mjs';
-import { tabelaCobertura } from './lib/motor/fetch-msis.mjs';
+import { tabelaCobertura, COBERTURA } from './lib/motor/fetch-msis.mjs';
 
 const SB_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -27,6 +27,13 @@ rodarFonte(cfg, {
   dryrun: process.env.MSIS_DRYRUN !== '0',
   debug: process.env.MSIS_DEBUG === '1',
   semBD: true,
-  exitCodeSeFalha: true,
-}).then(() => { console.log(`\n── COMPLETUDE MSIS ──\n${tabelaCobertura()}`); })
+  // Tenant com lote listado mas nenhum aproveitável (todos veículo/COMPREI/sem preço — Le Gentil, Octavio, Pedro
+  // Castro em 26/10) já fica em fonte_saude como 'falhou'; não pinta o workflow de vermelho todo dia. O exit 1 é para
+  // o que é falha de COLETA: catálogo ou leilão que não abriu (COBERTURA.falhas), checado abaixo.
+  exitCodeSeFalha: false,
+}).then(() => {
+  console.log(`\n── COMPLETUDE MSIS ──\n${tabelaCobertura()}`);
+  const falhas = [...COBERTURA].filter(([, c]) => c.falhas.length);
+  if (falhas.length) { console.error(`falha de coleta em ${falhas.map(([h]) => h).join(', ')}`); process.exitCode = 1; }
+})
   .catch((e) => { console.error(e); try { console.log(tabelaCobertura()); } catch { /* sem tabela */ } process.exit(1); });

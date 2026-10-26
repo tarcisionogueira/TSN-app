@@ -90,7 +90,7 @@ export function criarMotorMsis() {
     const host = new URL(base).host;
     const url = `${base}/Principal.asp`;
     const p1 = await pedirComRetry(url, { acaoDest: 'N', pag: '1' });
-    if (!p1.html) return { html: null, via: `catálogo: ${p1.motivo}` };
+    if (!p1.html) { cob(host).falhas.push(`catálogo: ${p1.motivo}`); return { html: null, via: `catálogo: ${p1.motivo}` }; }
     // O seletor pode mostrar só uma janela de páginas: o teto é recalculado a cada página lida.
     let ult = Math.min(ultimaPagina(p1.html), MAX_PAGINAS);
     const paginas = [p1.html];

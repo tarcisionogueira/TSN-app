@@ -831,9 +831,14 @@ async function main() {
   // coluna que falta — e o lote sem anexo nesta rodada apagava o de quem tinha (mesma regra dos outros coletores).
   const grupos = new Map();
   for (const r of prontos) { const k = Object.keys(r).sort().join(','); (grupos.get(k) || grupos.set(k, []).get(k)).push(r); }
+  // FATIAS DE 100 (26/10): a via grátis trouxe 1.247 lotes de uma vez e o upsert num comando só estourou o statement
+  // timeout (nada gravado). Mesmo tamanho de fatia do motor (UPSERT_FATIA), com pausa curta entre elas.
   for (const g of grupos.values()) {
-    const { error } = await supabase.from('imoveis_leilao').upsert(g, { onConflict: 'fonte_id', ignoreDuplicates: false });
-    if (error) { console.error('erro ao gravar:', error.message); process.exit(1); }
+    for (let i = 0; i < g.length; i += 100) {
+      const { error } = await supabase.from('imoveis_leilao').upsert(g.slice(i, i + 100), { onConflict: 'fonte_id', ignoreDuplicates: false });
+      if (error) { console.error(`erro ao gravar (fatia ${i / 100 + 1}):`, error.message); process.exit(1); }
+      await sleep(300);
+    }
   }
   console.log(`✅ ${prontos.length} imóveis do cluster Gestão de Leilões gravados/atualizados.`);
   // SAÚDE DA FONTE (08/08): entra no monitor de regressão junto das demais. Antes esta fonte
