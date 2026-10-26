@@ -60,7 +60,10 @@ export default async function handler(req, resp) {
     + `&geocod_tentativas=lt.${MAX_TENTATIVAS}`
     // + 'bairro' SEM bairro na coluna (05/10): é o pino emprestado pelo cache contaminado do
     // geocodificar.js (ver lá). Rótulo 'bairro' sem bairro não é pino OK — é o de outro lote.
-    + `&and=(or(geocod_nivel.in.(cidade,falhou),and(geocod_nivel.eq.bairro,bairro.is.null)),or(geocod_reproc_em.is.null,geocod_reproc_em.lt.${corte}))`
+    // + 'bairro' COM endereço numerado e NUNCA reprocessado (26/10): o endereço com número chegou DEPOIS do pino do
+    // bairro (coletor/descrição) e nada reabria o geocode — Feira de Santana (bb0c2247) e mais 543 ativos. Uma vez
+    // só (geocod_reproc_em nulo): se o geocoder grátis não subir de nível, o carimbo tira o lote desta fila.
+    + `&and=(or(geocod_nivel.in.(cidade,falhou),and(geocod_nivel.eq.bairro,bairro.is.null),and(geocod_nivel.eq.bairro,endereco.match.${encodeURIComponent('",[[:space:]]*[0-9]"')},geocod_reproc_em.is.null)),or(geocod_reproc_em.is.null,geocod_reproc_em.lt.${corte}))`
     + `&order=desconto_percentual.desc.nullslast&limit=${LIMITE}`;
   const r = await sb(sel);
   if (!r.ok) return resp.status(500).json({ error: 'select falhou', detalhe: (await r.text()).slice(0, 200) });
