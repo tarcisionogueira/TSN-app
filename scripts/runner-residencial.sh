@@ -117,12 +117,20 @@ rodar() {
   local fonte="$1"; shift
   quer "$fonte" || return 0
   if node scripts/coleta-gate.mjs claim "$fonte"; then
-    if "$@"; then
+    # MOTIVO DA FALHA NO BANCO (26/10): o log ficava só no PC — SOLEON e GESTAO falharam 4–5 dias seguidos
+    # (tentativa_em renovado, ultima_em parado) sem nenhum rastro legível de fora. Agora a saída vai também para
+    # um arquivo temporário e, na falha, as últimas linhas viram sistema_heartbeat `runner_falha_<FONTE>`.
+    local _out; _out="$(mktemp 2>/dev/null || echo "/tmp/bidpro-$fonte.out")"
+    "$@" 2>&1 | tee "$_out"; local _rc=${PIPESTATUS[0]}
+    if [ "$_rc" -eq 0 ]; then
       node scripts/coleta-gate.mjs concluir "$fonte" \
-        || echo "  ⚠️ ($fonte saiu com sucesso mas NÃO gravou no acervo — janela segue aberta; investigue o scraper)"
+        || { echo "  ⚠️ ($fonte saiu com sucesso mas NÃO gravou no acervo — janela segue aberta; investigue o scraper)"
+             node scripts/runner-carimbo.mjs "runner_falha_$fonte" "rc=0 sem gravar no acervo | $(tail -c 240 "$_out" | tr '\n' ' ')" || true; }
     else
       echo "  ($fonte falhou — NÃO concluído; o gate retenta em ~15 min / próxima janela)"
+      node scripts/runner-carimbo.mjs "runner_falha_$fonte" "rc=$_rc | $(tail -c 260 "$_out" | tr '\n' ' ')" || true
     fi
+    rm -f "$_out"
     sleep 5   # respiro entre fontes (uma de cada vez, IP tranquilo)
   fi
 }
