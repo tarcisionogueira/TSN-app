@@ -3309,6 +3309,9 @@ async function saudeVeiculos(fonte, vs, { gravados, motivo } = {}) {
   catch (e) { console.log(`  ⚠️ ${fonte}_VEICULOS: saúde não gravada (${String(e?.message || e).slice(0, 80)})`); }
 }
 
+// Praça encerrada há 2+ dias (a mesma folga do invariante resultado_leilao_atrasado). Data ilegível = não vencida.
+export const vencidaHa2Dias = (d, agora = Date.now()) => { const t = Date.parse(d || ''); return Number.isFinite(t) && t < agora - 2 * 864e5; };
+
 async function salvarVeiculos(registros, rotulo) {
   const nome = rotulo || (registros[0]?.fonte ? `${registros[0].fonte} veículos` : 'veículos');
   // Lista vazia não diz de QUAL fonte é — quem chama com [] sem `fonte` não ganha saúde aqui (o rótulo é só texto).
@@ -3351,11 +3354,11 @@ async function salvarVeiculos(registros, rotulo) {
     let leituraOk = true;
     for (let i = 0; i < aptos.length; i += 200) {
       const ids = aptos.slice(i, i + 200).map(r => r.fonte_id).filter(Boolean);
-      const { data, error } = await supabase.from('veiculos_leilao').select('fonte_id, status_patio, status_patio_motivo, cidade, estado, fotos, data_leilao').eq('fonte', fonteV).in('fonte_id', ids);
+      const { data, error } = await supabase.from('veiculos_leilao').select('fonte_id, ativo, status_patio, status_patio_motivo, cidade, estado, fotos, data_leilao').eq('fonte', fonteV).in('fonte_id', ids);
       if (error) { leituraOk = false; console.log(`  ⚠️ ${nome}: não li o pátio anterior (${String(error.message).slice(0, 80)}) — status do dia vale sozinho`); break; }
       for (const d of data || []) anteriores.set(d.fonte_id, d);
     }
-    let mantidos = 0;
+    let mantidos = 0, encerradosNaEntrada = 0;
     if (leituraOk) for (const r of aptos) {
       const prev = anteriores.get(r.fonte_id);
       // CIDADE NÃO ESQUECE (24/09): a página do lote do SUPORTE não diz onde o veículo está; a
@@ -3365,6 +3368,12 @@ async function salvarVeiculos(registros, rotulo) {
       // DATA NÃO ESQUECE (05/10): a data sai do detalhe, lido em rodízio — lote não relido hoje não
       // pode voltar a data_leilao=null (era o que deixava o veículo eterno na vitrine).
       if (!r.data_leilao && prev?.data_leilao) r.data_leilao = prev.data_leilao;
+      // PRAÇA VENCIDA NA ENTRADA (26/10, #357). Toda linha vai com `ativo: true`: o LJUD ainda lista lote de leilão
+      // de 09/10 e ele NASCIA ativo em 22/10 (fora da janela de apuração de 10 dias — nunca seria apurado), e o
+      // que a limpeza já tinha desligado voltava a cada rodada (invariante resultado_leilao_atrasado). Praça há
+      // 2+ dias: lote NOVO nasce inativo e lote já desligado não ressuscita. Lote ATIVO segue como está — a retenção
+      // de 15 dias da proposta (sem_lance) é decisão da limpeza (desativar_leiloes_encerrados), não do coletor.
+      if (vencidaHa2Dias(r.data_leilao) && (!prev || prev.ativo === false)) { r.ativo = false; encerradosNaEntrada++; }
       // GALERIA NÃO ENCOLHE (29/09): lote não relido hoje chega só com a capa — não apaga a
       // galeria que a leitura do detalhe provou numa rodada anterior. Ver lib/galeria-veiculo.mjs.
       if (Array.isArray(r.fotos)) r.fotos = fotosPreservadas(r.fotos, prev?.fotos);
@@ -3375,6 +3384,7 @@ async function salvarVeiculos(registros, rotulo) {
       }
     }
     if (mantidos) console.log(`    ${nome}: ${mantidos} mantido(s) como 'confirmado' de rodadas anteriores (não relidos hoje)`);
+    if (encerradosNaEntrada) console.log(`    ${nome}: ${encerradosNaEntrada} com praça vencida há 2+ dias gravado(s) INATIVO(s) (novo ou já desligado — não ressuscita)`);
   }
   let salvos = 0;
   for (let i = 0; i < aptos.length; i += 200) {

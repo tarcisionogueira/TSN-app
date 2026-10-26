@@ -10,6 +10,9 @@ export const RECUSA_POR_REGRA = /^(só para empresa credenciada|encerrado|bem co
 export function classificarVazio(r) {
   if (!r.fetchOk || r.rows.length) return null;
   if (r.enumerados === 0) return 'site sem veículo em aberto (catálogo lido inteiro)';
+  // Catálogo MISTO lido e nenhum lote com cara de veículo pela URL (`urlCandidata`) — ATLANTICOLEILOES 26/10: 2 lotes, os
+  // 2 imóveis. Gravava 'falhou' com "2 enumerados e nenhum gravado (sem motivo registrado)": não houve leitura a explicar.
+  if (r.candidatos === 0) return `site sem veículo em aberto (${r.enumerados} lote(s) no catálogo, nenhum de veículo pela URL)`;
   if (r.lidos && r.porRegra / r.lidos >= 0.9) return `${r.enumerados} enumerados, nenhum arrematável por pessoa física ou vigente (${r.porque || '—'})`.slice(0, 300);
   return null;
 }

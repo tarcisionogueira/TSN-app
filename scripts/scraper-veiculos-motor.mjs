@@ -170,7 +170,7 @@ async function coletarTenant(cfg, fetchFonte, tenant) {
   const porque = [sem ? `sem detalhe ${sem}` : '', ...[...motivos].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([m, n]) => `${m}: ${n}`)].filter(Boolean).join(' · ');
   const lidos = rows.length + sem + [...motivos.values()].reduce((a, n) => a + n, 0);
   const porRegra = [...motivos].filter(([m]) => RECUSA_POR_REGRA.test(m)).reduce((a, [, n]) => a + n, 0);
-  return { rows, enumerados: en.urls.length, fetchOk: en.fetchOk !== false, sem, cota, porque, lidos, porRegra, idsEnumerados: new Set(en.urls.map(idDe)) };
+  return { rows, enumerados: en.urls.length, candidatos: urls.length, via: en.via, fetchOk: en.fetchOk !== false, sem, cota, porque: porque || (urls.length < en.urls.length ? `${en.urls.length - urls.length} fora pela URL (não é veículo)` : ''), lidos, porRegra, idsEnumerados: new Set(en.urls.map(idDe)) };
 }
 
 async function main() {
@@ -194,7 +194,7 @@ async function main() {
             const vazio = classificarVazio(r);
             await registrarSaude(supabase, `${tenant.fonte}_VEICULOS`, r.rows, cfg.chave, {
               ok: r.fetchOk && (r.rows.length > 0 || !!vazio), enumerados: r.enumerados, semCota: r.cota > 0, vazio: !!vazio,
-              motivo: r.bloqueio ? `não gravado: ${r.bloqueio}` : !r.fetchOk ? 'catálogo de veículos não abriu' : (vazio || (r.enumerados && !r.rows.length ? `${r.enumerados} enumerados e nenhum gravado (${r.porque || 'sem motivo registrado'})`.slice(0, 300) : '')),
+              motivo: r.bloqueio ? `não gravado: ${r.bloqueio}` : !r.fetchOk ? `catálogo de veículos não abriu${r.via ? ` (via ${r.via})` : ''}` : (vazio || (r.enumerados && !r.rows.length ? `${r.enumerados} enumerados e nenhum gravado (${r.porque || 'sem motivo registrado'})`.slice(0, 300) : '')),
             });
           }
         } catch (e) {

@@ -43,11 +43,22 @@ export async function viaBanco(url, { json = false } = {}) {
     return { html: null, motivo: 'sem resposta em 30s' };
   };
   try {
-    const r = await pedir(json ? 'json_pedir' : 'pagina_pedir');
+    let r = await pedir(json ? 'json_pedir' : 'pagina_pedir');
+    // 5xx do Cloudflare na frente do site (522 = a origem não respondeu a tempo; SILVALEILOES 24–26/10, intermitente:
+    // o mesmo feed abre 200 horas antes e depois) é passageiro: UMA nova tentativa depois de 8 s antes de dar o
+    // catálogo por fechado. 4xx é resposta do site e não se repete.
+    if (!r.html && r.status >= 500 && r.status <= 599) {
+      await new Promise((ok) => setTimeout(ok, 8000));
+      const r2 = await pedir(json ? 'json_pedir' : 'pagina_pedir');
+      r = r2.html ? r2 : { ...r2, motivo: `${r.motivo} · de novo em 8 s: ${r2.motivo}` };
+    }
     // 22/10 (#292): IIS que dá 400 a UA de navegador abre sem cabeçalho — mesmo remédio do fetch direto.
     if (!r.html && r.status === 400 && !json) {
       const p = await pedir('pagina_pedir_pelada');
-      return p.html ? p : { html: null, motivo: `${r.motivo} · sem cabeçalho: ${p.motivo}` };
+      // `status` da 2ª tentativa SEGUE (26/10, #320): era descartado aqui, e o 404 do lote que o feed ainda lista e o
+      // site já tirou (Degrau: Destak, Pulse, GF, KTZ) virava "falha do banco" — 2 seguidos pausavam o banco no host
+      // e o resto da rodada morria sem tentativa (DESTAK: 245 de 249 "banco: em pausa", 0 gravados por 3 dias).
+      return p.html ? p : { html: null, status: p.status, motivo: `${r.motivo} · sem cabeçalho: ${p.motivo}` };
     }
     return r;
   } catch (e) { return { html: null, motivo: String(e?.message || e).slice(0, 80) }; }

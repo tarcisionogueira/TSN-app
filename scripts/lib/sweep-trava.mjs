@@ -73,3 +73,21 @@ export const likePrefixo = (prefixo) => `${String(prefixo).replace(/[\\%_]/g, (c
 // Mais prefixos que isso viram URL enorme no PostgREST e, de todo modo, já não é "um tenant caiu" — é a rodada
 // que caiu: aí o sweep inteiro fica para a próxima.
 export const MAX_PROTEGIDOS = 40;
+
+// FREIO QUE NÃO DESTRAVA (26/10, #277). "Mais da metade sumindo de uma vez é lista ruim" protege contra a lista
+// parcial de UMA rodada — mas em fonte pequena o fantasma ACUMULA: GIORDANO tinha 14 de 23 ativos fora da lista
+// (parados desde 23/09–20/10, todos lidos em rodadas antigas e nunca mais listados) e o freio dizia "demais para
+// uma rodada" todo dia, para sempre. Passado o freio, o lote só sai com DUAS provas que a lista ruim não dá:
+//   · a enumeração de hoje não encolheu — ≥ metade da mediana do que o site enumerou nas últimas rodadas
+//     (`pisoEnumeracao`, a mesma régua do sitemap); sem histórico legível, nada sai (na dúvida, não desliga);
+//   · o lote está fora há DIAS, não só hoje: `atualizado_em` mais velho que `diasParado` (lote listado é relido
+//     e regravado; o que sumiu numa lista ruim de hoje foi tocado ontem e fica).
+export function sumidosLiberados({ fora, ativos, enumerados, historico, agora = Date.now(), diasParado = 3 }) {
+  if (!fora.length || !demaisParaUmaRodada(fora.length, ativos)) return { liberar: fora, motivo: null };
+  const { piso, via } = pisoEnumeracao(historico, Infinity);
+  if (via === 'fixo') return { liberar: [], motivo: `${fora.length} de ${ativos} fora da lista e sem histórico de enumeração para conferir — NÃO desligados` };
+  if (!(enumerados >= piso)) return { liberar: [], motivo: `${fora.length} de ${ativos} fora da lista e a lista encolheu (${enumerados} < piso ${piso}, ${via}) — NÃO desligados` };
+  const corte = agora - diasParado * 864e5;
+  const liberar = fora.filter(a => Date.parse(a.atualizado_em || '') < corte);
+  return { liberar, motivo: `${fora.length} de ${ativos} fora da lista (acima do freio); lista inteira (${enumerados} ≥ piso ${piso}) — saem só os ${liberar.length} parados há ${diasParado}+ dias` };
+}

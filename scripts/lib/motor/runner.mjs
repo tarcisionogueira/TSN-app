@@ -24,6 +24,7 @@ import { siteDeclaraVazio, MOTIVO_VAZIO_DECLARADO } from '../vazio-declarado.mjs
 import { naoEhImovel, anularFotoRepetida, fotoDoMeta } from '../dom-parse-util.mjs';
 import { galeriaDoHtml, montarFotos, FONTES_PASTA_DA_CAPA } from '../galeria-veiculo.mjs';
 import { patchDaApuracao } from '../../../api/_resultado-leilao.js';
+import { sumidosLiberados } from '../sweep-trava.mjs';
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 // `chaveTenant` (29/08): tenants que COMPARTILHAM a mesma `fonte` precisam de id distinto,
@@ -286,6 +287,8 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
   const motivosSem = new Map();
   const contarSem = (m) => { const k = String(m || 'sem motivo').slice(0, 140); motivosSem.set(k, (motivosSem.get(k) || 0) + 1); };
   const naoImovelIds = [];
+  const encerradosAtivos = [];   // fonte_id de lote ATIVO no banco que a releitura achou encerrado (#277)
+  const metaAtivo = new Set();
   const recusas = [];   // #238: { fonte_id, motivo, dias } — gravadas no fim (fora do dry-run)
   if (urls.length) {
     const ids = urls.map(u => idFonte(tenant, cfg.parse.idDaUrl(u)));
@@ -312,6 +315,7 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
       urls, meta, chaveDe: u => idFonte(tenant, cfg.parse.idDaUrl(u)),
       maxLotes, maxRefresh: cfg.maxRefresh, recusados,
     });
+    for (const [k, m] of meta) if (m.ativo !== false) metaAtivo.add(k);
     let pararReleitura = false;
     console.log(`[${tenant.fonte}] no banco ${meta.size} · novos ${novos.length} · releitura ${releitura.length}${recusados.size ? ` · ${recusados.size} recusado(s) recentemente, pulados` : ''} · processando ${alvo.length}`);
     const t0 = Date.now();
@@ -361,7 +365,15 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
       // Parser que devolve null = "não consegui ler esta página" (ex.: MGL sem render) — conta como
       // sem detalhe; antes disto o `det.encerrado` derrubava a coleta inteira.
       if (!det) { sem++; contarSem('parser não leu a página'); continue; }
-      if (det.encerrado) { encerrados++; if (i < iReleitura) recusas.push({ fonte_id: idFonte(tenant, cfg.parse.idDaUrl(url)), motivo: 'encerrado', dias: 30 }); continue; }
+      if (det.encerrado) {
+        encerrados++;
+        const fid = idFonte(tenant, cfg.parse.idDaUrl(url));
+        if (i < iReleitura) recusas.push({ fonte_id: fid, motivo: 'encerrado', dias: 30 });
+        // Lote ATIVO no acervo que a própria página diz encerrado (#277, 26/10): era só contado e seguia ativo — o
+        // site ainda o lista, então o sweep de sumidos também não o tira (RAFAELLEILOEIRO: 5 de 6 ativos assim).
+        else if (metaAtivo.has(fid)) encerradosAtivos.push(fid);
+        continue;
+      }
       const row = cfg.parse.montarRow(url, det, tenant);
       // Sem foto no parser, a do meta da página (og:image filtrado) — #289. anularFotoRepetida, adiante, ainda derruba
       // o og:image de TEMPLATE (o mesmo em todo lote).
@@ -432,7 +444,14 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
   // `idsEnumerados` = TODOS os ids que o site listou (inclusive os fora pela URL): é a prova de presença que a
   // varredura de sumidos usa — e só quando `listaCompleta` (#277).
   const idsEnumerados = new Set(enumerado.urls.map(u => idFonte(tenant, cfg.parse.idDaUrl(u))));
-  return { prontos, encerrados, fonteVazia: fetchOk && enumerado.urls.length === 0, vazioDeclarado, enumerados: enumerado.urls.length, cotaNegada, eventosCount, viaCatalogo: via, naoImovelIds, idsEnumerados, listaCompleta: enumerado.completa, listaCortada: enumerado.cortada };
+  // O PORQUÊ DO ZERO vai para a saúde (26/10, #320). "sem nenhum lote pronto" era tudo o que a DESTAK dizia com 249 de
+  // 250 páginas "sem detalhe" (banco em pausa) — o log explicava, o banco não. Gate que descarta tudo diz qual gate.
+  const porqueZero = [
+    sem ? `${sem} sem detalhe (${[...motivosSem].sort((a, b) => b[1] - a[1]).slice(0, 2).map(([m, n]) => `${n}× ${m}`).join(' | ')})` : '',
+    reprov ? `${reprov} descartados na qualidade` : '', naoImovel ? `${naoImovel} não-imóvel` : '',
+    encerrados ? `${encerrados} encerrados` : '', !urls.length && foraPelaUrl ? `${foraPelaUrl} fora pela URL (não é imóvel)` : '',
+  ].filter(Boolean).join(' · ');
+  return { prontos, encerrados, fonteVazia: fetchOk && enumerado.urls.length === 0, vazioDeclarado, enumerados: enumerado.urls.length, cotaNegada, eventosCount, viaCatalogo: via, naoImovelIds, idsEnumerados, listaCompleta: enumerado.completa, listaCortada: enumerado.cortada, porqueZero, encerradosAtivos };
 }
 
 // Roda a coleta de uma fonte inteira (todos os tenants). opts:
@@ -460,7 +479,7 @@ export async function rodarFonte(cfg, opts) {
   console.log(`${rotulo} ${dryrun ? '(DRY-RUN — não grava)' : '(GRAVANDO)'} · tenants: ${tenants.map(t => t.fonte).join(',')} · max ${maxLotes}/tenant`);
 
   for (const tenant of tenants) {
-    const { prontos, encerrados, fonteVazia, vazioDeclarado, enumerados, cotaNegada, eventosCount, viaCatalogo, naoImovelIds = [], idsEnumerados, listaCompleta, listaCortada } = await coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debug, semBD, dryrun });
+    const { prontos, encerrados, fonteVazia, vazioDeclarado, enumerados, cotaNegada, eventosCount, viaCatalogo, naoImovelIds = [], idsEnumerados, listaCompleta, listaCortada, porqueZero, encerradosAtivos = [] } = await coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debug, semBD, dryrun });
 
     if (!prontos.length) {
       // ⚠️ 29/08 — FONTE VAZIA PRECISA VIRAR LINHA, NÃO SILÊNCIO. Isto era um `continue` que
@@ -508,8 +527,9 @@ export async function rodarFonte(cfg, opts) {
               // 21/10: `firecrawl-sem-chave` (runner sem FIRECRAWL_API_KEY) caía no genérico abaixo — o LEJE gravou
               // "sem nenhum lote pronto" 4×/dia por 9 dias apontando para o parser, que estava certo.
               ? `catálogo não abriu: ${viaCatalogo} — acesso do runner, não parser`
-              : (encerrados ? `sem lote pronto (${encerrados} encerrados)` : 'sem nenhum lote pronto'),
+              : `sem lote pronto: ${porqueZero || 'nenhum lote lido'}`.slice(0, 400),
       });
+      if (!dryrun) await desligarEncerrados(supabase, tenant, encerradosAtivos);
       console.error(`[${tenant.fonte}] nada a gravar.${estado.semCota ? ' (sem cota Bright Data — orçamento, não regressão.)' : ''}`);
       if (exitCodeSeFalha) process.exitCode = 1;
       continue;
@@ -571,6 +591,7 @@ export async function rodarFonte(cfg, opts) {
     // `cotaNegada` no ramo de SUCESSO: coleta cortada no meio pelo orçamento devolve lotes
     // de verdade e cai aqui — sem este número a linha vira medição sadia da fonte.
     await registrarSaude(supabase, tenant.fonte, prontos, cfg.chave, { enumerados, cotaNegada });
+    await desligarEncerrados(supabase, tenant, encerradosAtivos);
     // VARREDURA DE SUMIDOS, opt-in (10/10, #195). O motor só revisita o que o CATÁLOGO lista: lote
     // que saiu do site nunca é reaberto, e sem data de leilão nunca expira — LEJE tinha 12 de 15
     // ativos parados há semanas. `cfg.sumidoDias`: ativo desta fonte sem atualização há N dias
@@ -595,7 +616,7 @@ export async function rodarFonte(cfg, opts) {
     if (listaCompleta && idsEnumerados?.size && !estado.semCota && !cotaNegada) {
       const ativos = [];
       for (let de = 0; ; de += 1000) {
-        const { data, error: eAt } = await supabase.from('imoveis_leilao').select('id,fonte_id,resultado_leilao,resultado_apurado_em')
+        const { data, error: eAt } = await supabase.from('imoveis_leilao').select('id,fonte_id,resultado_leilao,resultado_apurado_em,atualizado_em')
           .eq('fonte', tenant.fonte).eq('ativo', true).order('id').range(de, de + 999);
         if (eAt) { console.error(`[${tenant.fonte}] sumidos pela lista: leitura falhou (${eAt.message}) — pulado`); ativos.length = 0; break; }
         ativos.push(...data);
@@ -604,11 +625,22 @@ export async function rodarFonte(cfg, opts) {
       const janela = Date.now() - 15 * 864e5;
       const fora = ativos.filter(a => !idsEnumerados.has(a.fonte_id)
         && !(['sem_lance', 'indeterminado'].includes(a.resultado_leilao) && Date.parse(a.resultado_apurado_em || 0) > janela));
-      if (fora.length > Math.max(5, ativos.length * 0.5)) {
-        console.warn(`[${tenant.fonte}] sumidos pela lista: ${fora.length} de ${ativos.length} ativos fora da lista — demais para uma rodada, NÃO desligados (conferir a enumeração)`);
-      } else if (fora.length) {
+      // Acima do freio (mais da metade de uma vez), só sai o que está fora há dias com a lista do tamanho de sempre
+      // (sweep-trava.sumidosLiberados, #277): o freio protege da lista ruim de UMA rodada sem travar para sempre a
+      // fonte pequena em que o fantasma acumulou (GIORDANO 14 de 23).
+      let historico = [];
+      if (fora.length) {
+        const { data: h, error: eH } = await supabase.from('fonte_saude').select('enumerados')
+          .eq('fonte', tenant.fonte).in('status', ['ok', 'degradado']).not('enumerados', 'is', null)
+          .order('executado_em', { ascending: false }).limit(10);
+        if (eH) console.warn(`[${tenant.fonte}] sumidos pela lista: histórico de enumeração ilegível (${eH.message}) — freio sem alívio`);
+        else historico = h || [];
+      }
+      const { liberar, motivo: mFreio } = sumidosLiberados({ fora, ativos: ativos.length, enumerados: idsEnumerados.size, historico });
+      if (mFreio) console.warn(`[${tenant.fonte}] sumidos pela lista: ${mFreio}`);
+      if (liberar.length) {
         const { data: saiu, error: eF } = await supabase.from('imoveis_leilao').update({ ativo: false, suprimido_motivo: 'sumiu_da_fonte' })
-          .in('id', fora.map(a => a.id)).eq('ativo', true).select('id');
+          .in('id', liberar.map(a => a.id)).eq('ativo', true).select('id');
         if (eF) console.error(`[${tenant.fonte}] sumidos pela lista: desligamento falhou (${eF.message})`);
         else console.log(`[${tenant.fonte}] sumidos pela lista: ${saiu.length} lote(s) que saíram do site → sumiu_da_fonte`);
       }
@@ -618,6 +650,41 @@ export async function rodarFonte(cfg, opts) {
   }
   if (dryrun) console.log(`\nPara gravar, rode com ${rotulo}_DRYRUN=0.`);
   } finally { await motor.fechar?.(); }
+}
+
+// ENCERRADO NA PRÓPRIA PÁGINA (26/10, #277). Lote ativo que a releitura achou encerrado sai do acervo — antes era só
+// contado e seguia ativo enquanto o site o listasse — e lote SEM data (GIORDANO: 14 judiciais sem praça) nunca
+// expira pela limpeza por data. Sai como `praca_vencida` (a apuração continua a alcançá-lo e o "sem lance" volta
+// para proposta, regra de 14/10). Se o banco conhece uma praça FUTURA, NÃO sai: a página diz uma coisa e o dado
+// outra, e o "encerrado" do parser pode ser o errado (RAFAELLEILOEIRO 26/10: lote.status 2, leilão "Aberto para
+// lances", 2º leilão 27/10) — fica no log como conflito. Retido na janela de proposta (sem lance/indeterminado
+// apurado há < 15 dias) fica. `.select()` prova o que saiu.
+export function classificarEncerrados(linhas, agora = Date.now()) {
+  const janela = agora - 15 * 864e5;
+  const ids = [], conflito = [];
+  for (const l of linhas || []) {
+    if (['sem_lance', 'indeterminado'].includes(l.resultado_leilao) && Date.parse(l.resultado_apurado_em || 0) > janela) continue;
+    // data_fim é DATA (meia-noite): o dia inteiro ainda vale.
+    const ult = Math.max(...[l.data_leilao, l.data_leilao_2, l.data_fim && `${String(l.data_fim).slice(0, 10)}T23:59:59-03:00`]
+      .map(d => Date.parse(d || '')).filter(Number.isFinite), -Infinity);
+    (ult > agora ? conflito : ids).push(l.id);
+  }
+  return { ids, conflito };
+}
+
+async function desligarEncerrados(supabase, tenant, fids) {
+  if (!fids?.length) return;
+  const { data: linhas, error } = await supabase.from('imoveis_leilao')
+    .select('id,fonte_id,data_leilao,data_leilao_2,data_fim,resultado_leilao,resultado_apurado_em')
+    .eq('fonte', tenant.fonte).eq('ativo', true).in('fonte_id', fids.slice(0, 500));
+  if (error) { console.error(`[${tenant.fonte}] encerrados na página: leitura falhou (${error.message}) — seguem ativos`); return; }
+  const { ids, conflito } = classificarEncerrados(linhas);
+  if (conflito.length) console.warn(`[${tenant.fonte}] encerrados na página: ${conflito.length} lote(s) com praça FUTURA no banco e "encerrado" na página — mantidos (conferir o parser)`);
+  if (!ids.length) return;
+  const { data: saiu, error: eU } = await supabase.from('imoveis_leilao').update({ ativo: false, suprimido_motivo: 'praca_vencida' })
+    .in('id', ids).eq('ativo', true).select('id');
+  if (eU) console.error(`[${tenant.fonte}] encerrados na página: desligamento falhou (${eU.message})`);
+  else console.log(`[${tenant.fonte}] encerrados na página: ${saiu.length} lote(s) ativos que o site diz encerrados → praca_vencida`);
 }
 
 // APURAÇÃO NA PRÓPRIA FONTE, opt-in (20/10): fonte cuja API diz o desfecho do lote (`cfg.apurarAusentes`,

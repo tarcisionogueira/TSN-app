@@ -11,4 +11,7 @@ assert.equal(classificarVazio({ ...base, fetchOk: false }), null);
 assert.equal(classificarVazio({ ...base, enumerados: 5, rows: [{}] }), null);
 assert.equal(classificarVazio({ ...base, enumerados: 652, lidos: 652, porRegra: 0, porque: 'não é veículo inteiro: 652' }), null);
 assert.equal(classificarVazio({ ...base, enumerados: 100, lidos: 100, porRegra: 80 }), null, 'abaixo de 90% segue falha');
+// ATLANTICOLEILOES (26/10): catálogo misto lido, 2 lotes, os 2 imóveis — nenhum candidato a veículo pela URL.
+assert.match(classificarVazio({ ...base, enumerados: 2, candidatos: 0 }), /nenhum de veículo pela URL/);
+assert.equal(classificarVazio({ ...base, enumerados: 2, candidatos: 2, lidos: 2, porque: 'sem valor: 2' }), null, 'candidato lido e recusado por leitura segue falha');
 console.log('✓ veículos: vazio legítimo × falha');

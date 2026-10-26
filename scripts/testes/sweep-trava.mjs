@@ -1,7 +1,7 @@
 // #277 (24/10): a trava de proporção do sweep de "sumidos" (scraper-puppeteer.mjs → salvarEFinalizar).
 // Números REAIS medidos no banco em 24/10 (imoveis_leilao + fonte_saude, últimas 7 rodadas 'ok').
 import assert from 'node:assert/strict';
-import { travaDoSweep, medianaTotais, pisoEnumeracao, demaisParaUmaRodada } from '../lib/sweep-trava.mjs';
+import { travaDoSweep, medianaTotais, pisoEnumeracao, demaisParaUmaRodada, sumidosLiberados } from '../lib/sweep-trava.mjs';
 
 assert.equal(medianaTotais([{ total: 39 }, { total: 47 }, { total: 38 }, { total: 35 }, { total: 35 }]), 38);
 assert.equal(medianaTotais([{ total: 10 }, { total: 20 }]), 15);
@@ -54,3 +54,23 @@ assert.equal(demaisParaUmaRodada(5, 6), false);
 assert.equal(demaisParaUmaRodada(6, 6), true);
 
 console.log('sweep-trava: todos os casos passaram');
+
+// FREIO QUE NÃO DESTRAVA (26/10) — GIORDANOLEILOES real: 23 ativos, 14 fora da lista (atualizado_em de 23/09 a 20/10),
+// a lista do site com 99 (histórico de enumerados 96–99). Antes: "demais para uma rodada" todo dia, para sempre.
+{
+  const agora = Date.parse('2026-10-26T15:48:51Z');
+  const parados = ['2026-09-23T13:54:21Z', '2026-09-24T13:51:21Z', '2026-09-30T15:08:38Z', '2026-10-09T15:28:59Z', '2026-10-20T13:55:25Z']
+    .map((atualizado_em, i) => ({ id: i, atualizado_em }));
+  const fora = [...parados, { id: 99, atualizado_em: '2026-10-26T01:00:00Z' }];   // um que sumiu SÓ hoje fica
+  const hist = [{ enumerados: 96 }, { enumerados: 99 }, { enumerados: 97 }, { enumerados: 99 }];
+  const r = sumidosLiberados({ fora, ativos: 9, enumerados: 99, historico: hist, agora });
+  assert.deepEqual(r.liberar.map(a => a.id), [0, 1, 2, 3, 4], 'saem só os parados há 3+ dias');
+  // lista ENCOLHIDA hoje (30 de ~98): ninguém sai — é a lista ruim que o freio existe para pegar
+  assert.equal(sumidosLiberados({ fora, ativos: 9, enumerados: 30, historico: hist, agora }).liberar.length, 0);
+  // sem histórico legível: na dúvida, não desliga
+  assert.equal(sumidosLiberados({ fora, ativos: 9, enumerados: 99, historico: [], agora }).liberar.length, 0);
+  // abaixo do freio: comportamento de sempre (todos os de fora saem)
+  assert.equal(sumidosLiberados({ fora: fora.slice(0, 2), ativos: 23, enumerados: 99, historico: hist, agora }).liberar.length, 2);
+  console.log('✓ sumidos acima do freio: saem só os parados, com a lista inteira');
+}
+

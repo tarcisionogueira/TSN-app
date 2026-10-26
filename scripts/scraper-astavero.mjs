@@ -197,21 +197,26 @@ async function coletarVeiculos(tenant) {
   const completa = !Number.isFinite(declarado) || itens.length >= declarado;
   const lerDetalhe = criarLeitorDetalhe(tenant);
   const prontos = []; let fora = 0, vencidos = 0;
+  // O PORQUÊ de cada "fora" (26/10, #280): AMARQUES "3 listados · 3 fora" e FOX "1 · 1 fora" gravavam 'falhou' sem
+  // motivo nenhum — não dava para separar lote encerrado (vazio legítimo) de parser quebrado (sem valor).
+  const porque = new Map();
+  const tirar = (m) => { fora++; porque.set(m, (porque.get(m) || 0) + 1); };
   const limite = Date.now() - 86400000;
   for (const item of itens) {
     const det = await lerDetalhe(item);
-    if (det?.lote?.status && det.lote.status !== 'Aberto') { fora++; continue; }
+    if (det?.lote?.status && det.lote.status !== 'Aberto') { tirar(`status ${det.lote.status}`); continue; }
     const row = montarRowVeiculoAstavero(item, det, tenant, { marcaModeloAno, tipoVeiculo });
-    if (!row.valor_minimo) { fora++; continue; }
+    if (!row.valor_minimo) { tirar('sem valor'); continue; }
     // Regra do dono (13/09): bem com o executado/devedor NUNCA é gravado — mesmo ponto de salvarVeiculos.
-    if (row.status_patio === 'excluido') { fora++; continue; }
+    if (row.status_patio === 'excluido') { tirar('bem com o executado'); continue; }
     // A plataforma mantém "Aberto" lote de leilão vencido há meses (visto nos imóveis): entra inativo.
     if (row.data_leilao && Date.parse(row.data_leilao) < limite) { row.ativo = false; vencidos++; }
     for (const k of ['fotos', 'anexos']) if (row[k] == null) delete row[k];   // null apagaria o que já existe
     prontos.push(row);
   }
   const pct = (f) => Math.round((100 * prontos.filter(f).length) / Math.max(1, prontos.length));
-  console.log(`[${tenant.fonte}] veículos: ${itens.length} listados · ${prontos.length} prontos (${vencidos} vencidos → inativos) · ${fora} fora · ${lerDetalhe.falhas()} sem detalhe`
+  const porqueTxt = [...porque].sort((a, b) => b[1] - a[1]).map(([m, n]) => `${n}× ${m}`).join(' · ');
+  console.log(`[${tenant.fonte}] veículos: ${itens.length} listados · ${prontos.length} prontos (${vencidos} vencidos → inativos) · ${fora} fora${porqueTxt ? ` (${porqueTxt})` : ''} · ${lerDetalhe.falhas()} sem detalhe`
     + ` · pátio ${pct((r) => r.status_patio === 'confirmado')}%/selo ${pct((r) => r.status_patio === 'nao_confirmado')}% · marca ${pct((r) => r.marca)}% · ano ${pct((r) => r.ano_modelo)}% · placa ${pct((r) => r.placa)}% · foto ${pct((r) => r.fotos)}% · cidade ${pct((r) => r.cidade && r.estado)}%`);
   if (DRYRUN) {
     for (const r of prontos.slice(0, 3)) console.log(`   · ${r.fonte_id} | ${r.tipo_veiculo} | ${r.marca || '?'} ${r.modelo || ''} ${r.ano_fabricacao || '?'}/${r.ano_modelo || '?'} | placa ${r.placa || '—'} | R$ ${r.valor_minimo} / aval ${r.valor_avaliacao} | ${r.cidade}/${r.estado} | ${r.data_leilao?.slice(0, 10)} | sucata=${r.is_sucata} ativo=${r.ativo}`);
@@ -245,8 +250,15 @@ async function coletarVeiculos(tenant) {
     }
   }
   // metricasColeta (_saude-fonte.mjs) já entende link_lote/fotos de veículo desde 05/10.
-  await registrarSaude(supabase, fonteSaude, prontos.filter((r) => r.ativo), 'astavero-api', {
-    ok: true, vazio: !itens.length, enumerados: itens.length, motivo: itens.length ? '' : 'site sem veículo em aberto' });
+  // Zero vigente: VAZIO legítimo só quando TODO listado saiu por regra objetiva (status ≠ Aberto, leilão vencido,
+  // bem com o executado). "sem valor" ou detalhe que não abriu pode ser parser/API quebrada — segue 'falhou', COM motivo.
+  const ativos = prontos.filter((r) => r.ativo);
+  const objetivos = vencidos + [...porque].filter(([m]) => /^status |^bem com o executado/.test(m)).reduce((a, [, n]) => a + n, 0);
+  const vazioLegitimo = !itens.length || (!ativos.length && objetivos === itens.length);
+  const motivoZero = !itens.length ? 'site sem veículo em aberto'
+    : ativos.length ? '' : `${itens.length} listados, nenhum vigente: ${[porqueTxt, vencidos ? `${vencidos}× leilão vencido` : '', lerDetalhe.falhas() ? `${lerDetalhe.falhas()} sem detalhe` : ''].filter(Boolean).join(' · ')}`;
+  await registrarSaude(supabase, fonteSaude, ativos, 'astavero-api', {
+    ok: true, vazio: vazioLegitimo, enumerados: itens.length, motivo: motivoZero.slice(0, 300) });
   return true;
 }
 
