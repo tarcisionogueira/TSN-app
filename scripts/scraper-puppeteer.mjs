@@ -5486,13 +5486,26 @@ async function scraperLeilotech(browser) {
   console.log('  Leilotech — plataforma white-label (interceptando GraphQL de cada tenant)...');
   const todos = [];
   const vistos = new Set();
+  // TENANT QUE FALHA OU VOLTA VAZIO NÃO PODE APOSENTAR O ACERVO DELE (26/10). Os 9 tenants gravam todos na fonte
+  // LEILOTECH, e o sweep do salvarEFinalizar desliga o que não foi tocado NA FONTE: um tenant com erro (ou com a
+  // interceptação do GraphQL vindo vazia) tinha os lotes dele marcados `sumiu_da_fonte` — 12 lotes com leilão
+  // entre 29/10 e 02/12 caíram assim no 1º dia. Erro, ou zero onde o banco tem lote ativo do tenant = coleta parcial.
+  const parciais = [];
   for (const tenant of LEILOTECH_TENANTS) {
+    let imoveis = null;
     try {
-      const imoveis = await scraperLeilotechTenant(browser, tenant);
+      imoveis = await scraperLeilotechTenant(browser, tenant);
       for (const im of imoveis) { if (!vistos.has(im.fonte_id)) { vistos.add(im.fonte_id); todos.push(im); } }
-    } catch (e) { console.log(`    [${tenant.domain}] erro: ${String(e.message).slice(0, 80)}`); }
+    } catch (e) { console.log(`    [${tenant.domain}] erro: ${String(e.message).slice(0, 80)}`); parciais.push(`${tenant.domain}: erro`); continue; }
+    if (!imoveis.length) {
+      const { count, error } = await supabase.from('imoveis_leilao').select('id', { count: 'exact', head: true })
+        .eq('fonte', 'LEILOTECH').eq('ativo', true).eq('leiloeiro', tenant.leiloeiro);
+      if (error) parciais.push(`${tenant.domain}: vazio e acervo ilegível (${error.message})`);
+      else if (count > 0) parciais.push(`${tenant.domain}: vazio com ${count} ativo(s) no banco`);
+    }
   }
-  console.log(`    Leilotech: ${todos.length} imóveis de ${LEILOTECH_TENANTS.length} leiloeiros`);
+  if (parciais.length) todos.coletaParcial = parciais.join('; ');
+  console.log(`    Leilotech: ${todos.length} imóveis de ${LEILOTECH_TENANTS.length} leiloeiros${parciais.length ? ` · PARCIAL: ${todos.coletaParcial}` : ''}`);
   return todos;
 }
 
