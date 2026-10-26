@@ -489,8 +489,21 @@ async function main() {
     console.log('\nPara gravar, rode com RJ_DRYRUN=0.');
     return { gravados: 0, dryrun: true, prontos: prontos.length };
   }
-  const { error } = await supabase.from('imoveis_leilao').upsert(prontos, { onConflict: 'fonte_id', ignoreDuplicates: false });
-  if (error) throw new FalhaDeAcesso('supabase', `upsert: ${error.message}`);
+  // EM LOTES DE 10, com 1 nova tentativa em timeout (26/10). Era UM upsert com tudo: em 25/10 19:45 e 26/10 01:44 ele
+  // estourou o statement timeout (57014, dentro dos gatilhos de endereço da tabela, com outras coletas gravando ao mesmo
+  // tempo) e a rodada perdeu TODOS os lotes já lidos — lidos pelo Bright Data, ou seja, pagos. Lote pequeno cabe no
+  // tempo; o que gravou fica gravado mesmo se um lote posterior falhar, e a falha continua lançando (sem sucesso falso).
+  const TAM = 10;
+  for (let i = 0; i < prontos.length; i += TAM) {
+    const parte = prontos.slice(i, i + TAM);
+    let { error } = await supabase.from('imoveis_leilao').upsert(parte, { onConflict: 'fonte_id', ignoreDuplicates: false });
+    if (error && /timeout|57014/i.test(`${error.code || ''} ${error.message || ''}`)) {
+      console.warn(`[rj] upsert ${i}-${i + parte.length} estourou o tempo; nova tentativa em 5 s`);
+      await new Promise((r) => setTimeout(r, 5000));
+      ({ error } = await supabase.from('imoveis_leilao').upsert(parte, { onConflict: 'fonte_id', ignoreDuplicates: false }));
+    }
+    if (error) throw new FalhaDeAcesso('supabase', `upsert (lote ${i}-${i + parte.length} de ${prontos.length}): ${error.message}`);
+  }
   console.log(`✅ ${prontos.length} imóveis RJ Leilões gravados/atualizados.`);
   // SAÚDE DA FONTE (08/08): entra no monitor de regressão junto das demais. Antes esta fonte
   // não escrevia em `fonte_saude`, então nunca ganhava piso aprendido e uma quebra passaria batido.
