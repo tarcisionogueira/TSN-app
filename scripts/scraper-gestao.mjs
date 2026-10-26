@@ -71,16 +71,28 @@ import { registrarConhecimento, qualidadeColeta } from './lib/conhecimento.mjs';
 import { registrarSaude } from './_saude-fonte.mjs';
 import { inferirUF } from './lib/inferir-uf.mjs';
 import { fetchResidencial, fecharHeadless, estatisticaResidencial, decodificarCorpo } from './lib/fetch-residencial.mjs';
+import { viaBanco } from './lib/motor/fetch-fonte.mjs';
+import { repararLatin1Perdido } from './lib/reparar-latin1.mjs';
+import { ehPadrao, fatiarCardsPadrao, pracasPadrao, parseCardPadrao } from './lib/gestao-padrao.mjs';
 
 // vincoleiloes.com.br: recon 26/07 viu o MESMO back-office (leilao.php?idLeilao=N), mas é uma
 // instalação PRÓPRIA (fotos em vincoleiloes.com.br/sishp, UTF-8, outro layout de lote — ver
 // fatiarCardsGrade, 21/10). idLote do vinco NÃO é do backend compartilhado: fonte_id leva o domínio.
-const DOMINIOS_PADRAO_CLUSTER = 'granadoleiloes.com.br,lancenoleilao.com.br,extrajustleiloes.com.br,lancetotal.com.br,vincoleiloes.com.br';
+// 26/10 (junta): + Fidalgo (www.fidalgoleiloes.com.br, 51 leilões, layout "lotePadrao" — parseCardPadrao) e Central
+// Judicial (www.centraljudicial.com.br, "Central Judicial :: Gestão de Leilões", 1 evento na home e ele dá 404 hoje:
+// entra vazio). Instalações PRÓPRIAS (fotos em <dominio>/sishp, sem a CDN d335 do backend compartilhado) — o idLote
+// é deles, então o fonte_id leva o domínio (DOMINIOS_ID_PROPRIO), como o vinco.
+const DOMINIOS_PADRAO_CLUSTER = 'granadoleiloes.com.br,lancenoleilao.com.br,extrajustleiloes.com.br,lancetotal.com.br,vincoleiloes.com.br,www.fidalgoleiloes.com.br,www.centraljudicial.com.br';
+const DOMINIOS_ID_PROPRIO = /(?:^|\.)(?:vincoleiloes|fidalgoleiloes|centraljudicial)\.com\.br$/i;
 const DOMINIOS = (process.env.GESTAO_DOMINIOS || DOMINIOS_PADRAO_CLUSTER)
   .split(',').map(s => s.trim()).filter(Boolean);
 const MAX_EVENTOS_PADRAO = 25;
 // Residencial (Chromium em IP de casa) não paga por request: teto maior. O pago segue em 25.
-const MAX_EVENTOS = Number(process.env.GESTAO_MAX_EVENTOS || (process.env.GESTAO_HEADLESS === '1' ? 80 : MAX_EVENTOS_PADRAO));
+// VIA GRÁTIS DO GITHUB (26/10): GESTAO_GRATIS=1 — fetch direto do runner e, quando o Cloudflare recusa (todos os
+// domínios menos o vinco, medido em 26/10), a página pelo BANCO (pg_net, grátis). Nunca Bright Data. O banco entrega
+// o latin1 do back-office com U+FFFD no lugar das acentuadas — repararLatin1Perdido reconstrói pelo léxico.
+const GRATIS = process.env.GESTAO_GRATIS === '1';
+const MAX_EVENTOS = Number(process.env.GESTAO_MAX_EVENTOS || (process.env.GESTAO_HEADLESS === '1' || GRATIS ? 160 : MAX_EVENTOS_PADRAO));
 // ESCOPO REDUZIDO (10/09): um dispatch manual com domínio/evento cortado (ex.: recon pontual
 // de 1 dos 5 domínios do cluster) não pode entrar no monitor com a MESMA etiqueta de uma
 // coleta de produção — foi exatamente isso que fez `fonte_regressao_suspeita()` acusar
@@ -92,7 +104,7 @@ const ESCOPO_REDUZIDO = !!process.env.GESTAO_DOMINIOS || MAX_EVENTOS < MAX_EVENT
 const ESTRATEGIA = ESCOPO_REDUZIDO ? 'principal-escopo-reduzido' : 'principal';
 // 22/10: 30 era o teto pensado para o Bright Data (pago). No runner residencial a busca é grátis
 // (2 páginas por lote, o edital do evento em cache) — o teto de 30 deixava o Vinco inteiro sem doc.
-const DOC_CAP = Number(process.env.GESTAO_DOC_CAP || (process.env.GESTAO_HEADLESS === '1' ? 400 : 30));
+const DOC_CAP = Number(process.env.GESTAO_DOC_CAP || (process.env.GESTAO_HEADLESS === '1' ? 400 : GRATIS ? 120 : 30));
 const DRYRUN = process.env.GESTAO_DRYRUN !== '0';
 const DEBUG = process.env.GESTAO_DEBUG === '1';
 const RESIDENCIAL = process.env.GESTAO_HEADLESS === '1';
@@ -110,7 +122,30 @@ const supabase = createClient(SB_URL, SB_KEY);
 let semCotaVisto = false;
 
 // Busca via Web Unlocker e DECODIFICA windows-1252 (o back-office serve latin1).
+// Caminho grátis (GESTAO_GRATIS): direto → banco. Devolve null com o motivo no log (nunca engole).
+const viaGratis = { direto: 0, banco: 0, falha: 0 };
+async function fetchGratis(url, { timeoutMs = 45000, valido = null } = {}) {
+  const serve = (h) => !!h && !/just a moment|cf-chl|challenge-platform\/h\//i.test(h.slice(0, 4000)) && (valido ? valido(h) : h.length > 0);
+  let porQue;
+  try {
+    const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36', 'Accept-Language': 'pt-BR,pt;q=0.9' }, redirect: 'follow', signal: AbortSignal.timeout(timeoutMs) });
+    const h = decodificarCorpo(await r.arrayBuffer(), 'auto');
+    if (r.ok && serve(h)) { viaGratis.direto++; return h; }
+    porQue = r.ok ? 'página inválida/challenge' : `HTTP ${r.status}`;
+  } catch (e) { porQue = `rede: ${String(e?.cause?.code || e?.message || e).slice(0, 60)}`; }
+  const b = await viaBanco(url);
+  if (b.html) {
+    const h = repararLatin1Perdido(b.html);
+    if (serve(h)) { viaGratis.banco++; return h; }
+    porQue += ' · banco: página inválida';
+  } else porQue += ` · banco: ${b.motivo}`;
+  viaGratis.falha++;
+  console.error(`  [grátis] ${url}: ${porQue}`);
+  return null;
+}
+
 async function bd(url, { timeoutMs = 60000, valido = null } = {}) {
+  if (GRATIS) return fetchGratis(url, { valido });
   if (RESIDENCIAL) {
     // Runner residencial: fetch puro (decodificando windows-1252 na mão — o Chromium fazia isso
     // de graça), com o navegador de rede de segurança. `valido` é o marcador que o parser
@@ -142,7 +177,7 @@ async function bd(url, { timeoutMs = 60000, valido = null } = {}) {
 }
 
 // Página válida? (o back-office às vezes devolve 200 com um stub minúsculo/challenge).
-const paginaOk = h => !!h && h.length > 5000 && /lotePadrao|Total de lotes|idLote/i.test(h);
+const paginaOk = h => !!h && h.length > 5000 && /lotePadrao|Total de lotes|idLote|Exibindo resultado/i.test(h);
 
 // Home resiliente: tenta o apex e, se vier vazio (apex que redireciona p/ www e o Web Unlocker
 // não segue — caso do vinco), tenta www.<dominio>. Barato: o 2º fetch só dispara quando o 1º falha.
@@ -440,7 +475,7 @@ function parseCard(card, ctx) {
 
   const row = {
     fonte: 'GESTAOLEILOES',
-    fonte_id: `gestao_${card.idLote}`,
+    fonte_id: DOMINIOS_ID_PROPRIO.test(ctx.dominio) ? `gestao_${ctx.dominio.replace(/^www\./, '').split('.')[0]}_${card.idLote}` : `gestao_${card.idLote}`,
     titulo: (tituloBase || `Imóvel ${ctx.leiloeiro} ${card.idLote}`).slice(0, 180),
     tipo: inferirTipo(txt),
     modalidade,
@@ -657,6 +692,21 @@ async function coletarEvento(dominio, idLeilao) {
     ctx.judicial = /Tipo:\s*Judicial/i.test(textoCompleto);
     parse = parseCardGrade;
   }
+  if (!cards.length && ehPadrao(html)) {
+    let h = html;
+    const total = Number((textoCompleto.match(/Exibindo resultado\s*\d+\s*a\s*\d+\s*de\s*(\d+)/i) || [])[1] || 0);
+    if (total > fatiarCardsPadrao(h).length) {
+      const hTodos = await bd(`${url}&pagina=-1&action=0&todos=1`, { valido: paginaOk });
+      if (paginaOk(hTodos) && fatiarCardsPadrao(hTodos).length > fatiarCardsPadrao(h).length) h = hTodos;
+      else console.error(`  [${dominio}] evento ${idLeilao}: todos=1 não trouxe mais lotes — fico com ${fatiarCardsPadrao(h).length}/${total}.`);
+    }
+    cards = fatiarCardsPadrao(h);
+    ctx.htmlEvento = h;
+    ctx.judicial = /Leil[ãa]o:\s*Judicial/i.test(textoCompleto);
+    Object.assign(ctx, pracasPadrao(textoCompleto));
+    ctx.totalDeclarado = total;
+    parse = parseCardPadrao;
+  }
   const rows = [];
   for (const c of cards) {
     const row = parse(c, ctx);
@@ -686,7 +736,7 @@ async function debugRecon() {
 async function main() {
   // Bright Data só é exigido no modo pago (CI); no runner RESIDENCIAL (GESTAO_HEADLESS=1)
   // o Chromium real passa o Cloudflare de graça — o guard antigo abortava o modo de casa.
-  if (!brightDataDisponivel() && !RESIDENCIAL) {
+  if (!brightDataDisponivel() && !RESIDENCIAL && !GRATIS) {
     console.error('BRIGHTDATA_API_TOKEN/ZONE ausentes — cluster só acessível via Web Unlocker (ou use GESTAO_HEADLESS=1 num IP residencial). Abortado.');
     process.exit(1);
   }
@@ -723,10 +773,10 @@ async function main() {
   const porId = new Map();
   let bloq = 0;
   for (const { dom, id } of alvo) {
-    const { rows, bloqueado } = await coletarEvento(dom, id);
+    const { rows, bloqueado, total } = await coletarEvento(dom, id);
     if (bloqueado) { bloq++; continue; }
     for (const r of rows) if (!porId.has(r.fonte_id)) porId.set(r.fonte_id, r);
-    console.log(`  [${dom}] evento ${id}: +${rows.length} imóvel(is) (total únicos ${porId.size})`);
+    console.log(`  [${dom}] evento ${id}: ${total ?? 0} card(s) lido(s) · +${rows.length} imóvel(is) (total únicos ${porId.size})`);
     await sleep(500);
   }
 
@@ -784,7 +834,7 @@ async function main() {
     // `acesso`/`custo` são o caminho que ESTA execução usou, não o que o scraper sabe fazer:
     // gravar 'pago' numa coleta residencial é o instrumento reportando outra coisa (forma #10).
     fonte: 'GESTAOLEILOES', plataforma: 'GestaoDeLeiloes(PHP)',
-    acesso: RESIDENCIAL ? 'residencial' : 'brightdata', custo: RESIDENCIAL ? 'gratis' : 'pago',
+    acesso: GRATIS ? 'gratis-direto+banco' : RESIDENCIAL ? 'residencial' : 'brightdata', custo: RESIDENCIAL || GRATIS ? 'gratis' : 'pago',
     anti_bot: 'cloudflare', enumeracao: 'home_idLeilao→evento_inline', url_lote: '/lote.php?idLote={id}',
     scraper: 'scraper-gestao.mjs', qualidade: qualidadeColeta(prontos),
   });
@@ -794,6 +844,7 @@ async function main() {
 // "o Chromium entrou em tudo" ficam idênticos no log — e a segunda é o sinal de que o site
 // endureceu, que é justamente o que a rede de segurança existe para não esconder.
 function logPlacarResidencial(tag) {
+  if (GRATIS) console.log(`  🆓 [${tag}] via grátis: ${viaGratis.direto} direto · ${viaGratis.banco} pelo banco · ${viaGratis.falha} sem resposta`);
   const p = estatisticaResidencial();
   if (p.fetch + p.navegador + p.falha === 0) return;   // rodou pelo caminho pago: nada a dizer
   console.log(`  🏠 [${tag}] caminho residencial: ${p.fetch} por fetch puro · ${p.navegador} pelo Chromium (rede de segurança) · ${p.falha} sem resposta`);

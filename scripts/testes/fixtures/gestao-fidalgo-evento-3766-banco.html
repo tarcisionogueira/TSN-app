@@ -1,0 +1,683 @@
+<!doctype html>
+<html lang="pt_BR">
+    <head>
+    <meta charset="ISO-8859-1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <link rel="stylesheet" href="bootstrap/css/bootstrap.css">
+    <link rel="stylesheet" href="hover/css/hover-min.css">
+    <link rel="stylesheet" href="font-awesome/css/font-awesome.min.css">
+    <link rel="stylesheet" href="fancybox/dist/css/jquery.fancybox.css">
+    <link rel="stylesheet" href="slick/slick.min.css">
+    <link rel="stylesheet" href="slick/slick-theme.min.css">
+    <link rel="stylesheet" href="css/style.css?prj06">
+    <title>Fidalgo Leil�es :: Gest�o de Leil�es</title>
+    <!-- Google Tag Manager -->
+    
+    <!-- End Google Tag Manager -->
+  </head>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/fancybox/3.5.7/jquery.fancybox.min.css" rel="stylesheet" crossorigin="anonymous" referrerpolicy="no-referrer">
+
+  <body>
+    <!-- Topo do site -->
+        <!-- Google Tag Manager (noscript) -->
+    <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-KJL99B3C"
+    height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+    <!-- End Google Tag Manager (noscript) -->
+	<div class="container-fluid p-0 fixed-sticky">
+      <div class="container py-2">
+        <div class="row">
+          <!-- Logomarca -->
+          <div class="col-lg-2 col-sm-6 d-md-flex d-none flex-column justify-content-center">
+            <a href="index.php" title="P�gina inicial - Fidalgo Leil�es" class="d-block text-center text-md-left py-2">
+              <img src="assets/logoTopo.png" height="90" alt="Logotipo Fidalgo Leil�es">
+            </a>
+          </div>
+          <!-- Menu principal -->
+          <div class="col-lg-10 d-flex flex-column justify-content-center order-lg-2 order-sm-3">
+            <nav class="navbar navbar-expand-lg navbar-light bg-transparent px-0 zindex-3">
+              <a class="navbar-brand d-md-none" href="index.php" title="Menu">
+                <img src="assets/logoTopo.png" height="60" alt="Logotipo Fidalgo Leil�es">
+              </a>
+              <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarSite">
+                <span class="navbar-toggler-icon"></span>
+              </button>
+              <div class="collapse navbar-collapse justify-content-center align-items-xl-stretch flex-xl-column" id="navbarSite">
+                <ul class="navbar-nav align-items-center">
+                  <li class="class-item hvr-pop px-1 link-top-border">
+                    <a class="nav-link" href="./index.php">HOME</a>
+                  </li>
+                  <li class="class-item hvr-pop px-1 link-top-border">
+                    <a class="nav-link" href="./quemSomos.php">QUEM SOMOS</a>
+                  </li>
+                  <li class="class-item hvr-pop px-1 link-top-border">
+                    <a class="nav-link" href="./queroVender.php">QUERO VENDER</a>
+                  </li>
+                  <li class="class-item hvr-pop px-1 link-top-border">
+                    <a class="nav-link" href="./ajuda.php">AJUDA</a>
+                  </li>
+                  <li class="class-item hvr-pop px-1 link-top-border">
+                    <a class="nav-link" href="./contato.php">CONTATO</a>
+                  </li>
+                  <li class="class-item hvr-pop px-1">
+                    <a class="nav-link" href="./trabalheConosco.php">TRABALHE CONOSCO</a>
+                  </li>
+                                    <li class="class-item px-2 fore-1 hvr-grow">
+                    <button class="btn pill-access mb-3" type="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                      <div class="row">
+                        <div class="col-3 d-flex align-items-center">
+                          <i class="fa fa-user-circle-o fa-fw fa-2x" aria-hidden="true"></i>
+                        </div>
+                        <div class="col-9 d-flex flex-column justify-content-center text-left pl-1">
+                          <p class="mb-0">Fa�a o login<br>ou Cadastre-se</p>
+                        </div>
+                      </div>
+                    </button>
+                    <div class="dropdown-menu dropdown-menu-right rounded-0 p-1 shadow-lg">
+                      <i aria-hidden="true" class="fa fa-caret-up fa-fw fa-3x fore-3 loginup d-none d-sm-block"></i>
+                      <form id="loginForm" class="p-3" method="post" enctype="application/x-www-form-urlencoded">
+                        <div class="form-group">
+                          <label for="login" class="small font-weight-bold">Login</label>
+                          <input type="text" class="form-control form-control-sm" name="login" placeholder="CPF, CNPJ ou Login" required>
+                        </div>
+                        <div class="form-group">
+                          <div class="row">
+                            <div class="col-9 col-md-8 col-lg-9 pr-1">
+                              <input type="password" class="form-control form-control-sm" name="senha" placeholder="Senha" required>
+                            </div>
+                            <div class="col-3 col-md-4 col-lg-3 pl-0">
+                              <button class="btn btn-block btn-sm back-1 text-white hvr-push">Entrar</button>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="row">
+                          <div class="col-6 pr-md-1 mb-1 mb-sm-0">
+                            <button onClick="goTo('acesso.php?focus=1');" class="btn btn-block back-1 text-white hvr-push" title="Lembrar senha">Lembrar senha</button>
+                          </div>
+                          <div class="col-6 pl-md-1">
+                            <button onClick="goTo('acesso.php?focus=2');" class="btn btn-block back-1 text-white hvr-push" title="Cadastre-se">Cadastre-se</button>
+                          </div>
+                        </div>
+                        <input type="hidden" name="mid" value="NDc3OTk1NS9wdHRmZGI=">
+                      </form>
+                    </div>
+                  </li>
+                                    <li class="class-item social-bar px-1">
+                    <a class="social pt-0 mt-0 hvr-pop" href="https://www.facebook.com/fidalgoleiloes" target="_blank"><img src="assets/social/Facebook.png" alt='Facebook'></a>
+                    <a class="social pt-0 mt-0 hvr-pop" href="https://www.instagram.com/fidalgoleiloes" target="_blank"><img src="assets/social/Instagram.png" alt='Instagram'></a>
+                    <a class="social pt-0 mt-0 hvr-pop" href="https://www.linkedin.com" target="_blank"><img src="assets/social/Linkedin.png" alt='LinkedIn'></a>
+                  </li>
+                </ul>
+              </div>
+            </nav>
+
+          </div>
+
+        </div>
+      </div>
+
+      <div class="container-fluid container-hotlink">
+        <div class="container container-hotlink text-white">
+          <div class="row">
+            <div class="col-sm-12 col-lg-2">
+              <div class="row" onClick="menuPesquisa(0);">
+                <div class="col-3 hotlink0">
+                  <img src="">
+                </div>
+                <div class="col-9 d-flex flex-column justify-content-center hvr-pop">TODOS LEIL�ES</div>
+              </div>
+            </div>
+            <div class="col-sm-12 col-lg-2">
+              <div class="row" onClick="menuPesquisa(1);">
+                <div class="col-3 hotlink1">
+                  <img src="">
+                </div>
+                <div class="col-9 d-flex flex-column justify-content-center hvr-pop">MATERIAIS</div>
+              </div>
+            </div>
+            <div class="col-sm-12 col-lg-2">
+              <div class="row" onClick="menuPesquisa(2);">
+                <div class="col-3 hotlink2">
+                  <img src="">
+                </div>
+                <div class="col-9 d-flex flex-column justify-content-center hvr-pop">IM�VEIS</div>
+              </div>
+            </div>
+            <div class="col-sm-12 col-lg-2">
+              <div class="row" onClick="menuPesquisa(3);">
+                <div class="col-3 hotlink3">
+                  <img src="">
+                </div>
+                <div class="col-9 d-flex flex-column justify-content-center hvr-pop">VE�CULOS</div>
+              </div>
+            </div>
+            <div class="col-sm-12 col-lg-2">
+              <div class="row" onClick="menuPesquisa(4);">
+                <div class="col-3 hotlink4">
+                  <img src="">
+                </div>
+                <div class="col-9 d-flex flex-column justify-content-center hvr-pop">JUDICIAIS</div>
+              </div>
+            </div>
+            <div class="col-sm-12 col-lg-2">
+              <div class="row" onClick="menuPesquisa(5);">
+                <div class="col-3 hotlink5">
+                  <img src="">
+                </div>
+                <div class="col-9 d-flex flex-column justify-content-center hvr-pop">EXTRAJUDICIAIS</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+    <!-- Fim do topo -->
+    <!-- Corpo  -->
+    <div class="container-fluid bg-white">
+	<div class="container bg-white p-0 mt-0 mb-4">
+	        <section class="bg-white">
+        <div class="container">
+          <div class="container">
+            <div class="row">
+              <div class="col-lg-12 col-xl-12 order-2 order-sm-1">
+                <nav aria-label="breadcrumb">
+                  <ol class="breadcrumb small rounded-0 bg-transparent mb-0 px-0">
+                    <li class="breadcrumb-item">
+                      <a href="index.php" title="P�gina inicial" class="fore-1 h6 mb-0">P�gina inicial</a>
+                    </li>
+                    <li class="breadcrumb-item" aria-current="page">
+                      <a href="javascript:void(0);" title="P�gina do leil�o" class="fore-1 h6 mb-0 text-decoration-none">ID 3766 - LEIL�O DE IM�VEIS - SENAD N� 49/2026 - ALIENA��O ANTECIPADA (TD)</a>
+                    </li>
+                  </ol>
+                </nav>
+                <div class="row">
+                  <div class="col-sm-6 col-lg-3 pl-lg-0 ml-lg-0 border-2">
+                    <img src="./sishp/leilao/3766/fotos/snapshot.jpg" alt="Destaque do leil�o" alt="" class="img-fluid p-0 mx-0 h-100" width="260" height="195">
+                  </div>
+                  <div class="col-sm-6 col-lg-9 auction-top pl-1 ml-0">
+                    <div class="row">
+                      <div class="col-sm-12 col-lg-8 auction-top-descriptor">
+                        <h5 class="pt-2 font-weight-bold">LEIL�O DE IM�VEIS - SENAD N� 49/2026 - ALIENA��O ANTECIPADA (TD)</h5>
+                        <h6 class="pt-1"><span class="font-weight-bold">Leil�o: </span>Extrajudicial</h6>
+                        <h6 class="pt-1"><span class="font-weight-bold">Modalidade: </span>ON-LINE</h6>
+                        <h6 class="pt-1"><span class="font-weight-bold">Local: </span>SOMENTE ON-LINE</h6>
+                      </div>
+                      <div class="col-sm-12 col-lg-4 p-0">
+                        <div class="container my-2 auction-top-date h-100 text-center">
+                          1� Pra�a <br>Abertura: <span>12/11/2026 �s 14h00</span><br>Encerramento: <span>17/11/2026 �s 14h00</span>                          <hr class="auction-top-divisor">2� Pra�a <br>Abertura: <span>17/11/2026 �s 14h01</span><br>Encerramento: <span>24/11/2026 �s 14h00</span>                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <nav class="navbar navbar-expand-md navbar-light bg-4 atalhos-navbar bg-white my-3 py-0 mb-md-0">
+        <div class="container px-3 my-2 py-lg-2">
+          <a class="navbar-brand d-md-none text-secondary small" href="#" title="Atalhos">Atalhos</a>
+          <button class="navbar-toggler border-0 rounded-0 p-0" type="button" data-toggle="collapse" data-target="#atalhos" aria-controls="atalhos" aria-expanded="false" aria-label="Alternar">
+            <span class="navbar-toggler-icon"></span>
+          </button>
+          <div class="collapse navbar-collapse flex-md-column align-items-md-stretch text-center" id="atalhos">
+            <div class="row zindex-1">
+              <hr class="auction-joinner ml-5">
+            </div>
+            <div class="row pb-3 zindex-2">
+              <div class="col-sm-6 col-lg-3">
+                <button class="btn auction-pill1 w-100 hvr-pop" id="navHabilitacao" type="button">
+                  <div class="row">
+                    <div class="col-3 d-flex align-items-center auction-pill1-icon p-2">
+                      <img src="assets/leilaoHabilitar.png">
+                    </div>
+                    <div class="col-8 d-flex flex-column justify-content-center text-left pl-1">
+                      <p class="mb-0">Habilite-se aqui</p>
+                    </div>
+                  </div>
+                </button>
+              </div>
+              <div class="col-sm-6 col-lg-3">
+                <button class="btn auction-pill2 w-100 hvr-pop" id="navAnexo" type="button">
+                  <div class="row">
+                    <div class="col-3 d-flex align-items-center auction-pill2-icon p-2">
+                      <img src="assets/leilaoEditalAnexos.png">
+                    </div>
+                    <div class="col-8 d-flex flex-column justify-content-center text-left pl-1">
+                      <p class="mb-0">Edital de leil�o e anexos</p>
+                    </div>
+                  </div>
+                </button>
+              </div>
+              <div class="col-sm-6 col-lg-3">
+                <button class="btn auction-pill2 w-100 hvr-pop" id="navImpressao" type="button">
+                  <div class="row">
+                    <div class="col-3 d-flex align-items-center auction-pill2-icon p-2">
+                      <img src="assets/leilaoImprimir.png">
+                    </div>
+                    <div class="col-8 d-flex flex-column justify-content-center text-left pl-1">
+                      <p class="mb-0">Imprimir rela��o de lotes</p>
+                    </div>
+                  </div>
+                </button>
+              </div>
+              <div class="col-sm-6 col-lg-3">
+                <button class="btn auction-pill2 w-100 hvr-pop" id="navAuditorio" type="button">
+                  <div class="row">
+                    <div class="col-3 d-flex align-items-center auction-pill2-icon p-2">
+                      <img src="assets/leilaoAuditorio.png">
+                    </div>
+                    <div class="col-8 d-flex flex-column justify-content-center text-left pl-1">
+                      <p class="mb-0">Audit�rio virtual</p>
+                    </div>
+                  </div>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </nav>
+                  <div class="container auction-top-divisor pt-2 px-1 text-justify">
+        <h6><span class="font-weight-bold">Observa��es: </span><br><br><b>DICAS:</b><br>- <b>OS LANCES</b> dever�o ser ofertados atrav�s do <b>"AUDIT�RIO VIRTUAL"</b>.<br><br>- Marque como favorito o(s) lote(s) que possui interesse de ofertar lances, pois no Audit�rio Virtual h� a op��o de "Exibir meus lotes favoritos" atrav�s do "Mais op��es", assim facilitando a visualiza��o desses lotes. Para marca-los como favoritos basta efetuar o login em sua conta e clicar no �cone de estrela no canto superior direito. Caso tenha favoritado algum lote com o "Audit�rio Virtual" aberto, ser� necess�rio fechar e abrir ou recarregar a p�gina do mesmo.</h6>
+      </div>
+                  <div class="container auction-top-divisor pt-2 px-1 text-justify">
+        <h6><span class="font-weight-bold">Visita��o: </span>Verificar possibilidade de visita��o atrav�s dos telefones: (11 2653-8583/ 2653-0553), e-mail <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="f3909c9d8792879cb3959a97929f949c9f969a9f9c9680dd909c9edd9181">[email&#160;protected]</a>.</h6>
+      </div>
+                  <main>
+          <div class="container mt-4">
+                        <div class="row">
+              <!-- Coluna de filtros -->
+              <div class="col-sm-12 col-lg-3 px-1">
+                <div class="container auction-filter-box">
+                  <div class="row py-2">
+                    <div class="col-6 px-2">
+                      <button type="button" id="filtroTodos" class="btn back-1 text-white btn-block rounded-0 px-1 py-1 hvr-pop">Exibir todos</button>
+                    </div>
+                    <div class="col-6 px-2">
+                      <button type="button" id="filtroLimpar" class="btn back-1 text-white btn-block rounded-0 px-1 py-1 hvr-pop">Limpar filtros</button>
+                    </div>
+                  </div>
+                </div>
+                <form id="filtrosForm" enctype="application/x-www-form-urlencoded">
+                <!-- Acordeon de classifica��es -->
+                <div class="accordion md-accordion my-2" id="accordionFilter0" role="tablist" aria-multiselectable="true">
+                  <div class="card rounded-0 auction-filter-box">
+                    <div class="card-header px-2" role="tab" id="ft0">
+                      <a data-toggle="collapse" data-parent="#accordionFilter0" href="#collapse0" aria-expanded="true" aria-controls="collapse0">
+                        <span class="h6 mb-0 fore-1 font-weight-bold">CATEGORIAS <i class="fa fa-angle-down rotate-icon"></i></span>
+                      </a>
+                    </div>
+                    <div id="collapse0" class="collapse" role="tabpanel" aria-labelledby="ft0" data-parent="#accordionFilter0">
+                      <div class="card-body px-2 py-1 auction-filter-item">
+                                                <div class="accordion md-accordion my-2" id="accordionFilter1_1" role="tablist" aria-multiselectable="true">
+                          <div class="card border-0 auction-filter-subitem">
+                            <div class="card-header bg-white px-0 py-1" role="tab" id="ft1_1">
+                              <a data-toggle="collapse" data-parent="#accordionFilter1_1" href="#collapse1_1" aria-expanded="true" aria-controls="collapse1_1">
+                                <span class="h6 mb-0 fore-1 font-weight-bold">Im�veis (2) <i class="fa fa-angle-down rotate-icon"></i></span>
+                              </a>
+                            </div>
+                            <div id="collapse1_1" class="collapse show" role="tabpanel" aria-labelledby="ft1_1" data-parent="#accordionFilter1_1">
+                              <div class="card-body bg-white px-0 py-1 auction-filter-subitem">
+                                                                <div class="custom-control custom-checkbox">
+                                  <input type="checkbox" class="custom-control-input" id="chk1_1" name="chk[]" value="1.1" >
+                                  <label class="custom-control-label pt-1" for="chk1_1">Residencial (2)</label>
+                                </div>
+                                                              </div>
+                            </div>
+                          </div>
+                        </div>
+                                                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="accordion md-accordion my-2" id="accordionFilter1" role="tablist" aria-multiselectable="true">
+                  <div class="card rounded-0 auction-filter-box">
+                    <div class="card-header px-2" role="tab" id="ft1">
+                      <a data-toggle="collapse" data-parent="#accordionFilter1" href="#collapse1" aria-expanded="true" aria-controls="collapse1">
+                        <span class="h6 mb-0 fore-1 font-weight-bold">LOCALIZA��O <i class="fa fa-angle-down rotate-icon"></i></span>
+                      </a>
+                    </div>
+                    <div id="collapse1" class="collapse" role="tabpanel" aria-labelledby="ft1" data-parent="#accordionFilter1">
+                      <div class="card-body px-2 auction-filter-item">
+                                                <div class="accordion md-accordion my-2" id="accordionFilterlc0" role="tablist" aria-multiselectable="true">
+                          <div class="card border-0 auction-filter-subitem">
+                            <div class="card-header bg-white px-0 py-1" role="tab" id="ftlc0">
+                              <a data-toggle="collapse" data-parent="#accordionFilterlc0" href="#collapselc0" aria-expanded="true" aria-controls="collapselc0">
+                                <span class="h6 mb-0 fore-1 font-weight-bold">S�O PAULO (2) <i class="fa fa-angle-down rotate-icon"></i></span>
+                              </a>
+                            </div>
+                            <div id="collapselc0" class="collapse show" role="tabpanel" aria-labelledby="ftlc0" data-parent="#accordionFilterlc0">
+                              <div class="card-body px-0 py-1 auction-filter-subitem">
+                                                              <div class="custom-control custom-checkbox">
+                                  <input type="checkbox" class="custom-control-input" id="chklc0" name="chklc[]" value="S�O PAULO|BUTANT�" >
+                                  <label class="custom-control-label pt-1" for="chklc0">BUTANT� (1)</label>
+                                </div>
+                                                              <div class="custom-control custom-checkbox">
+                                  <input type="checkbox" class="custom-control-input" id="chklc1" name="chklc[]" value="S�O PAULO|SANTO AMARO" >
+                                  <label class="custom-control-label pt-1" for="chklc1">SANTO AMARO (1)</label>
+                                </div>
+                                                            </div>
+                            </div>
+                          </div>
+                        </div>
+                                              </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="accordion md-accordion my-2" id="accordionFilter2" role="tablist" aria-multiselectable="true">
+                  <div class="card rounded-0 auction-filter-box">
+                    <div class="card-header px-2" role="tab" id="ft1">
+                      <a data-toggle="collapse" data-parent="#accordionFilter2" href="#collapse2" aria-expanded="true" aria-controls="collapse2">
+                        <span class="h6 mb-0 fore-1 font-weight-bold">LANCE INICIAL <i class="fa fa-angle-down rotate-icon"></i></span>
+                      </a>
+                    </div>
+                    <div id="collapse2" class="collapse" role="tabpanel" aria-labelledby="ft1" data-parent="#accordionFilter2">
+                      <div class="card-body px-2 pl-3 auction-filter-item">
+                         <span id="minimalValue0">A partir de </span>
+                         <input id="sliderValue0" name="sliderValue0" class="custom-range" type="range" min="1100000" max="1400000" value="1100000">
+                         <span id="minimalValue1">At� </span>
+                         <input id="sliderValue1" name="sliderValue1" class="custom-range" type="range" min="1100000" max="1400000" value="1400000">
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <input type="hidden" name="pagina" id="pagina" value="1">
+                </form>
+                <div class="container auction-filter-box mb-2">
+                  <div class="row py-2">
+                    <div class="col-12 px-2">
+                      <button type="button" id="filtroAplicar" class="btn back-1 text-white btn-block rounded-0 px-1 py-1 hvr-pop">Aplicar filtros</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-sm-12 col-lg-9 pr-1">
+                <div class="row pb-2">
+                  <div class="col-lg-5 col-sm-12 pt-2">
+                    Exibindo resultado 1 a 2 de 2                  </div>
+                  <div class="col-lg-4 col-sm-6 text-right">
+                    <form id="orderForm">
+                      <div class="form-group row text-right">
+                        <label for="ordem" class="col-5 col-form-label pr-2">Ordernar por:</label>
+                        <div class="col-7 pl-0">
+                          <select class="custom-select p-0 pointer" id="ordem" name="ordem">
+                            <option value="0">N�mero de lote</option>
+                            <option value="1">Maior valor</option>
+                            <option value="2">Menor valor</option>
+                          </select>
+                        </div>
+                      </div>
+                    </form>
+                  </div>
+                  <div class="col-lg-3 col-sm-6 text-right auction-show-mode">
+                    Exibir:
+                      <img src="assets/listah1.png" title="Exibir em modo horizontal" class="hvr-pop" onClick="exibirLista(0);">
+                      <img src="assets/listav0.png" title="Exibir em modo cartas" class="hvr-pop" onClick="exibirLista(9);">
+                  </div>
+                </div>
+                                <div class="mb-4 back-11 lotePadrao ">
+                  <div class="row">
+                    <div class="col-lg-4 col-sm-12 text-center">
+                      <div class="lotePadraoNumero pt-0 h-100">
+                        <div class="container p-0">
+                          <div class="row">
+                            <div class="col-12 pb-0">
+                                <a href='sishp/leilao/3766/fotos/87678_01.jpg' data-fancybox='galeria87678'><img src='sishp/leilao/3766/fotos/87678_01.jpg' alt='' class='w-100 img-fluid'></a><a href='sishp/leilao/3766/fotos/87678_02.jpg' data-fancybox='galeria87678' class='d-none'><img src='sishp/leilao/3766/fotos/87678_02.jpg' alt='' class='w-100 img-fluid'></a><a href='sishp/leilao/3766/fotos/87678_03.jpg' data-fancybox='galeria87678' class='d-none'><img src='sishp/leilao/3766/fotos/87678_03.jpg' alt='' class='w-100 img-fluid'></a><a href='sishp/leilao/3766/fotos/87678_04.jpg' data-fancybox='galeria87678' class='d-none'><img src='sishp/leilao/3766/fotos/87678_04.jpg' alt='' class='w-100 img-fluid'></a>                                <div class="lotePadraoConsultas d-none"><i class="fa fa-eye"></i> 52</div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="col-lg-5 col-sm-12 back-11 px-lg-1" onClick="goTo('lote.php?idLote=87678');" title="Clique para ver mais detalhes deste lote" style="cursor: pointer;">
+                      <div class="row pt-0">
+                        <div class="col-12 lotePadraoBens pl-lg-0">
+                                                    <div>IM�VEL: Matr�cula 285.648 - 11� Cart�rio de Registro de Im�veis de S�o Paulo/SP. Apartamento n�191, localizado no 19� pavimento da Torre do Bosque, in...</div>
+                          <div class="mt-2"><b>Local do bem: </b>ESTRADA CARLOS QUEIROZ, 81, APTO 191, 19� PAV. - SANTO AMARO - S�O PAULO/SP</div>
+                          <hr class="lotePadraoDivisor py-0 my-2">
+                          <div class="row py-0 my-0">
+                            <div class="col-lg-4 col-sm-12 text-center py-0 my-0 fore-1">
+                              <b>Lances</b><br><span id="nl87678">0</span>
+                            </div>
+                            <div class="col-lg-4 col-sm-12 text-center py-0 my-0 fore-1" style="overflow: hidden;">
+                              <b>Usu�rio</b><br><span class="text-lowercase" id="cul87678">-</span>
+                            </div>
+                            <div class="col-lg-4 col-sm-12 text-center py-0 my-0 fore-1">
+                              <b>Lance atual</b><br>R$ <span id="vl87678">0,00</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="col-lg-3 col-sm-12 pl-lg-0">
+                      <div class="lotePadraoLance pt-1 h-100">
+                        <div class="row px-1 pt-2 pb-1">
+                          <div class="col-12 d-flex flex-column align-items-center justify-content-center">
+                            <div id="st87678" class="lotePadraoStatus text-center text-white pointer py-1 back-7" onclick='_atalhoAuditorio(87678)'>
+                              Aberto para lances                            </div>
+                          </div>
+                        </div>
+                        <div class="row px-1 pt-2">
+                          <div class="col-12 lotePadraoLanceInicial">
+                            Lance inicial<br>
+                            R$ 1.400.000,00 
+                          </div>
+                        </div>
+                        <div class="row px-1 pt-2">
+                          <div class="col-12 d-flex flex-column align-items-center justify-content-center">
+                            <div class="lotePadraoNumero fore-0 py-0 my-0">
+                              LOTE 001                            </div>
+                            <div class="lotePadraoStatus rounded text-white font-weight-bold back-0 py-1" onClick="goTo('lote.php?idLote=87678');" title="Clique para ver mais detalhes deste lote" style="cursor: pointer;">
+                              Mais detalhes
+                            </div>
+                          </div>
+                        </div>
+                        <img src="assets/favorito0.png" class="lotePadraoFavorito" onClick="favorito('87678', '1', favoritoSucesso)" id="fvt87678">
+                      </div>
+                    </div>
+                  </div>
+                </div>                <div class="mb-4 back-11 lotePadrao ">
+                  <div class="row">
+                    <div class="col-lg-4 col-sm-12 text-center">
+                      <div class="lotePadraoNumero pt-0 h-100">
+                        <div class="container p-0">
+                          <div class="row">
+                            <div class="col-12 pb-0">
+                                <a href='sishp/leilao/3766/fotos/87679_01.jpg' data-fancybox='galeria87679'><img src='sishp/leilao/3766/fotos/87679_01.jpg' alt='' class='w-100 img-fluid'></a><a href='sishp/leilao/3766/fotos/87679_02.jpg' data-fancybox='galeria87679' class='d-none'><img src='sishp/leilao/3766/fotos/87679_02.jpg' alt='' class='w-100 img-fluid'></a><a href='sishp/leilao/3766/fotos/87679_03.jpg' data-fancybox='galeria87679' class='d-none'><img src='sishp/leilao/3766/fotos/87679_03.jpg' alt='' class='w-100 img-fluid'></a><a href='sishp/leilao/3766/fotos/87679_04.jpg' data-fancybox='galeria87679' class='d-none'><img src='sishp/leilao/3766/fotos/87679_04.jpg' alt='' class='w-100 img-fluid'></a>                                <div class="lotePadraoConsultas d-none"><i class="fa fa-eye"></i> 51</div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="col-lg-5 col-sm-12 back-11 px-lg-1" onClick="goTo('lote.php?idLote=87679');" title="Clique para ver mais detalhes deste lote" style="cursor: pointer;">
+                      <div class="row pt-0">
+                        <div class="col-12 lotePadraoBens pl-lg-0">
+                                                    <div>IM�VEL: Matr�cula 137.283 - 18� Cart�rio de Registro de Im�veis de S�o Paulo/SP. Apartamento n� 21, LOCALIZADO NO 21� ANDAR DO edif�cio Rembrandt, SIT...</div>
+                          <div class="mt-2"><b>Local do bem: </b>RUA JOS� DA SILVA RIBEIRO, 76, APTO 21 - BUTANT� - S�O PAULO/SP</div>
+                          <hr class="lotePadraoDivisor py-0 my-2">
+                          <div class="row py-0 my-0">
+                            <div class="col-lg-4 col-sm-12 text-center py-0 my-0 fore-1">
+                              <b>Lances</b><br><span id="nl87679">0</span>
+                            </div>
+                            <div class="col-lg-4 col-sm-12 text-center py-0 my-0 fore-1" style="overflow: hidden;">
+                              <b>Usu�rio</b><br><span class="text-lowercase" id="cul87679">-</span>
+                            </div>
+                            <div class="col-lg-4 col-sm-12 text-center py-0 my-0 fore-1">
+                              <b>Lance atual</b><br>R$ <span id="vl87679">0,00</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="col-lg-3 col-sm-12 pl-lg-0">
+                      <div class="lotePadraoLance pt-1 h-100">
+                        <div class="row px-1 pt-2 pb-1">
+                          <div class="col-12 d-flex flex-column align-items-center justify-content-center">
+                            <div id="st87679" class="lotePadraoStatus text-center text-white pointer py-1 back-7" onclick='_atalhoAuditorio(87679)'>
+                              Aberto para lances                            </div>
+                          </div>
+                        </div>
+                        <div class="row px-1 pt-2">
+                          <div class="col-12 lotePadraoLanceInicial">
+                            Lance inicial<br>
+                            R$ 1.100.000,00 
+                          </div>
+                        </div>
+                        <div class="row px-1 pt-2">
+                          <div class="col-12 d-flex flex-column align-items-center justify-content-center">
+                            <div class="lotePadraoNumero fore-0 py-0 my-0">
+                              LOTE 002                            </div>
+                            <div class="lotePadraoStatus rounded text-white font-weight-bold back-0 py-1" onClick="goTo('lote.php?idLote=87679');" title="Clique para ver mais detalhes deste lote" style="cursor: pointer;">
+                              Mais detalhes
+                            </div>
+                          </div>
+                        </div>
+                        <img src="assets/favorito0.png" class="lotePadraoFavorito" onClick="favorito('87679', '1', favoritoSucesso)" id="fvt87679">
+                      </div>
+                    </div>
+                  </div>
+                </div>                <div class="row">
+                  <div class="col-12 d-flex flex-row-reverse">
+                    <nav aria-label="">
+                      <div class="col-12">
+                        <nav aria-label="Pagina��o"><ul class="pagination pagination-sm justify-content-end"><li class="page-item disabled"><a class="page-link" href="javascript:void(0);" tabindex="-1">1</a></li></ul></nav>                      </div>
+                    </nav>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+      </main>
+      	</div>
+	</div>
+    <div id="modalPopUp" class="modal fade" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-dialog-centered modal-xl">
+            <div class="modal-content">
+                <div class="modal-header p-2">
+                    <h5 class="modal-title font-weight-bold p-0 m-0" id="modalLongTitle">ATEN��O</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div class="modal-body p-2"><img src="#" class="img-responsive w-100 h-100"></div>
+            </div>
+        </div>
+    </div>
+          <div class="container-fluid bg-footer">
+        <div class="container bg-footer mt-0 pt-2">
+          <div class="container">
+            <div class="row pb-2">
+              <div class="col-sm-12 col-lg-2 pt-2 px-0 d-flex">
+                <div class="d-flex align-items-center justify-content-left">
+                  <img src="assets/logoFundo.png" height="90" alt="Logotipo Fidalgo Leil�es">
+                </div>
+              </div>
+              <div class="col-sm-12 col-lg-2 pt-2 px-0 bd-left">
+                <ul class="list-unstyled pl-2">
+                  <li class="pb-1"><a class="text-light link-footer" href="index.php">Home</a></li>
+                  <li class="pb-1"><a class="text-light link-footer" href="quemSomos.php">Quem somos</a></li>
+                  <li class="pb-1"><a class="text-light link-footer" href="queroVender.php">Quero vender</a></li>
+                  <li class="pb-1"><a class="text-light link-footer" href="ajuda.php">Ajuda</a></li>
+                  <li class="pb-1"><a class="text-light link-footer" href="contato.php">Contato</a></li>
+                  <li><a class="text-light link-footer" href="trabalheConosco.php">Trabalhe conosco</a></li>
+                </ul>
+              </div>
+              <div class="col-sm-12 col-lg-3 pt-2 px-0 bd-left pl-2">
+                <h6 class="font-weight-bold text-white">Central de Atendimento:</h6>
+                <ul class="list-unstyled atendimento">
+                  <li class="text-light">(11) 2653-0553 / 2653-8583</li>
+                </ul>
+                <h6 class="font-weight-bold text-white pt-2">Endere�o:</h6>
+                <ul class="list-unstyled atendimento">
+                  <li class="text-light">Rua Arquiteto Heitor de Melo, 91</li>
+                  <li class="text-light">Vila Euthalia - S�o Paulo - SP - CEP: 03519-000</li>
+                </ul>
+              </div>
+              <div class="col-sm-12 col-lg-3 pt-2 px-0 bd-left pl-2">
+                <form id="newsletterForm" action="processoNewsletter.php" method="post" enctype="application/x-www-form-urlencoded">
+                  <span class="text-white px-0 mx-0">Inscreva-se em nossa Newsletter</span>
+                  <div class="row py-1">
+                    <div class="col-12">
+                      <div class="form-group p-0 bg-white input-group-sm my-0 mb-1">
+                        <input type="text" class="form-control bg-transparent border-0" name="nome" placeholder="Nome completo" maxlength="50" required>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="row py-1">
+                    <div class="col-12">
+                      <div class="form-group p-0 bg-white input-group-sm my-0 mb-1">
+                        <input type="email" class="form-control bg-transparent border-0" name="email" placeholder="E-mail" required>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="row py-1">
+                    <div class="col-12 text-right">
+                      <button class="btn btn-outline-light bg-primary border-0 py-1">Inscrever-se</button>
+                    </div>
+                  </div>
+                  <input type="hidden" name="midnl" value="ODI2NDE0Ni9zZnV1Zk10eGZv">
+                </form>
+              </div>
+              <div class="col-sm-12 col-lg-2 pl-4">
+                <div class="d-block slicks homologados mb-2">
+                  <div class="d-block slick homologado p-1">
+                    <a href="http://www.tjsp.jus.br/UtilidadePublica/UtilidadePublica/HastasPublicas" class="d-block text-center py-2 overflow-hidden" title="TJSP" target="_blank">
+                      <span class="w-100 d-block" style="background-image: url('assets/tjsp_homologado.png')"></span>
+                    </a>
+                  </div>
+                  <div class="d-block slick homologado p-1">
+                    <a href="https://ww2.trt2.jus.br/servicos/leiloes-judiciais/como-participar/" class="d-block text-center py-2 overflow-hidden" title="TRT02" target="_blank">
+                      <span class="w-100 d-block" style="background-image: url('assets/trt02_homologado.png')"></span>
+                    </a>
+                  </div>
+                  <div class="d-block slick homologado p-1">
+                    <a href="http://www.jfsp.jus.br/servicos-judiciais/cehas/" class="d-block text-center py-2 overflow-hidden" title="JF3" target="_blank">
+                      <span class="w-100 d-block" style="background-image: url('assets/jf3_homologado.png')"></span>
+                    </a>
+                  </div>
+                  <div class="d-block slick homologado p-1">
+                    <a href="https://trt15.jus.br/institucional/corregedoria/hastas-publicas" class="d-block text-center py-2 overflow-hidden" title="TRT15" target="_blank">
+                      <span class="w-100 d-block" style="background-image: url('assets/trt15_homologado.png')"></span>
+                    </a>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="modalFooter" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="modalCenterTitle" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="modalLongTitle">...</h5>
+              <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+              </button>
+            </div>
+            <div class="modal-body">
+              ...
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-dismiss="modal">Fechar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="popUpPrivacidade" class="popup shadow">
+        <b class="text-dark">Sobre privacidade</b><br>
+        <div class="mt-2">Utilizamos Cookies para identificarmos nossos usu�rios.<br>O correto funcionamento do site depende de sua utiliza��o.</div>
+        <div class="text-right mr-2"><button type="button" onClick="aceitarPrivacidade();" class="btn btn-dark btn-sm mt-2" data-dismiss="modal">Aceito</button></div>
+      </div>
+      <a href="#top" class="shadow text-center"><i class="fa fa-arrow-circle-up text-white"></i></a>
+        
+    
+    
+    
+    
+    
+    
+    
+    <!-- Global site tag (gtag.js) - Google Analytics -->
+    
+    
+  </body>
+</html>

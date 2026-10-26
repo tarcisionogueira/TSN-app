@@ -1,0 +1,44 @@
+name: Scraper Gestão de Leilões — via grátis (direto + banco, sem Bright Data)
+
+# Cluster "Gestão de Leilões" (granado, lancenoleilao, extrajust, lancetotal, vinco, fidalgo, central judicial)
+# pela VIA GRÁTIS (26/10): fetch direto do runner (só o vinco abre — os outros dão desafio do Cloudflare ao IP do
+# GitHub) e a página pelo BANCO (pg_net), que abre todos. Nunca Bright Data (sem os segredos aqui de propósito).
+# O runner residencial do dono segue com o mesmo coletor (GESTAO_HEADLESS=1) — os dois são grátis; este existe
+# porque o residencial falha o GESTAO desde 21/10. Cron GRAVA; para ensaio, dispare com dryrun=1.
+on:
+  schedule:
+    - cron: '40 9 * * *'  # diário, 9h40 UTC
+  workflow_dispatch:
+    inputs:
+      dryrun:
+        description: '1 = dry-run (não grava); 0 = grava'
+        required: false
+        default: '0'
+      max_eventos:
+        description: 'Máx. de eventos (leilao.php) por execução'
+        required: false
+        default: '160'
+      dominios:
+        description: 'csv de domínios (vazio = padrão do cluster)'
+        required: false
+        default: ''
+
+jobs:
+  gestao-gratis:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      - name: Rodar scraper Gestão (grátis)
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          GESTAO_GRATIS: '1'
+          GESTAO_DRYRUN: ${{ github.event.inputs.dryrun || '0' }}
+          GESTAO_MAX_EVENTOS: ${{ github.event.inputs.max_eventos || '160' }}
+          GESTAO_DOMINIOS: ${{ github.event.inputs.dominios || '' }}
+        run: node scripts/scraper-gestao.mjs
