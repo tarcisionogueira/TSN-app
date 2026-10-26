@@ -330,21 +330,24 @@ export default async function handler(req, res) {
   // LOTES DE 200, REPETINDO ENQUANTO VIER CHEIO (23/10, #222). Era 2000 numa chamada só: ~16 ms por documento
   // (insert em imovel_anexos + gatilhos do imóvel) passa dos 8 s do statement_timeout — falhou 5 das 6 rodadas
   // de 22/10, e a fila acumulou documento copiado e invisível (1.207 publicados de uma vez ao esvaziar em 23/10).
-  // 200 ≈ 3 s; até 5 chamadas por rodada. `.ok` checado: falha calada devolveria a cópia como sucesso completo.
+  // 200 ≈ 3 s; até 5 chamadas por rodada.
+  // 26/10 (#305): 200 → 50, até 10 chamadas. Com o cache frio a busca dos candidatos em documento_espelho (131 mil
+  // linhas) leva ~4,5 s sozinha; somada aos ~3 s dos 200 gatilhos estourou os 8 s em 25/10 20:42 e 26/10 00:42. `.ok` checado: falha calada devolveria a cópia como sucesso completo.
+  const LOTE_PUB = 50;
   let publicados = null;
   const somaPub = { inseridos: 0, preenchidos: 0, outros_publicados: 0, chamadas: 0 };
   try {
     // Relógio próprio (a cópia acima já gastou parte do maxDuration de 300 s) e teto total com folga.
     const tPub = Date.now();
-    for (let k = 0; k < 5 && (k === 0 || (Date.now() - tPub < 40000 && Date.now() - t0 < 280000)); k++) {
-      const r = await sb('rpc/registrar_anexos_do_espelho', { method: 'POST', body: JSON.stringify({ p_limite: 200 }) });
+    for (let k = 0; k < 10 && (k === 0 || (Date.now() - tPub < 40000 && Date.now() - t0 < 280000)); k++) {
+      const r = await sb('rpc/registrar_anexos_do_espelho', { method: 'POST', body: JSON.stringify({ p_limite: LOTE_PUB }) });
       if (!r.ok) { publicados = { ...somaPub, erro: `HTTP ${r.status}` }; break; }
       const j = await r.json().catch(() => null) || {};
       somaPub.chamadas++;
       for (const c of ['inseridos', 'preenchidos', 'outros_publicados']) somaPub[c] += Number(j[c]) || 0;
       publicados = somaPub;
       // 24/10: `outros_publicados` também conta — fila só de "outros" parava na 1ª chamada.
-      if ((Number(j.inseridos) || 0) < 200 && (Number(j.preenchidos) || 0) < 200 && (Number(j.outros_publicados) || 0) < 200) break; // fila acabou
+      if ((Number(j.inseridos) || 0) < LOTE_PUB && (Number(j.preenchidos) || 0) < LOTE_PUB && (Number(j.outros_publicados) || 0) < LOTE_PUB) break; // fila acabou
     }
   } catch (e) { publicados = { ...somaPub, erro: String(e?.message || e).slice(0, 80) }; }
 
