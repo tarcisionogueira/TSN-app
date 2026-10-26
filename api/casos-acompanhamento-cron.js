@@ -22,7 +22,7 @@
  *
  * 15/10 (dono): (a) caso SEM conta de advogado mas com os e-mails do escritório no próprio caso
  * (casos.acompanhamento_para/_cc) é cobrado igual — só depois de casos.acompanhamento_liberado_em (o dono
- * aprova o 1º rascunho); (b) a ATUALIZAÇÃO semanal sai às QUARTAS (a guia segue o vencimento, qualquer dia
+ * aprova o 1º rascunho); (b) a ATUALIZAÇÃO semanal sai às SEGUNDAS de manhã (26/10; era quarta) (a guia segue o vencimento, qualquer dia
  * útil); (c) o e-mail RESPONDE à última mensagem do caso em email_caixa (In-Reply-To/References) com
  * "Re: <casos.acompanhamento_assunto>" — fica na mesma conversa do imóvel que o escritório já tem, e a
  * conversa importada do Gmail da Reimob entra na mesma pasta; (d) o juridico-devolutivas-cron lê as
@@ -42,7 +42,8 @@ const BASE         = process.env.APP_BASE_URL || 'https://bidprobrasil.com.br';
 const ETAPAS = ['arrematado', 'honorarios_pagos', 'procuracao_assinada', 'pos_arrematacao'];
 // Marcos do pedido da guia (dias até o vencimento → marco). Janela, não dia exato: o cron roda só em
 // dia útil, e um marco que cai no fim de semana ainda é pego no dia útil seguinte.
-const DIA_ATUALIZACAO = 3; // quarta-feira (getUTCDay sobre a data de Brasília)
+const QUINZENAL_LIGADO = false;
+const DIA_ATUALIZACAO = 1; // SEGUNDA-feira de manhã (dono, 26/10; antes quarta) — getUTCDay sobre a data de Brasília
 // "Operação atribuída pela equipe" / "Arremate atribuído pela equipe" são marcadores do cadastro manual,
 // não endereço — não vão para o assunto nem para o texto do e-mail ao escritório.
 const RE_PLACEHOLDER = /atribu[ií]d[ao] pela equipe/i;
@@ -224,7 +225,9 @@ async function handler(req) {
       // Intervalo aprendido das devolutivas (7 = toda quarta; 14 = quarta sim, quarta não): conta desde o
       // último acompanhamento ENVIADO pelo cron (resposta_token só existe nos envios dele).
       let atualizaHoje = diaDeAtualizacao;
-      if (atualizaHoje && !atualizarAgora && Number(c.acompanhamento_intervalo_dias) === 14) {
+      // 26/10 (dono: "toda segunda-feira de manhã"): SEMANAL fixo. O quinzenal aprendido das devolutivas fica
+      // desligado (QUINZENAL_LIGADO) — a coluna segue gravada pelo juridico-devolutivas-cron, só não é obedecida.
+      if (QUINZENAL_LIGADO && atualizaHoje && !atualizarAgora && Number(c.acompanhamento_intervalo_dias) === 14) {
         const [ultEnvio] = await ler(`email_caixa?caso_id=eq.${c.id}&direcao=eq.saida&resposta_token=not.is.null&select=criado_em&order=criado_em.desc&limit=1`);
         if (ultEnvio && Date.now() - Date.parse(ultEnvio.criado_em) < 12 * 864e5) { atualizaHoje = false; res.quinzenal_aguardando = (res.quinzenal_aguardando || 0) + 1; }
       }
