@@ -800,6 +800,17 @@ async function main() {
     await sleep(500);
   }
 
+  // INSTALAÇÃO SFRAZÃO (26/10): a home de sfrazao.com.br lista 187 leilões, a maioria HISTÓRICA (praças de 2023–2025).
+  // Dry-run de 26/10: 1.338 lotes-imóvel, quase todos com a praça vencida — gravá-los seria escrever ~1.000 linhas por
+  // dia só para o gatilho de praça vencida desligar na mesma hora. Daqui só sai lote com praça de hoje em diante (ou
+  // venda direta). "&reg;" do <title> ("SFrazão &reg;") sai do nome do leiloeiro.
+  const hoje = new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10);
+  let historicos = 0;
+  for (const [k, r] of porId) {
+    if (r.leiloeiro) r.leiloeiro = String(r.leiloeiro).replace(/\s*(?:&reg;|®)\s*/gi, ' ').trim();
+    if (/^gestao_sfrazao_/.test(k) && r.modalidade !== 'venda_direta' && r.data_leilao && String(r.data_leilao).slice(0, 10) < hoje) { porId.delete(k); historicos++; }
+  }
+  if (historicos) console.log(`  [sfrazao] ${historicos} lote(s) de leilão já realizado fora (histórico da home).`);
   const todos = [...porId.values()];
   if (!DRYRUN) await completarDetalheGrade(todos);   // 1 request por imóvel: só quando vai gravar
   const prontos = todos.filter(r => !checarQualidade(r, { estrito: false }).descartar);
