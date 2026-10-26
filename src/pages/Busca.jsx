@@ -249,7 +249,11 @@ function LazyImage({ src, alt, style }) {
           />
         : <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:4, color:'#cbd5e1', width:'100%', height:'100%' }}>
             <svg width="28" height="28" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5M3.75 21V6.75A2.25 2.25 0 016 4.5h12A2.25 2.25 0 0120.25 6.75V21M9 21v-6h6v6"/></svg>
-            <span style={{ fontSize:9, color:'#94a3b8', fontWeight:600 }}>Sem foto</span>
+            {/* Sem candidato = o leiloeiro não publicou foto (26/10: RJ e LJUD mostram a imagem genérica
+                "sem imagem", que descartamos); candidatos que falharam = foto existe e não carregou. */}
+            {(!cands.length || idx >= cands.length) && (
+              <span style={{ fontSize:9, color:'#94a3b8', fontWeight:600, textAlign:'center' }}>{cands.length ? 'Foto indisponível' : 'Leiloeiro não divulgou foto'}</span>
+            )}
           </div>
       }
     </div>
@@ -2365,7 +2369,7 @@ export default function Busca() {
                       ? <LazyImage src={imgSrc} alt={im.titulo} style={{ width:'100%', height:'100%' }}/>
                       : <div style={{ width:'100%', height:'100%', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:4, color:'#cbd5e1' }}>
                           <svg width="28" height="28" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5M3.75 21V6.75A2.25 2.25 0 016 4.5h12A2.25 2.25 0 0120.25 6.75V21M9 21v-6h6v6"/></svg>
-                          <span style={{ fontSize:9, color:'#94a3b8', fontWeight:600 }}>Sem foto</span>
+                          <span style={{ fontSize:9, color:'#94a3b8', fontWeight:600, textAlign:'center' }}>Leiloeiro não divulgou foto</span>
                         </div>
                     }
                     {desc>0 && (

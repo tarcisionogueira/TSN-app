@@ -309,7 +309,9 @@ function LazyImage({ src, alt, style }) {
         ? <img src={atual} alt={alt} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} onError={() => setIdx(i => i + 1)} />
         : <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, color: '#cbd5e1', width: '100%', height: '100%' }}>
             <Car size={28} strokeWidth={1.5} />
-            <span style={{ fontSize: 9, color: '#94a3b8', fontWeight: 600 }}>Sem foto</span>
+            {(!cands.length || idx >= cands.length) && (
+              <span style={{ fontSize: 9, color: '#94a3b8', fontWeight: 600, textAlign: 'center' }}>{cands.length ? 'Foto indisponível' : 'Leiloeiro não divulgou foto'}</span>
+            )}
           </div>
       }
     </div>
