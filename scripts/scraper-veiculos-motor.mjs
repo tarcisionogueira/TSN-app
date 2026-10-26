@@ -84,11 +84,38 @@ async function coletarTenant(cfg, fetchFonte, tenant) {
   const v = cfg.veiculos;
   const cfgV = {
     ...cfg, catalogo: v.catalogo, paginaParam: v.paginaParam || cfg.paginaParam, maxPages: v.maxPages ?? cfg.maxPages ?? 3,
-    parse: { ...cfg.parse, extrairUrlsDeLote: v.extrairUrlsDeLote || cfg.parse.extrairUrlsDeLote, detalhesDoCatalogo: v.detalhesDoCatalogo || cfg.parse.detalhesDoCatalogo, urlCandidata: v.urlCandidata },
+    maxPagesEvento: v.maxPagesEvento ?? cfg.maxPagesEvento,
+    parse: { ...cfg.parse, extrairUrlsDeLote: v.extrairUrlsDeLote || cfg.parse.extrairUrlsDeLote, detalhesDoCatalogo: v.detalhesDoCatalogo || cfg.parse.detalhesDoCatalogo, urlCandidata: v.urlCandidata,
+      // Nível 2 só de veículo (26/10, Portal dos Leilões: o catálogo de veículo são os LEILÕES abertos).
+      extrairUrlsDeEvento: v.extrairUrlsDeEvento || cfg.parse.extrairUrlsDeEvento },
   };
   // O `catalogo` do tenant é o de IMÓVEIS (ex.: Viva/Jinkings no feed): para veículo vale o do bloco.
-  const tenantV = { ...tenant, catalogo: tenant.catalogoVeiculos ?? v.catalogo };
-  const en = await enumerar(fetchFonte, tenantV, cfgV, { maxPages: cfgV.maxPages, debug: false, semBD: SEM_BD });
+  // `v.catalogos` (26/10): mais de um catálogo por site (Portal: leilões "em andamento" + "próximos" — o site não
+  // tem filtro que traga os dois). Lista lida = a soma; um catálogo que não abre deixa a leitura incompleta.
+  const catalogos = tenant.catalogoVeiculos != null ? [tenant.catalogoVeiculos] : (v.catalogos || [v.catalogo]);
+  v.cobertura?.zerar();
+  let en = null;
+  for (const catalogo of catalogos) {
+    const r = await enumerar(fetchFonte, { ...tenant, catalogo }, cfgV, { maxPages: cfgV.maxPages, debug: false, semBD: SEM_BD });
+    if (!en) { en = { ...r, urls: [...r.urls] }; continue; }
+    en.urls = [...new Set([...en.urls, ...r.urls])];
+    for (const [u, d] of r.detCatalogo || []) en.detCatalogo.set(u, d);
+    en.fetchOk = en.fetchOk && r.fetchOk; en.cortada = en.cortada || r.cortada; en.completa = en.completa && r.completa;
+    en.via = en.via || r.via;
+  }
+  // COMPLETUDE (26/10, pedido do dono): fonte que declara `cobertura` só grava com o que leu ≥ 90% do que o site
+  // DECLARA ter (Portal: cards lidos × "X de Y lotes" de cada evento aberto) e sem página/evento que não abriu.
+  // Abaixo disso o lote não entra — melhor nenhum dado do que um recorte com cara de inteiro.
+  if (v.cobertura) {
+    const c = v.cobertura.medir();
+    const pct = c.pct == null ? null : Math.round(c.pct * 1000) / 10;
+    console.log(`[${tenant.fonte}] cobertura: ${c.lidos} cards lidos de ${c.declarado} que os ${c.eventos.length} evento(s) abertos declaram${pct != null ? ` (${pct}%)` : ''}${c.ocultos ? ` · ${c.ocultos} lote(s) anunciados ainda sem página no site` : ''}${en.cortada ? ` · CORTADA: ${en.cortada}` : ''}`);
+    if (!en.fetchOk || en.cortada || (c.pct != null && c.pct < 0.9)) {
+      const porque = !en.fetchOk ? 'catálogo de veículos não abriu' : en.cortada ? `lista incompleta (${en.cortada})` : `cobertura ${pct}% < 90%`;
+      console.log(`  [${tenant.fonte}] NÃO grava: ${porque}`);
+      return { rows: [], enumerados: en.urls.length, fetchOk: false, bloqueio: porque, sem: 0, cota: 0, porque, lidos: 0, porRegra: 0, idsEnumerados: new Set() };
+    }
+  }
   const urls = v.urlCandidata ? en.urls.filter(v.urlCandidata) : en.urls;
   const idDe = (u) => `${tenant.fonte.toLowerCase()}_veic_${cfg.parse.idDaUrl(u)}`;
   // Os NOVOS na frente; depois o mais antigo. Teto por rodada — o resto entra nas próximas.
@@ -167,7 +194,7 @@ async function main() {
             const vazio = classificarVazio(r);
             await registrarSaude(supabase, `${tenant.fonte}_VEICULOS`, r.rows, cfg.chave, {
               ok: r.fetchOk && (r.rows.length > 0 || !!vazio), enumerados: r.enumerados, semCota: r.cota > 0, vazio: !!vazio,
-              motivo: !r.fetchOk ? 'catálogo de veículos não abriu' : (vazio || (r.enumerados && !r.rows.length ? `${r.enumerados} enumerados e nenhum gravado (${r.porque || 'sem motivo registrado'})`.slice(0, 300) : '')),
+              motivo: r.bloqueio ? `não gravado: ${r.bloqueio}` : !r.fetchOk ? 'catálogo de veículos não abriu' : (vazio || (r.enumerados && !r.rows.length ? `${r.enumerados} enumerados e nenhum gravado (${r.porque || 'sem motivo registrado'})`.slice(0, 300) : '')),
             });
           }
         } catch (e) {

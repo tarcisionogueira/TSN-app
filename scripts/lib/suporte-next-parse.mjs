@@ -385,7 +385,79 @@ export const PORTAL = (() => {
     };
   }
   const montarRow = (url, det, tenant) => linha(url, det, tenant);
-  return { TENANTS, extrairUrlsDeLote, idDaUrl, parseDetalhe, montarRow, checarQualidade, painel };
+
+  // ── VEÍCULOS (26/10, 2ª passada) ──────────────────────────────────────────────────────────────
+  // `/lotes?categoria=Veículos` NÃO serve: o catálogo geral tem 4.133 lotes (259 páginas) de usinas, quase todos
+  // "Vendido"/"Sem Licitantes", e a categoria "Veículos" só cobre 3 deles — o caminhão do mesmo leilão está em
+  // "Diversos", a moto em "Motos", e `?situacao=`/`?status=` são ignorados no /lotes (medido: os mesmos 4.133).
+  // O que o site DECLARA aberto é o leilão: `/leiloes?situacao=andamento` e `?situacao=proximos` (1 + 1 em 26/10:
+  // a Venda Direta 2026, "49 de 49 lotes", e a Usina Porto Rico 25/11, "0 de 101" — lotes ainda não publicados).
+  // Dentro do evento cada card diz o status ("Vendido", "Sem Licitantes" com `is-inativo`; "Venda Direta"/
+  // "Leilão único" aberto). Só o card aberto vira URL; a data da praça é conferida no detalhe (`encerrado`).
+  const RE_EVENTO = /<a class="(lei-leilao[^"]*)" href="(\/leilao\/(\d+)-[a-z0-9-]*)"/g;
+  function eventosAbertos(html, base) {
+    const out = new Map();
+    const b = corpo(html);
+    for (const m of b.matchAll(RE_EVENTO)) {
+      if (/--encerrado/.test(m[1])) continue;
+      const resto = b.slice(m.index, m.index + 4000);
+      const st = umaLinha((resto.match(/lei-leilao__status"[^>]*>([\s\S]*?)<\/span>/) || [])[1]);
+      if (/encerrad|cancelad|suspens|finalizad|realizad/i.test(st)) continue;
+      out.set(m[3], new URL(m[2], base).href);
+    }
+    return out;
+  }
+  const RE_CARD_FECHADO = /vendid|sem\s+licitante|arrematad|encerrad|cancelad|suspens|retirad|prejudicad|desert|finalizad/i;
+  // Cards de lote da página (catálogo ou evento), com o status que o PRÓPRIO card declara.
+  function cartoes(html, base) {
+    const b = corpo(html);
+    const pos = [...b.matchAll(/<a class="(lei-lote(?:\s[^"]*)?)" href="(\/lote\/([a-z0-9][a-z0-9-]*))"/g)];
+    return pos.map((m, i) => {
+      const seg = b.slice(m.index, i + 1 < pos.length ? pos[i + 1].index : m.index + 6000);
+      const tag = umaLinha((seg.match(/lei-lote__(?:cancel|praca)">([\s\S]*?)<\/span>/) || [])[1]);
+      return {
+        slug: m[3], url: new URL(m[2], base).href, tag,
+        categoria: umaLinha((seg.match(/lei-lote__cat">([\s\S]*?)<\/div>/) || [])[1]) || null,
+        titulo: umaLinha((seg.match(/lei-lote__title">([\s\S]*?)<\/h3>/) || [])[1]) || null,
+        aberto: !/\bis-inativo\b/.test(m[1]) && !RE_CARD_FECHADO.test(tag),
+      };
+    });
+  }
+  // COBERTURA (pedido do dono: "total declarado × enumerado ≥ 90%, sem isso não grave"). O site não publica
+  // um total de lotes ABERTOS; publica, em cada evento, "X de Y lotes" — X = os que a página lista, Y = os do
+  // leilão. Medimos cards LIDOS (de qualquer status, somados nas páginas) contra X: é o que prova que nenhuma
+  // página do evento ficou para trás; o filtro de aberto vem depois, card a card. Y − X (lotes ainda não
+  // publicados, ex.: Porto Rico "0 de 101") vai para o log — não é corte nosso, é o site que não mostra.
+  const COB = new Map();   // id do evento → { declarado, publicado, paginas: Map(chave da página → n de cards) }
+  function registrarPagina(html, cards) {
+    const ev = (String(html).match(/lei-ev-tab is-active" href="\/leilao\/(\d+)-/) || [])[1];
+    const cont = corpo(html).match(/lei-lf-count"><b>(\d+)<\/b>\s*de\s*(?:<!-- -->)?(\d+)/);
+    if (!ev || !cont) return;
+    const e = COB.get(ev) || { declarado: Number(cont[1]), publicado: Number(cont[2]), paginas: new Map() };
+    // A mesma página lida duas vezes (o motor confere o vazio na página 1) não conta em dobro.
+    e.paginas.set(cards.length ? `${cards[0].slug}|${cards.length}|${cards[cards.length - 1].slug}` : 'vazia', cards.length);
+    COB.set(ev, e);
+  }
+  // Devolve TODOS os cards (o motor pagina o evento enquanto aparece lote novo — devolver só os abertos parava a
+  // paginação na 1ª página sem lote aberto e a cobertura caía por nossa causa); quem decide ler é `abertoNoCard`.
+  const ABERTO = new Map();   // url → o card declara aberto?
+  function extrairUrlsDeLoteVeiculo(html, base) {
+    const cards = cartoes(html, base);
+    registrarPagina(html, cards);
+    const out = new Map();
+    for (const c of cards) { out.set(c.slug, c.url); ABERTO.set(c.url, (ABERTO.get(c.url) || false) || c.aberto); }
+    return out;
+  }
+  const abertoNoCard = (url) => ABERTO.get(url) === true;
+  const cobertura = {
+    zerar: () => { COB.clear(); ABERTO.clear(); },
+    medir: () => {
+      const eventos = [...COB].map(([id, e]) => ({ id, declarado: e.declarado, publicado: e.publicado, lidos: [...e.paginas.values()].reduce((a, n) => a + n, 0) }));
+      const declarado = eventos.reduce((a, e) => a + e.declarado, 0), lidos = eventos.reduce((a, e) => a + Math.min(e.lidos, e.declarado), 0);
+      return { eventos, declarado, lidos, ocultos: eventos.reduce((a, e) => a + Math.max(0, e.publicado - e.declarado), 0), pct: declarado ? lidos / declarado : null };
+    },
+  };
+  return { TENANTS, extrairUrlsDeLote, idDaUrl, parseDetalhe, montarRow, checarQualidade, painel, eventosAbertos, cartoes, extrairUrlsDeLoteVeiculo, abertoNoCard, cobertura };
 })();
 
 // ══ VEÍCULOS (LanceVIP e VIX) ════════════════════════════════════════════════════════════════════
@@ -398,7 +470,8 @@ export function tituloVeiculo(html) {
   const b = corpo(html);
   const h1 = umaLinha((b.match(/<h1[^>]*>([\s\S]*?)<\/h1>/) || [])[1]);
   if (!h1) return null;
-  const cat = paresDl(b).get('Categoria') || '';
+  // Portal dos Leilões escreve a categoria em `lei-lote-spec` ("Tipo: Motos"), não em <dl>.
+  const cat = paresDl(b).get('Categoria') || umaLinha((b.match(/lei-lote-spec__k">\s*Tipo\s*<\/div>\s*<div class="lei-lote-spec__v">([\s\S]*?)<\/div>/) || [])[1]) || '';
   const pre = (PREFIXO_VEICULO.find(([re]) => re.test(cat)) || [])[1];
   if (!pre || /moto|caminh|[ôo]nibus|reboque|carreta|utilit|van\b|furg/i.test(h1)) return h1;
   return `${pre} ${h1}`.slice(0, 180);

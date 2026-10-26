@@ -15,5 +15,7 @@ import suportev2 from './fontes/suportev2.mjs';
 // 26/10: fronts Next.js novos da Suporte (LanceVIP: carros/motos/caminhões; VIX: veículos dos eventos abertos).
 import lancevip from './fontes/lancevip.mjs';
 import vixleiloes from './fontes/vixleiloes.mjs';
+// Portal dos Leilões (26/10): só lote ABERTO dos leilões que o site declara abertos, com gate de cobertura ≥ 90%.
+import portaldosleiloes from './fontes/portaldosleiloes.mjs';
 
-export const FONTES_VEICULOS = [freitas, globo, leilaobrasil, mgl, jeleiloes, simon, nakakogue, ares, suportev2, vixleiloes, lancevip];
+export const FONTES_VEICULOS = [freitas, globo, leilaobrasil, mgl, jeleiloes, simon, nakakogue, ares, suportev2, vixleiloes, lancevip, portaldosleiloes];

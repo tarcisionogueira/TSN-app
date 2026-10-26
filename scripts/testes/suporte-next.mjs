@@ -15,6 +15,7 @@ import cfgLancevip from '../lib/motor/fontes/lancevip.mjs';
 import cfgVix from '../lib/motor/fontes/vixleiloes.mjs';
 import cfgPortal from '../lib/motor/fontes/portaldosleiloes.mjs';
 import cfgClassico from '../lib/motor/fontes/suporteclassico.mjs';
+import { veiculoDoLote } from '../lib/veiculo-do-lote.mjs';
 
 const fx = (n) => readFileSync(new URL(`./fixtures/suporte-next/${n}`, import.meta.url), 'utf8');
 const AGORA = new Date('2026-10-26T15:00:00-03:00');
@@ -164,6 +165,48 @@ assert.deepEqual(cidadeDoTexto('Terreno 02/F, 366,68 m², Ariquemes/RO — matr�
   assert.equal(d.fotos.length, 4);
   assert.equal(d.eh_imovel, false, 'tipo "Diversos" não é imóvel');
   assert.equal(PORTAL.idDaUrl(`${B}/lote/caminhao-cavalo-mecanico-internacional-pro-sleeper`), 'caminhao-cavalo-mecanico-internacional-pro-sleeper');
+
+  // ── VEÍCULOS: só lote ABERTO, pelos leilões que o site declara abertos (o mesmo cfgV de scraper-veiculos-motor) ──
+  const v = cfgPortal.veiculos;
+  const cfgV = { ...cfgPortal, maxPages: v.maxPages, maxPagesEvento: v.maxPagesEvento,
+    parse: { ...cfgPortal.parse, extrairUrlsDeLote: v.extrairUrlsDeLote, extrairUrlsDeEvento: v.extrairUrlsDeEvento } };
+  assert.deepEqual(v.catalogos, ['/leiloes?situacao=andamento', '/leiloes?situacao=proximos']);
+  // O card ENCERRADO da agenda fica fora; "Aberto para lances" e "Em breve" entram.
+  assert.deepEqual([...PORTAL.eventosAbertos(fx('portal-leiloes-proximos.html'), B).keys()], ['54']);
+  const E28 = `${B}/leilao/28-venda-direta-portal-dos-leiloes-2026`, E54 = `${B}/leilao/54-grande-leilao-usina-porto-rico-2026`;
+  const mapaV = { [`${B}/leiloes?situacao=andamento`]: 'portal-leiloes-andamento.html', [`${B}/leiloes?situacao=proximos`]: 'portal-leiloes-proximos.html',
+    [E28]: 'portal-evento-28-p1.html', [`${E28}?page=2`]: 'portal-evento-28-p2.html', [`${E28}?page=3`]: 'portal-evento-28-p3.html', [E54]: 'portal-evento-54.html' };
+  const lerVeiculos = async (mapa) => {
+    v.cobertura.zerar();
+    const urls = new Set(); let completa = true;
+    for (const catalogo of v.catalogos) {
+      const r = await silencioso(() => enumerar(fetchDe(mapa), { ...T, catalogo }, cfgV, { maxPages: cfgV.maxPages, semBD: true }));
+      r.urls.forEach((u) => urls.add(u)); completa = completa && r.completa;
+    }
+    return { urls: [...urls], completa, cob: v.cobertura.medir() };
+  };
+  const ve = await lerVeiculos(mapaV);
+  // 49 cards lidos nas 3 páginas do leilão 28 contra os "49 de 49" que ele declara; o 54 anuncia 101 e lista 0.
+  assert.deepEqual([ve.cob.declarado, ve.cob.lidos, ve.cob.ocultos, ve.cob.pct, ve.completa], [49, 49, 101, 1, true]);
+  const abertos = ve.urls.filter(v.urlCandidata).map((u) => PORTAL.idDaUrl(u));
+  // 11 cards sem "Vendido"/"Sem Licitantes" — a moto, o caminhão, e máquinas/geradores (que veiculoDoLote descarta).
+  assert.equal(abertos.length, 11);
+  assert.ok(abertos.includes('harley-davidson-flhp-road-king-police') && abertos.includes('caminhao-cavalo-mecanico-internacional-pro-sleeper'));
+  assert.ok(!abertos.includes('automovel-camionete-ford-ranger-limited-3-2'), 'Ranger "Vendido" não é lida');
+  // Página 2 do evento que não abre: a cobertura cai (24 de 49) e a leitura é marcada cortada — o coletor NÃO grava.
+  const corte = await lerVeiculos({ ...mapaV, [`${E28}?page=2`]: undefined });
+  assert.equal(corte.completa, false);
+  assert.ok(corte.cob.pct < 0.9, `cobertura ${corte.cob.lidos}/${corte.cob.declarado}`);
+  // Detalhe: a moto (tipo "Motos" vira prefixo do título) e o caminhão viram veículo; data da praça futura.
+  const uH = `${B}/lote/harley-davidson-flhp-road-king-police`;
+  const dH = PORTAL.parseDetalhe(fx('portal-lote-harley.html'), uH, { agora: AGORA });
+  assert.deepEqual([dH.valor_minimo, dH.valor_avaliacao, dH.data_leilao, dH.modalidade, dH.encerrado, dH.fotos.length], [70000, 80000, '2026-12-31', 'venda_direta', false, 5]);
+  const rowH = PORTAL.montarRow(uH, dH, T); rowH.titulo = tituloVeiculo(fx('portal-lote-harley.html'));
+  const vH = veiculoDoLote(rowH, { id: PORTAL.idDaUrl(uH), fonte: T.fonte }).row;
+  assert.deepEqual([vH.tipo_veiculo, vH.marca, vH.valor_minimo, vH.fonte_id], ['moto', 'HARLEY-DAVIDSON', 70000, 'portaldosleiloes_veic_harley-davidson-flhp-road-king-police']);
+  // Venda direta fecha pelo STATUS do painel (a data é o prazo de proposta, não praça): o mesmo lote "Vendido" não entra.
+  const vendida = fx('portal-lote-harley.html').replaceAll('Aberto para Lances', 'Vendido');
+  assert.equal(PORTAL.parseDetalhe(vendida, uH, { agora: AGORA }).encerrado, true);
 }
 
 // ══ CLÁSSICO (Simões, VJ, Marco Aurélio) ═════════════════════════════════════════════════════════
@@ -195,4 +238,4 @@ assert.deepEqual(cidadeDoTexto('Terreno 02/F, 366,68 m², Ariquemes/RO — matr�
   assert.deepEqual(fontes, ['LANCEVIP', 'VIXLEILOES', 'PORTALDOSLEILOES', 'SIMOESLEILOES', 'VJLEILOES', 'MARCOLEILOES']);
 }
 
-console.log('✅ suporte-next: LanceVIP 26/26, VIX (eventos abertos, corte protegido), Portal (zero declarado), clássico 2/2 — ok');
+console.log('✅ suporte-next: LanceVIP 26/26, VIX (eventos abertos, corte protegido), Portal (zero declarado; veículos abertos 49/49 cards, corte não grava), clássico 2/2 — ok');

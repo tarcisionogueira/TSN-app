@@ -229,7 +229,11 @@ export function extrairAreaM2(texto, { permitirSolta = true, uf = null } = {}) {
   // FRENTE × FUNDO (25/10, caso do dono: "terreno com 11 metros de frente e 25 metros de frente a fundo",
   // LJUD Feira de Santana — sem m² escrito, ficava sem área e o enriquecimento pegou 1.850 ha de uma notícia
   // da página). Só a forma explícita das duas medidas, perto uma da outra.
-  const ff = t.match(/(?<![\d.,])(\d{1,4}(?:,\d{1,2})?)\s*(?:m|mts|metros?)\s+de\s+frente\b.{0,60}?(?<![\d.,])(\d{1,4}(?:,\d{1,2})?)\s*(?:m|mts|metros?)\s+(?:de\s+)?(?:frente\s+(?:a|ao|aos)\s+fundos?|fundos?|profundidade|comprimento)/i);
+  // E SÓ QUANDO O TEXTO NÃO ESCREVE A ÁREA EM m² (26/10): a matrícula do Marco Antônio 11083 diz "loja com
+  // área de 159,04 m² … medindo 12,15 m de frente … 12,00 m de fundo" — o produto (145,8) é o LOTE de terreno
+  // (e só um retângulo aproximado), não a área que a própria matrícula declara. Medida escrita vence conta.
+  const m2Escrito = plausivel(paraNumero((t.match(new RegExp(`${NUM}\\s*${UNI}`, 'i')) || [])[1]));
+  const ff = !m2Escrito && t.match(/(?<![\d.,])(\d{1,4}(?:,\d{1,2})?)\s*(?:m|mts|metros?)\s+de\s+frente\b.{0,60}?(?<![\d.,])(\d{1,4}(?:,\d{1,2})?)\s*(?:m|mts|metros?)\s+(?:de\s+)?(?:frente\s+(?:a|ao|aos)\s+fundos?|fundos?|profundidade|comprimento)/i);
   if (ff) {
     const v = plausivel(Math.round(Number(ff[1].replace(',', '.')) * Number(ff[2].replace(',', '.')) * 100) / 100);
     if (v) return v;

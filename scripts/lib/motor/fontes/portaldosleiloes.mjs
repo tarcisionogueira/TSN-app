@@ -4,9 +4,10 @@
  * "Nenhum lote encontrado" (o acervo é de usinas: máquinas, equipamentos e veículos) — ligado assim mesmo, para o
  * imóvel que for publicado entrar sozinho. O zero declarado vira linha em fonte_saude com o motivo "site declara…".
  */
-import { PORTAL } from '../../suporte-next-parse.mjs';
+import { PORTAL, tituloVeiculo } from '../../suporte-next-parse.mjs';
+import { complementoGenerico } from '../../veiculo-do-lote.mjs';
 
-const { TENANTS, extrairUrlsDeLote, idDaUrl, parseDetalhe, montarRow, checarQualidade } = PORTAL;
+const { TENANTS, extrairUrlsDeLote, idDaUrl, parseDetalhe, montarRow, checarQualidade, eventosAbertos, extrairUrlsDeLoteVeiculo, abertoNoCard, cobertura } = PORTAL;
 
 export default {
   chave: 'portaldosleiloes',
@@ -17,6 +18,17 @@ export default {
   maxRefresh: 30,
   tenants: Object.values(TENANTS),
   parse: { extrairUrlsDeLote, idDaUrl, parseDetalhe, montarRow, checarQualidade },
+  // VEÍCULOS (26/10): só lote ABERTO. `/lotes?categoria=Veículos` mistura 4.133 lotes de usina já vendidos e põe o
+  // caminhão em "Diversos" — o catálogo aqui são os LEILÕES que o site declara abertos (`?situacao=andamento` e
+  // `?situacao=proximos`); em cada um, só o card sem "Vendido"/"Sem Licitantes" vira URL, e a praça vencida cai no
+  // detalhe (`encerrado`). Trator, rolo e gerador ficam fora em veiculoDoLote (só veículo inteiro).
+  // Gate de completude (`cobertura`): cards lidos × "X de Y lotes" que cada evento declara ≥ 90%, senão não grava.
+  veiculos: {
+    catalogos: ['/leiloes?situacao=andamento', '/leiloes?situacao=proximos'],
+    maxPages: 1, maxPagesEvento: 8,
+    extrairUrlsDeEvento: eventosAbertos, extrairUrlsDeLote: extrairUrlsDeLoteVeiculo, urlCandidata: abertoNoCard, cobertura,
+    complemento: (html) => ({ ...complementoGenerico(html), titulo: tituloVeiculo(html) }),
+  },
   conhecimento: {
     plataforma: 'Suporte Leilões — front Next.js "lei-" (Portal dos Leilões), SSR',
     acesso: 'fetch-direto (banco de reserva)', custo: 'gratis', anti_bot: 'nenhum (Cloudflare sem challenge)',

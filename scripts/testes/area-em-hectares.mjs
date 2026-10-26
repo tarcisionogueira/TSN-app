@@ -37,6 +37,11 @@ eq('Área Terreno: 162.00 m²', 162, { permitirSolta: false });
 eq('terreno com área do terreno de 300,00 m²', 300, { permitirSolta: false });
 eq('Lote com área terreno, 144,52 m² de área comum', 0, { permitirSolta: false });
 
+// FRENTE × FUNDO (25/10) só sem m² escrito. Marco Antônio 11083 (matrícula real): o produto 12,15 × 12 = 145,8
+// passava na frente dos 159,04 m² que a matrícula declara (testar:suportev2 vermelho desde 25/10).
+eq('terreno com 11 metros de frente e 25 metros de frente a fundo', 275);
+eq('Uma loja comercial com sobreloja, com área de 159,04 m² (cento e cinquenta e nove metros e quatro decímetros quadrados) de construção, e respectivo terreno com área de 186,16 m², medindo 12,15 m de frente para a referida avenida; 12,00 m de fundo na confrontação do lote 108', 159.04);
+
 // JELEILOES (29/09, invariante area_truncada_no_milhar): o 1º m² do texto era o do barracão.
 { const v = extrairArea('Imóvel C 3 5129 Alq em Palmeira/PR', 'Terreno rural com área de 8,5013ha. Barracão com área aproximada de 1.300,00m².');
   const ok = v === 85013; if (!ok) falhas++; console.log(`  ${ok ? '✓' : '✗'} extrairArea (LeilãoPro/JELEILOES) sítio em ha, não o barracão → ${v}`); }
