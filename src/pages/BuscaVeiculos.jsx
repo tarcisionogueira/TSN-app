@@ -474,7 +474,7 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
   async function buscar(p, f) {
     setLoading(true); setErro('');
     try {
-      let q = supabase.from(fonteVeiculos(role)).select(equipe ? COLUNAS : COLUNAS_PUBLICAS, { count: 'estimated' })
+      let q = supabase.from(fonteVeiculos(role)).select(equipe ? COLUNAS : COLUNAS_PUBLICAS, { count: 'exact' }) // exato (26/10): o número aparece na tela por filtro; a estimativa do planejador erra com filtro
         .eq('ativo', true)
         // Rede de segurança pública (11/09, pedido do dono): nunca bem em posse do executado.
         // 05/10 (opção 2 do dono): além dos CONFIRMADOS em pátio, entram os 'nao_confirmado' — local de
@@ -737,6 +737,13 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
         </div>
       )}
 
+      {/* QUANTOS VEÍCULOS (26/10, dono: "igual aos imóveis") — o total que bate com os filtros aplicados. */}
+      {!loading && !erro && resultados.length > 0 && (
+        <div style={{ fontSize: 13, color: '#334155', fontWeight: 700, margin: '0 0 10px' }}>
+          {total.toLocaleString('pt-BR')} veículo{total === 1 ? '' : 's'} encontrado{total === 1 ? '' : 's'}
+          {totalPaginas > 1 && <span style={{ color: '#64748b', fontWeight: 600 }}> · página {pagina} de {totalPaginas}</span>}
+        </div>
+      )}
       {!loading && !erro && resultados.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : 'repeat(4, minmax(0, 1fr))', gap: 12 }}>
           {resultados.map(v => {
