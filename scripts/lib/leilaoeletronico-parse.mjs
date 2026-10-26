@@ -68,6 +68,30 @@ export const TENANTS = {
   // Metodista, Jardim Carvalho) não está na Trevisan. imperioleiloes.com (JUCEMAT) NÃO entra: é o mesmo leiloeiro e o
   // mesmo feed da Absoluta (Rafael Cicolin; o <title> do feed é "Absoluta Leilões").
   raota:      { fonte: 'RAOTALEIL',      leiloeiro: 'Raota Leilões (Antonio Alexandre Raota)', base: 'https://www.raotaleiloes.com.br', catalogo: '/sitemap.xml' }, // ~10, RS/SC
+  // 26/10 (JUCESP, triagem pelo banco `tri2610`; regra do dono: ligar todos, vazios incluídos). Feed /sitemap.xml lido
+  // "pelado" pelo banco (HTTP 200, <title> do próprio site — nenhum repete outro tenant); amostra de lotes no motor em
+  // seco. Entre parênteses: <listing> no feed em 26/10 (antes do filtro de encerrado/não-imóvel). O feed é a lista INTEIRA
+  // do site (é dele que a enumeração sai), então a cobertura da enumeração é o próprio feed.
+  // FORA: imperioleiloes.com — o feed é o da Absoluta (<title> "Absoluta Leilões", já ABSOLUTALEIL): duplicaria;
+  // casareisleiloesonline — a home é da plataforma, mas /sitemap.xml dá 404 (IIS): sem o feed, o parser não enumera;
+  // wsleiloes.com.br redireciona para o PW (pwleiloes.com.br, já coletado).
+  act: { fonte: 'ACTLEILOES', leiloeiro: 'ACT Leilões (Ademilson Cesar Teixeira)', base: 'https://www.actleiloes.com.br', catalogo: '/sitemap.xml' }, // 0 (feed vazio)
+  ags: { fonte: 'AGSLEILOES', leiloeiro: 'AGS Leilões (Ahmad Said Mourad)', base: 'https://www.agsleiloes.com.br', catalogo: '/sitemap.xml' }, // 24 no feed
+  amazonas: { fonte: 'AMAZONASLEIL', leiloeiro: 'Amazonas Leilões (Brian Galvão Frota)', base: 'https://www.amazonasleiloes.com.br', catalogo: '/sitemap.xml' }, // 37 no feed
+  andra: { fonte: 'ANDRALEIL', leiloeiro: 'Andra Leilões', base: 'https://www.andraleiloes.com.br', catalogo: '/sitemap.xml' }, // 1 no feed, encerrado
+  atrio: { fonte: 'ATRIOLEIL', leiloeiro: 'Átrio Leilões (Ana Claudia Camargo de Oliveira)', base: 'https://www.atrioleiloes.com.br', catalogo: '/sitemap.xml' }, // 20 no feed
+  brancalliao: { fonte: 'BRANCALLIAO', leiloeiro: 'Brancallião Leilões (Nilton Brancallião)', base: 'https://www.brancalliao.com.br', catalogo: '/sitemap.xml' }, // 1 no feed
+  camargo: { fonte: 'CAMARGOLEIL', leiloeiro: 'Camargo Leilões (João Rodrigues de Camargo Junior)', base: 'https://www.camargoleiloes.com.br', catalogo: '/sitemap.xml' }, // 1 no feed
+  tupinamba: { fonte: 'TUPINAMBALEIL', leiloeiro: 'Tupinambá Leilões (Douglas Tupinambá Camargo)', base: 'https://www.douglasleiloeiro.com.br', catalogo: '/sitemap.xml' }, // 3 no feed
+  ktz: { fonte: 'KTZLEILOES', leiloeiro: 'KTZ Leilões (Vivian Thomaz Katzenelson)', base: 'https://www.ktzleiloes.com.br', catalogo: '/sitemap.xml' }, // 18 no feed
+  mager: { fonte: 'MAGERLEIL', leiloeiro: 'Mager Leilões (Erica Cristina Borro)', base: 'https://www.leiloesmager.com.br', catalogo: '/sitemap.xml' }, // 0 (feed vazio)
+  multiplique: { fonte: 'MULTIPLIQUE', leiloeiro: 'Multiplique Leilões (Tiago Clemente Sampaio)', base: 'https://www.multipliqueleiloes.com.br', catalogo: '/sitemap.xml' }, // 35 no feed
+  nacional: { fonte: 'NACIONALLEIL', leiloeiro: 'Nacional Leilões (Maritza Grande Falcão Cordeiro)', base: 'https://www.nacionalleiloes.com.br', catalogo: '/sitemap.xml' }, // 0 (feed vazio)
+  peixoto: { fonte: 'PEIXOTOLEIL', leiloeiro: 'Peixoto Leilões (Rafael Brambila Peixoto)', base: 'https://www.peixotoleiloes.com.br', catalogo: '/sitemap.xml' }, // 32 no feed
+  projud: { fonte: 'PROJUDLEIL', leiloeiro: 'PRÓ-JUD Leilões (Carlos Campanhã)', base: 'https://www.projudleiloes.com.br', catalogo: '/sitemap.xml' }, // 47 no feed
+  tradicao: { fonte: 'TRADICAOLEIL', leiloeiro: 'Tradição Leilões', base: 'https://www.tradicaoleiloes.com.br', catalogo: '/sitemap.xml' }, // 5 no feed, todos encerrados
+  vendasjudiciais: { fonte: 'VENDASJUDICIAIS', leiloeiro: 'Vendas Judiciais (Fernando Semerdjian)', base: 'https://www.vendasjudiciais.com.br', catalogo: '/sitemap.xml' }, // 28 no feed
+  viana: { fonte: 'VIANALEIL', leiloeiro: 'Viana Leilões (José Carlos Chagas)', base: 'https://www.vianaleiloes.com.br', catalogo: '/sitemap.xml' }, // 2 no feed
 };
 
 const limpo = (s) => decodificarEntidades(String(s || '').replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, ' '))

@@ -27,6 +27,9 @@ import MUNICIPIOS from '../../api/_municipios.js';
 export const TENANTS = {
   casadeleiloes: { fonte: 'CASADELEILOES', leiloeiro: 'Casa de Leilões (Tarcílio Leite, JUCEMS 003)', base: 'https://www.casadeleiloes.com.br' },
   rpleiloes: { fonte: 'RPLEILOES', leiloeiro: 'Reinaldo Rodrigues Perdomo (JUCEMS 083)', base: 'https://www.rpleiloes.com.br' },
+  // 26/10 (triagem pelo banco `tri2610`, JUCESP): mesma plataforma (assinatura leilovia, home lista os leilões). Só abre
+  // "pelado" (HTTP 400 aos cabeçalhos de navegador, 200 sem eles) — o viaBanco do motor já repete pelado no 400.
+  onlinems: { fonte: 'LEILOESONLINEMS', leiloeiro: 'Leilões OnLine MS (Gustavo Correa Pereira da Silva)', base: 'https://www.leiloesonlinems.com.br' },
 };
 
 const limpar = (s) => decodificarEntidades(String(s || '').replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();

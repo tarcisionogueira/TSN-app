@@ -32,14 +32,26 @@ export const TENANTS = {
   // front. Catálogo e lotes lidos pelo banco (pg_net) e passados no motor em seco. Entre parênteses: imóveis no catálogo.
   // A Rapidão Vende tem ainda fazendas/chácaras em /busca?tipo=Fazendas (URL /oferta/leilao/fazendas/…), fora deste
   // catálogo e do padrão de URL — ficam para quando a família ler mais de uma categoria.
-  // Casa Forte (casaforteleiloes.com.br, RS) é o mesmo front, mas os 4 imóveis do catálogo hoje são todos box de garagem
-  // — descartados por decisão de negócio no seco (0 pronto). Entra com uma linha quando publicar outro tipo.
+  // Casa Forte (casaforteleiloes.com.br, RS) é o mesmo front; os 4 imóveis do catálogo em 24/10 eram todos box de garagem
+  // (descartados por regra de negócio no seco). Entrou em 26/10 — bloco no fim da lista.
   aba: { fonte: 'ABALEILOES', leiloeiro: 'ABA Leilões', base: 'https://abaleiloes.com.br' }, // 6, SE
   araujo: { fonte: 'LEILOESARAUJO', leiloeiro: 'Leilões Araújo', base: 'https://leiloesaraujo.com.br' }, // 1, RN/PB
   rapidaovende: { fonte: 'RAPIDAOVENDE', leiloeiro: 'Rapidão Vende', base: 'https://rapidaovende.com.br' }, // 3, TO
   // 26/10 (3ª leva das Juntas, regra do dono: 1 lote já vale): /buscador?categoria=2 dá 404, /busca?tipo=Imoveis abre com
   // `var lote`. Catálogo e lote lidos pelo banco e passados no motor em seco.
   edgarcarvalho: { fonte: 'EDGARCARVALHO', leiloeiro: 'Edgar de Carvalho Jr. Leiloeiro', base: 'https://edgarcarvalholeiloeiro.com.br' }, // 1, RJ
+  // 26/10 — LIGADOS (regra do dono: ATIVO em família que já lemos fica ligado mesmo sem imóvel aproveitável hoje).
+  // Pelo banco: /busca?tipo=Imoveis HTTP 200 com o <title> "Busca(dor) | <site>" do front "oferta" (o /buscador antigo dá
+  // 404). Ricardo Gomes e Rogério Menezes: 0 link /oferta/leilao/imoveis hoje. Casa Forte: 4 de 4 enumerados (box).
+  casaforte: { fonte: 'CASAFORTELEIL', leiloeiro: 'Casa Forte Leilões (Jean Miguel Corrêa)', base: 'https://casaforteleiloes.com.br' }, // 4 de 4, box (RS)
+  ricardogomes: { fonte: 'RICARDOGOMESLEIL', leiloeiro: 'Ricardo Gomes Leilões', base: 'https://ricardogomesleiloes.com.br' }, // 0 (PR/SC)
+  rogeriomenezes: { fonte: 'ROGERIOMENEZES', leiloeiro: 'Rogério Menezes Leiloeiro', base: 'https://rogeriomenezes.com.br' }, // 0 (PI/RJ)
+  // JUCEMG/JUCESP (triagem pelo banco `tri2610`): /buscador dá 404 e /busca?tipo=Imoveis abre o front "oferta".
+  isac: { fonte: 'ISACLEILOES', leiloeiro: 'Isac Leilões (Isac Vicente da Silva)', base: 'https://www.isacleiloes.com.br' }, // 0 (MG)
+  lfr: { fonte: 'LFRLEILOES', leiloeiro: 'Luiz Fernando Leilões (Luiz Fernando Borges Rocha)', base: 'https://www.lfrleiloes.com.br' }, // 2 (MG)
+  uni: { fonte: 'UNILEILOES', leiloeiro: 'Unileilões (Fabiana Cusato)', base: 'https://www.unileiloes.com.br' }, // 2 (SP)
+  // FORA: simoesleiloes e vjleiloes (MG) — outro front da Suporte ("Aguarde…", bens montados por JS): /busca e /buscador
+  // não trazem bem nenhum no HTML; nenhum parser nosso lê esse front.
   // camilaleiloes.com.br segue FORA: o único lote (Sítio Vargem Grande, id 22) diz "Aberto para lances" na 2ª praça com
   // `dataProximoLeilao` e `dataLimitePropostas` vazios — sem data que prove leilão vivo (o mesmo caso de elydaluzramos).
 };

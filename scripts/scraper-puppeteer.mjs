@@ -5580,7 +5580,7 @@ const SUPORTE_TENANTS = [
   // (fonte_id `sl_bl_<id>`) — único entre os tenants. FORA: abaleiloes (SE), casaforteleiloes (RS), leiloesaraujo
   // (PB) e rapidaovende (TO) devolvem 404 em /buscador — são do front Suporte "oferta" (/busca?tipo=Imoveis); ABA, Araújo e
   // Rapidão coletam por scraper-suporteoferta.mjs desde 24/10 (pendência 356), Casa Forte só tem box de garagem;
-  // atlantico (PB/RN), pineiro (RS) e vlleiloes (PB) abrem o buscador com 0 imóvel hoje.
+  // atlantico (PB/RN), pineiro (RS) e vlleiloes (PB) abriam o buscador com 0 imóvel (vl entrou em 25/10, pineiro em 26/10).
   { domain: 'bl.leilao.br', leiloeiro: 'Braga Leilões' },
   { domain: 'dalaqualeiloes.com.br', leiloeiro: "Dal'Aqua Leilões" },
   { domain: 'gsleiloes.com.br', leiloeiro: 'GS Leilões' },
@@ -5588,10 +5588,26 @@ const SUPORTE_TENANTS = [
   // 25/10 (pendência 321, FENALEI: JUCEPI/JUCEP). Mesmo template, /buscador?categoria=2 lido pelo banco e passado na
   // MESMA suporteParsePagina em Chrome (seco): Monteiro 12 cards (PB/PI; só 2 trazem "Cidade/UF" na descrição —
   // Guarabira/PB e Cabedelo/PB —, os outros 10 têm o campo de local VAZIO e entram sem cidade/UF até a descrição dizer),
-  // VL 1 card (apto em João Pessoa/PB, R$ 150.000). Nenhum lote destes domínios estava no acervo. Os do buscador vazio
-  // hoje (atlantico, pineiro) continuam fora — entram com esta linha quando publicarem imóvel.
+  // VL 1 card (apto em João Pessoa/PB, R$ 150.000). Nenhum lote destes domínios estava no acervo. Do buscador vazio
+  // de 25/10, o pineiro entrou em 26/10 (bloco abaixo); o atlantico segue fora por outro motivo (ver lá).
   { domain: 'leiloesmonteiro.com.br', leiloeiro: 'Leilões Monteiro (Miguel Alexandrino Monteiro Neto)' },
   { domain: 'vlleiloes.com.br', leiloeiro: 'VL Leilões (Vinícius Vidal Lacerda)' },
+  // 26/10 — LIGADOS COM CATÁLOGO VAZIO (regra do dono: leiloeiro ATIVO em família que já lemos fica ligado mesmo sem
+  // imóvel hoje). Prova pelo banco (pg_net, grátis): /buscador?categoria=2 HTTP 200, <title> "Buscador - <site>",
+  // static.suporteleiloes.com.br, e NENHUM `lote-main` (o Bueno, com 9 imóveis, devolve 18 pelo mesmo caminho e na mesma
+  // hora). A home de cada um também não tem evento de imóvel (Buaiz e Geilson: só veículos; Renan Neris: prefeituras).
+  // O Piñeiro estava fora desde 24/10 só por estar vazio.
+  // FORA, com motivo: atlanticoleiloes e esleiloes — a home lista evento de IMÓVEL ("apartamento…", "terreno em Alto
+  // Parnaíba/MA"; "área … m² em São José do Calçado") e o /buscador?categoria=2 vem com 0: o catálogo que lemos não
+  // enxerga o que o site mostra (cobertura < 90%), pede recon da categoria antes de entrar. lancevip, portaldosleiloes
+  // e vixleiloes rodam um front Next.js novo (/leilao/N, /lote/N) em que /buscador, /busca e /leiloes-de dão 404 —
+  // nenhum parser nosso lê. marcoleiloes não é a Suporte (/leiloes/N, /categoria/Imóveis).
+  { domain: 'buaizleiloes.com.br', leiloeiro: 'Buaiz Leilões' },
+  { domain: 'geilsonalmeidaleiloes.com.br', leiloeiro: 'Geilson Almeida Leilões' },
+  { domain: 'ggleiloes.com.br', leiloeiro: 'GG Leilões' },
+  { domain: 'mauriciomarizleiloes.com.br', leiloeiro: 'Maurício Mariz Leilões' },
+  { domain: 'renannerisleiloeiro.com.br', leiloeiro: 'Renan Neris Leilões' },
+  { domain: 'pineiroleiloes.com.br', leiloeiro: 'Piñeiro Leilões (Pierre Novo Piñeiro)' },
   // `donizetteleiloes.leilao.br` é o MESMO site do .com.br (mesmo `arrematante.` e mesmo
   // static). Fora de propósito: o `tenantKey` deriva do domínio antes do primeiro ponto, então
   // os dois gerariam o mesmo `fonte_id` e um sobrescreveria o outro sem nada aparecer.

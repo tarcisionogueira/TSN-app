@@ -68,12 +68,10 @@ export const TENANTS = {
   // rz.leilao.br; blmleiloes.com.br → blm.leilao.br; scholante.com.br → scholanteleiloes.com.br; eduardovivian.com →
   // .com.br; mpleilao.com → .com.br; pietosoleiloes.lel.br → .com.br; leiloeiros.lel.br → jritta.lel.br;
   // mercadoleiloes.com.br (WordPress) → catálogo em mercadoleiloes.leilao.br; scheidleiloes.com.br → leilao.scheid….
-  // Ficaram FORA com /leilao/lotes/imoveis VAZIO hoje (LeilãoPro confirmado; entram com uma linha quando publicarem
-  // imóvel): agenciadeleiloes, auroraleiloes (DF), beltrameleiloes (RO), bisleiloeiro, bsbleiloes (DF), ckleiloes,
-  // cpkleiloes, deboramullerleiloes, elevaleiloes, fernandaleiloes.lel.br, leilaobutia, lipinskileiloes,
-  // lottermannleiloes, rangelleiloes, rogerserafimleiloes, amtleiloes (rubemgarcia.com.br redireciona p/ ele),
-  // srleiloes (DF), swleiloes, veronicaleiloes, zaccariasleiloes.
-  // santayanaleiloes.com.br (10 na listagem) também: hoje só boxes de estacionamento e massa falida — 0 pronto no seco.
+  // Os que vieram com /leilao/lotes/imoveis VAZIO nesta leva (aurora, beltrame, bis, ck, cpk, deboramuller, eleva,
+  // fernanda, butiá, lipinski, lottermann, rangel, rogerserafim, amt — rubemgarcia.com.br redireciona p/ ele —, sr, sw,
+  // veronica, zaccarias) e o santayana entraram em 26/10: bloco "LIGADOS COM CATÁLOGO VAZIO" no fim da lista.
+  // (agenciadeleiloes já é o CHAIEBLEIL; bsbleiloes não está mais entre os não coletados da Junta.)
   santoseborin: { fonte: 'SANTOSBORIN', leiloeiro: 'Santos & Borin Leilões', base: 'https://www.santoseborinleiloes.com.br', sufixo: 'Santos & Borin Leilões' }, // 40+
   grandes: { fonte: 'GRANDESLEIL', leiloeiro: 'Grandes Leilões (Jochims)', base: 'https://www.grandesleiloes.com.br', sufixo: 'Grandes Leilões' }, // 40+
   mercado: { fonte: 'MERCADOLEIL', leiloeiro: 'Mercado Leilões (José Lázaro Ribeiro Menezes)', base: 'https://www.mercadoleiloes.leilao.br', sufixo: 'Mercado Leilões' }, // 38
@@ -124,15 +122,57 @@ export const TENANTS = {
   wendelgarcia: { fonte: 'WENDELGARCIA', leiloeiro: 'Wendel Garcia Leiloeiro', base: 'https://wendelgarcia.com.br', sufixo: 'Wendel Garcia' },
   zuccalmaglio: { fonte: 'ZUCCALMAGLIO', leiloeiro: 'Zuccalmaglio Leilões', base: 'https://zuccalmaglioleiloes.com.br', sufixo: 'Zuccalmaglio Leilões' },
   // Só VENDA DIRETA de imóvel aberta hoje (0 lote de leilão na listagem; 1 bem /venda-direta/bem_id/N em cada).
-  // FORA, com a venda direta da listagem toda ENCERRADA hoje (lida no seco): amtleiloes (2), assertivaleiloes (4),
-  // deborabarzleiloes (3), leilaobutia (5). Os demais da leva com listagem vazia: alegranzzi, costasalman, fumagalli,
-  // gbleiloes, oscarleiloes.com.br (≠ OSCAR, oscar.leilao.br), praleiloes, aurora, beltrame, bis, ck, cpk, deboramuller,
-  // eleva, lipinski, rangel, rogerserafim, sr, veronica, zaccarias, lottermann — LeilãoPro confirmado, entram com uma
-  // linha quando publicarem imóvel. swleiloes tem 1 venda direta (pavilhão, R$ 3 mi) cuja página não fecha o bloco
-  // DESCRIÇÃO antes do rodapé: sem cidade provada, ficaria invisível em /leiloes — fora até o parser ler esse caso.
+  // Os da leva com listagem vazia ou só com venda direta ENCERRADA (amt, assertiva, deborabarz, butiá, alegranzzi,
+  // costasalman, fumagalli, gb, oscarleiloes.com.br, pra, aurora, beltrame, bis, ck, cpk, deboramuller, eleva, lipinski,
+  // rangel, rogerserafim, sr, veronica, zaccarias, lottermann, sw) entraram em 26/10 — ver o bloco abaixo.
   michelesandor: { fonte: 'MICHELESANDOR', leiloeiro: 'Michele Sandor Leilões', base: 'https://michelesandorleiloes.com.br', sufixo: 'Michele Sandor Leilões' },
   moresco: { fonte: 'MORESCOLEIL', leiloeiro: 'Cesar Moresco Leiloeiro', base: 'https://morescoleiloes.com.br', sufixo: 'Cesar Moresco Leiloeiro' },
   agencia: { fonte: 'CHAIEBLEIL', leiloeiro: 'Agência de Leilões (Daniel Chaieb)', base: 'https://www.agenciadeleiloes.com.br', sufixo: 'Agência de Leilões' },
+  // ── LIGADOS COM CATÁLOGO VAZIO (26/10, regra do dono: leiloeiro ATIVO em família que já lemos fica ligado mesmo sem
+  // imóvel hoje — o coletor pega no dia em que publicar). Prova, pelo banco (pg_net, grátis): /leilao/lotes/imoveis HTTP
+  // 200, <title> "IMÓVEIS - <site>", js.pusher/leilao.pro na página e o contador do próprio site "IMÓVEIS 0 itens" — o
+  // mesmo HTML do tenant com lote, sem nenhum link lote_id. Fonte que nunca teve lote fica de fora de
+  // fonte_baseline_aprendida (só aprende de status ok com total > 0): sem `zerou`/`regressao`/`medicao_velha` possível.
+  // Os marcados VD têm venda direta na listagem, hoje toda ENCERRADA (o parser lê e descarta como encerrada).
+  // oscarleiloes.com.br (BA) ≠ OSCAR (oscar.leilao.br, com lote): mesmo nome, catálogos distintos (um vazio, outro não).
+  alegranzzi: { fonte: 'ALEGRANZZI', leiloeiro: 'Alegranzzi Leilões', base: 'https://www.alegranzzileiloes.com.br', sufixo: 'Alegranzzi Leilões' },
+  amt: { fonte: 'AMTLEILOES', leiloeiro: 'Álvaro Marques Teixeira Leiloeiro', base: 'https://www.amtleiloes.com.br', sufixo: 'Álvaro Marques Teixeira' }, // VD 2
+  assertiva: { fonte: 'ASSERTIVALEIL', leiloeiro: 'Assertiva Leilões', base: 'https://www.assertivaleiloes.com.br', sufixo: 'Assertiva Leilões' }, // VD 4
+  aurora: { fonte: 'AURORALEIL', leiloeiro: 'Aurora Leilões', base: 'https://www.auroraleiloes.com.br', sufixo: 'Aurora Leilões' },
+  beltrame: { fonte: 'BELTRAMELEIL', leiloeiro: 'Beltrame Leilões', base: 'https://www.beltrameleiloes.com.br', sufixo: 'Beltrame Leilões' },
+  bis: { fonte: 'BISLEILOEIRO', leiloeiro: 'Bis Leiloeiro', base: 'https://www.bisleiloeiro.com.br', sufixo: 'Bis Leiloeiro' },
+  ck: { fonte: 'CKLEILOES', leiloeiro: 'CK Leilões', base: 'https://www.ckleiloes.com.br', sufixo: 'CK Leilões' },
+  costasalman: { fonte: 'COSTASALMAN', leiloeiro: 'Costa Salman Leilões', base: 'https://www.costasalmanleiloes.com.br', sufixo: 'Costa Salman Leilões' },
+  cpk: { fonte: 'CPKLEILOES', leiloeiro: 'CPK Leilões', base: 'https://www.cpkleiloes.com.br', sufixo: 'CPK Leilões' },
+  deborabarz: { fonte: 'DEBORABARZ', leiloeiro: 'Débora Barz Leilões', base: 'https://www.deborabarzleiloes.com.br', sufixo: 'Débora Barz Leilões' }, // VD 3
+  deboramuller: { fonte: 'DEBORAMULLER', leiloeiro: 'Débora Müller Leiloeira', base: 'https://www.deboramullerleiloes.com.br', sufixo: 'Débora Müller' },
+  eleva: { fonte: 'ELEVALEIL', leiloeiro: 'Eleva Leilões', base: 'https://www.elevaleiloes.com.br', sufixo: 'Eleva Leilões' },
+  fernanda: { fonte: 'FERNANDALEIL', leiloeiro: 'Fernanda Leilões', base: 'https://www.fernandaleiloes.lel.br', sufixo: 'Fernanda Leilões' }, // VD 5
+  fumagalli: { fonte: 'FUMAGALLI', leiloeiro: 'Fumagalli Leilões', base: 'https://www.fumagallileiloes.com.br', sufixo: 'Fumagalli Leilões' },
+  gb: { fonte: 'GBLEILOES', leiloeiro: 'GB Leilões', base: 'https://www.gbleiloes.com.br', sufixo: 'GB Leilões' },
+  butia: { fonte: 'LEILAOBUTIA', leiloeiro: 'Leilão Butiá', base: 'https://www.leilaobutia.com.br', sufixo: 'Leilão Butiá' }, // VD 5
+  lipinski: { fonte: 'LIPINSKI', leiloeiro: 'Lipinski Leilões', base: 'https://www.lipinskileiloes.com.br', sufixo: 'Lipinski Leilões' },
+  lottermann: { fonte: 'LOTTERMANN', leiloeiro: 'Lottermann Leilões', base: 'https://www.lottermannleiloes.com.br', sufixo: 'Lottermann Leilões' },
+  oscarba: { fonte: 'OSCARBA', leiloeiro: 'Oscar Leilões (BA)', base: 'https://www.oscarleiloes.com.br', sufixo: 'Oscar Leilões' },
+  pra: { fonte: 'PRALEILOES', leiloeiro: 'Pra Leilões', base: 'https://www.praleiloes.com.br', sufixo: 'Pra Leilões' },
+  rangel: { fonte: 'RANGELLEIL', leiloeiro: 'Rangel Machado Leiloeiro', base: 'https://www.rangelleiloes.com.br', sufixo: 'Rangel Machado' },
+  rogerserafim: { fonte: 'ROGERSERAFIM', leiloeiro: 'Roger Serafim Leilões', base: 'https://www.rogerserafimleiloes.com.br', sufixo: 'Roger Serafim Leilões' },
+  sr: { fonte: 'SRLEILOES', leiloeiro: 'SR Leilões', base: 'https://www.srleiloes.com.br', sufixo: 'SR Leilões' },
+  // SW: 1 venda direta aberta (pavilhão, R$ 3 mi); o parser lê preço e foto, mas a página não fecha o bloco DESCRIÇÃO
+  // antes do rodapé e o lote sai SEM cidade (não aparece em /leiloes até alguém completar) — ligado assim mesmo pela regra.
+  sw: { fonte: 'SWLEILOES', leiloeiro: 'SW Leilões', base: 'https://www.swleiloes.com.br', sufixo: 'SW Leilões' }, // VD 1 de 1, sem cidade
+  veronica: { fonte: 'VERONICALEIL', leiloeiro: 'Veronica Telles Leiloeira', base: 'https://www.veronicaleiloes.com.br', sufixo: 'Veronica Telles' },
+  zaccarias: { fonte: 'ZACCARIAS', leiloeiro: 'Zaccarias Leiloeiro Oficial', base: 'https://www.zaccariasleiloes.com.br', sufixo: 'Zaccarias Leiloeiro Oficial' },
+  // ── 26/10, com lote hoje (todos os lotes no parser em seco; contador "IMÓVEIS N itens" × enumerados).
+  // Luci Vera: 11 de 11 enumerados → 10 prontos + 1 não-imóvel (silos). Santayana: 10 lotes + 3 VD (o contador diz 11 —
+  // conta só os abertos) → 7 prontos, 4 box descartados, 2 encerrados. Os dois têm lote cujo título é só "APARTAMENTO"/
+  // "CASA"/"TERRENO COM ÁREA…" sem cidade no texto (Luci 3 de 10, Santayana 3 de 7): a cidade está no SLUG do leilão
+  // ("…-em-campo-bom-rs", "imovel-porto-alegre-rs-…"), que o parser ainda não lê — achado para o parser, não bloqueio.
+  luciverareis: { fonte: 'LUCIVERAREIS', leiloeiro: 'Luci Vera Primaz dos Reis Leiloeira', base: 'https://www.luciverareisleiloes.com.br', sufixo: 'Luci Vera Primaz dos Reis' }, // 11 de 11
+  // JUCESP/JUCEMG/SC (triagem pelo banco `tri2610`): contador "IMÓVEIS N itens" × lote_id enumerados.
+  goldenbrazil: { fonte: 'GOLDENBRAZIL', leiloeiro: 'Golden Brazil Leilões (Anderson Luchtenberg)', base: 'https://www.goldenbrazilleiloes.com.br', sufixo: 'Golden Brazil Leilões' }, // 2 + 1 VD (contador 2)
+  sandro: { fonte: 'SANDROLEIL', leiloeiro: 'Melhores Leilões (Sandro Rodrigues Pinto)', base: 'https://www.sandroleiloeiro.com.br', sufixo: 'Melhores Leilões' }, // 14 de 14
+  santayana: { fonte: 'SANTAYANA', leiloeiro: 'Santayana Leilões', base: 'https://www.santayanaleiloes.com.br', sufixo: 'Santayana Leilões' }, // 13 de 13 (contador 11)
 };
 
 const num = s => parseFloat(String(s || '').replace(/[^\d.,]/g, '').replace(/\./g, '').replace(',', '.')) || 0;

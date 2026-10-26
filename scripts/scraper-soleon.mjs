@@ -123,11 +123,9 @@ const TODOS_TENANTS = [
   // Mesmo procedimento: home e /lotes/imovel pelo banco (grátis, HTTP 200), 2–3 lotes de cada no coletor real em seco.
   // Nenhum lote destes domínios estava no acervo (conferido por host do url_lote). LEVYLEIL (John Levy Zago Amaral)
   // e ZAGOLEIL (Cleci Levy Zago) são da mesma família mas catálogos distintos (ids não se repetem).
-  // Ficaram FORA, com /lotes/imovel vazio hoje (SOLEON confirmado na home; entram quando tiverem imóvel — basta
-  // a linha aqui): argleiloes.com.br (SE), jgcargneluttileiloes.com.br (RS), leilaosantos.com.br (RS),
-  // lopesleiloes.net.br (CE), pereiraleiloesce.com.br (CE), portelaleiloes.com.br (RO), realizaleiloes.com.br (SE),
-  // sydneyleiloes.com.br (CE), natalialeiloes.com.br (DF, só com www.); leiloestocantins.com (TO) tem 1 lote, fração
-  // ideal de 25% — sai pela regra de negócio, 0 pronto no seco.
+  // Os que vieram com /lotes/imovel vazio nesta leva (argleiloes, jgcargneluttileiloes, leilaosantos, lopesleiloes,
+  // pereiraleiloesce, portelaleiloes, realizaleiloes, sydneyleiloes, natalialeiloes, leiloestocantins) entraram em
+  // 26/10 — ver o bloco "LIGADOS COM CATÁLOGO VAZIO" no fim da lista.
   { fonte: 'CARGNELUTTI', leiloeiro: 'Cargnelutti Leilões', base: 'https://cargneluttileiloes.com.br' }, // 30+ (RS)
   { fonte: 'LEILOESRN', leiloeiro: 'Leilões RN (Stella Araújo Zanatta)', base: 'https://leiloesrn.com.br' }, // 30+ (RN)
   { fonte: 'OROLEIL', leiloeiro: 'Öro Leilões (Erni Carlos Oro)', base: 'https://oroleiloes.lel.br' }, // 30+ (RS)
@@ -146,9 +144,10 @@ const TODOS_TENANTS = [
   // 26/10 (3ª leva — leiloeiro_junta ATIVO nao_coletado, triagem `junta_2410`: PE/SC/BA/ES/GO/MT/MA/RJ/PR). /lotes/imovel
   // pelo banco (grátis); "Total N Lotes" do próprio site = itens enumerados em todos (página única, sem ?page=2); TODOS
   // os lotes lidos no coletor real em seco (fetch simulado, nada gravado). Nenhum lote destes domínios estava no acervo.
-  // Entre parênteses: Total do site em 26/10. FORA com /lotes/imovel vazio hoje (SOLEON confirmado): conceitoleiloes,
-  // felfilileiloes, focoleiloes, gutembergaraujoleiloes, kildareleiloes, luminaleiloes, macedoleiloes, machadoleiloes.
-  // FORA também: leiloeironacif.com (1 lote listado, mas a página /item/N/detalhes só abre com LOGIN — 1 KB de texto).
+  // Entre parênteses: Total do site em 26/10. Os de /lotes/imovel vazio nesta leva (conceito, felfili, foco,
+  // gutembergaraujo, kildare, lumina, macedo, machado) entraram depois — bloco "LIGADOS COM CATÁLOGO VAZIO" abaixo.
+  // FORA: leiloeironacif.com (1 lote listado, mas a página /item/N/detalhes só abre com LOGIN — 1 KB de texto;
+  // reconferido em 26/10 à tarde, mesmo resultado).
   { fonte: 'ARAGAOLEIL', leiloeiro: 'Aragão Leilões', base: 'https://aragaoleiloes.com.br' }, //   7 (PE)
   { fonte: 'BESTLEIL', leiloeiro: 'Best Leilões', base: 'https://bestleiloes.com.br' }, //   3 (SC)
   { fonte: 'BRASILSULLEIL', leiloeiro: 'Brasil Sul Leilões', base: 'https://brasilsulleiloes.com.br' }, //   8 (SC)
@@ -165,9 +164,79 @@ const TODOS_TENANTS = [
   { fonte: 'QUADRADOLEIL', leiloeiro: 'Quadrado Leilões', base: 'https://quadradoleiloes.com.br' }, //   1 (SC)
   { fonte: 'ROSENTALLEIL', leiloeiro: 'Rosental Leilões', base: 'https://rosentalleiloes.com.br' }, //   3 (SC)
   { fonte: 'VALDEIRPEREIRA', leiloeiro: 'Valdeir Pereira Leiloeiro', base: 'https://valdeirpereiraleiloeiro.com.br' }, //   1 (MT)
+  // ── LIGADOS COM CATÁLOGO VAZIO (26/10, regra do dono: leiloeiro ATIVO em família que já lemos fica ligado mesmo sem
+  // lote hoje — o coletor pega no dia em que publicar). Prova de cada um, pelo banco (pg_net, grátis): /lotes/imovel
+  // HTTP 200, título "Busca de Imóveis :: <site>", assinatura SOLEON e o texto "NENHUM LOTE ENCONTRADO" — o mesmo HTML
+  // que o tenant com lote devolve, só que sem /item/N/detalhes. No seco (coletor real, fetch simulado) cada um sai
+  // "0 lotes enumerados" com o vazio DECLARADO pelo site, o que grava `vazio` em fonte_saude sem alarme: fonte que
+  // nunca teve lote não entra em fonte_baseline_aprendida (só aprende de status ok com total > 0), então não há
+  // `zerou`/`regressao`/`medicao_velha` possível para ela. ARGLEILOES e REALIZALEIL têm a mesma leiloeira (Cristiane
+  // Góis, SE) em sites distintos; se um dia listarem os mesmos ids, sai um dos dois.
+  { fonte: 'CONCEITOLEIL', leiloeiro: 'Conceito Leilões (Miriam A. Trindade Gir)', base: 'https://conceitoleiloes.com.br' }, // 0 (PE/SP)
+  { fonte: 'FELFILILEIL', leiloeiro: 'Felfili Leilões (Icaro Felfili Jardim)', base: 'https://felfilileiloes.com.br' }, // 0 (MT)
+  { fonte: 'FOCOLEIL', leiloeiro: 'Foco Leilões (Anna Karoline do Amaral)', base: 'https://focoleiloes.com.br' }, // 0 (BA/MT/RJ)
+  { fonte: 'GUTEMBERGLEIL', leiloeiro: 'Gutemberg Araújo Leilões', base: 'https://gutembergaraujoleiloes.com.br' }, // 0 (BA)
+  { fonte: 'KILDARELEIL', leiloeiro: 'Kildare Leilões (Josecelli Kildare Fraga Gomes)', base: 'https://kildareleiloes.com.br' }, // 0 (PR)
+  { fonte: 'LUMINALEIL', leiloeiro: 'Lumina Leilões (Marcelo Drechsel)', base: 'https://luminaleiloes.com.br' }, // 0 (SC)
+  { fonte: 'MACEDOLEIL', leiloeiro: 'Macêdo Leilões (José Sérgio Della Giustina)', base: 'https://macedoleiloes.com.br' }, // 0 (ES/SC)
+  { fonte: 'MACHADORJ', leiloeiro: 'Machado Leilões RJ (Norma Maria Machado)', base: 'https://machadoleiloes.com.br' }, // 0 (RJ)
+  { fonte: 'ARGLEILOES', leiloeiro: 'ARG Leilões (Cristiane Góis)', base: 'https://argleiloes.com.br' }, // 0 (SE)
+  { fonte: 'JGCARGNELUTTI', leiloeiro: 'João Guilherme Cargnelutti Leilões', base: 'https://jgcargneluttileiloes.com.br' }, // 0 (RS)
+  { fonte: 'LEILAOSANTOS', leiloeiro: 'Leilão Santos (Luiz Carlos Dale Nogari dos Santos)', base: 'https://leilaosantos.com.br' }, // 0 (RS)
+  { fonte: 'LOPESLEILCE', leiloeiro: 'Lopes Leilões (João Lopes Cavalcante)', base: 'https://lopesleiloes.net.br' }, // 0 (CE)
+  { fonte: 'PEREIRALEILCE', leiloeiro: 'Pereira Leilões (Francisco das Chagas Pereira Júnior)', base: 'https://pereiraleiloesce.com.br' }, // 0 (CE)
+  { fonte: 'PORTELARO', leiloeiro: 'Portela Leilões (Francisco Portela Aguiar)', base: 'https://portelaleiloes.com.br' }, // 0 (RO) ≠ PORTELLA
+  { fonte: 'REALIZALEIL', leiloeiro: 'Realiza Leilões (Rabelo Góis)', base: 'https://realizaleiloes.com.br' }, // 0 (SE)
+  { fonte: 'SYDNEYLEIL', leiloeiro: 'Sydney Leilões (Eduardo Sydney Bezerra de Girão)', base: 'https://sydneyleiloes.com.br' }, // 0 (CE)
+  { fonte: 'LOUCOPORLEIL', leiloeiro: 'Louco por Leilões (Matheus Werneck)', base: 'https://leiloarialoucoporleiloes.com.br' }, // 0 (MG)
+  { fonte: 'UNIVERSOLEIL', leiloeiro: 'Universo dos Leilões (Alexsander Pretti Domingos)', base: 'https://universodosleiloes.com.br' }, // 0 (MG)
+  // agilleiloes.com.br redireciona para cá (mesmo leiloeiro, André Fonseca Dias); /lotes/imovel responde 200 e vazio declarado.
+  { fonte: 'MARAURZEDO', leiloeiro: 'Mara Urzedo Leilão (André Fonseca Dias)', base: 'https://maraurzedoleilao.com.br' }, // 0 (MG)
+  // ── 26/10, com lote hoje: TODOS os lotes no coletor real em seco; Total do site × enumerados entre parênteses.
+  { fonte: 'NATALIALEIL', leiloeiro: 'Natália Nunes Leilões', base: 'https://www.natalialeiloes.com.br' }, // 1 de 1 (DF, só com www.)
+  { fonte: 'CARSTENSLEIL', leiloeiro: 'Carstens Leiloeiros (Rosa Lúcia Lopes Carstens)', base: 'https://leiloeiro.online' }, // 1 de 1 (SC)
+  { fonte: 'ALVESLEIL', leiloeiro: 'Alves Leilões (Érica Cristina Alves)', base: 'https://www.alvesleiloes.com.br' }, // 1 de 1 (MG)
+  // Tocantins: o único lote é fração ideal (25%) — sai pela regra de negócio; fica ligado pelo próximo.
+  { fonte: 'TOCANTINSLEIL', leiloeiro: 'Leilões Tocantins (Lucas Fernandes Almeida)', base: 'https://leiloestocantins.com' }, // 1 de 1, 0 pronto (TO)
+  // SCHMITZ Leiloeiros (Eduardo Schmitz, GO/MG/MT/PR/SC): "Total 560 Lotes" = 19 páginas de 30 (+20); a pág. 20
+  // declara vazio. Os ids (22010, 22607–23165) não se repetem com o HAMMERLEIL (17915–18093, Total 604) — catálogos
+  // distintos apesar do sobrenome. Era CLICLEILOES no bloco de reprovados de 29/08 (1 lote naquele dia).
+  { fonte: 'SCHMITZLEIL', leiloeiro: 'Schmitz Leiloeiros Oficiais (Eduardo Schmitz)', base: 'https://clicleiloes.com.br' }, // 560 de 560
+  // ── 26/10, JUCESP (triagem pelo banco de 26/10, `tri2610`): mesma prova dos blocos acima. Base com `www.` (url_final
+  // medida). Cada site tem a sua CDN de bens (dxxxx.cloudfront.net) e faixa de ids própria — nenhum catálogo repetido.
+  // Vazios hoje ("NENHUM LOTE ENCONTRADO" no /lotes/imovel; o Nosso Leilão mostra "Imóveis 0" na home e "RELAÇÃO EM
+  // BREVE" na busca — vazio sem a frase-padrão, grava `vazio` igual):
+  { fonte: 'ANDRADELEIL', leiloeiro: 'Andrade Leilões (Luis Alexandre Andrade)', base: 'https://www.andradeleiloes.com.br' }, // 0 (SP)
+  { fonte: 'BENOZZATI', leiloeiro: 'Benozzati Leilões (George H. R. Benozzati)', base: 'https://www.benozzati.com.br' }, // 0 (SP)
+  { fonte: 'DAMASIOLEIL', leiloeiro: 'Damásio Leilões (Rogério Damásio de Oliveira)', base: 'https://www.damasioleiloes.com.br' }, // 0 (SP)
+  { fonte: 'DESANTILEIL', leiloeiro: 'De Santi Leilões (Farah C. V. de Santi)', base: 'https://www.desantileiloes.com.br' }, // 0 (SP)
+  { fonte: 'EDITALLEIL', leiloeiro: 'Edital Leilões (Silvio Cesar de Jesus Santos)', base: 'https://www.editalleiloes.com.br' }, // 0 (SP)
+  { fonte: 'GLLEILOES', leiloeiro: 'GL Leilões (Mauricio Gomes Leiteiro)', base: 'https://www.glleiloes.com.br' }, // 0 (SP)
+  { fonte: 'LANCELEILSP', leiloeiro: 'Lance Leilões (Galvez Gonçalves)', base: 'https://www.lanceleiloes.com.br' }, // 0 (SP)
+  { fonte: 'TESSARINI', leiloeiro: 'Tessarini Leilões (Adriano Tessarini de Carvalho)', base: 'https://www.tessarinileiloes.com.br' }, // 0 (SP)
+  { fonte: 'PAVANILEIL', leiloeiro: 'Pavani Leilões (Luis Renato Pavani)', base: 'https://www.pavanileiloes.com.br' }, // 0 (SP)
+  { fonte: 'NOSSOLEILAO', leiloeiro: 'Nosso Leilão (Paulo Cesar de Carvalho)', base: 'https://www.nossoleilao.com.br' }, // 0 (SP)
+  // Com lote hoje ("Total N Lotes" do site × enumerados; amostra de lotes no coletor real em seco):
+  { fonte: 'AMARALLEIL', leiloeiro: 'Amaral Leilões (Eder Amaral de Oliveira)', base: 'https://www.amaralleiloes.com.br' }, // 2 de 2 (SP)
+  { fonte: 'BIDMAX', leiloeiro: 'Bidmax Leilões (Ligia Seixas)', base: 'https://www.bidmax.com.br' }, // 11 de 11 (SP)
+  { fonte: 'CARDOSOLEIL', leiloeiro: 'Cardoso Leilões (Emerson Lopes Cardoso)', base: 'https://www.cardosoleiloes.com.br' }, // 5 de 5 (SP)
+  { fonte: 'CENCIN', leiloeiro: 'Cencin Leilões (André Cencin)', base: 'https://www.cencin.com.br' }, // 8 de 8 (SP)
+  { fonte: 'LECAPE', leiloeiro: 'Lecape Leilões (Leonardo de Campos Penin)', base: 'https://www.lecapeleiloes.com.br' }, // 14 de 14 (SP)
+  { fonte: 'LOTTILEIL', leiloeiro: 'Lotti Leilões (Wagner Lotti)', base: 'https://www.lottileiloes.com.br' }, // 23 de 23 (SP)
+  { fonte: 'OCTAVIOLEIL', leiloeiro: 'Octavio Leilões (Octavio de Azevedo Marques)', base: 'https://www.octavioleiloes.com.br' }, // 1 de 1 (SP)
+  { fonte: 'RICOLEIL', leiloeiro: 'Rico Leilões (Marcello Lemos da Cruz e outros)', base: 'https://www.ricoleiloes.com.br' }, // 6 de 6 (SP)
+  { fonte: 'SITELEILOES', leiloeiro: 'Site Leilões (José Luiz Donizete da Silva)', base: 'https://www.siteleiloes.com.br' }, // 595 (SP)
+  { fonte: 'TKLLEILOES', leiloeiro: 'TKL Leilões (Wendell Marcel Calixto Felix)', base: 'https://www.tkl.com.br' }, // 21 de 21 (SP)
+  { fonte: 'TRIBUNALEIL', leiloeiro: 'Tribuna Leilões (Eduardo da Silva Pinto)', base: 'https://www.tribunaleiloes.com.br' }, // 14 de 14 (SP)
+  { fonte: 'WSPLEILOES', leiloeiro: 'WSP Leilões (Wanderley Samuel Pereira)', base: 'https://www.wspleiloes.com.br' }, // 18 de 18 (SP)
+  // FORA: guariglia.com.br (SP) — o banco recusa o certificado TLS do site ("SSL peer certificate"); sem página lida não
+  // há prova de catálogo. Não confundir com GUARIGLIA (guariglialeiloes.com.br, BA), que já coleta.
 ];
 
-// ── REPROVADOS NO MESMO DRY-RUN — ficam FORA, e o registro é o que impede re-tentar às cegas:
+// ── REPROVADOS NO DRY-RUN DE 29/08 — histórico. Em 26/10 os cinco foram REMEDIDOS e entraram (bloco "LIGADOS COM
+// CATÁLOGO VAZIO" e SCHMITZLEIL acima): os quatro "0 enumerados" hoje declaram "nenhum lote encontrado" no próprio
+// /lotes/imovel (vazio legítimo, não catálogo ausente), o CLICLEILOES virou SCHMITZ com 560 lotes e o MARAURZEDO
+// responde 200 pelo banco. O texto abaixo fica como registro do que foi medido naquele dia:
 //   ALVESLEIL     (alvesleiloes.com.br)              0 lotes enumerados via grátis
 //   LOUCOPORLEIL  (leiloarialoucoporleiloes.com.br)  0 lotes enumerados via grátis
 //   UNIVERSOLEIL  (universodosleiloes.com.br)        0 lotes enumerados via grátis
@@ -897,7 +966,14 @@ const VEICULOS_NAO_VALIDADOS = new Set(['PATIOROCHALEIL', 'LEILOPAR', 'WINLEILOE
   'LEVYLEIL', 'ZAGOLEIL', 'BACKLEIL', 'NIEWINSKI', 'LEILBRASILIA', 'SANTIAGOLEIL',
   // 3ª leva (26/10) — mesma razão.
   'ARAGAOLEIL', 'BESTLEIL', 'BRASILSULLEIL', 'CENTRALDOSLEIL', 'COLODETE', 'DIEGOLEIL', 'FALEILOES', 'GRLEILOES', 'GUARIGLIA',
-  'JUNKESLEIL', 'VARONESLEIL', 'LKLEILOES', 'PLUSLEIL', 'QUADRADOLEIL', 'ROSENTALLEIL', 'VALDEIRPEREIRA']);
+  'JUNKESLEIL', 'VARONESLEIL', 'LKLEILOES', 'PLUSLEIL', 'QUADRADOLEIL', 'ROSENTALLEIL', 'VALDEIRPEREIRA',
+  // 4ª leva (26/10 à tarde, vazios incluídos) — mesma razão.
+  'CONCEITOLEIL', 'FELFILILEIL', 'FOCOLEIL', 'GUTEMBERGLEIL', 'KILDARELEIL', 'LUMINALEIL', 'MACEDOLEIL', 'MACHADORJ',
+  'ARGLEILOES', 'JGCARGNELUTTI', 'LEILAOSANTOS', 'LOPESLEILCE', 'PEREIRALEILCE', 'PORTELARO', 'REALIZALEIL', 'SYDNEYLEIL',
+  'LOUCOPORLEIL', 'UNIVERSOLEIL', 'MARAURZEDO', 'NATALIALEIL', 'CARSTENSLEIL', 'ALVESLEIL', 'TOCANTINSLEIL', 'SCHMITZLEIL',
+  'ANDRADELEIL', 'BENOZZATI', 'DAMASIOLEIL', 'DESANTILEIL', 'EDITALLEIL', 'GLLEILOES', 'LANCELEILSP', 'TESSARINI', 'PAVANILEIL',
+  'NOSSOLEILAO', 'AMARALLEIL', 'BIDMAX', 'CARDOSOLEIL', 'CENCIN', 'LECAPE', 'LOTTILEIL', 'OCTAVIOLEIL', 'RICOLEIL',
+  'SITELEILOES', 'TKLLEILOES', 'TRIBUNALEIL', 'WSPLEILOES']);
 
 async function mainVeiculos() {
   const tenantsVeic = TENANTS.filter(t => !VEICULOS_NAO_VALIDADOS.has(t.fonte) || filtro.includes(t.fonte));

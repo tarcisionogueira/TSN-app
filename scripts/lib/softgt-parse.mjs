@@ -21,10 +21,17 @@ export const TENANTS = {
   flex: { fonte: 'FLEXLEILOES', leiloeiro: 'Flex Leilões', base: 'https://www.flexleiloes.com.br', catalogo: '/imoveis/' },
   luiz: { fonte: 'LUIZCARVALHO', leiloeiro: 'Luiz Carvalho Leilões', base: 'https://www.luizleiloes.com.br', catalogo: '/' },
   // 26/10 (3ª leva das Juntas, triagem `junta_2410`): home → leilões → detalhe-lote lidos pelo banco e passados no motor
-  // em seco. FORA com a home sem leilão hoje: araujoleiloes (MT), dalcanaleleiloes e lelialenz (PR).
+  // em seco. Os de home sem leilão (araujo, dalcanale, lelialenz) entraram em 26/10 — bloco abaixo.
   vz: { fonte: 'VZLEILOES', leiloeiro: 'VZ Leilões', base: 'https://vzleiloes.com.br', catalogo: '/' }, // 5 leilões, GO/DF/MG
-  // rmmleiloes.com.br (PR) fica FORA: o único leilão (8 terrenos, TRT Umuarama) é HOJE, 26/10, e nenhum lote sai com
-  // cidade/UF ("situado na cidade de Mariluz-PR" fica no corpo, que o parser não lê) — entra com uma linha no próximo.
+  // 26/10 — LIGADOS COM CATÁLOGO VAZIO (regra do dono: ATIVO em família que já lemos fica ligado mesmo sem lote hoje).
+  // Pelo banco: home 200 com meta author SoftGT, menu "TODOS OS LEILÕES / JUDICIAIS / EXTRAJUDICIAIS" e nenhum link
+  // lotes/<L> ou leiloes/<L>. Fonte que nunca teve lote não entra em fonte_baseline_aprendida: sem alarme.
+  araujo: { fonte: 'ARAUJOLEILMT', leiloeiro: 'Araújo Leilões (Wellington Martins Araújo)', base: 'https://araujoleiloes.com.br', catalogo: '/' }, // 0 (MT)
+  dalcanale: { fonte: 'DALCANALE', leiloeiro: 'Dalcanale Leilões (Lucas Eduardo Dalcanale)', base: 'https://dalcanaleleiloes.com.br', catalogo: '/' }, // 0 (PR)
+  lelialenz: { fonte: 'LELIALENZ', leiloeiro: 'Lelia Lenz Leiloeira', base: 'https://lelialenz.com.br', catalogo: '/' }, // 0 (PR)
+  // rmmleiloes.com.br (PR) fica FORA: o único leilão (8 terrenos, TRT Umuarama) foi em 26/10 e nenhum lote saía com
+  // cidade/UF ("situado na cidade de Mariluz-PR" fica no corpo, que o parser não lê). À tarde a home já veio sem
+  // leilão, mas o defeito é do parser neste tenant, não do catálogo: entra quando o detalhe der cidade.
   // pbcastro.com.br (PR) fica FORA: 21 leilões de 1 lote cada, mas o detalhe deste tenant sai sem data de praça em todos,
   // com cidade em 2 de 11 e com moto/carro (Honda CG 160, Kia Sportage, Fiat Uno) passando como imóvel — pede ajuste do
   // parser antes de entrar.

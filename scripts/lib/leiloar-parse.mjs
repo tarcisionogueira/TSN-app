@@ -49,6 +49,31 @@ export const TENANTS = {
   flaviocosta: { fonte: 'FLAVIOCOSTA', leiloeiro: 'Flávio Costa Leilões', base: 'https://flaviocostaleiloes.com.br', catalogo: '/' },
   jussiara: { fonte: 'JUSSIARALEIL', leiloeiro: 'Jussiara Leilões', base: 'https://jussiaraleiloes.com', catalogo: '/' },
   mrl4: { fonte: 'MRL4LEILOES', leiloeiro: 'MRL4 Leilões', base: 'https://mrl4leiloes.com.br', catalogo: '/' },
+  // 26/10 (regra do dono: leiloeiro ATIVO em família que já lemos fica ligado mesmo sem lote hoje). Prova pelo banco
+  // (pg_net, grátis): o catálogo do motor responde 200 com o rodapé/links da Plataforma Leiloar (/externo/area/…,
+  // /externo/leiloes-passados) e NENHUM link /leilao/<id> — a home vazia da plataforma. Adring lista só o lote 380
+  // "leilao-simulacao-treinamento", que `ehTeste` já descarta. Fonte que nunca teve lote não entra em
+  // fonte_baseline_aprendida, então não há alarme de `zerou`/`regressao` para ela.
+  adring: { fonte: 'ADRINGLEIL', leiloeiro: 'ADring Leilões (Adriano Carlos Oliveira Silva)', base: 'https://adringleiloes.com.br' }, // 0 (DF)
+  almoeda: { fonte: 'ALMOEDALEIL', leiloeiro: 'Almoeda Leilões (Ioneide Maria Fernandes Sampaio)', base: 'https://almoedaleiloes.com.br' }, // 0 (DF)
+  hatory: { fonte: 'HATORYLEIL', leiloeiro: 'Hatory Leilões (Clauberto Fernandes Nascimento Júnior)', base: 'https://hatoryleiloes.com.br' }, // 0 (BA)
+  ml: { fonte: 'MLLEILOES', leiloeiro: 'ML Leilões (Silvio Luiz Silva de Moura Leite)', base: 'https://mlleiloes.com.br' }, // 0 (MT)
+  up: { fonte: 'UPLEILOES', leiloeiro: 'Up Leilões (Eucélia Madalena de Souza)', base: 'https://upleiloes.com.br' }, // 0 (DF)
+  // Curiau e Tenório: hoje só leilão de veículo (UNIFAP; DETRAN "em elaboração", na raiz) — 0 imóvel, o motor descarta o
+  // que não é imóvel. Ligados pelo próximo leilão de imóvel.
+  curiau: { fonte: 'CURIAULEIL', leiloeiro: 'Curiaú Leilões (José Carlos Zingra)', base: 'https://curiauleiloes.com.br' }, // 0 imóvel (AP)
+  // JUCESP/JUCEMG (triagem pelo banco de 26/10, `tri2610`). Adri e Bolsa na RAIZ (/externo/ dá 404; home lista
+  // /leilao/<id>); Federal e OA em /externo/. Leilões e lotes lidos pelo banco e passados no motor em seco.
+  adri: { fonte: 'ADRILEIL', leiloeiro: 'Adri Leilões (Laiza Machado de Oliveira Adri)', base: 'https://www.adrileiloes.com.br', catalogo: '/' }, // 1 leilão (MG)
+  bolsa: { fonte: 'BOLSADELEIL', leiloeiro: 'Bolsa de Leilões', base: 'https://www.bolsadeleiloes.com.br', catalogo: '/' }, // 3 leilões
+  federal: { fonte: 'FEDERALLEIL', leiloeiro: 'Federal Leilões', base: 'https://www.leiloesfederal.com.br' }, // 1 leilão, 7 lotes
+  oa: { fonte: 'OALEILOES', leiloeiro: 'OA Leilões', base: 'https://www.oaleiloes.com.br' }, // 8 leilões
+  tenorio: { fonte: 'TENORIOLEIL', leiloeiro: 'Tenório Leilões (Luis Guilherme Tenório)', base: 'https://tenorioleiloes.com.br', catalogo: '/' }, // 0 imóvel (MS)
+  // FORA (26/10): prosperarleiloes (GO) — a home lista 8 leilões de imóvel, mas a página /externo/leilao/<id> deste tenant
+  // não tem NENHUM link /lote/ (só o auditório ao vivo); o motor enumera só os 5 lotes em destaque na home (3 prontos no
+  // seco): 5 de ≥ 8, abaixo dos 90% de cobertura — pede recon de onde o lote mora; brasilialeiloes (só o "leilao-teste" 558 — site de teste/simulação); fkleiloes e salgueiroleiloes
+  // (/externo/ 404 e a raiz é uma casca vazia, só o rodapé "Copyright Plataforma Leiloar" — não há catálogo que prove
+  // onde o leilão apareceria).
 };
 
 // Leilão/lote de TESTE da plataforma (brasilialeiloes, rodrigo, IPC, marquesbarreto, lucasignacio — 24/10) e de
