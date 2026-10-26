@@ -42,6 +42,13 @@ on:
       - 'scripts/scraper-leilaoeletronico.mjs'
       - 'scripts/lib/suportev2-parse.mjs'
       - 'scripts/scraper-suportev2.mjs'
+      - 'scripts/lib/suporte-next-parse.mjs'
+      - 'scripts/lib/suporte-classico-parse.mjs'
+      - 'scripts/lib/motor/fontes/lancevip.mjs'
+      - 'scripts/lib/motor/fontes/vixleiloes.mjs'
+      - 'scripts/lib/motor/fontes/portaldosleiloes.mjs'
+      - 'scripts/lib/motor/fontes/suporteclassico.mjs'
+      - 'scripts/scraper-suportenext.mjs'
       - 'scripts/lib/leilovia-parse.mjs'
       - 'scripts/lib/motor/fontes/leilovia.mjs'
       - 'scripts/scraper-leilovia.mjs'
@@ -89,7 +96,7 @@ on:
   workflow_dispatch:
     inputs:
       fontes:
-        description: 'csv: softgt,nortedeminas,leilaoeletronico,suportev2,leilovia,labasoft,baston,cassiano,arnaldo,novaserrana(recon),alfa,hasta,nordeste,nordeste_veiculos,jeleiloes,leilaoindex,rocha,albertomacedo,francoleiloes,simon,globo,leje,freitas,leiloar,lgcorretor,nakakogue,astavero,suporteoferta,comprei'
+        description: 'csv: softgt,nortedeminas,leilaoeletronico,suportev2,suportenext,leilovia,labasoft,baston,cassiano,arnaldo,novaserrana(recon),alfa,hasta,nordeste,nordeste_veiculos,jeleiloes,leilaoindex,rocha,albertomacedo,francoleiloes,simon,globo,leje,freitas,leiloar,lgcorretor,nakakogue,astavero,suporteoferta,comprei'
         required: false
         default: 'alfa,nordeste'
       gravar:
@@ -257,6 +264,17 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           SUPORTEV2_DRYRUN: ${{ env.DRYRUN_PADRAO }}
         run: node scripts/scraper-suportev2.mjs
+
+      # 26/10: os fronts Next.js NOVOS da Suporte que nenhum parser lia — LanceVIP (~26 imóveis, RO/PR/SC), VIX (ES),
+      # Portal dos Leilões (AL, catálogo de imóveis vazio hoje) — e o front clássico /categoria/ (Simões, VJ, Marco
+      # Aurélio; vazios ou só lote encerrado hoje). Ligados mesmo vazios. Uma fonte por site; só via grátis.
+      - name: Suporte Next (LanceVIP / VIX / Portal dos Leilões / clássico)
+        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'suportenext')) }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          SUPORTENEXT_DRYRUN: ${{ env.DRYRUN_PADRAO }}
+        run: node scripts/scraper-suportenext.mjs
 
       - name: Baston
         if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'baston')) }}
@@ -436,12 +454,12 @@ jobs:
       # VEÍCULOS das fontes do motor deste job (21/10, pedido do dono): JE/K Leilões (/veiculos), Simon
       # (/leiloes/veiculos), Nakakogue (/lotes/consulta/2). Mesmo parser de cada fonte; conversão e pátio em
       # lib/veiculo-do-lote.mjs. Só via grátis (VEIC_BD desligado).
-      - name: Veículos (Globo, JE, Simon, Nakakogue, Suporte v2)
+      - name: Veículos (Globo, JE, Simon, Nakakogue, Suporte v2, VIX, LanceVIP)
         if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'veiculos')) }}
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          VEIC_FONTES: globo,jeleiloes,simon,nakakogue,suportev2
+          VEIC_FONTES: globo,jeleiloes,simon,nakakogue,suportev2,vixleiloes,lancevip
           VEIC_DRYRUN: ${{ env.DRYRUN_PADRAO }}
           VEIC_MAX_LOTES: '80'
         run: node scripts/scraper-veiculos-motor.mjs

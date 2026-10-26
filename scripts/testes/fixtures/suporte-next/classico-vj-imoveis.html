@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    
+
+            
+    
+                <title>Imóveis em leilão | VJ Leilões</title>
+    
+                        
+
+        <!-- Renders a link tag (if your module requires any CSS)
+              -->
+    
+
+    
+    
+    
+    
+
+    <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+    <!-- WARNING: Respond.js doesn't work if you view the page via file:// -->
+    <!--[if lt IE 9]>
+    
+    
+    <![endif]-->
+</head>
+    <body class="">
+<div id="filterOverlay" class="filter-overlay hide">
+    <div class="spinner-border" role="status">
+        <span class="sr-only">Aguarde...</span>
+    </div>
+</div>
+
+<header>
+	<div class="row-1">
+		<div class="center">
+			<p><a href="/cdn-cgi/l/email-protection#c5b3a4a9b1a0b7ebafaab7a2a085b0aaa9eba6aaa8eba7b7"><span class="__cf_email__" data-cfemail="7e081f120a1b0c5014110c191b3e0b1112501d1113501c0c">[email&#160;protected]</span></a> | <a href="tel:(34) 9 9841-6427">(34) 9 9841-6427</a></p>
+			<ul class="list-social">
+				
+				
+				
+				
+				
+							</ul>
+		</div><!-- END Center -->
+	</div><!-- END Row 1 -->
+
+	<div class="row-2">
+		<div class="center">
+			<div class="cont-logo">
+				<a href="/" class="logo">Valter Jorge Fernandes Leiloeiro</a>
+			</div>
+
+			<nav>
+				<div class="btnMenu">
+	                <div class="bar1"></div>
+	                <div class="bar2"></div>
+	                <div class="bar3"></div>
+	            </div>
+                    
+				<ul class="menu">
+					<li class="leiloes">
+						<a href="/leiloes">Leilões</a>
+					</li>
+					<li class="leiloeiro">
+						<a href="/leiloeiro">Leiloeiro</a>
+					</li>
+					<li class="funcionamento">
+						<a href="/funcionamento">Dúvidas frequentes</a>
+					</li>
+					<li class="">
+						<a href="/#newsletter" class="nav-news">Newsletter</a>
+					</li>
+					<li class="blog">
+						<a href="/blog" class="nav-blog">Blog</a>
+					</li>
+					<li class="contato">
+						<a href="/contato">Contato</a>
+					</li>
+				</ul>
+			</nav>
+
+			<div class="cont-auth">
+				<ul>
+					<li><a href=""><i class="fas fa-mobile-alt"></i> App</a></li>
+					<li class="show-logged">
+                        <div class="logged-in-menu">Olá, <strong id="logged-username"></strong>!</div>
+                    </li>
+                    <li class="show-logged">
+                        <a class="btn btn-dark text-white btn-xs" href="/conta">Minha conta</a>
+                    </li>
+					<li><a href="/cadastro" class="cadastro hide-logged">Cadastro</a></li>
+					<li><a href="/login" class="hide-logged">Login</a></li>
+				</ul>
+			</div>
+		</div><!-- END Center -->
+	</div><!-- END Row 2 -->
+</header>
+    <div id="app">
+                        <div class="center-1200 mt-4 mb-4">
+            <form id="filtrosAvancados" action="/busca" method="get">
+                <div class="form-row mt-4">
+    <div class="form-group col-md-3">
+        <label for="tipoId">Tipo do Bem</label>
+        <select name="tipoId" id="tipoId" class="form-control filtro-avancado-tipos-bem" data-filtro="tipos-bem">
+            <option value="">Qualquer</option>
+        </select>
+    </div>
+
+    <div class="form-group col-md-3">
+        <label for="localizacao">Localização</label>
+        <select name="localizacao" id="localizacao" class="form-control filtro-avancado-localizacao"
+                data-filtro="localizacao">
+            <option value="" selected>Qualquer</option>
+        </select>
+    </div>
+
+    <div class="form-group col-md-3">
+        <label for="tipoLeilao">Tipo Leilão</label>
+        <select id="tipoLeilao" name="tipoLeilao" class="form-control">
+            <option value="" selected>Qualquer</option>
+            <option>Judicial</option>
+            <option>Extrajudicial</option>
+            <option>Venda direta</option>
+        </select>
+    </div>
+
+    <div class="form-group col-md-3">
+        <label for="valor">Valor</label>
+        <select id="valor" name="valor" class="form-control">
+            <option value="" selected>Escolha...</option>
+            <option value="0...1000">Até R$1.000</option>
+            <option value="1001...5000">R$1.001 Até R$5.000</option>
+            <option value="1001...5000">R$5.001 Até R$10.000</option>
+            <option value="1001...5000">R$10.001 Até R$50.000</option>
+            <option value="1001...5000">R$50.001 Até R$100.000</option>
+            <option value="100000">Acima de R$100.000</option>
+        </select>
+    </div>
+
+</div>
+
+<div class="form-row">
+    <div class="form-group col-md-3">
+        <label for="comitente">Comitente</label>
+        <select id="comitente" name="comitente" class="form-control filtro-avancado-comitente" data-filtro="comitente">
+            <option value="" selected>Qualquer</option>
+        </select>
+    </div>
+
+    <div class="form-group col-md-3">
+        <label for="parcelamento">Parcelamento</label>
+        <select id="parcelamento" name="parcelamento" class="form-control">
+            <option value="" selected>Qualquer</option>
+            <option>Permite parcelamento</option>
+            <option>Não permite parcelamento</option>
+        </select>
+    </div>
+
+    <div class="form-group col-md-3">
+        <label for="marca">Marca</label>
+        <select id="marca" name="marca" class="form-control filtro-avancado-marca" data-filtro="marca">
+            <option value="" selected>Qualquer</option>
+        </select>
+    </div>
+
+    <div class="form-group col-md-3">
+        <label for="modelo">Modelo</label>
+        <select id="modelo" name="modelo" class="form-control filtro-avancado-modelo" data-filtro="modelo">
+            <option value="" selected>Qualquer</option>
+        </select>
+    </div>
+    <div class="form-group col-md-12">
+        <label for="buscaAvancada">Pesquisar por palavra chave <small>(opcional)</small></label>
+        <input name="busca" id="buscaAvancada" class="form-control" type="text"/>
+    </div>
+</div>
+
+<div class="text-center">
+    <input name="bf" class="form-control" type="hidden" value="1"/>
+    <button type="submit" class="btn btn-dark">Pesquisar</button>
+</div>            </form>
+        </div>
+                <div class="leilao center-1200">
+            <div class="options">
+                <div class="left">
+                    <form class="form-inline">
+                        <div class="form-group">
+                            <input name="busca" size="28"
+                                   placeholder="Buscar no site"
+                                   value="" class="form-control form-control-sm">
+                            <button class="btn btn-sm"><i class="fas fa-search"></i></button>
+                        </div>
+                    </form>
+                </div>
+                <div class="exibicao right">
+                                        <div class="hidden-mobile">
+                        <span class="mr-2">Forma de exibição:</span>
+                        <a class="exibicao-ico selected" data-type="lista">
+                            
+                        </a>
+                        <a class="exibicao-ico" data-type="grade">
+                            
+                        </a>
+                                            </div>
+                    <div class="ml-4 ordering">
+                        <span>Ordenar por:</span>
+                        <select class="ml-2">
+                            <option value="lotNumber:asc;subLotNumber:asc">Número de Lote</option>
+                            <option value="price:desc">Maior Valor</option>
+                            <option value="price:asc">Menor Valor</option>
+                            <option value="visits:desc">Mais Visitados</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="leilao center-1200">
+            <!-- FILTROS -->
+            <div class="filtros">
+    
+        <form id="filterForm" name="filtrosLeilao" method="post" action="https://www.vjleiloes.com.br/categoria?page=1">
+        </form>
+
+    <div class="lotes-tipo">
+    <div class="title">Pesquise em nossos leilões</div>
+    <ul>
+            </ul>
+</div>
+</div>
+            <!-- LISTA -->
+            <div class="lotes-container">
+                <div class="list-lotes lista">
+    </div>                            </div>
+        </div>
+        <div aria-live="polite" aria-atomic="true">
+    <!-- Position it -->
+    <div>
+
+        <!-- Then put toasts within -->
+        <div class="toast" v-for="(alert, index) in alerts" :key="index" role="alert" aria-live="assertive" aria-atomic="true" data-delay="10000">
+            <div class="toast-header">
+                <div class="mr-2">
+                    
+                </div>
+                <strong class="mr-auto"><% alert.title %></strong>
+                <small class="text-muted"><% alert.time %></small>
+                <button type="button" class="ml-2 mb-1 close" data-dismiss="toast" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="toast-body">
+                <% alert.message %>
+            </div>
+        </div>
+
+    </div>
+</div>    </div>
+
+<footer>
+	<div class="center">
+		<div class="cont-colunas">
+			<div>
+				<h6>Nosso Escritório</h6>
+				<ul>
+					<li><a href="/leiloeiro">Sobre Nós</a></li>
+					<li><a href="/leiloes">Leilões</a></li>
+					<li><a href="/funcionamento">Como Participar</a></li>
+					<li><a href="/contato">Fale Conosco</a></li>
+				</ul>
+			</div><!-- END Col 1 -->
+
+			<div>
+				<h6>Atendimento</h6>
+				<ul>
+					<li>Valter Jorge Fernandes</li>
+					<li>Matrícula: JUCEMG 208</li>
+					<li>Av. João Naves de Ávila, 6105 - B. Sta Mônica <div class="break"></div> Uberlândia/MG CEP: 38408-288</li>
+					<li>(34) 9 9841-6427</li>
+					<li><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="7a0c1b160e1f08541015081d1f3a0f151654191517541808">[email&#160;protected]</a></li>
+				</ul>
+			</div><!-- END Col 2 -->
+
+			<div>
+				<h6>Siga-nos</h6>
+				<ul class="lista-social">
+					
+					
+					
+					
+					
+									</ul>
+
+				<div class="show-selo">
+					<a href="https://www.suporteleiloes.com/" target="_blank"><img src="/build/images/selo.79a9aa8c.png" alt="Selo Suporte Leilões"></a>
+				</div>
+			</div><!-- END Col 3 -->
+		</div>
+	</div><!-- END Center -->
+
+	<div class="copy">
+		<div class="center">
+			<p>&copy; 2020 - Valter Jorge Fernandes Leiloeiro - Todos os direitos reservados.</p>
+					</div><!-- END Center -->
+	</div>
+</footer>
+
+    
+    
+
+    
+    
+        
+
+    <!-- Renders app.js & a webpack runtime.js file
+        
+         -->
+
+    
+
+</body>
+</html>

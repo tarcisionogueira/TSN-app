@@ -12,5 +12,8 @@ import globo from './fontes/globo.mjs';
 import leilaobrasil from './fontes/leilaobrasil.mjs';
 import ares from './fontes/ares.mjs';
 import suportev2 from './fontes/suportev2.mjs';
+// 26/10: fronts Next.js novos da Suporte (LanceVIP: carros/motos/caminhões; VIX: veículos dos eventos abertos).
+import lancevip from './fontes/lancevip.mjs';
+import vixleiloes from './fontes/vixleiloes.mjs';
 
-export const FONTES_VEICULOS = [freitas, globo, leilaobrasil, mgl, jeleiloes, simon, nakakogue, ares, suportev2];
+export const FONTES_VEICULOS = [freitas, globo, leilaobrasil, mgl, jeleiloes, simon, nakakogue, ares, suportev2, vixleiloes, lancevip];

@@ -47,7 +47,7 @@ export async function enumerar(fetchFonte, tenant, cfg, { maxPages, debug, semBD
   let fetchOk = false, via = null, eventosCount = null, htmlPagina1 = null, htmlEvento1 = null, eventosDeclaramVazio = false;
   // `cortada` (22/10, #277): a lista só prova AUSÊNCIA se foi lida inteira — teto de páginas/eventos batido com
   // lote novo chegando, ou evento que não abriu, deixam lote do site fora da lista sem ele ter saído.
-  let cortada = null;
+  let cortada = null, htmlAnterior = null;
   // Teto batido só é CORTE se a página tem link para a próxima ("?page=N+1"): fonte que lê 1 página por evento
   // (BASTON, ALBERTOMACEDO) ou cujo catálogo cabe no teto acusava "lista incompleta" toda rodada (23/10) e a
   // varredura nunca rodava. Paginação só por script não deixa link — aí vale o freio relativo da varredura.
@@ -59,7 +59,11 @@ export async function enumerar(fetchFonte, tenant, cfg, { maxPages, debug, semBD
     const url = `${tenant.base}${cat}${p > 1 ? `${cat.includes('?') ? '&' : '?'}${cfg.paginaParam}=${p}` : ''}`; // tenant.catalogo: id de categoria varia por site (Viva, 10/10)
     const r = await fetchFonte(url, { semBD });
     // Página 1 recusada: guarda o `via` da FALHA (ex.: 'dom-403') para o motivo em fonte_saude.
-    if (!r.html) { if (p === 1) via = r.via || null; break; }
+    // Página SEGUINTE que não abre é lista cortada, não fim do catálogo (26/10): sem isto a varredura de sumidos
+    // tratava os lotes das páginas não lidas como "saíram do site".
+    // Só conta se a página anterior LINKAVA esta: o pedido de uma página além da última (404 em alguns sites) é o fim.
+    if (!r.html) { if (p === 1) via = r.via || null; else if (temProxima(htmlAnterior, p - 1)) cortada = `página ${p} do catálogo não abriu`; break; }
+    htmlAnterior = r.html;
     fetchOk = true; via = via || r.via;
     if (p === 1) htmlPagina1 = r.html;
     const antes = urls.size, antesEv = eventosPaginas.size;
@@ -72,6 +76,16 @@ export async function enumerar(fetchFonte, tenant, cfg, { maxPages, debug, semBD
     if (urls.size === antes && eventosPaginas.size === antesEv) break;
     if (p === maxPages && temProxima(r.html, p)) cortada = `catálogo no teto de ${maxPages} página(s)`;
     await sleep(400);
+  }
+  // TOTAL DECLARADO PELO SITE (26/10, lição do FREITAS: rolagem infinita lida como uma página). Fonte que expõe o
+  // contador ("Exibindo 1–12 de 26") declara `parse.totalDoCatalogo(html)`: enumerar menos que isso é lista cortada
+  // — a varredura de sumidos não roda sobre ela. Sem o gancho, nada muda.
+  if (fetchOk && cfg.parse.totalDoCatalogo && !cfg.parse.extrairUrlsDeEvento) {
+    const total = cfg.parse.totalDoCatalogo(htmlPagina1);
+    if (total != null) {
+      console.log(`   [${tenant.fonte}] cobertura do catálogo: ${urls.size} de ${total} que o site declara`);
+      if (urls.size < total && !cortada) cortada = `enumerou ${urls.size} de ${total} que o site declara`;
+    }
   }
 
   // NÍVEL 2 (opcional — fontes em que o catálogo lista EVENTOS e o lote mora dentro, ex.:
@@ -109,10 +123,16 @@ export async function enumerar(fetchFonte, tenant, cfg, { maxPages, debug, semBD
     eventosDeclaramVazio = eventos.length > 0;
     for (const ev of eventos) {
       const antesEvento = urls.size;
+      let declarado = null, htmlEvAnterior = null;   // `parse.totalDoEvento` (26/10): "80 lotes encontrados" — o que o evento diz ter
       for (let p = 1; p <= maxPagEvento; p++) {
         const sep = ev.includes('?') ? '&' : '?';
         const re = await fetchFonte(p > 1 ? `${ev}${sep}${cfg.paginaParam}=${p}` : ev, { semBD });
-        if (!re.html) { if (p === 1) { eventosDeclaramVazio = false; cortada = 'evento não abriu'; } break; }
+        if (!re.html) {
+          if (p === 1) { eventosDeclaramVazio = false; cortada = 'evento não abriu'; } else if (temProxima(htmlEvAnterior, p - 1)) cortada = `página ${p} de evento não abriu`;
+          break;
+        }
+        htmlEvAnterior = re.html;
+        if (p === 1 && cfg.parse.totalDoEvento) declarado = cfg.parse.totalDoEvento(re.html);
         if (p === 1 && (cfg.parse.extrairUrlsDeLote(re.html, tenant.base).size || !siteDeclaraVazio(re.html))) eventosDeclaramVazio = false;
         if (!htmlEvento1) htmlEvento1 = { url: ev, html: re.html };
         const antes = urls.size;
@@ -125,7 +145,9 @@ export async function enumerar(fetchFonte, tenant, cfg, { maxPages, debug, semBD
         if (p === maxPagEvento && temProxima(re.html, p)) cortada = `evento no teto de ${maxPagEvento} página(s)`;
         await sleep(400);
       }
-      if (!debug) console.log(`   [${tenant.fonte}] evento ${ev.slice(-40)}: +${urls.size - antesEvento}`);
+      if (!debug) console.log(`   [${tenant.fonte}] evento ${ev.slice(-40)}: +${urls.size - antesEvento}${declarado != null ? ` de ${declarado} declarados` : ''}`);
+      // Lote repetido entre eventos conta uma vez só: compara o que ESTE evento listou de novo com o que ele declara.
+      if (declarado != null && urls.size - antesEvento < declarado && !cortada) cortada = `evento ${ev.slice(-40)}: ${urls.size - antesEvento} de ${declarado} declarados`;
       await sleep(400);
     }
   }

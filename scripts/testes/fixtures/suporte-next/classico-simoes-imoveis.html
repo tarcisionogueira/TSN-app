@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    
+
+            
+    
+                <title>Imóveis em leilão | Simões Leilões</title>
+    
+                        
+
+        <!-- Renders a link tag (if your module requires any CSS)
+              -->
+    
+
+    
+    
+    
+    
+
+    <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+    <!-- WARNING: Respond.js doesn't work if you view the page via file:// -->
+    <!--[if lt IE 9]>
+    
+    
+    <![endif]-->
+</head>
+    <body class="">
+<div id="filterOverlay" class="filter-overlay hide">
+    <div class="spinner-border" role="status">
+        <span class="sr-only">Aguarde...</span>
+    </div>
+</div>
+
+<header>
+    <div class="center">
+        <div class="cont-logo">
+            <a href="/" class="logo">Simões Leilõess</a>
+        </div><!-- / END Logo -->
+
+        <nav>
+            <div class="btnMenu">
+                <div class="bar1"></div>
+                <div class="bar2"></div>
+                <div class="bar3"></div>
+            </div>
+
+            <div class="auth-mobile">
+                <ul>
+                    <li class="cadastro show-logged">
+                        <div class="logged-in-menu">
+                            <small>Olá, <strong id="logged-username"></strong>!</small>
+                        </div>
+                    </li>
+                    <li class="login show-logged">
+                        <a class="text-primary" href="/conta">Minha conta</a>
+                    </li>
+                    <li class="cadastro hide-logged"><a href="/cadastro">Cadastre-se</a></li>
+                    <li class="login hide-logged"><a href="/login">Login</a></li>
+                </ul>
+            </div>
+
+            <ul class="menu">
+                <li class="home"><a href="/">Home</a></li>
+                <li class="leiloes"><a href="/leiloes">Leilões</a></li>
+                <li class="leiloeiro"><a href="/leiloeiro">Leiloeiro</a></li>
+                <li class="funcionamento"><a href="/funcionamento">Dúvidas</a></li>
+                <li class="contato"><a href="/contato">Contato</a></li>
+<!--                <li class="documento"><a href="#">Meu documento chegou?</a></li>-->
+
+                <div class="auth">
+                    <li class="cadastro show-logged">
+                        <div class="logged-in-menu">
+                            <small>Olá, <strong id="logged-username"></strong>!</small>
+                        </div>
+                    </li>
+                    <li class="login show-logged">
+                        <a class="text-primary" href="/conta">Minha conta</a>
+                    </li>
+                    
+                    <li class="cadastro hide-logged"><a href="/cadastro">Cadastre-se</a></li>
+                    <li class="login hide-logged"><a href="/login">Login</a></li>
+                </div><!-- / END Auth -->
+            </ul>
+        </nav><!-- / END Menu -->
+    </div><!-- / END Center -->
+</header>
+<div class="clearfloat"></div>
+    <div id="app">
+                <div class="leilao center-1200">
+            <div class="options">
+                <div class="left">
+                    <form class="form-inline">
+                        <div class="form-group">
+                            <input name="busca" size="28"
+                                   placeholder="Buscar no site"
+                                   value="" class="form-control form-control-sm">
+                            <button class="btn btn-sm"><i class="fas fa-search"></i></button>
+                        </div>
+                    </form>
+                </div>
+                <div class="exibicao right">
+                    <div>
+                        <a href="/print/leiloes/" target="_blank" class="btn btn-md mr-2"><i class="fas fa-print"></i> Imprimir</a>
+                    </div>
+                    <div class="hidden-mobile">
+                        <span class="mr-2">Forma de exibição:</span>
+                        <a class="exibicao-ico selected" data-type="lista">
+                            
+                        </a>
+                        <a class="exibicao-ico" data-type="grade">
+                            
+                        </a>
+                                            </div>
+                    <div class="ml-4 ordering">
+                        <span>Ordenar por:</span>
+                        <select class="ml-2">
+                            <option value="lotNumber:asc;subLotNumber:asc">Número de Lote</option>
+                            <option value="price:desc">Maior Valor</option>
+                            <option value="price:asc">Menor Valor</option>
+                            <option value="visits:desc">Mais Visitados</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="leilao center-1200">
+            <!-- FILTROS -->
+            <div class="filtros">
+    
+    <div class="lotes-tipo">
+    <div class="title">Pesquise em nossos leilões</div>
+    <ul>
+                                                                                    <li>
+                <a href="/busca-tipo/1/Ve%C3%ADculos" class="">
+                    <div class="icon">
+                        <i class="fa fa-car"></i>
+                    </div>
+                    <div class="content">
+                        Veículos
+                    </div>
+                    <div class="total">8</div>
+                </a>
+            </li>
+            </ul>
+</div>
+
+    
+</div>
+            <!-- LISTA -->
+            <div class="lotes-container">
+                                <div class="list-lotes lista">
+    </div>            </div>
+        </div>
+        <div aria-live="polite" aria-atomic="true">
+    <!-- Position it -->
+    <div>
+
+        <!-- Then put toasts within -->
+        <div class="toast" v-for="(alert, index) in alerts" :key="index" role="alert" aria-live="assertive" aria-atomic="true" data-delay="10000">
+            <div class="toast-header">
+                <div class="mr-2">
+                    
+                </div>
+                <strong class="mr-auto"><% alert.title %></strong>
+                <small class="text-muted"><% alert.time %></small>
+                <button type="button" class="ml-2 mb-1 close" data-dismiss="toast" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="toast-body">
+                <% alert.message %>
+            </div>
+        </div>
+
+    </div>
+</div>    </div>
+
+<div class="clearfloat"></div>
+<footer>
+    <div class="center">
+        <div class="cont-colunas">
+            <div>
+                <h6>Nossa Empresa</h6>
+                <ul>
+                    <li>
+                        <a href="/leiloeiro">Leiloeiro</a>
+                    </li>
+                    <li><a href="/leiloes">Leilões</a></li>
+                    <li><a href="/funcionamento">Dúvidas</a></li>
+                    <li><a href="/contato">Contato</a></li>
+                </ul>
+            </div><!-- END col -->
+
+            <div>
+                <h6>Informações</h6>
+                <ul>
+                    <li>
+                        <a href="#">Política de Privacidade</a>
+                    </li>
+                    <li>
+                        <a href="#">Termos de Uso</a>
+                    </li>
+                    <li>
+                        <a href="#">Documentos</a>
+                    </li>
+                    <li>
+                        <a href="#">Mapa do site</a>
+                    </li>
+                </ul>
+            </div><!-- END col -->
+
+            <div>
+                <h6>Fale Conosco</h6>
+
+                <ul>
+                    <li>João Simões de Almeida Júnior</li>
+                    <li>Matrícula JUCEMG N. 1215</li>
+                    <li>
+                        Rua Piauí, 114A, Bairro Boa Vista,
+                        <div class="break"></div>
+                        Sete Lagoas/MG, CEP 35700-092
+                    </li>
+					<li>(35) 99985-6143</li>
+					<li>(31) 99795-8804</li>
+					<li><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="72011b1f1d17011e171b1e1d1701321a1d061f131b1e5c111d1f">[email&#160;protected]</a></li>
+                                                        </ul>
+            </div><!-- END col -->
+
+            <div>
+                <h6>Siga-nos</h6>
+                <ul class="lista-social">
+                                                                                                                                                <li><a href="https://api.whatsapp.com/send?phone=5535999856143&amp;text=Ol%C3%A1%2C%20gostaria%20de%20falar%20sobre%20os%20leil%C3%B5es." target="_blank"><i class="fab fa-whatsapp"></i></a></li>
+                                    </ul>
+
+                <div class="selo">
+                    <a href="https://www.suporteleiloes.com/" target="_blank"><img src="/build/images/selo.2073d5a2.png" alt="Selo Suporte Leilões"></a>
+                </div>
+            </div><!-- END col -->
+
+        </div>
+    </div><!-- / END Center -->
+
+    <div class="copy">
+        <p>2021 &copy; Simões Leilões. <span>Desenvolvido pela <a href="http://suporteleiloes.com/" target="_blank">Suporte Leilões</a></span>
+        </p>
+    </div><!-- / END Copy -->
+</footer>
+
+    
+
+    
+        
+
+    <!-- Renders app.js & a webpack runtime.js file
+        
+         -->
+
+    
+
+</body>
+</html>
