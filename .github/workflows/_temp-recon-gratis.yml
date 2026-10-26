@@ -1,0 +1,31 @@
+name: Recon grátis (fetch puro do runner, GET/POST de formulário)
+
+# Mede páginas do IP do GitHub com fetch puro — inclusive POST de formulário, que o pg_net não faz
+# (plataforma MSIS: o catálogo inteiro só vem por POST acaoDest/pag). Só disparo manual. Grava o corpo
+# em recon_dump (origem recon-gratis) quando dump=1, para leitura pelo banco. 0 Bright Data, 0 Firecrawl.
+on:
+  workflow_dispatch:
+    inputs:
+      reqs:
+        description: 'JSON [{chave,url,form?,json?,contar?}]'
+        required: true
+      dump:
+        description: '1 = grava o corpo em recon_dump'
+        required: false
+        default: '1'
+
+jobs:
+  recon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Recon
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          RECON_REQS: ${{ github.event.inputs.reqs }}
+          RECON_DUMP: ${{ github.event.inputs.dump }}
+        run: node scripts/recon-gratis.mjs
