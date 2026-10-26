@@ -5668,6 +5668,16 @@ const SUPORTE_TENANTS = [
   { domain: 'mauriciomarizleiloes.com.br', leiloeiro: 'Maurício Mariz Leilões' },
   { domain: 'renannerisleiloeiro.com.br', leiloeiro: 'Renan Neris Leilões' },
   { domain: 'pineiroleiloes.com.br', leiloeiro: 'Piñeiro Leilões (Pierre Novo Piñeiro)' },
+  // 26/10 (2ª passada, varredura dos 138 domínios `nao_coletado` das Juntas sem plataforma conhecida — home de cada um
+  // pelo banco, pg_net): impressão digital da Suporte (`static.suporteleiloes.com.br/<cliente>`, `arrematante.<site>`,
+  // /buscador) e o MESMO /buscador?categoria=2 com <title> "Buscador - <site>". Bessa: 1 `lote-main` (rural 37,44 ha
+  // em Tarumirim/MG, "Aberto para Lances", R$ 1,5 mi) — a home anuncia 1 evento (Tarumirim) e é esse lote: 1 de 1.
+  // Magliano (PB) e Salles (ES): buscador 200 e nenhum lote, home sem evento — ligados vazios (regra do dono).
+  // FORA: djanirleiloes.com.br — o /buscador devolve a home (sem <title>), o único evento é "sucata veículo Fiat
+  // Fiorino" e o static é o da Daros (`darosleiloescombr`), cujo buscador também vem vazio e sem nome de site.
+  { domain: 'bessaleiloes.com.br', leiloeiro: 'Bessa Leilões (Paulo Roberto Araújo de Oliveira Bessa)' },
+  { domain: 'maglianoleiloes.com.br', leiloeiro: 'Magliano Leilões (Raphael Queiroga Magliano)' },
+  { domain: 'sallesleiloes.com.br', leiloeiro: 'Salles Leilões (Liliane de Narde Salles)' },
   // `donizetteleiloes.leilao.br` é o MESMO site do .com.br (mesmo `arrematante.` e mesmo
   // static). Fora de propósito: o `tenantKey` deriva do domínio antes do primeiro ponto, então
   // os dois gerariam o mesmo `fonte_id` e um sobrescreveria o outro sem nada aparecer.
