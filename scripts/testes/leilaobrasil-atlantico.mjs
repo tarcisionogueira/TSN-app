@@ -17,3 +17,14 @@ assert.equal(r.link_foto, foto);
 assert.equal(parseLoteObj({ ...lote, valorMinimo: 120000 }).valor_minimo, 120000);
 assert.equal(parseLoteObj({ ...lote, bem: { ...lote.bem, image: { full: { url: 'https://x.com/a.jpg' } } } }).link_foto, 'https://x.com/a.jpg');
 console.log('leilaobrasil-atlantico: ok');
+
+// O `var lote` do Atlântico não tem `bem`: cidade/UF pelo fim do título e foto pela página.
+import { bemDaPagina, parseDetalhe } from '../lib/leilaobrasil-parse.mjs';
+const html = `<script>var lote = ${JSON.stringify({ id: 1147, descricao: 'Imóvel residencial, localizado na Rua Castelo Branco, 415, Centro, Baraúna - PB', valorAvaliacao: 0, valorMinimo: 0, valorInicial: 90000, valorInicial2: 45000, leilao: { id: 500, judicial: true } }).replace(/\//g, '\\/')};</script>`
+  + `<img src="${foto}">`;
+const b = bemDaPagina({ descricao: 'Imóvel residencial, localizado na Rua Castelo Branco, 415, Centro, Baraúna - PB' }, html);
+assert.equal(b.cidade, 'Baraúna'); assert.equal(b.uf, 'PB');
+assert.equal(bemDaPagina({ descricao: 'Terreno em Alto Parnaíba - MA' }, '').cidade, 'Alto Parnaíba');
+const d = parseDetalhe(html, 'https://atlanticoleiloes.com.br/eventos/leilao/x/lote/1147/x');
+assert.equal(d.valor_minimo, 90000); assert.equal(d.link_foto, foto); assert.equal(d.estado, 'PB');
+console.log('leilaobrasil-atlantico (sem bem): ok');

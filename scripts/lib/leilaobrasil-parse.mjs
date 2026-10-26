@@ -150,8 +150,21 @@ function parseDetalheFallback(html, url) {
 
 export function parseDetalhe(html, url) {
   const lote = extrairJsonLote(html);
+  if (lote && !lote.bem && lote.descricao && lote.leilao) return parseLoteObj({ ...lote, bem: bemDaPagina(lote, html) });
   if (!lote || !lote.bem) return parseDetalheFallback(html, url);
   return parseLoteObj(lote);
+}
+
+// ATLÂNTICO (26/10): o `var lote` deste front NÃO tem `bem` (as chaves param em lote.descricao/leilao). O título
+// diz o lugar no fim ("…, Centro, Baraúna - PB", "Terreno em Alto Parnaíba - MA") e a foto do bem está na página
+// (static.suporteleiloes…/bens/<id>/arquivos/<x>.jpg). Monta o `bem` mínimo com isso; o resto segue o caminho comum.
+export function bemDaPagina(lote, html) {
+  const titulo = String(lote.descricao || '').trim();
+  const fim = titulo.match(/^(.*?)\s*[-/]\s*([A-Z]{2})\s*$/);
+  const lugar = fim ? fim[1].split(/,|\s+em\s+/i).pop().trim() : '';
+  const m = fim && /^[A-Za-zÀ-ÿ' ]{2,40}$/.test(lugar) ? [null, lugar, fim[2]] : null;
+  const fotos = [...String(html || '').replace(/\\\//g, '/').matchAll(/https?:\/\/static\.suporteleiloes\.com(?:\.br)?\/[^"'\s)]+\/bens\/\d+\/arquivos\/[^"'\s)]+\.(?:jpe?g|png|webp)/gi)].map((x) => x[0]);
+  return { siteTitulo: titulo, descricao: titulo, cidade: m ? m[1].trim() : null, uf: m ? m[2] : null, image: null, arquivos: fotos.map((url) => ({ url })) };
 }
 
 // O objeto `lote` da infra Suporte Leilões, já decodificado — exportado (13/10) porque o
