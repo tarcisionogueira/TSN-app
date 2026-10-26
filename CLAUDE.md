@@ -471,6 +471,14 @@ e só para a fila abaixo. Antes de gastar, confira o saldo:
 3. Emílio Matos: conferir se os ~86 veículos já vêm pelo portal SUPERBID antes de coletar (#282).
 4. Recon das fontes pequenas restantes de veículo (Sublime, Uberlândia, Hasta, Leilotech/Topo).
 
+## ✉️ E-mail enviado à mão pela sessão (Resend MCP) = formato de CARTA (dono, 26/10)
+
+Saudação numa linha · parágrafos curtos separados por linha em branco · fecho ("Obrigado!" / "Atenciosamente,")
+· assinatura em linhas próprias (`Tarcísio Nogueira` / `BidPro Brasil`). No `html`, um `<p>` por parágrafo (ou
+`white-space:pre-wrap`, como o `casos-acompanhamento-cron.js`); no `text`, `\n\n` entre parágrafos — é o `texto`
+que a caixa do app mostra. Em 26/10 o follow-up de Brotas saiu num bloco só, e o dono pediu "similar a uma carta".
+Os e-mails do cron já seguem esse formato: use-os de modelo.
+
 ## 🔒 As duas travas automáticas (custo zero, sem IA)
 
 | Trava | Onde roda | O que pega |
