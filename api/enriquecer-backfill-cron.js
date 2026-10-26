@@ -51,6 +51,8 @@ async function marcar(id, patch) {
   }).catch(() => {});
 }
 
+const AREA_URBANA_MAX = 100000; // 10 ha: apartamento/casa/comercial acima disso é leitura errada (26/10)
+
 export default async function handler(req, res) {
   if (!isCronAuthorized(req)) { res.status(401).json({ error: 'não autorizado' }); return; }
   if (!SUPABASE_URL || !SERVICE_KEY) { res.status(500).json({ error: 'Supabase não configurado' }); return; }
@@ -80,7 +82,7 @@ export default async function handler(req, res) {
     'or=(data_leilao.is.null,data_leilao_2.is.null,area_m2.is.null,area_m2.eq.0)',
     'modalidade=not.ilike.*venda*direta*',
     'ativo=not.is.false',
-    'select=id,url_lote,link_edital,cidade,fonte,data_leilao,data_leilao_2,area_m2,titulo,descricao',
+    'select=id,url_lote,link_edital,cidade,fonte,data_leilao,data_leilao_2,area_m2,titulo,descricao,tipo',
     'order=enriquecido_em.asc.nullsfirst',
     `limit=${LOTE_MAX * 5}`,
   ].join('&');
@@ -91,6 +93,19 @@ export default async function handler(req, res) {
   if (!poolRes.ok) { res.status(200).json({ ok: false, motivo: `leitura_falhou_http_${poolRes.status}` }); return; }
   const pool = await poolRes.json().catch(() => null);
   if (!Array.isArray(pool)) { res.status(200).json({ ok: false, motivo: 'resposta_invalida' }); return; }
+  // ÁREA IMPOSSÍVEL (26/10): o filtro acima só pega área VAZIA — lote com área absurda nunca voltava. Feira de
+  // Santana (comercial, 11 × 25 m) estava com 18.500.000 m²; apartamento com 975.000 m², casa com 670.100 m².
+  // Urbano acima de 10 ha entra na frente do pool (até 10 por rodada, 1 vez a cada 3 dias pelo enriquecido_em).
+  {
+    const corte3d = new Date(Date.now() - 3 * 86400000).toISOString();
+    const r2 = await sb(`imoveis_leilao?ativo=eq.true&tipo=in.(apartamento,casa,comercial)&area_m2=gt.${AREA_URBANA_MAX}`
+      + `&or=(enriquecido_em.is.null,enriquecido_em.lt.${corte3d})&url_lote=not.is.null`
+      + '&select=id,url_lote,link_edital,cidade,fonte,data_leilao,data_leilao_2,area_m2,titulo,descricao,tipo&order=enriquecido_em.asc.nullsfirst&limit=10');
+    if (r2.ok) {
+      const extra = await r2.json().catch(() => null);
+      if (Array.isArray(extra)) { const ja = new Set(pool.map((x) => x.id)); pool.unshift(...extra.filter((x) => !ja.has(x.id))); }
+    } else console.warn(`[enriquecer-backfill] leitura de área impossível falhou: HTTP ${r2.status}`);
+  }
   if (!pool.length) {
     res.status(200).json({ ok: true, processados: 0, com_data: 0, motivo: 'sem_candidatos' }); return;
   }
@@ -128,13 +143,15 @@ export default async function handler(req, res) {
         // A descrição só é substituída quando a atual é ECO DO TÍTULO (o defeito medido em
         // 17/08: fora da CEF, `descricao` era o título e nada mais em 7 fontes inteiras).
         // Nunca sobrescreve texto que já diz algo — o dia é fonte da verdade só do que traz.
-        if (!(Number(im.area_m2) > 0)) {
+        const areaImpossivel = /^(apartamento|casa|comercial)$/.test(String(im.tipo || '')) && Number(im.area_m2) > AREA_URBANA_MAX;
+        if (!(Number(im.area_m2) > 0) || areaImpossivel) {
           const corpo = extrairDescricaoDoCorpo(html);
           const ecoDoTitulo = !im.descricao || im.descricao.trim() === String(im.titulo || '').trim();
           // 20/09 (pedido do dono: descrição completa, como o leiloeiro publica).
           if (corpo && ecoDoTitulo) { patch.descricao = corpo.slice(0, 8000); comTexto++; }
-          const area = extrairAreaM2(corpo || '') || extrairAreaM2(html, { permitirSolta: false }); // página inteira só com padrão ancorado (25/10)
-          if (area > 0) { patch.area_m2 = area; comArea++; }
+          const area = extrairAreaM2(corpo || '') || extrairAreaM2(im.descricao || '') || extrairAreaM2(html, { permitirSolta: false }); // página inteira só com padrão ancorado (25/10)
+          // Na área impossível só troca por uma plausível — ler outro número absurdo não melhora nada.
+          if (area > 0 && (!areaImpossivel || area <= AREA_URBANA_MAX)) { patch.area_m2 = area; comArea++; }
         }
       } else {
         semConteudo++;
