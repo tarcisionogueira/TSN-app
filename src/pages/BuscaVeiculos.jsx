@@ -108,6 +108,26 @@ const TIPOS_MONTA = ['sem sinistro', 'pequena monta', 'média monta', 'grande mo
 // "Não informado" (23/09): 8.307 dos ~8.800 veículos ativos vêm SEM classificação de monta do
 // leiloeiro — sem esta opção, marcar "Sem sinistro" escondia quase todo o acervo.
 const MONTA_NAO_INFORMADA = 'nao_informado';
+
+// FILTROS QUE ESCONDEM QUEM NÃO INFORMOU (26/10, dono). Cada um diz: quando está ativo, quais lotes ficam de
+// fora SÓ porque o leiloeiro não trouxe aquele dado (`semInfo` aplica o "não informado" na consulta), o texto
+// do aviso e o que o botão faz (`ver`: mostra exatamente esses; sem `ver`, o botão tira o filtro).
+const FILTROS_SEM_INFO = [
+  { k: 'motor', ativo: (f) => f.motor && f.motor !== 'nao_informado', rotulo: 'a condição do motor',
+    semInfo: (q) => q.is('motor_status', null), ver: (f) => ({ ...f, motor: 'nao_informado' }) },
+  { k: 'tipoMonta', ativo: (f) => f.tipoMonta.length > 0 && !f.tipoMonta.includes(MONTA_NAO_INFORMADA), rotulo: 'o tipo de monta (sinistro)',
+    semInfo: (q) => q.is('sinistro', null), ver: (f) => ({ ...f, tipoMonta: [...f.tipoMonta, MONTA_NAO_INFORMADA] }), verRotulo: 'Incluir os sem informação' },
+  { k: 'valorRefMin', ativo: (f) => !!f.valorRefMin, rotulo: 'FIPE nem avaliação',
+    semInfo: (q) => q.is('valor_fipe', null).or('valor_avaliacao.is.null,valor_avaliacao.eq.0') },
+  { k: 'valorAvaliacaoMax', ativo: (f) => !!f.valorAvaliacaoMax, rotulo: 'FIPE nem avaliação',
+    semInfo: (q) => q.is('valor_fipe', null).or('valor_avaliacao.is.null,valor_avaliacao.eq.0') },
+  { k: 'descontoMin', ativo: (f) => !!f.descontoMin, rotulo: 'referência para calcular o desconto',
+    semInfo: (q) => q.is('desconto_fipe_percentual', null).is('desconto_percentual', null) },
+  { k: 'anoMin', ativo: (f) => !!f.anoMin, rotulo: 'o ano', semInfo: (q) => q.is('ano_fabricacao', null) },
+  { k: 'anoMax', ativo: (f) => !!f.anoMax, rotulo: 'o ano', semInfo: (q) => q.is('ano_fabricacao', null) },
+  { k: 'valorMin', ativo: (f) => !!f.valorMin, rotulo: 'o lance mínimo', semInfo: (q) => q.is('valor_minimo', null) },
+  { k: 'valorMax', ativo: (f) => !!f.valorMax, rotulo: 'o lance mínimo', semInfo: (q) => q.is('valor_minimo', null) },
+];
 const OPCOES_MONTA = [...TIPOS_MONTA.map(t => [t, t[0].toUpperCase() + t.slice(1)]), [MONTA_NAO_INFORMADA, 'Não informado']];
 
 // Múltipla escolha num campo do tamanho de um <select> (23/09, pedido do dono: "permitir uma
@@ -436,7 +456,7 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
   const [diagnostico, setDiagnostico] = useState(null); // resultado vazio: quanto cada filtro corta
   // MOTOR SEM INFORMAÇÃO (26/10, print do dono: "filtros não funcionam"): 89% dos carros vêm do leiloeiro
   // sem dizer nada do motor, e "Funcionando" mostrava 123 de 2.378 sem avisar que o resto ficou de fora.
-  const [foraPorMotor, setForaPorMotor] = useState(0);
+  const [foraSemInfo, setForaSemInfo] = useState([]); // [{ k, n }] por filtro ativo que esconde "não informado"
   const [pagina, setPagina] = useState(() => Math.max(1, Number(lerSessao('veic_pagina', 1)) || 1));
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState('');
@@ -505,13 +525,18 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
       }
       setResultados(linhas); setTotal(count || 0);
       setDiagnostico(null);
-      setForaPorMotor(0);
-      if (f.motor && f.motor !== 'nao_informado' && p === 1) {
-        // Quantos SEM INFORMAÇÃO de motor batem com os demais filtros (contagem `head`, sem trazer linhas).
-        // Falha = não avisa nada, em vez de avisar um número errado.
-        aplicarFiltros(supabase.from(fonteVeiculos(role)).select('id', { count: 'exact', head: true }).eq('ativo', true).in('status_patio', PATIO_VISIVEL), { ...f, motor: 'nao_informado' })
-          .then(({ count: semInfo, error: e2 }) => { if (!e2 && semInfo > 0) setForaPorMotor(semInfo); })
-          .catch((e2) => console.warn('[veiculos] contagem sem motor falhou:', e2?.message || e2));
+      setForaSemInfo([]);
+      if (p === 1) {
+        // Para cada filtro ativo: quantos SEM aquele dado batem com todos os outros filtros (contagem `head`,
+        // sem trazer linhas). Falha de uma contagem = esse aviso não aparece, em vez de um número errado.
+        const ativos = FILTROS_SEM_INFO.filter((d) => d.ativo(f));
+        Promise.all(ativos.map(async (d) => {
+          const base = supabase.from(fonteVeiculos(role)).select('id', { count: 'exact', head: true }).eq('ativo', true).in('status_patio', PATIO_VISIVEL);
+          const { count: n, error: e2 } = await d.semInfo(aplicarFiltros(base, f, new Set([d.k])));
+          if (e2) { console.warn(`[veiculos] contagem sem informação (${d.k}) falhou:`, e2.message); return null; }
+          return n > 0 ? { k: d.k, n } : null;
+        })).then((r) => setForaSemInfo(r.filter(Boolean)))
+          .catch((e2) => console.warn('[veiculos] contagem sem informação falhou:', e2?.message || e2));
       }
       if (!(data || []).length && p === 1) diagnosticarVazio(f);
     } catch (e) {
@@ -748,13 +773,17 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
         </div>
       )}
 
-      {!loading && !erro && foraPorMotor > 0 && filtros.motor && filtros.motor !== 'nao_informado' && (
-        <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '10px 14px', marginBottom: 10, fontSize: 13, color: '#78350f', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          <span><strong>+{foraPorMotor.toLocaleString('pt-BR')} veículos</strong> com os mesmos filtros ficaram de fora porque o leiloeiro não informou a condição do motor.</span>
-          <button onClick={() => { const f = { ...filtros, motor: 'nao_informado' }; setFiltros(f); setPagina(1); buscar(1, f); }}
-            style={{ background: '#b45309', color: 'white', border: 'none', borderRadius: 8, padding: '6px 12px', fontWeight: 800, fontSize: 12.5, cursor: 'pointer' }}>
-            Ver os sem informação do motor
-          </button>
+      {!loading && !erro && foraSemInfo.length > 0 && (
+        <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '10px 14px', marginBottom: 10, fontSize: 13, color: '#78350f', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {foraSemInfo.map(({ k, n }) => { const d = FILTROS_SEM_INFO.find((x) => x.k === k); return (
+            <div key={k} style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              <span><strong>+{n.toLocaleString('pt-BR')} veículos</strong> com os demais filtros ficaram de fora porque o leiloeiro não informou {d.rotulo}.</span>
+              <button onClick={() => { const f = d.ver ? d.ver(filtros) : { ...filtros, [k]: '' }; setFiltros(f); setPagina(1); buscar(1, f); }}
+                style={{ background: '#b45309', color: 'white', border: 'none', borderRadius: 8, padding: '5px 11px', fontWeight: 800, fontSize: 12, cursor: 'pointer' }}>
+                {d.ver ? (d.verRotulo || 'Ver os sem informação') : `Tirar o filtro ${ROTULO_FILTRO[k]}`}
+              </button>
+            </div>
+          ); })}
         </div>
       )}
       {/* QUANTOS VEÍCULOS (26/10, dono: "igual aos imóveis") — o total que bate com os filtros aplicados. */}
