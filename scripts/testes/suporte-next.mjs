@@ -132,7 +132,7 @@ assert.deepEqual(cidadeDoTexto('Terreno 02/F, 366,68 m², Ariquemes/RO — matr�
   const d = VIX.parseDetalhe(fx('vix-lote-18257.html'), `${B}/lote/18257-aprt-condominio-monica-bloco-b-serra`, { agora: AGORA });
   assert.deepEqual([d.titulo, d.cidade, d.estado, d.tipo, d.modalidade], ['Aprt Condomínio Mônica Bloco B, Serra', 'Serra', 'ES', 'apartamento', 'judicial']);
   assert.deepEqual([d.valor_avaliacao, d.valor_minimo, d.data_leilao], [751740, 751740, '2026-11-04']);
-  assert.deepEqual([d.cep, d.bairro, d.numero_matricula, d.numero_processo], ['26164-050', 'Jardim Limoeiro', '53.270', '0012052-79.2008.8.08.0024']);
+  assert.deepEqual([d.cep, d.bairro, d.numero_matricula, d.numero_processo], ['26164050', 'Jardim Limoeiro', '53.270', '0012052-79.2008.8.08.0024']);
   assert.equal(d.fotos.length, 3);
   assert.equal(d.anexos[0].tipo, 'edital');
   assert.equal(d.encerrado, false);

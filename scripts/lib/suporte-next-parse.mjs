@@ -298,7 +298,8 @@ export const VIX = (() => {
     return {
       id: idDaUrl(url), titulo: titulo.slice(0, 180), cidade, estado, status, categoria,
       endereco: specs.get('Endereço') || ld?.isRelatedTo?.address?.streetAddress || null, bairro: specs.get('Bairro') || null,
-      cep: (String(specs.get('CEP') || ld?.isRelatedTo?.address?.postalCode || '').match(/\d{5}-?\d{3}/) || [])[0] || null,
+      // `cep` é varchar(8) no banco: só os dígitos ("26164-050" derrubou o upsert inteiro da VIX em 26/10).
+      cep: (String(specs.get('CEP') || ld?.isRelatedTo?.address?.postalCode || '').match(/\d{5}-?\d{3}/) || [])[0]?.replace(/\D/g, '') || null,
       valor_avaliacao: avaliacao, valor_minimo: plaus(lanceInicial) || avaliacao, valor_minimo_2: null,
       data_leilao: iso ? iso.slice(0, 10) : null, data_leilao_2: null, modalidade,
       tipo: ehImovel === false ? null : tipoDaCategoria(specs.get('Tipo')) || inferirTipo(`${titulo} ${descricao || ''}`.slice(0, 300), url),
