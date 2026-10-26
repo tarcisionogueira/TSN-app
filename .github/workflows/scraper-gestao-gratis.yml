@@ -17,7 +17,7 @@ on:
       max_eventos:
         description: 'Máx. de eventos (leilao.php) por execução'
         required: false
-        default: '160'
+        default: '260'
       dominios:
         description: 'csv de domínios (vazio = padrão do cluster)'
         required: false
@@ -39,6 +39,6 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           GESTAO_GRATIS: '1'
           GESTAO_DRYRUN: ${{ github.event.inputs.dryrun || '0' }}
-          GESTAO_MAX_EVENTOS: ${{ github.event.inputs.max_eventos || '160' }}
+          GESTAO_MAX_EVENTOS: ${{ github.event.inputs.max_eventos || '260' }}
           GESTAO_DOMINIOS: ${{ github.event.inputs.dominios || '' }}
         run: node scripts/scraper-gestao.mjs

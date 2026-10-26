@@ -92,7 +92,7 @@ const MAX_EVENTOS_PADRAO = 25;
 // domínios menos o vinco, medido em 26/10), a página pelo BANCO (pg_net, grátis). Nunca Bright Data. O banco entrega
 // o latin1 do back-office com U+FFFD no lugar das acentuadas — repararLatin1Perdido reconstrói pelo léxico.
 const GRATIS = process.env.GESTAO_GRATIS === '1';
-const MAX_EVENTOS = Number(process.env.GESTAO_MAX_EVENTOS || (process.env.GESTAO_HEADLESS === '1' || GRATIS ? 160 : MAX_EVENTOS_PADRAO));
+const MAX_EVENTOS = Number(process.env.GESTAO_MAX_EVENTOS || (process.env.GESTAO_HEADLESS === '1' ? 160 : GRATIS ? 260 : MAX_EVENTOS_PADRAO));
 // ESCOPO REDUZIDO (10/09): um dispatch manual com domínio/evento cortado (ex.: recon pontual
 // de 1 dos 5 domínios do cluster) não pode entrar no monitor com a MESMA etiqueta de uma
 // coleta de produção — foi exatamente isso que fez `fonte_regressao_suspeita()` acusar
@@ -695,12 +695,26 @@ async function coletarEvento(dominio, idLeilao) {
   if (!cards.length && ehPadrao(html)) {
     let h = html;
     const total = Number((textoCompleto.match(/Exibindo resultado\s*\d+\s*a\s*\d+\s*de\s*(\d+)/i) || [])[1] || 0);
-    if (total > fatiarCardsPadrao(h).length) {
-      const hTodos = await bd(`${url}&pagina=-1&action=0&todos=1`, { valido: paginaOk });
-      if (paginaOk(hTodos) && fatiarCardsPadrao(hTodos).length > fatiarCardsPadrao(h).length) h = hTodos;
-      else console.error(`  [${dominio}] evento ${idLeilao}: todos=1 não trouxe mais lotes — fico com ${fatiarCardsPadrao(h).length}/${total}.`);
+    // A barra "CATEGORIAS Imóveis (N)" diz quantos imóveis o evento tem: evento só de veículo/material não é paginado
+    // (a Fidalgo tem evento de 453 veículos — 16 páginas pelo banco à toa).
+    const imoveisDecl = Number((textoCompleto.match(/CATEGORIAS[\s\S]{0,300}?Im[óo]veis\s*\((\d+)\)/i) || [])[1] || 0);
+    let todosCards = fatiarCardsPadrao(h);
+    // PAGINAÇÃO `&pagina=N`, 30 por página (lib.js da Fidalgo: pesquisaNavegar). O `todos=1` do clássico NÃO vale
+    // aqui (medido em 26/10: devolve a 1ª página) — "Exibindo resultado 31 a 30 de 124" na página 2.
+    if (imoveisDecl > 0 && total > todosCards.length) {
+      const porPag = todosCards.length || 30;
+      for (let pg = 2; pg <= Math.min(Math.ceil(total / porPag), 40); pg++) {
+        const hp = await bd(`${url}&pagina=${pg}`, { valido: paginaOk });
+        if (!paginaOk(hp)) { console.error(`  [${dominio}] evento ${idLeilao}: página ${pg} não veio — fico com ${todosCards.length}/${total}.`); break; }
+        const novos = fatiarCardsPadrao(hp).filter((c) => !todosCards.some((x) => x.idLote === c.idLote));
+        if (!novos.length) break;
+        todosCards = todosCards.concat(novos);
+        h += hp;
+        await sleep(300);
+      }
     }
-    cards = fatiarCardsPadrao(h);
+    ctx.imoveisDeclarados = imoveisDecl;
+    cards = todosCards;
     ctx.htmlEvento = h;
     ctx.judicial = /Leil[ãa]o:\s*Judicial/i.test(textoCompleto);
     Object.assign(ctx, pracasPadrao(textoCompleto));
@@ -712,7 +726,7 @@ async function coletarEvento(dominio, idLeilao) {
     const row = parse(c, ctx);
     if (row) rows.push(row);
   }
-  return { rows, bloqueado: false, total: cards.length, leiloeiro: ctx.leiloeiro };
+  return { rows, bloqueado: false, total: cards.length, leiloeiro: ctx.leiloeiro, imoveisDeclarados: ctx.imoveisDeclarados };
 }
 
 async function debugRecon() {
@@ -763,7 +777,7 @@ async function main() {
   // Só no RESIDENCIAL (grátis, teto 80). No pago (teto 25, fallback) a ordem fica a de antes: o
   // rodízio ali tiraria eventos do lancenoleilao e o acervo dele encolheria numa rodada paga.
   const eventos = [];
-  if (RESIDENCIAL) {
+  if (RESIDENCIAL || GRATIS) {
     for (let i = 0; porDominio.some((l) => i < l.length); i++) for (const l of porDominio) if (i < l.length) eventos.push(l[i]);
   } else for (const l of porDominio) eventos.push(...l);
   const alvo = eventos.slice(0, MAX_EVENTOS);
@@ -773,10 +787,10 @@ async function main() {
   const porId = new Map();
   let bloq = 0;
   for (const { dom, id } of alvo) {
-    const { rows, bloqueado, total } = await coletarEvento(dom, id);
+    const { rows, bloqueado, total, imoveisDeclarados } = await coletarEvento(dom, id);
     if (bloqueado) { bloq++; continue; }
     for (const r of rows) if (!porId.has(r.fonte_id)) porId.set(r.fonte_id, r);
-    console.log(`  [${dom}] evento ${id}: ${total ?? 0} card(s) lido(s) · +${rows.length} imóvel(is) (total únicos ${porId.size})`);
+    console.log(`  [${dom}] evento ${id}: ${total ?? 0} card(s) lido(s) · +${rows.length} imóvel(is)${imoveisDeclarados != null ? ` de ${imoveisDeclarados} declarado(s)` : ''} (total únicos ${porId.size})`);
     await sleep(500);
   }
 
