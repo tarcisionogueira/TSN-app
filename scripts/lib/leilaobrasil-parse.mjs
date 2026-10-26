@@ -56,6 +56,12 @@ import { somaAreasMultiBem, avaliacaoAtualizadaDoTexto, numeroMatriculaDoTexto }
 export const TENANTS = {
   leilaobrasil: { fonte: 'LEILAOBRASIL', leiloeiro: 'Leilão Brasil', base: 'https://www.leilaobrasil.com.br' },
   luthero: { fonte: 'LUTHERO', leiloeiro: 'Luthero Leilões', base: 'https://lutheroleiloes.com.br' },
+  // 26/10 (junta, PB/RN): o Atlântico estava "fora" porque o /buscador?categoria=2 do template antigo da Suporte vinha
+  // vazio — mas a home é ESTE template (/eventos/leilao/<id>/<slug>/lote): os 2 imóveis da home (terreno em Alto
+  // Parnaíba/MA, evento 270; residencial em Baraúna/PB, evento 500) são os 2 links que extrairUrlsDeLote acha (100%).
+  // esleiloes.com.br NÃO entra: lá os eventos são multi-lote (/eventos/leilao/<id>/<slug> sem /lote) e só 1 dos 4 cai
+  // neste caminho — a cobertura ficaria < 90%.
+  atlantico: { fonte: 'ATLANTICOLEILOES', leiloeiro: 'Atlântico Leilões', base: 'https://atlanticoleiloes.com.br' },
 };
 
 const num = v => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
