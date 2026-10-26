@@ -82,8 +82,14 @@ import { ehPadrao, fatiarCardsPadrao, pracasPadrao, parseCardPadrao } from './li
 // Judicial (www.centraljudicial.com.br, "Central Judicial :: Gestão de Leilões", 1 evento na home e ele dá 404 hoje:
 // entra vazio). Instalações PRÓPRIAS (fotos em <dominio>/sishp, sem a CDN d335 do backend compartilhado) — o idLote
 // é deles, então o fonte_id leva o domínio (DOMINIOS_ID_PROPRIO), como o vinco.
-const DOMINIOS_PADRAO_CLUSTER = 'granadoleiloes.com.br,lancenoleilao.com.br,extrajustleiloes.com.br,lancetotal.com.br,vincoleiloes.com.br,www.fidalgoleiloes.com.br,www.centraljudicial.com.br';
-const DOMINIOS_ID_PROPRIO = /(?:^|\.)(?:vincoleiloes|fidalgoleiloes|centraljudicial)\.com\.br$/i;
+// 26/10 (junta, "FRAZAO_SISTEMA"): + SFrazão (sfrazao.com.br, 187 leilões na home) e WLeilões (www.wleiloes.com.br) — o
+// MESMO back-office (`leilao.php?idLeilao=N`, cards `card card-1`, fotos em <dominio>/sishp), numa instalação PRÓPRIA
+// que os DOIS domínios compartilham (medido pelo banco: idLeilao 501 traz o lote 10651 nos dois). O fonte_id leva o
+// prefixo da instalação (`sfrazao`) para os dois — o mesmo lote não entra duas vezes — e o sfrazao vem antes no rodízio.
+const DOMINIOS_PADRAO_CLUSTER = 'granadoleiloes.com.br,lancenoleilao.com.br,extrajustleiloes.com.br,lancetotal.com.br,vincoleiloes.com.br,www.fidalgoleiloes.com.br,www.centraljudicial.com.br,sfrazao.com.br,www.wleiloes.com.br';
+const DOMINIOS_ID_PROPRIO = /(?:^|\.)(?:vincoleiloes|fidalgoleiloes|centraljudicial|sfrazao|wleiloes)\.com\.br$/i;
+const PREFIXO_INSTALACAO = { wleiloes: 'sfrazao' };
+const prefixoIdProprio = (dominio) => { const k = String(dominio).replace(/^www\./, '').split('.')[0]; return PREFIXO_INSTALACAO[k] || k; };
 const DOMINIOS = (process.env.GESTAO_DOMINIOS || DOMINIOS_PADRAO_CLUSTER)
   .split(',').map(s => s.trim()).filter(Boolean);
 const MAX_EVENTOS_PADRAO = 25;
@@ -322,7 +328,7 @@ function parseCardGrade(card, ctx) {
   const reFotoLote = new RegExp(`["']([^"']*/${card.idLote}_[^"'/]*\\.(?:jpe?g|png|webp|jfif)[^"']*)["']`, 'i');
   const foto = (String(ctx.htmlEvento || card.html).match(reFotoLote) || [])[1] || null;
   const temDesconto = valorAval > 0 && valorMinimo > 0 && valorMinimo <= valorAval;
-  const base = ctx.dominio.replace(/^www\./, '').split('.')[0];
+  const base = ctx.prefixoId || ctx.dominio.replace(/^www\./, '').split('.')[0];
   return {
     fonte: 'GESTAOLEILOES',
     fonte_id: `gestao_${base}_${card.idLote}`,
@@ -475,7 +481,7 @@ function parseCard(card, ctx) {
 
   const row = {
     fonte: 'GESTAOLEILOES',
-    fonte_id: DOMINIOS_ID_PROPRIO.test(ctx.dominio) ? `gestao_${ctx.dominio.replace(/^www\./, '').split('.')[0]}_${card.idLote}` : `gestao_${card.idLote}`,
+    fonte_id: DOMINIOS_ID_PROPRIO.test(ctx.dominio) ? `gestao_${prefixoIdProprio(ctx.dominio)}_${card.idLote}` : `gestao_${card.idLote}`,
     titulo: (tituloBase || `Imóvel ${ctx.leiloeiro} ${card.idLote}`).slice(0, 180),
     tipo: inferirTipo(txt),
     modalidade,
@@ -660,7 +666,7 @@ async function coletarEvento(dominio, idLeilao) {
   // gravados inativos em 21/10. Sem "Encerramento" (vinco: "Data: 22/Out/2026"), segue a 1ª data.
   const mEnc = textoData.match(/Encerramento\s*(\d{1,2}\/[A-Za-zç]{3}\/\d{4})/i);
   const ctx = {
-    dominio, idLeilao,
+    dominio, idLeilao, prefixoId: prefixoIdProprio(dominio),
     leiloeiro: leiloeiroDoTitulo(html, dominio),
     data_leilao: dataEvento(mEnc ? mEnc[1] : textoData),
     htmlEvento: html, // p/ resolver a foto pelo idLote no HTML INTEIRO (ver parseCard)

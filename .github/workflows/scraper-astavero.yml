@@ -1,0 +1,38 @@
+name: Scraper Astavero (38 leiloeiros, API JSON da plataforma)
+
+# Plataforma ASTAVERO (Angular + API JSON própria; POST /app/lotes, /app/pregao/init, /app/pregao/lote — sem login, sem
+# Cloudflare). Saiu do scraper-dom em 26/10: de 5 para 38 tenants (família LEILOADOR e o cluster da JUCESC que a
+# triagem rotulava "NAO_E_LEILAO?"), ~250 imóveis e ~500 veículos — não cabe no fim de um job de 120 min. Custo zero:
+# nunca Bright Data, nunca Firecrawl (fetch direto e, se o runner for recusado, o banco). O cron GRAVA; para ensaio,
+# dispare com dryrun=1; `tenants` filtra por fonte (csv).
+on:
+  schedule:
+    - cron: '25 10 * * *'  # diário, 10h25 UTC
+  workflow_dispatch:
+    inputs:
+      dryrun:
+        description: '1 = dry-run (não grava); 0 = grava'
+        required: false
+        default: '0'
+      tenants:
+        description: 'csv de fontes (vazio = todas)'
+        required: false
+        default: ''
+
+jobs:
+  scraper-astavero:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      - name: Rodar scraper Astavero
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          ASTAVERO_DRYRUN: ${{ github.event.inputs.dryrun || '0' }}
+          ASTAVERO_TENANTS: ${{ github.event.inputs.tenants || '' }}
+        run: node scripts/scraper-astavero.mjs

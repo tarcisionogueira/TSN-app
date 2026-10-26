@@ -65,7 +65,7 @@ export function parseCardPadrao(card, ctx) {
   const area = num((txt.match(/(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?)\s*m²/i) || [])[1]);
   const reFotoLote = new RegExp(`["']([^"']*/${card.idLote}_[^"'/]*\\.(?:jpe?g|png|webp|jfif)[^"']*)["']`, 'i');
   const foto = (card.html.match(reFotoLote) || String(ctx.htmlEvento || '').match(reFotoLote) || [])[1] || null;
-  const base = ctx.dominio.replace(/^www\./, '').split('.')[0];
+  const base = ctx.prefixoId || ctx.dominio.replace(/^www\./, '').split('.')[0]; // instalação dividida por 2 domínios (scraper-gestao)
   // A 1ª frase costuma ser a matrícula ("Matrícula 285.648 - 11º Cartório…"): o título é a 1ª que descreve o bem.
   const frases = (descricao || '').split(/(?<=[a-zà-ú0-9)])\.\s/i).map((f) => f.trim()).filter(Boolean);
   const titulo = (frases.find((f) => !/^matr[íi]cula\b/i.test(f)) || frases[0] || `Imóvel ${ctx.leiloeiro} ${card.idLote}`).slice(0, 180);

@@ -390,10 +390,10 @@ jobs:
           NAKAKOGUE_DRYRUN: ${{ env.DRYRUN_PADRAO }}
         run: node scripts/scraper-nakakogue.mjs
 
-      # ASTAVERO (05/10, #41): 5 leiloeiros no mesmo backend (Damiani, Mazzolli, FB, DBS, Saulo Júlio) pela
-      # API JSON da plataforma (POST, sem login/Cloudflare) — custo zero. ~90 imóveis.
+      # ASTAVERO (05/10, #41): API JSON da plataforma (POST, sem login/Cloudflare) — custo zero. Desde 26/10 roda no
+      # próprio workflow (scraper-astavero.yml, 38 tenants); aqui só quando pedido pelo nome no dispatch.
       - name: Astavero
-        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'astavero')) }}
+        if: ${{ !cancelled() && contains(github.event.inputs.fontes, 'astavero') }}
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}

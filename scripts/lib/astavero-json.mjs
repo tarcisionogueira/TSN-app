@@ -23,6 +23,51 @@ export const TENANTS = [
   { fonte: 'FBLEILOES', leiloeiro: 'FB Leilões', base: 'https://www.fbleiloes.com.br' },
   { fonte: 'DBSLEILOES', leiloeiro: 'DBS Leilões', base: 'https://www.dbsleiloes.com.br' },
   { fonte: 'SAULOJULIOLEILOEIRO', leiloeiro: 'Saulo Júlio Leiloeiro', base: 'https://www.saulojulioleiloeiro.com.br' },
+  // 26/10 — a "família LEILOADOR" da JUCESC (formula, portaldoleiloeiro, sabrina, elisa, leia) é Astavero: os portais
+  // ?pg=item de cada um são vitrine COMPARTILHADA (os mesmos ids nos quatro) e o pregão mora em instâncias Astavero
+  // próprias — o POST /app/lotes dava 404 porque era tentado no domínio do portal, não no da instância. Medido pelo
+  // banco (POST JSON, 26/10): leiloador.com.br 6 imóveis abertos (edital "julio_ramos_leiloes" — Júlio Ramos Luz, JUCESC,
+  // portaldoleiloeiro.com.br), sabrinaleiloes.lel.br 1, deltta 0 imóvel e 267 veículos, leia/tai/itamar/formulla 0
+  // (ligados vazios: regra do dono). O leiloeiro vai pelo NOME da Junta onde o host da instância não é o domínio dela.
+  { fonte: 'LEILOADOR', leiloeiro: 'Júlio Ramos Luz', base: 'https://leiloador.com.br' },
+  { fonte: 'SABRINALEILOES', leiloeiro: 'Sabrina Leilões', base: 'https://www.sabrinaleiloes.lel.br' },
+  { fonte: 'LEIALEILOES', leiloeiro: 'Leia Leilões', base: 'https://www.leialeiloes.lel.br' },
+  { fonte: 'DELTTALEILOES', leiloeiro: 'Deltta Leilões', base: 'https://www.delttaleiloes.com.br' },
+  { fonte: 'TAILEILOES', leiloeiro: 'Tai Leilões', base: 'https://taileiloes.com.br' },
+  { fonte: 'ITAMARLEILOES', leiloeiro: 'Itamar Coraci Xavier De Liz', base: 'https://leiloesitamar.com.br' },
+  { fonte: 'FORMULLALEILOES', leiloeiro: 'Aridina Maria Do Amaral', base: 'https://www.formullaleiloes.com.br' },
+  // 26/10 — o cluster "NAO_E_LEILAO?" da triagem (31 domínios da JUCESC com a home vazia para o pg_net: SPA Angular sem
+  // texto) era ASTAVERO. Impressão digital testada em TODOS pelo banco (POST /app/lotes, 26/10): 27 responderam o JSON
+  // da plataforma (deltta e tai estão no bloco de cima). Bampi veio da varredura dos 208 "desconhecidos" (o único). Nos
+  // comentários, os imóveis abertos no dia — os de 0
+  // entram vazios (regra do dono). Fora: octa, maleiloesro, vardana (404 em /app/lotes), leiloeslr (SSL),
+  // fabrikadeleiloes (sem DNS no www). Leiloeiro = nome da JUCESC (o cruzamento da Junta casa por host E por nome).
+  { fonte: 'BALDISSERALEILOEIROS', leiloeiro: 'Ruy Walter Baldissera', base: 'https://www.baldisseraleiloeiros.com.br' }, // 70
+  { fonte: 'OESTELEILOES', leiloeiro: 'Odiclesio Jaison Storchio', base: 'https://www.oesteleiloes.com.br' },               // 32
+  { fonte: 'BALDISSERALEILOES', leiloeiro: 'Andréa Baldissera', base: 'https://www.baldisseraleiloes.com.br' },             // 20
+  { fonte: 'NELCILEILOES', leiloeiro: 'Nelcir Aparecida Catafesta', base: 'https://www.nelcileiloes.com.br' },              // 18
+  { fonte: 'FABIANEBALDISSERA', leiloeiro: 'Fabiane Tissiane Baldissera De Souza', base: 'https://www.fabianebaldisseraleiloes.com.br' }, // 16
+  { fonte: 'TOPLEILOES', leiloeiro: 'Paulo Pizzolatti Neto', base: 'https://www.topleiloes.com.br' },                       // 12
+  { fonte: 'KROBELLEILOES', leiloeiro: 'Janine Ledoux Krobel Lorenz', base: 'https://www.krobelleiloes.com.br' },           // 9
+  { fonte: 'BAMPILEILOES', leiloeiro: 'Ricardo Bampi', base: 'https://www.bampileiloes.com.br' },                           // 5
+  { fonte: 'SAMPAIOLEILOES', leiloeiro: 'João Paulo Sampaio Damiani', base: 'https://www.sampaioleiloes.com.br' },          // 3
+  { fonte: 'ZAMPIERILEILAO', leiloeiro: 'Jefferson Eduardo Zampieri', base: 'https://www.zampierileilao.com.br' },          // 2
+  { fonte: 'ADAIANAGARCIA', leiloeiro: 'Adaiana Garcia', base: 'https://www.adaianagarcialeiloes.com.br' },                 // 2
+  { fonte: 'GESTORDELEILOES', leiloeiro: 'Eduardo De Werk', base: 'https://www.gestordeleiloes.com.br' },                   // 1
+  { fonte: 'CORREAQUINHONES', leiloeiro: 'Eloisa Auxiliadora Menegassi Correa', base: 'https://www.correaquinhonesleiloes.com.br' }, // 1
+  { fonte: 'MAXTERLEILOES', leiloeiro: 'Simone Wenning', base: 'https://www.maxterleiloes.com.br' },
+  { fonte: 'SUPREMALEILOES', leiloeiro: 'Taisa Raquel Pereira Carvalho', base: 'https://www.supremaleiloes.com.br' },
+  { fonte: 'HITOLEILOES', leiloeiro: 'Andreia Cristina Nunes', base: 'https://www.hitoleiloes.com.br' },
+  { fonte: 'LEILOESREI', leiloeiro: 'Roger Wenning', base: 'https://www.leiloesrei.com.br' },
+  { fonte: 'AMARQUESLEILOES', leiloeiro: 'Auriannye Marques', base: 'https://www.amarquesleiloes.com.br' },
+  { fonte: 'FOXLEILOES', leiloeiro: 'Maurício Guerra Alves', base: 'https://www.foxleiloes.com.br' },
+  { fonte: 'OMEGA1LEILOES', leiloeiro: 'Osmar Sergio Costa', base: 'https://www.omega1leiloes.com.br' },
+  { fonte: 'VVLEILOES', leiloeiro: 'Débora Viale Prazeres Vilela Veiga', base: 'https://www.vvleiloes.com.br' },
+  { fonte: 'BRASSIANILEILOES', leiloeiro: 'Viviane Aparecida Brassiani Engicht', base: 'https://www.brassianileiloes.com.br' },
+  { fonte: 'RODOLFOMACARINI', leiloeiro: 'Rodolfo Macarini De Souza', base: 'https://www.leiloeirorodolfomacarini.com.br' },
+  { fonte: 'TROMBETTALEILOES', leiloeiro: 'Claudio Trombetta', base: 'https://www.trombettaleiloes.com.br' },
+  { fonte: 'MAXXLEILOES', leiloeiro: 'Tatiana Sofka Antunes Ferreira', base: 'https://www.maxxleiloes.com.br' },
+  { fonte: 'ALINEMAROS', leiloeiro: 'Aline Maros', base: 'https://www.alinemaros.com.br' },
 ];
 
 export const CORPO_LISTAGEM = { botao: 'ABERTOS', categoria: 'Imóveis', uf: '', cidade: '', varacomitente: '', f: '' };
