@@ -51,6 +51,7 @@
     "testar:datas-vizinhos": "node scripts/testes/datas-do-lote-nao-vem-dos-vizinhos.mjs",
     "testar:albertomacedo-cidade": "node scripts/testes/albertomacedo-cidade-do-lote.mjs",
     "testar:freitas": "node scripts/testes/freitas-parse.mjs",
+    "testar:msis": "node scripts/testes/msis-parse.mjs",
     "testar:milan": "node scripts/testes/milan-parse.mjs",
     "testar:sweep-trava": "node scripts/testes/sweep-trava.mjs",
     "testar:pecini-fila": "node scripts/testes/pecini-fila.mjs",

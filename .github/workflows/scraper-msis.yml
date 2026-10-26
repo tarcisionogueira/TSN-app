@@ -1,0 +1,46 @@
+name: Scraper MSIS (21 leiloeiros do RJ, POST de formulário + via banco)
+
+# Plataforma MSIS (msis.com.br, ASP clássico): o catálogo inteiro só vem por POST de formulário
+# (Principal.asp acaoDest=N&pag=N) — fetch puro do runner. Tenants com desafio do Cloudflare no IP do
+# GitHub (BSP, Adriana Yuan em 26/10) abrem pelo banco (pagina_pedir_pelada / pagina_postar_form). Custo
+# zero: nunca Bright Data, nunca Firecrawl. O cron GRAVA; o dispatch grava por default — para ensaio,
+# dryrun=1 (imprime a tabela de completude no fim).
+on:
+  schedule:
+    - cron: '25 9 * * *'  # diário, 9h25 UTC
+  workflow_dispatch:
+    inputs:
+      dryrun:
+        description: '1 = dry-run (não grava); 0 = grava'
+        required: false
+        default: '0'
+      max_lotes:
+        description: 'Máx. de lotes por tenant'
+        required: false
+        default: '200'
+      tenants:
+        description: 'chaves separadas por vírgula (vazio = todos)'
+        required: false
+        default: ''
+
+jobs:
+  scraper-msis:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm ci
+      - name: Rodar scraper MSIS
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          MSIS_DRYRUN: ${{ github.event.inputs.dryrun || '0' }}
+          MSIS_MAX_LOTES: ${{ github.event.inputs.max_lotes || '200' }}
+          MSIS_TENANTS: ${{ github.event.inputs.tenants || '' }}
+        run: node scripts/scraper-msis.mjs

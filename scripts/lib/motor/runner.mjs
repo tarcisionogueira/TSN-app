@@ -421,7 +421,10 @@ export async function rodarFonte(cfg, opts) {
   // Eixo de FETCH da matriz: 'dom' renderiza num Chromium (SPA sem SSR); default é o motor
   // grátis→Bright Data. O contrato é o mesmo; o runner não distingue.
   // 'firecrawl' (10/10): sites que dão 403 ao runner e ao proxy ISP (Cloudflare) — fetch-firecrawl.mjs.
-  const motor = cfg.fetch === 'dom' ? criarMotorDom(cfg.dom)
+  // `cfg.criarMotor` (26/10, MSIS): fonte com transporte próprio (catálogo só por POST de formulário, com a via
+  // banco `pagina_postar_form` quando o Cloudflare recusa o runner) — mesmo contrato { fetchFonte, estado }.
+  const motor = typeof cfg.criarMotor === 'function' ? cfg.criarMotor(cfg)
+    : cfg.fetch === 'dom' ? criarMotorDom(cfg.dom)
     : cfg.fetch === 'firecrawl' ? criarMotorFirecrawl(cfg.firecrawl)
     // 'api' (13/10): catálogo é API JSON com cabeçalho por tenant (plataforma Ares) — fetch-api.mjs.
     : cfg.fetch === 'api' ? criarMotorApi(cfg)

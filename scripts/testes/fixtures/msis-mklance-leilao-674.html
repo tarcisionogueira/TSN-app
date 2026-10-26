@@ -1,0 +1,2335 @@
+
+<html>
+<head>
+<title>Mauricio Kronemberg - Leiloeiro Público</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+
+<script language='JavaScript'>
+
+function SomenteNumero(e){
+    var tecla=(window.event)?event.keyCode:e.which;   
+    if((tecla>47 && tecla<58)) return true;
+    else{
+    	if (tecla==8 || tecla==0) return true;
+	else  return false;
+    }
+}
+
+function SomenteNumeroLetra(e){
+    var tecla=(window.event)?event.keyCode:e.which;   
+    if((tecla>47 && tecla<58)||(tecla>64 && tecla<91)||(tecla>96 && tecla<123)) return true;
+    else{
+    	if (tecla==8 || tecla==0) return true;
+	else  return false;
+    }
+}
+
+function ImpedeProibidos(e){
+//  	'  *  ;  ==  "  (  )  <  >  [  ]  #  $  ¨  |  !  
+    var tecla=(window.event)?event.keyCode:e.which;   
+    if(tecla==39 || tecla==42 || tecla==59 || tecla==61 || tecla==34 || tecla==40 || tecla==41 || tecla==60 || tecla==62 || tecla==91 || tecla==93 || tecla==35 || tecla==36 || tecla==124 || tecla==33) return false;
+    else{
+    	return true;
+    }
+}
+
+function AbreJanela(varArquivo,varTipo,varParametros) {
+	window.open(varArquivo,varTipo,varParametros);
+}
+
+
+function formataTelefone(vC,vT){
+
+	var vCampoN=vC.value;
+	var vLn=vCampoN.length;
+
+	var vCampo='';
+	var vN;
+	var i;
+	for (i = 0; i < vLn; i++){
+		if(!isNaN(parseFloat(vCampoN.substr(i,1))) && isFinite(vCampoN.substr(i,1))==true){
+			vN=vCampoN.substr(i,1);
+			vCampo=vCampo+String(vN);
+		}
+	}
+	vCampo=vCampo.trim();
+
+	var vL=vCampo.length;
+
+	if(vL==1){
+		vC.value='(' + vCampo + '_) ____-____'; 
+		setCaretPosition(vC.id,2);
+	}else if(vL==2){
+		vC.value='('+ vCampo + ') ____-____'; 
+		setCaretPosition(vC.id,5);
+	}else if(vL==3){
+		vC.value='(' + vCampo.substr(0,2) + ') ' + vCampo.substr(2,1) + '___-____'; 
+		setCaretPosition(vC.id,6);
+	}else if(vL==4){
+		vC.value='(' + vCampo.substr(0,2) + ') ' + vCampo.substr(2,2) + '__-____'; 
+		setCaretPosition(vC.id,7);
+	}else if(vL==5){
+		vC.value='(' + vCampo.substr(0,2) + ') ' + vCampo.substr(2,3) + '_-____'; 
+		setCaretPosition(vC.id,8);
+	}else if(vL==6){
+		vC.value='(' + vCampo.substr(0,2) + ') ' + vCampo.substr(2,4) + '-____'; 
+		setCaretPosition(vC.id,10);
+	}else if(vL==7){
+		vC.value='(' + vCampo.substr(0,2) + ') ' + vCampo.substr(2,4) + '-' + vCampo.substr(6,1) + '___'; 
+		setCaretPosition(vC.id,11);
+	}else if(vL==8){
+		vC.value='(' + vCampo.substr(0,2) + ') ' + vCampo.substr(2,4) + '-' + vCampo.substr(6,2) + '__'; 
+		setCaretPosition(vC.id,12);
+	}else if(vL==9){
+		vC.value='(' + vCampo.substr(0,2) + ') ' + vCampo.substr(2,4) + '-' + vCampo.substr(6,3) + '_'; 
+		setCaretPosition(vC.id,13);
+	}else if(vL==10){
+		vC.value='(' + vCampo.substr(0,2) + ') ' + vCampo.substr(2,4) + '-' + vCampo.substr(6,4); 
+		setCaretPosition(vC.id,14);
+	}else if(vL==11){
+		vC.value='(' + vCampo.substr(0,2) + ') ' + vCampo.substr(2,5) + '-' + vCampo.substr(7,4); 
+		setCaretPosition(vC.id,15);
+	}else if(vL>11){
+		vC.value='(' + vCampo.substr(0,2) + ') ' + vCampo.substr(2,5) + '-' + vCampo.substr(7,4); 
+		setCaretPosition(vC.id,15);
+	}
+
+}
+
+
+function setCaretPosition(elemId, caretPos) {
+    var elem = document.getElementById(elemId);
+
+    if(elem != null) {
+        if(elem.createTextRange) {
+            var range = elem.createTextRange();
+            range.move('character', caretPos);
+            range.select();
+        }
+        else {
+            if(elem.selectionStart) {
+                elem.focus();
+                elem.setSelectionRange(caretPos, caretPos);
+            }
+            else
+                elem.focus();
+        }
+    }
+}
+
+</script>
+
+<link rel="stylesheet" type="text/css" href="_styleGeneral4.css" />
+<link href="https://fonts.googleapis.com/css?family=Montserrat" rel="stylesheet">
+<link rel="apple-touch-icon" sizes="180x180" href="https://www.mklance.com.br/imagens/ico/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="https://www.mklance.com.br/imagens/ico/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="https://www.mklance.com.br/imagens/ico/favicon-16x16.png">
+<link rel="manifest" href="https://www.mklance.com.br/imagens/ico/site.webmanifest">
+<link rel="mask-icon" href="https://www.mklance.com.br/imagens/ico/safari-pinned-tab.svg" color="#5bbad5">
+<meta name="msapplication-TileColor" content="#da532c">
+<meta name="theme-color" content="#ffffff">
+
+<script src="https://www.google.com/recaptcha/api.js" async defer></script>
+
+<script language="JavaScript">
+  var check = false;
+  (function(a){
+    if(/(android|bb\d+|meego).+mobile|avantgo|bada\/|blackberry|blazer|compal|elaine|fennec|hiptop|iemobile|ip(hone|od)|iris|kindle|lge |maemo|midp|mmp|mobile.+firefox|netfront|opera m(ob|in)i|palm( os)?|phone|p(ixi|re)\/|plucker|pocket|psp|series(4|6)0|symbian|treo|up\.(browser|link)|vodafone|wap|windows ce|xda|xiino/i.test(a)||/1207|6310|6590|3gso|4thp|50[1-6]i|770s|802s|a wa|abac|ac(er|oo|s\-)|ai(ko|rn)|al(av|ca|co)|amoi|an(ex|ny|yw)|aptu|ar(ch|go)|as(te|us)|attw|au(di|\-m|r |s )|avan|be(ck|ll|nq)|bi(lb|rd)|bl(ac|az)|br(e|v)w|bumb|bw\-(n|u)|c55\/|capi|ccwa|cdm\-|cell|chtm|cldc|cmd\-|co(mp|nd)|craw|da(it|ll|ng)|dbte|dc\-s|devi|dica|dmob|do(c|p)o|ds(12|\-d)|el(49|ai)|em(l2|ul)|er(ic|k0)|esl8|ez([4-7]0|os|wa|ze)|fetc|fly(\-|_)|g1 u|g560|gene|gf\-5|g\-mo|go(\.w|od)|gr(ad|un)|haie|hcit|hd\-(m|p|t)|hei\-|hi(pt|ta)|hp( i|ip)|hs\-c|ht(c(\-| |_|a|g|p|s|t)|tp)|hu(aw|tc)|i\-(20|go|ma)|i230|iac( |\-|\/)|ibro|idea|ig01|ikom|im1k|inno|ipaq|iris|ja(t|v)a|jbro|jemu|jigs|kddi|keji|kgt( |\/)|klon|kpt |kwc\-|kyo(c|k)|le(no|xi)|lg( g|\/(k|l|u)|50|54|\-[a-w])|libw|lynx|m1\-w|m3ga|m50\/|ma(te|ui|xo)|mc(01|21|ca)|m\-cr|me(rc|ri)|mi(o8|oa|ts)|mmef|mo(01|02|bi|de|do|t(\-| |o|v)|zz)|mt(50|p1|v )|mwbp|mywa|n10[0-2]|n20[2-3]|n30(0|2)|n50(0|2|5)|n7(0(0|1)|10)|ne((c|m)\-|on|tf|wf|wg|wt)|nok(6|i)|nzph|o2im|op(ti|wv)|oran|owg1|p800|pan(a|d|t)|pdxg|pg(13|\-([1-8]|c))|phil|pire|pl(ay|uc)|pn\-2|po(ck|rt|se)|prox|psio|pt\-g|qa\-a|qc(07|12|21|32|60|\-[2-7]|i\-)|qtek|r380|r600|raks|rim9|ro(ve|zo)|s55\/|sa(ge|ma|mm|ms|ny|va)|sc(01|h\-|oo|p\-)|sdk\/|se(c(\-|0|1)|47|mc|nd|ri)|sgh\-|shar|sie(\-|m)|sk\-0|sl(45|id)|sm(al|ar|b3|it|t5)|so(ft|ny)|sp(01|h\-|v\-|v )|sy(01|mb)|t2(18|50)|t6(00|10|18)|ta(gt|lk)|tcl\-|tdg\-|tel(i|m)|tim\-|t\-mo|to(pl|sh)|ts(70|m\-|m3|m5)|tx\-9|up(\.b|g1|si)|utst|v400|v750|veri|vi(rg|te)|vk(40|5[0-3]|\-v)|vm40|voda|vulc|vx(52|53|60|61|70|80|81|83|85|98)|w3c(\-| )|webc|whit|wi(g |nc|nw)|wmlb|wonu|x700|yas\-|your|zeto|zte\-/i.test(a.substr(0,4))) 
+      check = true;
+  })(navigator.userAgent||navigator.vendor||window.opera);
+
+if(check==true){
+	window.open('mLeilao.asp?zz=20041876401060003060002','_self');
+}
+</script>
+
+
+<script language="JavaScript">
+
+var vLi="https://www.mklance.com.br";
+var vCod="20041876401060003060002";
+
+function abrirPDF(vNL,vA){
+	window.open(vLi+'/Arquivos/'+vNL+'/'+vA,'_blank')
+}
+
+function login(){
+	if(window.scrollY!=0){
+  		setTimeout(function() {
+    	window.scrollTo(0,window.scrollY-10);
+      login();
+    	}, 1);
+	}else{
+		abreLogin();
+   }
+}
+
+var vN="674";
+
+function pagina(vP){
+	document.frm1.action='Leilao.asp?zz='+vCod;
+	document.frm1.pag.value=vP;
+	frm1.submit();
+}
+
+function selecionaLote(vNlo){
+	document.frm1.action='Leilao.asp?zz='+vCod;
+	document.frm1.nlo.value=vNlo;
+	frm1.submit();
+}
+
+function acessarAuditorio(vZ,vLex,vNlo){
+
+	if('s'=='s'&&typeof vLex!=='undefined'&&vLex!=''){
+		window.open(vLex,'_blank');
+		return false;
+	}
+
+	if('0'=='2'){
+		var vUs='';
+		var vHab='N';
+		if((vUs=='us'||vUs=='ad')&&(vHab=='1'||vHab=='2')){
+			preparaAbrirPropLancar2(vNlo);
+			return false;
+		}else{
+			alert('Para efetuar propostas, esteja habilitado a participar e faça o seu login.');
+			return false;
+		}	
+	}
+
+	document.frm1.action='Leilao_Lote.asp?zz='+vZ;
+	frm1.submit();
+/*	var vL="< %=varLinkHttp%>";
+	top.location.href=(vL+'/?zz='+vZ);*/
+}
+
+function consultaAvisos() {
+   var head = document.getElementsByTagName('head').item(0);
+   var eScript = document.createElement('script');
+   eScript.setAttribute('type','text/javascript');
+   eScript.setAttribute('src','_Leilao_Avisos2.asp?z='+vCod);
+   head.appendChild(eScript);
+
+	var vHab='N';
+	if(vHab=='1'||vHab=='2'){
+		t=setTimeout("consultaAvisos()",10000);
+	}
+
+}
+
+function confirmAlterarStatusLeilao(vA) {
+	var vAv;
+	if(vA=='S'){vAv='Confirme: SUSPENDER leilão?'};
+	if(vA=='R'){vAv='Confirme: REATIVAR leilão?'};
+	if(vA!=''){
+		if(confirm(vAv)){
+			var head = document.getElementsByTagName('head').item(0);
+			var eScript = document.createElement('script');
+			eScript.setAttribute('type','text/javascript');
+			eScript.setAttribute('src','Leilao_G.asp?c='+vCod+'&a='+vA+'&a2=Le');
+			head.appendChild(eScript);
+		}
+	}
+}
+
+function abrirEdital(vA){
+	window.open('Edital.asp?na='+vA,'_blank');
+}
+
+function suspendeLote(vL){
+	document.getElementById('divLote'+vL).style.backgroundColor='#eedfdf';
+//	document.getElementById('divSuspensoLote'+vL).style.display='';		
+
+}
+
+function toScrolltoAviso(){
+	if(window.scrollY>250){
+  		setTimeout(function() {
+    	window.scrollTo(0,window.scrollY-10);
+      toScrolltoAviso();
+    	}, 1);
+   }
+}
+
+
+var vB;
+function setaUltAv(){
+	vB='n';
+	if(document.getElementById('na').value!=document.getElementById('naOld').value){
+		document.getElementById('naOld').value=document.getElementById('na').value;
+		vB='s';
+	}
+}
+function ativaLembrete(){
+	document.getElementById('divSino').style.display='';
+	if(vB=='s'){
+		document.getElementById('divSinoHover').style.display='';
+		overSino();
+		t=setTimeout('outSino()',4000);
+	}
+}
+function desativaLembrete(){
+	document.getElementById('divSino').style.display='none';
+	document.getElementById('divSinoHover').style.display='none';
+}
+function overSino(){
+	document.getElementById('divSino').style.width='400px';
+	document.getElementById('divSinoHover').className='hoverSino2';
+}
+function outSino(){
+	t=setTimeout('outSino2()',2000);
+}
+function outSino2(){
+	document.getElementById('divSino').style.width='60px';
+	document.getElementById('divSinoHover').className='hoverSino';
+}
+
+
+function refreshPag(){
+	var vL="https://www.mklance.com.br";
+	top.location.href=(vL+'/?zzL='+vCod);
+}
+
+</script>
+
+</head>
+
+<body leftmargin="0" topmargin="0" onLoad="consultaAvisos();">
+<div id="divFdo" class="Fdo" style="display:none"></div>
+
+<div class="Topo1_container">
+	<div class="Topo1_linha1"></div>
+	<div class="Topo1_barrasup"></div>
+	<div class="Topo1_lateral" style="top:3px;"></div>
+	<div class="Topo1_inside" style="top:3px; height:40px;">
+		<div class="Topo1_msg">Leilões Presenciais, Online e Presenciais/Online - Judiciais e Extrajudiciais</div>
+
+
+
+      <div class="Topo1_cadastrese1"><img src="Imagens/imgCadastrese.png" width="23" height="23"></div>
+      <div class="Topo1_cadastrese2"><a href="#void" onclick="abreCadastrar();" class="Login">Cadastre-se</a></div>
+      <div class="Topo1_login1"><img src="Imagens/imgLoginBco.png" width="23" height="23"></div>
+      <div class="Topo1_login2"><a href="#void" onclick="abreLogin();" class="Login">Login</a></div>
+
+
+
+   </div>
+
+	<div class="Topo1_linha2"></div>
+	<div class="Topo1_barraprinc"></div>
+	<div class="Topo1_lateral" style="top:3px;"></div>
+	<div class="Topo1_inside" style="top:46px; height:120px;">
+		<div class="Topo1_logo" style="left:0px; top:20px;"><img src="Imagens/imgLogo.png" height="120"></div>
+      <div class="Topo1_busca1" id="divBusca1" style="bottom:-40px"><div align="right"><input name="txtDado" type="text" id="txtDado" size="30" maxlength="50" placeholder="Digite o que procura" class="Topo1_classTXT" onfocus="expandeContraiDado('e');" onfocusout="expandeContraiDado('c');" onKeyPress="detectarEnter(event);" value=""></div></div>
+      <div class="Topo1_busca2" onclick="pesquisarTopo();" style="bottom:-40px"><div align="right"><img src="Imagens/imgLupa.png" width="30" height="30"></div></div>
+	</div>
+
+	<div class="Topo1_linha3" style="display:none;"></div>
+	<div class="Topo1_barramenu" style="display:none;"></div>
+	<div class="Topo1_inside" style="top:180px; z-index:1; display:-webkit-flex; display:flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center;">
+		<div style="display:-webkit-flex; display:flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; top:0px; margin-left:220px; /*border:1px solid #FFFF00;*/">
+			<div class="Topo1_mnu_PrincH" onclick="acionarMenu('HOME');" align="center">Home</div>
+			<div class="Topo1_mnu_PrincL" onclick="acionarMenu('HOME');" align="center">Leilões</div>
+         <div class="Topo1_mnu_PrincLe" onclick="acionarMenu('LEILOEIRO');" align="center">Leiloeiro</div>
+         <div class="Topo1_mnu_PrincC" onclick="acionarMenu('COMOVENDER');" align="center">Como vender</div>
+         <div class="Topo1_mnu_PrincCo" onclick="acionarMenu('CONTATO');" align="center">Contato</div>
+         <div class="Topo1_mnu_PrincA" onclick="acionarMenu('AJUDA');" align="center">Ajuda</div>
+		</div>
+	</div>
+	<div class="Topo1_mnu_Princ_grad" style="z-index:2;"></div>
+</div>
+
+
+
+<form name="frmTopo" method="post">
+<input type="hidden" name="pesq">
+</form>
+
+<script language="JavaScript">
+
+function abreLogin(){
+	document.getElementById('divLogin').className='classDIVLogin';
+	document.getElementById('divFdo').style.zIndex='904';
+	document.getElementById('divFdo').style.display='';
+	document.getElementById('divLogin').style.display='';
+}
+function fechaLogin(){
+	document.getElementById('divLogin').className='classDIVLogin2';
+	document.getElementById('divFdo').style.display='none';
+}
+
+function abreLoginTrocaSenha(){
+	document.getElementById('divLoginTrocaSenha').className='classDIVLogin';
+	document.getElementById('divFdo').style.zIndex='904';
+	document.getElementById('divFdo').style.display='';
+	document.getElementById('divLoginTrocaSenha').style.display='';
+}
+function fechaLoginTrocaSenha(){
+	window.location.href=('Sair.asp');
+}
+
+function abreLogado(){
+	var vL="https://www.mklance.com.br";
+	top.location.href=(vL+'/AreaCliente.asp');
+}
+
+function abreCadastrar(){
+/* com SSL
+	window.location.href=('Cadastro.asp');
+*/
+	var vL="https://www.mklance.com.br";
+	top.location.href=(vL+'/?pag=7');
+}
+
+function acionarMenu(vD){
+/* com SSL
+	if(vD=='HOME'){
+		window.location.href=('Principal.asp');
+	}else if(vD=='LEILOEIRO'){
+		window.location.href=('Leiloeiro.asp');
+	}else if(vD=='COMOVENDER'){
+		window.location.href=('ComoVender.asp');
+	}else if(vD=='CONTATO'){
+		window.location.href=('Contato.asp');
+	}else if(vD=='AJUDA'){
+		window.location.href=('Ajuda.asp');
+	}else if(vD=='TERMOS'){
+		window.location.href=('Termos.asp');
+	}else if(vD=='POLPRIV'){
+		window.location.href=('PoliticaPrivacidade.asp');
+	}
+*/
+	var vL='https://www.mklance.com.br';
+
+	if(vD=='HOME'){
+		top.location.href=(vL+'/?pag=1');
+	}else if(vD=='LEILOEIRO'){
+		top.location.href=(vL+'/?pag=2');
+	}else if(vD=='COMOVENDER'){
+		top.location.href=(vL+'/?pag=3');
+	}else if(vD=='CONTATO'){
+		top.location.href=(vL+'/?pag=4');
+	}else if(vD=='AJUDA'){
+		top.location.href=(vL+'/?pag=5');
+	}else if(vD=='TERMOS'){
+		top.location.href=(vL+'/?pag=6');
+	}else if(vD=='POLPRIV'){
+		top.location.href=(vL+'/?pag=9');
+	}
+
+}
+
+function detectarEnter(e){
+	var code = (e.keyCode ? e.keyCode : e.which);
+	if(code == 13) { //Enter keycode
+		pesquisarTopo();
+	}
+}
+
+function detectarEnter2(e){
+	var code = (e.keyCode ? e.keyCode : e.which);
+	if(code == 13) { //Enter keycode
+		entrar();
+	}
+}
+
+function detectarEnter3(e){
+	var code = (e.keyCode ? e.keyCode : e.which);
+	if(code == 13) { //Enter keycode
+		document.frmLoginTrocarSenha.txtNSenha2.focus();
+	}
+}
+
+function detectarEnter4(e){
+	var code = (e.keyCode ? e.keyCode : e.which);
+	if(code == 13) { //Enter keycode
+		trocar();
+	}
+}
+
+function pesquisarTopo(){
+	document.frmTopo.action='https://www.mklance.com.br/Principal.asp';
+	document.frmTopo.pesq.value=document.getElementById('txtDado').value;
+	frmTopo.submit();
+}
+
+function esqueciSenha(){
+	document.frmTopo.action='EsqueciASenha.asp';
+	frmTopo.submit();
+}
+
+var vKKK="9383695";
+var vrR="Leilao.asp";
+var vrN="674";
+var vrNL="";
+
+function entrar(){
+	document.frmLogin.action='Login.asp?kkk='+vKKK;
+	if(document.frmLogin.txtLogin.value==''){
+		alert('Campos LOGIN e SENHA são de preenchimento obrigatório.');
+	}else{
+		document.frmLogin.r.value=vrR;
+		document.frmLogin.n.value=vrN;
+		document.frmLogin.nl.value=vrNL;
+		document.frmLogin.submit();
+	}
+}
+
+function RightEsp(str, n){
+    if (n <= 0)
+       return "";
+    else if (n > String(str).length)
+       return str;
+    else {
+       var iLen = String(str).length;
+       return String(str).substring(iLen, iLen - n);
+    }
+}
+
+function LeftEsp(str, n){
+	if (n <= 0)
+	    return "";
+	else if (n > String(str).length)
+	    return str;
+	else
+	    return String(str).substring(0,n);
+}
+
+function verificaLogin(){
+
+	var vPw=document.frmLoginTrocaSenha.txtNSenha.value;
+	if(vPw.length>5&&vPw.length<11){
+		document.getElementById('divLoginItem1').style.backgroundColor='#003a75';
+		document.getElementById('divLoginItem1texto').className='Letra12 CorAzulEsc';
+	}else{
+		document.getElementById('divLoginItem1').style.backgroundColor='#7a7a7a';
+		document.getElementById('divLoginItem1texto').className='Letra12 CorCinza';
+	}
+
+	var vLt='aáàâãbcçdeéêfghiíjklmnoóõpqrstuúvwxyzAÂÀÁÃBCÇDEÉÊFGHIÍJKLMNOÓÕPQRSTUÚVWXYZ';
+	var vNt='0123456789';
+	var vEt='@.,:?{}/\\';
+	var vC;
+	var vL=0;
+	var vN=0;
+	var vE=0;
+
+	var vCd=RightEsp(vPw,1);
+	var vLtC=vLt+vNt+vEt;
+
+  	if(vLtC.indexOf(vCd)<0){
+		alert('O caracter abaixo não é permitido e por isso vamos removê-lo.\n\n'+vCd+'\n\nA SENHA deve ter entre 6 e 10 caracteres, contendo no mínimo: 2 letras, 2 números e 1 símbolo especial   @   .   ,   :   ?   {   }   /   \\.');
+		document.frmLoginTrocaSenha.txtNSenha.value=LeftEsp(vPw,vPw.length-1);
+		return false;
+	}
+
+	for (i = 0; i < vPw.length; i++) {
+	  vC=vPw.substr(i, 1);
+	  if(vLt.indexOf(vC)>-1){vL=vL+1};
+	  if(vNt.indexOf(vC)>-1){vN=vN+1};
+	  if(vEt.indexOf(vC)>-1){vE=vE+1};
+	}
+
+	if(vL>1){
+		document.getElementById('divLoginItem2').style.backgroundColor='#003a75';
+		document.getElementById('divLoginItem2texto').className='Letra12 CorAzulEsc';
+	}else{
+		document.getElementById('divLoginItem2').style.backgroundColor='#7a7a7a';
+		document.getElementById('divLoginItem2texto').className='Letra12 CorCinza';
+	}
+
+
+	if(vN>1){
+		document.getElementById('divLoginItem3').style.backgroundColor='#003a75';
+		document.getElementById('divLoginItem3texto').className='Letra12 CorAzulEsc';
+	}else{
+		document.getElementById('divLoginItem3').style.backgroundColor='#7a7a7a';
+		document.getElementById('divLoginItem3texto').className='Letra12 CorCinza';
+	}
+
+
+	if(vE==1){
+		document.getElementById('divLoginItem4').style.backgroundColor='#003a75';
+		document.getElementById('divLoginItem4texto').className='Letra12 CorAzulEsc';
+	}else{
+		document.getElementById('divLoginItem4').style.backgroundColor='#7a7a7a';
+		document.getElementById('divLoginItem4texto').className='Letra12 CorCinza';
+	}
+
+
+}
+
+function trocar(){
+
+	if(document.frmLoginTrocaSenha.txtNSenha.value==''||document.frmLoginTrocaSenha.txtNSenha2.value==''){
+		alert('Campos DIGITE A NOVA SENHA e REDIGITE A NOVA SENHA são de preenchimento obrigatório.');
+		return false;
+	}
+	if(document.frmLoginTrocaSenha.txtNSenha.value!=document.frmLoginTrocaSenha.txtNSenha2.value){
+		alert('Campos DIGITE A NOVA SENHA e REDIGITE A NOVA SENHA devem ser iguais.');
+		return false;
+	}
+
+	var vPw=document.frmLoginTrocaSenha.txtNSenha.value;
+	if(vPw.length<6||vPw.length>10){
+		alert('Nova senha inválida. A SENHA deve ter entre 6 e 10 caracteres, contendo no mínimo: 2 letras, 2 números e 1 símbolo especial   @   .   ,   :   ?   {   }   /   \\. Não são permitidos outros caracteres especiais.');
+		return false;
+	}
+
+	var vLt='aáàâãbcçdeéêfghiíjklmnoóõpqrstuúvwxyzAÂÀÁÃBCÇDEÉÊFGHIÍJKLMNOÓÕPQRSTUÚVWXYZ';
+	var vNt='0123456789';
+	var vEt='@.,:?{}/\\';
+	var vC;
+	var vL=0;
+	var vN=0;
+	var vE=0;
+	for (i = 0; i < vPw.length; i++) {
+	  vC=vPw.substr(i, 1);
+	  if(vLt.indexOf(vC)>-1){vL=vL+1};
+	  if(vNt.indexOf(vC)>-1){vN=vN+1};
+	  if(vEt.indexOf(vC)>-1){vE=vE+1};
+	}
+	if(vL<2||vN<2||vE<1){
+		alert('Nova senha inválida. A SENHA deve ter entre 6 e 10 caracteres, contendo no mínimo: 2 letras, 2 números e 1 símbolo especial   @   .   ,   :   ?   {   }   /   \\. Não são permitidos outros caracteres especiais.');
+		return false;
+	}
+
+	document.frmLoginTrocaSenha.action='LoginTrocaSenha.asp';
+	document.frmLoginTrocaSenha.submit();
+
+}
+
+function enableBtnL(){
+	document.getElementById('btnEntrarL').className='classBotaoL';
+	document.getElementById('btnEntrarL').setAttribute("onclick","entrar();");
+} 
+
+function disableBtnL(){
+	document.getElementById('btnEntrarL').className='classBotaoInativo';
+	document.getElementById('btnEntrarL').removeAttribute("onclick");
+} 
+
+function enableBtnT(){
+	document.getElementById('btnEntrarT').className='classBotaoL';
+	document.getElementById('btnEntrarT').setAttribute("onclick","trocar();");
+} 
+
+function disableBtnT(){
+	document.getElementById('btnEntrarT').className='classBotaoInativo';
+	document.getElementById('btnEntrarT').removeAttribute("onclick");
+} 
+
+function expandeContraiDado(vT){
+	if(vT=='e'){
+		document.getElementById('divBusca1').style.zIndex='930'; 
+		document.getElementById('divBusca1').style.width='350px';
+		document.getElementById('divFdo').style.display='';
+	}else if(vT=='c'){
+		document.getElementById('divFdo').style.display='none';
+		t=setTimeout("ajustaDivBusca()",800);
+	}
+}
+
+function ajustaDivBusca(){
+	document.getElementById('divBusca1').style.zIndex='2';
+	document.getElementById('divBusca1').style.width='160px'; 
+}
+
+function confereLogin(){
+
+	var vLogin=document.getElementById('txtLogin').value;
+	
+	if(vLogin.trim()===''){
+		alert('Digite o seu e-mail ou login');
+		return false;
+	}
+
+	var head = document.getElementsByTagName('head').item(0);
+	var eScript = document.createElement('script');
+	eScript.setAttribute('type','text/javascript');
+	eScript.setAttribute('src','_Topo_cl.asp?l='+vLogin);
+	head.appendChild(eScript);
+}
+
+</script>
+
+
+
+
+
+
+
+
+<div id="divLogin" class="classDIVLogin" style="display:none; z-index:1000;">
+
+	<div style="position:absolute; top:0px; width:100%; left:0px; height:110px; background-color:#402900;"></div>
+
+
+   <div onClick="fechaLogin()" style="position:absolute; width:30px; height:30px; right:10px; top:10px; cursor:pointer; z-index:906">
+      <div style="position:absolute; top:0px; left:-6px; width:32px; height:32px; border-radius:50%; overflow:hidden; background:rgba(0, 0, 0, 0.5);"></div>
+      <div style="position:absolute; top:15px; left:0px; width:20px;	height:1px;	background-color:#ffffff; -ms-transform: rotate(45deg); transform: rotate(45deg);"></div>
+      <div style="position:absolute; top:15px; left:0px;	width:20px; height:1px; background-color:#ffffff; -ms-transform: rotate(-45deg); transform: rotate(-45deg);"></div>
+   </div>
+
+	<div class="Topo1_logo" style="position:absolute; top:15px; width:100%; left:50%; margin-left:-120px;"><img src="Imagens/imgLogo.png" width="240"></div>
+
+   <div class="JanLoginFdo" style="left:63px; top:110px; height:330px; width:323px;">
+
+      <form name="frmLogin" method="post">
+
+      <div class="JanLoginTit" align="center" style="top:25px; font-family:ARIAL; font-size:20px; width:323px;"><strong>Acesso de clientes</strong></div>
+      <div class="JanLoginLoginIcon" style="left:18px; top:75px;"><img src="Imagens/imgLoginIntra.png" width="20" height="20"></div>
+      <div class="JanLoginLogin" style="left:10px; width:300px; top:70px;" align="right"><input name="txtLogin" type="text" id="txtLogin" maxlength="255" placeholder="Digite o seu e-mail ou login" class="JanLoginLoginTXT" style="font-size:16px; width:260px;"></div>
+
+      <div id="divLoginKeyIntra" class="JanLoginPWIcon" style="left:18px; top:116px; margin-top:5px; display:none;"><img src="Imagens/imgKeyIntra.png" width="22" height="22"></div>
+      <div id="divLogintxtPW" class="JanLoginPW" align="right" style="left:10px; width:300px; top:110px; margin-top:5px; display:none;"><input name="txtPW" type="password" id="txtPW" maxlength="30" placeholder="Digite a sua senha" class="JanLoginPWTXT" onKeyPress="detectarEnter2(event);" style="font-size:16px; width:260px;"></div>
+
+      <div id="divLoginRecaptcha" class="g-recaptcha" data-sitekey="6LeBiRAqAAAAAIvL_JaiiDjboE-2IXbX9sg84SEJ" data-callback="enableBtnL" data-expired-callback="disableBtnL" style="position:absolute; top:160px; left:10px; display:none;"></div>
+
+      <div id="divLoginBtnEntrarL" class="JanLoginEntrar" style="top:260px; width:323px; left:0px; display:none;" align="center"><input type="button" name="btnEntrarL" id="btnEntrarL" value="ENTRAR" class="classBotaoInativo" style="width:300px; height:40px; line-height:40px; font-size:14px;"></div>
+
+      <div id="divLoginBtnAvancarL" class="JanLoginEntrar" style="top:130px; width:323px; left:0px" align="center"><input type="button" name="btnAvancarL" id="btnAvancarL" value="AVANÇAR" class="classBotaoL" style="width:300px; height:40px; line-height:40px; font-size:14px;" onclick="confereLogin()"></div>
+
+      <input type="hidden" name="r">
+      <input type="hidden" name="n">
+      <input type="hidden" name="nl">
+      <input type="hidden" name="rcp" id="rcp">
+      </form>
+
+      <div id="divLoginEsqueci" class="JanLoginEsqueci" style="position:absolute; top:180px; width:323px; left:0px" align="center"><a href="#void" onclick="esqueciSenha();" class="esqueciPW">esqueci a senha</a></div>
+
+      <div id="divLoginbtnEntrarL2" class="JanLoginEntrar" style="top:220px; width:323px; left:0px" align="center"><input type="button" name="btnEntrarL2" id="btnEntrarL2" value="Não tem cadastro? Cadastre-se" class="classBotaoL2" onclick="abreCadastrar();"></div>
+	</div>
+
+</div>
+
+
+<div id="divLoginTrocaSenha" class="classDIVLogin" style="display:none; z-index:1000;">
+
+	<div style="position:absolute; top:0px; width:100%; left:0px; height:110px; background-color:#402900;"></div>
+
+
+   <div onClick="fechaLoginTrocaSenha()" style="position:absolute; width:30px; height:30px; right:10px; top:10px; cursor:pointer; z-index:906">
+      <div style="position:absolute; top:0px; left:-6px; width:32px; height:32px; border-radius:50%; overflow:hidden; background:rgba(0, 0, 0, 0.5);"></div>
+      <div style="position:absolute; top:15px; left:0px; width:20px;	height:1px;	background-color:#ffffff; -ms-transform: rotate(45deg); transform: rotate(45deg);"></div>
+      <div style="position:absolute; top:15px; left:0px;	width:20px; height:1px; background-color:#ffffff; -ms-transform: rotate(-45deg); transform: rotate(-45deg);"></div>
+   </div>
+
+	<div class="Topo1_logo" style="position:absolute; top:15px; width:100%; left:50%; margin-left:-120px;"><img src="Imagens/imgLogo.png" width="240"></div>
+
+   <div class="JanLoginFdo" style="left:63px; top:110px; height:330px; width:323px;">
+
+      <form name="frmLoginTrocaSenha" method="post">
+      <div class="JanLoginTit" align="center" style="top:25px; font-family:ARIAL; font-size:20px; width:323px;"><strong>Troca de senha obrigatória</strong></div>
+      <div class="JanLoginLoginIcon" style="left:18px; top:80px;"><img src="Imagens/imgLoginIntra.png" width="20" height="20"></div>
+      <div class="JanLoginLogin" style="left:10px; width:300px; top:74px;"><span class="Letra16" style="position:absolute; left:48px; top:5px;"></span></div>
+      <div class="JanLoginPWIcon" style="left:18px; top:116px; margin-top:5px"><img src="Imagens/imgKeyIntra.png" width="22" height="22"></div>
+      <div class="JanLoginPW" align="right" style="left:10px; width:300px; top:110px; margin-top:5px;"><input name="txtNSenha" type="password" id="txtNSenha" maxlength="30" placeholder="Digite a nova senha" class="JanLoginPWTXT" onKeyPress="detectarEnter3(event);" onKeyUp="verificaLogin();" style="font-size:16px; width:260px;" onpaste="return false" ondrop="return false"></div>
+      <div class="JanLoginPWIcon" style="left:18px; top:157px; margin-top:5px"><img src="Imagens/imgKeyIntra.png" width="22" height="22"></div>
+      <div class="JanLoginPW" align="right" style="left:10px; width:300px; top:151px; margin-top:5px;"><input name="txtNSenha2" type="password" id="txtNSenha2" maxlength="30" placeholder="Redigite a nova senha" class="JanLoginPWTXT" onKeyPress="detectarEnter4(event);" style="font-size:16px; width:260px;" onpaste="return false" ondrop="return false"></div>
+
+      <div class="g-recaptcha" data-sitekey="6LeBiRAqAAAAAIvL_JaiiDjboE-2IXbX9sg84SEJ" data-callback="enableBtnT" data-expired-callback="disableBtnT" style="position:absolute; top:200px; left:10px;"></div>
+
+      <div class="JanLoginEntrar" style="top:290px; width:323px; left:0px" align="center"><input type="button" name="btnEntrarT" id="btnEntrarT" value="TROCAR" class="classBotaoInativo" style="width:300px; height:40px; line-height:40px; font-size:14px;"></div>
+
+      <div style="position:absolute; top:320px; width:323px; height:80px; background-color:#FFffFF">
+         <div style="position:absolute; top:26px; width:300px; left:12px;"><span class="Letra12">Regras para composição da nova senha:</span></div>
+      </div>
+
+      <div style="position:absolute; top:370px; width:323px; left:18px;">
+         <div id="divLoginItem1" style="position:absolute; top:0px; left:-6px; width:14px; height:14px; border-radius:50%; overflow:hidden; background-color:#7a7a7a;"></div>
+         <div style="position:absolute; top:8px; left:-4px; width:5px; height:1px; background-color:#ffffff; -ms-transform: rotate(45deg); transform: rotate(45deg);"></div>
+         <div style="position:absolute; top:7px; left:-2px; width:8px; height:1px; background-color:#ffffff; -ms-transform: rotate(-60deg); transform: rotate(-60deg);"></div>
+
+         <div id="divLoginItem1texto" style="position:absolute; top:-1px; width:300px; left:14px;" class="Letra12 CorCinza">Tamanho entre 6 e 10 caracteres</div>
+
+      </div>
+
+      <div style="position:absolute; top:390px; width:323px; left:18px;">
+         <div id="divLoginItem2" style="position:absolute; top:0px; left:-6px; width:14px; height:14px; border-radius:50%; overflow:hidden; background-color:#7a7a7a;"></div>
+         <div style="position:absolute; top:8px; left:-4px; width:5px; height:1px; background-color:#ffffff; -ms-transform: rotate(45deg); transform: rotate(45deg);"></div>
+         <div style="position:absolute; top:7px; left:-2px; width:8px; height:1px; background-color:#ffffff; -ms-transform: rotate(-60deg); transform: rotate(-60deg);"></div>
+
+         <div id="divLoginItem2texto" style="position:absolute; top:-1px; width:300px; left:14px;" class="Letra12 CorCinza">Deve ter pelo menos 2 letras</div>
+
+      </div>
+
+      <div style="position:absolute; top:410px; width:323px; left:18px;">
+         <div id="divLoginItem3" style="position:absolute; top:0px; left:-6px; width:14px; height:14px; border-radius:50%; overflow:hidden; background-color:#7a7a7a;"></div>
+         <div style="position:absolute; top:8px; left:-4px; width:5px; height:1px; background-color:#ffffff; -ms-transform: rotate(45deg); transform: rotate(45deg);"></div>
+         <div style="position:absolute; top:7px; left:-2px; width:8px; height:1px; background-color:#ffffff; -ms-transform: rotate(-60deg); transform: rotate(-60deg);"></div>
+
+         <div id="divLoginItem3texto" style="position:absolute; top:-1px; width:300px; left:14px;" class="Letra12 CorCinza">Deve ter pelo menos 2 números</div>
+
+      </div>
+
+      <div style="position:absolute; top:430px; width:323px; left:18px;">
+         <div id="divLoginItem4" style="position:absolute; top:0px; left:-6px; width:14px; height:14px; border-radius:50%; overflow:hidden; background-color:#7a7a7a;"></div>
+         <div style="position:absolute; top:8px; left:-4px; width:5px; height:1px; background-color:#ffffff; -ms-transform: rotate(45deg); transform: rotate(45deg);"></div>
+         <div style="position:absolute; top:7px; left:-2px; width:8px; height:1px; background-color:#ffffff; -ms-transform: rotate(-60deg); transform: rotate(-60deg);"></div>
+
+         <div id="divLoginItem4texto" style="position:absolute; top:-1px; width:300px; left:14px;" class="Letra12 CorCinza">Deve ter 1 símbolo especial:<br /> &nbsp;&nbsp;&nbsp; @&nbsp;&nbsp;&nbsp; .&nbsp;&nbsp;&nbsp; ,&nbsp;&nbsp;&nbsp; :&nbsp;&nbsp;&nbsp; ?&nbsp;&nbsp;&nbsp; {&nbsp;&nbsp;&nbsp; }&nbsp;&nbsp;&nbsp; /&nbsp;&nbsp;&nbsp; \</div>
+
+      </div>
+
+      </form>
+
+	</div>
+
+</div>
+
+
+
+<script language="JavaScript">
+
+function abreAceitePolPriv(){
+	document.getElementById('divPolPriv').className='classDIVLogin';
+	document.getElementById('divFdo').style.zIndex='904';
+	document.getElementById('divFdo').style.display='';
+	document.getElementById('divPolPriv').style.display='';
+}
+function fechaAceitePolPriv(){
+		window.location.href=('Sair.asp');
+}
+function abrePolPriv(){
+	document.getElementById('divFdoModalPolPriv').style.display='';
+}
+function fechaPolPriv(){
+	document.getElementById('divFdoModalPolPriv').style.display='none';
+}
+
+function enviarAceite(){
+
+	if(document.getElementById('chkPolPriv2').checked==false){
+		alert('Para prosseguir, você deve marcar que deu consentimento para coleta, uso e tratamento de seus dados, conforme a nossa política de privacidade.');
+		return false;
+	}
+	document.frmAceitePolPriv.action='AceitePolPriv.asp';
+	frmAceitePolPriv.submit();
+
+}
+
+</script>
+
+<div id="divPolPriv" class="classDIVLogin" style="display:none; z-index:1000;">
+
+  	<form name="frmAceitePolPriv" id="frmAceitePolPriv" method="post">
+
+	<div style="position:absolute; top:0px; width:100%; left:0px; height:110px; background-color:#402900;"></div>
+
+
+
+   <div onClick="fechaAceitePolPriv();" style="position:absolute; width:30px; height:30px; right:10px; top:10px; cursor:pointer; z-index:906">
+      <div style="position:absolute; top:0px; left:-6px; width:32px; height:32px; border-radius:50%; overflow:hidden; background:rgba(0, 0, 0, 0.5);"></div>
+      <div style="position:absolute; top:15px; left:0px; width:20px;	height:1px;	background-color:#ffffff; -ms-transform: rotate(45deg); transform: rotate(45deg);"></div>
+      <div style="position:absolute; top:15px; left:0px;	width:20px; height:1px; background-color:#ffffff; -ms-transform: rotate(-45deg); transform: rotate(-45deg);"></div>
+   </div>
+
+	<div class="Topo1_logo" style="position:absolute; top:15px; width:100%; left:50%; margin-left:-120px;"><img src="Imagens/imgLogo.png" width="240"></div>
+
+   <div style="position:absolute; top:125px; width:323px; left:63px; font-family:'Montserrat', sans-serif; font-size:15px; font-weight:bold;">
+      <div align="center" style="position:absolute; top:20px; width:323px; font-family:'Montserrat', sans-serif; font-size:20px; color:#e12d00;"><strong>Aviso importante</strong></div>
+      <div align="center" style="position:absolute; top:57px; width:323px; font-family:'Montserrat', sans-serif; font-size:20px; color:#000000;"><strong>Política de Privacidade</strong><!-- politica de privacidade removida da fixture -->      
+	</div>
+</div>
+
+
+
+<div id="divWhats" class="classDIVLogin" style="display:none; z-index:1000;">
+
+  	<form name="frmWhats" id="frmWhats" method="post">
+
+	<div style="position:absolute; top:0px; width:100%; left:0px; height:110px; background-color:#402900;"></div>
+
+
+
+   <div onClick="fechaWhats();" style="position:absolute; width:30px; height:30px; right:10px; top:10px; cursor:pointer; z-index:906">
+      <div style="position:absolute; top:0px; left:-6px; width:32px; height:32px; border-radius:50%; overflow:hidden; background:rgba(0, 0, 0, 0.5);"></div>
+      <div style="position:absolute; top:15px; left:0px; width:20px;	height:1px;	background-color:#ffffff; -ms-transform: rotate(45deg); transform: rotate(45deg);"></div>
+      <div style="position:absolute; top:15px; left:0px;	width:20px; height:1px; background-color:#ffffff; -ms-transform: rotate(-45deg); transform: rotate(-45deg);"></div>
+   </div>
+
+	<div class="Topo1_logo" style="position:absolute; top:15px; width:100%; left:50%; margin-left:-120px;"><img src="Imagens/imgLogo.png" width="240"></div>
+
+   <div style="position:absolute; top:125px; width:450px; left:0px;">
+
+		<div style="position:absolute; top:-10px; left:10px;"><img src="Imagens/imgAlerta.png" width="35"></div>
+      <div align="center" style="position:absolute; top:7px; width:450px; font-family:'Montserrat', sans-serif; font-size:16px; color:#000000;"><strong>Comunicação com o cliente</strong></div>
+      <div align="center" style="position:absolute; top:35px; width:420px; left:15px; font-family:'Montserrat', sans-serif; font-size:13px; color:#4f4f4f; text-align:center;"><div>O Leiloeiro se comunica, através do sistema, com o cliente de duas formas: e-mail e/ou whatsapp. Portanto, é necessário que o cliente valide ambos os dados de contato para esse fim. O contato por whatsapp é importante para uma comunicação mais rápida e eficaz.</div></div>
+
+      <div align="center" style="position:absolute; top:140px; width:450px; font-family:'Montserrat', sans-serif; font-size:15px; font-weight:bold; color:#000000;"><strong>Valide seu whatsapp</strong></div>
+      <div align="center" style="position:absolute; top:168px; width:420px; left:15px; font-family:'Montserrat', sans-serif; font-size:13px; font-weight:normal; color:#000000;">Clique no botão ENVIAR e o sistema enviará um código de 6 dígitos para o whatsapp informado.</div>
+
+
+		<div align="center" style="position:absolute; top:212px; width:450px;"><input name="txtWhatsApp" type="text" class="Letra16" id="txtWhatsApp" maxlength="16" onKeyPress="return SomenteNumeroW(event)" onKeyUp="formataTelefoneW(this,3);" onpaste="return false;" style="width:160px; text-align:center;"></div>
+
+      <div class="JanLoginEntrar" style="top:255px; left:0px; width:450px;" align="center"><input type="button" name="btnEnviarCodW" id="btnEnviarCodW" value="ENVIAR" class="classBotao" style="width:250px; height:40px; line-height:40px; font-size:14px;" onClick="enviarCodWhats();"></div>
+
+		<div style="position:absolute; top:260px; width:80px; right:15px; text-align:right; font-family:'Montserrat', sans-serif; font-size:13px; font-weight:normal; color:#000000; height:40px; z-index:906;"><a href="#void" class="EsqueciPW" onClick="fechaWhats2();">Agora não,<br>mais tarde</a></div>
+
+
+
+      <div align="center" style="position:absolute; top:330px; width:420px; left:15px; font-family:'Montserrat', sans-serif; font-size:13px; font-weight:normal; color:#000000;">Insira abaixo o código de 6 dígitos recebido em seu whatsapp.</div>
+
+		<div align="center" style="position:absolute; top:360px; width:300px; left:50%; margin-left:-150px;">
+      	<div style="top:0px; left:0px; display:inline;">    
+      		<input name="txtWhatsAppCod1" type="text" class="Letra16" id="txtWhatsAppCod1" maxlength="1" onKeyPress="return SomenteNumeroW(event);" onpaste="return false;" onKeyUp="passaProx(1);" onFocus="this.select();" style="width:30px; text-align:center;">
+         </div>
+      	<div style="top:0px; left:40px; display:inline;">    
+      		<input name="txtWhatsAppCod2" type="text" class="Letra16" id="txtWhatsAppCod2" maxlength="1" onKeyPress="return SomenteNumeroW(event);" onpaste="return false;" onKeyUp="passaProx(2);" onFocus="this.select();" style="width:30px; text-align:center;">
+         </div>
+      	<div style="top:0px; left:80px; display:inline;">    
+      		<input name="txtWhatsAppCod3" type="text" class="Letra16" id="txtWhatsAppCod3" maxlength="1" onKeyPress="return SomenteNumeroW(event);" onpaste="return false;" onKeyUp="passaProx(3);" onFocus="this.select();" style="width:30px; text-align:center;">
+         </div>
+      	<div style="top:0px; left:120px; display:inline;">    
+      		<input name="txtWhatsAppCod4" type="text" class="Letra16" id="txtWhatsAppCod4" maxlength="1" onKeyPress="return SomenteNumeroW(event);" onpaste="return false;" onKeyUp="passaProx(4);" onFocus="this.select();" style="width:30px; text-align:center;">
+         </div>
+      	<div style="top:0px; left:160px; display:inline;">    
+      		<input name="txtWhatsAppCod5" type="text" class="Letra16" id="txtWhatsAppCod5" maxlength="1" onKeyPress="return SomenteNumeroW(event);" onpaste="return false;" onKeyUp="passaProx(5);" onFocus="this.select();" style="width:30px; text-align:center;">
+         </div>
+      	<div style="top:0px; left:200px; display:inline;">    
+      		<input name="txtWhatsAppCod6" type="text" class="Letra16" id="txtWhatsAppCod6" maxlength="1" onKeyPress="return SomenteNumeroW(event);" onpaste="return false;" onKeyUp="passaProx(6);" onFocus="this.select();" style="width:30px; text-align:center;">
+         </div>
+      </div>
+
+      <div id="divErrWcod" align="center" style="position:absolute; top:390px; width:450px; //left:15px; font-family:'Montserrat', sans-serif; font-size:11px; font-weight:normal; color:red;"></div>
+      <div class="JanLoginEntrar" style="top:410px; left:0px; width:450px;" align="center"><input type="button" name="btnValidarCod" id="btnValidarCod" value="VALIDAR" class="classBotao" style="width:250px; height:40px; line-height:40px; font-size:14px;" onClick="validarWhats();"></div>
+
+	</div>
+
+	<input name="txtWhatsAppCod" type="hidden" id="txtWhatsAppCod">   
+   </form>
+
+</div>
+
+<script language="JavaScript">
+var vTempWh=61;
+
+function passaProx(vN){
+
+	if(document.getElementById('txtWhatsAppCod'+vN).value!=''){
+		if(vN=='6'){vN='0'};
+		vN=parseInt(vN)+1;
+		document.getElementById('txtWhatsAppCod'+vN).focus();
+	}
+	document.getElementById('divErrWcod').style.display='none';
+
+}
+
+function enviarCodWhats(){
+
+	var vTz=document.getElementById('txtWhatsApp').value;
+	if(vTz!=''){
+		if(vTz.indexOf("_")>-1){
+			alert('Campo WHATSAPP contém um número incompleto.');
+			return false;
+		}
+		vLn=vTz.length;
+		if(vLn!=15){
+			alert('Campo WHATSAPP contém um número incompleto.');
+			return false;
+		}
+		if(vTz.substr(0,2)=='(0'||vTz.substr(2,2)=='0)'){
+			alert('Campo WHATSAPP contém um número inválido. DDD inválido.');
+			return false;
+		}
+		if(vTz.substr(5,1)!='7'&&vTz.substr(5,1)!='9'){
+			alert('Campo WHATSAPP contém um número inválido. Telefones celulares devem iniciar com 7 ou 9.');
+			return false;
+		}
+	}else{
+		alert('Insira um número WHATSAPP.');
+		return false;
+	}
+
+	var head = document.getElementsByTagName('head').item(0);
+	var eScript = document.createElement('script');
+	eScript.setAttribute('type','text/javascript');
+	eScript.setAttribute('src','https://www.mklance.com.br/_AreaCliente4.asp?tz='+vTz);
+	head.appendChild(eScript);
+
+	document.getElementById('btnEnviarCodW').className='classBotaoInativo';
+	if(document.getElementById('btnEnviarCodW').value=='REENVIAR'){
+		vTempWh=181;
+	}		
+	document.getElementById('btnEnviarCodW').value='';
+	document.getElementById('btnEnviarCodW').onclick='';
+	document.getElementById('txtWhatsAppCod1').focus();
+	contaRegressivoCodWhats();
+
+}
+
+const converter = (segundos) => {
+  const minutos = Math.floor(segundos/ 60);          
+  const seg = segundos % 60;
+  const textoMinutos = (`00${minutos}`).slice(-2);
+  const textoSegundos = (`00${seg}`).slice(-2);
+  
+  return `${textoMinutos }:${textoSegundos}`;
+};
+
+function contaRegressivoCodWhats(){
+
+	vTempWh=parseInt(vTempWh)-1;
+	var vRestWh=converter(vTempWh);
+
+	document.getElementById('btnEnviarCodW').value='Aguarde '+vRestWh+' para reenviar';
+	if(parseInt(vTempWh)==0){
+		document.getElementById('btnEnviarCodW').className='classBotao';
+		document.getElementById('btnEnviarCodW').value='REENVIAR';
+		document.getElementById('btnEnviarCodW').onclick=function(){enviarCodWhats();};
+	}else{		
+		t=setTimeout("contaRegressivoCodWhats()",1000);
+	}
+}
+
+
+
+function abreWhats(){
+   var head = document.getElementsByTagName('head').item(0);
+   var eScript = document.createElement('script');
+   eScript.setAttribute('type','text/javascript');
+   eScript.setAttribute('src','_AreaCliente3.asp');
+   head.appendChild(eScript);
+}
+
+function fechaWhats(){
+	document.getElementById('divFdo').style.display='none';
+	document.getElementById('divWhats').style.display='none';
+}
+function fechaWhats2(){
+
+   var head = document.getElementsByTagName('head').item(0);
+   var eScript = document.createElement('script');
+   eScript.setAttribute('type','text/javascript');
+   eScript.setAttribute('src','_AreaCliente6.asp');
+   head.appendChild(eScript);
+
+	document.getElementById('divFdo').style.display='none';
+	document.getElementById('divWhats').style.display='none';
+//	window.open('Principal.asp','_self');
+}
+
+function validarWhats(){
+
+	document.getElementById('txtWhatsAppCod').value=document.getElementById('txtWhatsAppCod1').value+document.getElementById('txtWhatsAppCod2').value+document.getElementById('txtWhatsAppCod3').value+document.getElementById('txtWhatsAppCod4').value+document.getElementById('txtWhatsAppCod5').value+document.getElementById('txtWhatsAppCod6').value;
+
+	var vWzc=document.getElementById('txtWhatsAppCod').value;
+	if(vWzc==''){
+		if(vWzc.length!=6){
+			alert('Insira o CÓDIGO com 6 dígitos.');
+			return false;
+		}
+	}
+	if(vWzc!=''){
+		if(vWzc.length!=6){
+			alert('Campo CÓDIGO deve conter 6 dígitos.');
+			return false;
+		}
+	}
+	var head = document.getElementsByTagName('head').item(0);
+	var eScript = document.createElement('script');
+	eScript.setAttribute('type','text/javascript');
+	eScript.setAttribute('src','https://www.mklance.com.br/_AreaCliente5.asp?wzc='+vWzc+'&arq='+'Leilao.asp');
+	head.appendChild(eScript);
+}
+
+
+function formataTelefoneW(vC,vT){
+
+	var vCampoN=vC.value;
+	var vLn=vCampoN.length;
+
+	var vCampo='';
+	var vN;
+	var i;
+	for (i = 0; i < vLn; i++){
+		if(!isNaN(parseFloat(vCampoN.substr(i,1))) && isFinite(vCampoN.substr(i,1))==true){
+			vN=vCampoN.substr(i,1);
+			vCampo=vCampo+String(vN);
+		}
+	}
+	vCampo=vCampo.trim();
+
+	var vL=vCampo.length;
+
+	if(vL==1){
+		vC.value='(' + vCampo + '_) ____-____'; 
+		setCaretPositionW(vC.id,2);
+	}else if(vL==2){
+		vC.value='('+ vCampo + ') ____-____'; 
+		setCaretPositionW(vC.id,5);
+	}else if(vL==3){
+		vC.value='(' + vCampo.substr(0,2) + ') ' + vCampo.substr(2,1) + '___-____'; 
+		setCaretPositionW(vC.id,6);
+	}else if(vL==4){
+		vC.value='(' + vCampo.substr(0,2) + ') ' + vCampo.substr(2,2) + '__-____'; 
+		setCaretPositionW(vC.id,7);
+	}else if(vL==5){
+		vC.value='(' + vCampo.substr(0,2) + ') ' + vCampo.substr(2,3) + '_-____'; 
+		setCaretPositionW(vC.id,8);
+	}else if(vL==6){
+		vC.value='(' + vCampo.substr(0,2) + ') ' + vCampo.substr(2,4) + '-____'; 
+		setCaretPositionW(vC.id,10);
+	}else if(vL==7){
+		vC.value='(' + vCampo.substr(0,2) + ') ' + vCampo.substr(2,4) + '-' + vCampo.substr(6,1) + '___'; 
+		setCaretPositionW(vC.id,11);
+	}else if(vL==8){
+		vC.value='(' + vCampo.substr(0,2) + ') ' + vCampo.substr(2,4) + '-' + vCampo.substr(6,2) + '__'; 
+		setCaretPositionW(vC.id,12);
+	}else if(vL==9){
+		vC.value='(' + vCampo.substr(0,2) + ') ' + vCampo.substr(2,4) + '-' + vCampo.substr(6,3) + '_'; 
+		setCaretPositionW(vC.id,13);
+	}else if(vL==10){
+		vC.value='(' + vCampo.substr(0,2) + ') ' + vCampo.substr(2,4) + '-' + vCampo.substr(6,4); 
+		setCaretPositionW(vC.id,14);
+	}else if(vL==11){
+		vC.value='(' + vCampo.substr(0,2) + ') ' + vCampo.substr(2,5) + '-' + vCampo.substr(7,4); 
+		setCaretPositionW(vC.id,15);
+	}else if(vL>11){
+		vC.value='(' + vCampo.substr(0,2) + ') ' + vCampo.substr(2,5) + '-' + vCampo.substr(7,4); 
+		setCaretPositionW(vC.id,15);
+	}
+
+}
+
+
+function setCaretPositionW(elemId, caretPos) {
+    var elem = document.getElementById(elemId);
+
+    if(elem != null) {
+        if(elem.createTextRange) {
+            var range = elem.createTextRange();
+            range.move('character', caretPos);
+            range.select();
+        }
+        else {
+            if(elem.selectionStart) {
+                elem.focus();
+                elem.setSelectionRange(caretPos, caretPos);
+            }
+            else
+                elem.focus();
+        }
+    }
+}
+
+function SomenteNumeroW(e){
+    var tecla=(window.event)?event.keyCode:e.which;   
+    if((tecla>47 && tecla<58)) return true;
+    else{
+    	if (tecla==8 || tecla==0) return true;
+	else  return false;
+    }
+}
+
+</script>
+
+
+
+<script language="JavaScript">
+
+var vAcm='';
+
+if(vAcm.substr(38,1)=='N'){
+	abreLoginTrocaSenha();
+}else{
+	if(vAcm.substr(36,1)=='N'){
+		abreAceitePolPriv();
+	}else	if(vAcm.substr(39,1)=='N'){
+		abreWhats();
+	}
+}
+
+</script>
+
+
+
+<div style="position:relative; width:100%; min-width:100%; height:auto; margin-top:220px; padding-top:0px; top:0px; z-index:0;">
+
+
+	<div style="position:relative; width:100%; width:100vw;/**/ top:0px; z-index:0; background-color:#A18276; height:auto; /*border:1px solid #000000;*/">
+      <div class="Pags_inside" style="position:relative; top:0px; width:76.5%; height:auto; /*border:1px solid #000000;*/">
+         <div class="Letra15 CorBranca" style="position:absolute; top:16px; text-align:right; right:0px;">
+			
+         Leilão <span class="Negrito">ONLINE</span>
+			 cód 674/2026</div>
+         <span class="Letra26 CorBranca Negrito" style="margin-top:50px; margin-bottom:8px;">Proc. n° 5003432-98.2022.4.02.5101 - Execução Fiscal - 08° Vara Federal do RIO DE JANEIRO - PGFN - Procuradoria Geral da Fazenda Nacional.</span>
+      </div>
+	</div>
+
+
+	<div style="position:relative; width:100%; width:100vw; height:auto; background-color:#E7EEE8; border-bottom:3px solid #d4d4e1; padding-bottom:15px; /*top:219px; z-index:0; border:1px solid #000000;*/">
+		<div class="Pags_inside" style="position:relative; width:76.5%; /*top:0px;*/ height:auto; /*border:1px solid #0000ff;*/">
+			<div class="Letra18 CorCinzaEsc" style="position:relative; margin-top:15px; /*margin-bottom:8px;*/" align="justify">Imóvel loja B, situada na Rua Operário Fortes, 43, Ramos, na cidade do Rio de Janeiro. Trata-se de loja no térreo com posição de frente e com área de 70,00m2. </div>
+		</div>
+	</div>
+
+	<div style="position:relative; width:100%; height:auto; margin-top:12px; display:none;">
+		<div class="Pags_inside" style="position:relative; height:auto; border-top:3px solid #b3b3ce;"></div>
+	</div>
+
+
+
+
+<SCRIPT LANGUAGE="JavaScript">
+
+function abreFechaPropDescr(){
+	var vAlt=document.getElementById('divPropDescr').style.height;
+	if(vAlt=='auto'){
+		document.getElementById('divPropDescr').style.height='0px';
+		document.getElementById('divPropDescrTexto').style.display='none';
+		document.getElementById('divMostraDetBarraEsq').style.display='';
+		document.getElementById('divMostraDetBarraDir').style.display='';
+		document.getElementById('divMostraDetBarraEsq2').style.display='none';
+		document.getElementById('divMostraDetBarraDir2').style.display='none';
+		document.getElementById('divExibirPropTermos').innerHTML='exibir termos da proposta de aquisição';
+	}else{
+		document.getElementById('divPropDescr').style.height='auto';
+		document.getElementById('divPropDescrTexto').style.display='';
+		document.getElementById('divMostraDetBarraEsq').style.display='none';
+		document.getElementById('divMostraDetBarraDir').style.display='none';
+		document.getElementById('divMostraDetBarraEsq2').style.display='';
+		document.getElementById('divMostraDetBarraDir2').style.display='';
+		document.getElementById('divExibirPropTermos').innerHTML='ocultar termos da proposta de aquisição';
+	}
+}
+</script>
+
+
+
+	<div style="position:relative; width:100%; height:auto;">
+		<div class="Pags_inside" style="position:relative; height:auto;">
+			<div class="Letra18 CorCinzaEsc" style="position:relative; margin-top:15px; //width:500px;"><span class="Negrito">Proposta de Aquisição</span></div>
+
+         <div style="position:absolute; margin-top:15px; text-align:right; right:30px"><a href="#void" class="LinkviewP" onClick="abreFechaPropDescr();"><div id="divExibirDescrLote">exibir termos da proposta de aquisição</div></a></div>
+
+			<div id="divMostraDetLote" style="position:absolute; margin-top:13px; text-align:right; right:0px; cursor:pointer; cursor:hand; height:24px; width:24px;" onClick="abreFechaPropDescr()" onMouseOver="document.getElementById('divMostraDetLoteCirc').style.backgroundColor='#FFFFFF';document.getElementById('divMostraDetBarraEsq').style.backgroundColor='#A18276';document.getElementById('divMostraDetBarraDir').style.backgroundColor='#A18276';document.getElementById('divMostraDetBarraEsq2').style.backgroundColor='#A18276';document.getElementById('divMostraDetBarraDir2').style.backgroundColor='#A18276'" onMouseOut="document.getElementById('divMostraDetLoteCirc').style.backgroundColor='#A18276';document.getElementById('divMostraDetBarraEsq').style.backgroundColor='#FFFFFF';document.getElementById('divMostraDetBarraDir').style.backgroundColor='#FFFFFF';document.getElementById('divMostraDetBarraEsq2').style.backgroundColor='#FFFFFF';document.getElementById('divMostraDetBarraDir2').style.backgroundColor='#FFFFFF'">
+
+            <div id="divMostraDetLoteCirc" style="position: absolute; left:0px; top:0px; height:24px; width:24px; background-color:#A18276; border-radius:15px; -moz-border-radius:15px; -webkit-border-radius:15px;"></div>
+
+         	<div id="divMostraDetBarraEsq" style="position:absolute; top:11px; left:3px; width:11px; height:2px; -ms-transform: rotate(45deg); transform: rotate(45deg);	background-color:#FFFFFF;"></div>
+         	<div id="divMostraDetBarraDir" style="position:absolute; top:11px; left:10px; width:11px; height:2px; -ms-transform: rotate(-45deg); transform: rotate(-45deg); background-color:#FFFFFF;"></div>
+
+         	<div id="divMostraDetBarraEsq2" style="position:absolute; top:11px; left:3px; width:11px; height:2px; -ms-transform: rotate(-45deg); transform: rotate(-45deg); background-color:#FFFFFF; display:none;"></div>
+         	<div id="divMostraDetBarraDir2" style="position:absolute; top:11px; left:10px; width:11px; height:2px; -ms-transform: rotate(45deg); transform: rotate(45deg); background-color:#FFFFFF; display:none;"></div>
+
+			</div>            
+		</div>
+	</div>
+
+	<div id="divPropDescr" style="position:relative; width:100%; height:0px;">
+		<div class="Pags_inside" style="position:relative; height:auto;">
+			<div id="divPropDescrTexto" class="Letra18 CorCinzaEsc" style="position:relative; margin-top:15px; display:none;">Em conformidade com o Art. 895 da Lei nº 13.105 de 16 de Março de 2015, neste leilão poderão ser efetuadas Propostas de Aquisição.</div>
+		</div>
+	</div>
+	<div style="position:relative; width:100%; height:auto; margin-top:12px;">
+		<div class="Pags_inside" style="position:relative; height:auto; border-top:3px solid #d4d4e1;"></div>
+	</div>
+
+	<div style="position:relative; width:100%; height:auto; /*top:219px; z-index:0; background-color:#000000; border:1px solid #000000;*/">
+		<div class="Pags_inside" style="position:relative; /*top:0px;*/ height:auto; /*border:1px solid #0000ff;*/">
+
+			<div style="float:left; margin-top:15px; margin-right:15px; /*position:relative;  margin-bottom:8px;*/" align="center">
+            <span style="line-height:1.7;">
+					<a href="#void" onClick="abrirPDF('000674','000674_000000_01_001967.pdf');" class="EsqueciPW"><img src="Imagens/imgPDF2.gif" width="25" height="31" border="0"><br>Documento</a>
+         	</span>
+         </div>
+
+			<div style="float:left; margin-top:15px; margin-right:15px; /*position:relative;  margin-bottom:8px;*/" align="center">
+            <span style="line-height:1.7;">
+					<a href="#void" onClick="abrirEdital(1963);" class="EsqueciPW"><img src="Imagens/imgDoc2.gif" width="25" height="31" border="0"><br>Edital</a>
+         	</span>
+         </div>
+
+		</div>
+	</div>
+	<div style="position:relative; width:100%; height:auto; margin-top:12px;">
+		<div class="Pags_inside" style="position:relative; height:auto; border-top:3px solid #d4d4e1;"></div>
+	</div>
+
+
+	<div id="divAviso" style="position:relative; width:100%; height:auto; margin-bottom:12px; /*border:1px solid #000000;*/ display:none">
+		<div class="Pags_inside" style="position:relative; height:auto; margin-bottom:-15px; padding-bottom:15px; border-bottom:3px solid #d4d4e1; background-color:#E7EEE8;">
+      	<div style="position:absolute; left:10px; top:10px;"><img src="Imagens/imgAviso.png" width="50" class="pulse"></div>
+			<div class="Pags_inside" style="position:relative; width:100%; left:0px; height:auto; /*border:1px solid #0000ff;*/">
+				<div id="divAvisoTexto" class="Letra18 CorCinzaEsc" style="position:relative; margin-top:15px; margin-left:70px; margin-right:10px;" align="justify"></div>
+			</div>
+		</div>
+	</div>
+
+
+	<div style="position:relative; width:100%; height:auto;">
+		<div class="Pags_inside" style="position:relative; height:auto;">
+
+			<div class="Letra14 CorCinzaEsc" style="position:relative; margin-top:15px; width:34%; min-width:333px;/* border:1px solid #FF0000*/"><span class="Negrito">Visitas:</span> 6083</div>
+
+			<div style="position:relative; margin-top:15px; width:2%; min-width:20px;*/ border:1px solid #FFff00*/"></div>
+
+			<div style="position:relative; margin-top:15px; width:23%; min-width:230px;/* border:1px solid #FF0000*/">
+
+
+            <div class="classBotaoLeilao" onClick="login();">
+               <div style="position: absolute; top:0px; left:0px;"><img src="Imagens/imgLeilao.png" width="50" height="50"></div>
+               <div class="Letra12 Negrito CorBranca" style="position: absolute; left:50px; top:6px; line-height: 1.5; width:170px; text-align: left">Faça seu login para<br>participar deste leilão</div>
+            </div>
+
+            <div id="divSolicHabilLeilaoEspaco" style="position: relative; border:0px; display:inline-block; height:50px; width:220px; max-width: 220px; display:none;"></div>
+
+         </div>
+
+
+
+
+			<div style="position:relative; margin-top:10px; width:41%; min-width:393px; /*border:1px solid #000000;*/">
+				<div class="Letra14 CorCinzaEsc" style="position:absolute; top:0px; text-align:right; right:0px;" align="right">
+
+            Total: 1 lote / 1 página
+            </div>
+
+				<div style="position:absolute; top:25px; text-align:right; right:0px;" align="right">
+<div class='Anuncio1_seletorIna' align='center'><div class='Anuncio1_seletorStr'>>></div></div><div class="Anuncio1_seletorEsp"></div><div class='Anuncio1_seletorIna' align='center'><div class='Anuncio1_seletorStr'>></div></div><div class="Anuncio1_seletorEsp"></div><div class='Anuncio1_seletorSel' align='center'>1</div><div class="Anuncio1_seletorEsp"></div><div class='Anuncio1_seletorIna' align='center'><div class='Anuncio1_seletorStr'><</div></div><div class="Anuncio1_seletorEsp"></div><div class='Anuncio1_seletorIna' align='center'><div class='Anuncio1_seletorStr'><<</div></div><div class="Anuncio1_seletorEsp"></div>	
+				</div>
+         </div>
+		</div>
+	</div>
+	<div style="position:relative; width:100%; height:auto; margin-top:12px;">
+		<div class="Pags_inside" style="position:relative; height:auto; border-top:3px solid #d4d4e1;"></div>
+	</div>
+
+
+
+
+	<div id="divLote2458" style="position:relative; width:100%; height:auto;">
+		<div class="Pags_inside" style="position:relative;/*top:0px;*/ height:auto;">
+
+			
+			<div style="position:relative; margin-top:15px; width:34%; min-width:333px; height:auto; /*border:1px solid #FF0000;*/cursor:hand; cursor:pointer;" onClick="abrirModalFoto('1948');">
+         	<div style="position:relative; width:100%; /*min-width:333px;*/ padding-top:0px; padding-left:0px; /*border:1px solid #00FF00*/">
+            	<img src="Arquivos/000674/000674_002458_02_1949.jpg" width="100%">
+					              
+               
+            </div>
+           	<div class="Letra14 CorCinzaEsc" style="position:relative; margin-top:10px; right:0px; /*border:1px solid #000000;*/" align="right">4 imagens</div>
+				<div style="position:relative; margin-top:-82px; margin-bottom:30px; margin-right:5px; /*border:1px solid #cccccc*/" align="right"><img src="Imagens/imgLupa3.gif" width="50px" height="50px" style="opacity:0.5"></div>
+         </div>
+
+			
+			<div style="position:relative; margin-top:15px; width:2%; min-width:20px;*/ border:1px solid #FFff00*/"></div>
+
+			
+			<div style="position:relative; margin-top:15px; width:64%; min-width:623px;/* border:1px solid #FF0000*/">
+
+				
+           	<div class="Letra18 CorBranca" style="width:100%; left:0px; height:44px; background-color:#A18276;"><div style="padding-top:10px; padding-left:10px;"><span class="Negrito">Lote nº 43</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="Letra14 CorBranca">cód do lote 674/2458</span></div></div>
+
+				
+            <div style="position:relative; width:100%; height:auto; padding-top:8px; background-color:#E7EEE8;">
+               <div class="Pags_inside" style="position:relative; left:0px; width:100%; min-width:623px; height:auto; /*border:1px solid #000000;*/">
+                  <div class="Letra14 CorCinzaEsc" style="position:relative; margin-top:0px; padding-left:10px; padding-right:10px; padding-bottom:10px;" align="justify">Imóvel loja B, situada na Rua Operário Fortes, 43, Ramos, na cidade do Rio de Janeiro. Trata-se de loja no térreo com posição de frente e com área de 70,00m2. Devidamente descrito e dimensionado na matrícula 139711 no 6° Serviço Registral de Imóveis da Comarca da Capital – RJ. Abrir um negócio em Ramos, na Zona Norte do Rio de Janeiro, pode ser vantajoso devido ao alto fluxo de pedestres e consolidação como área comercial. O bairro é populoso e tradicional, com forte comércio de rua, o que facilita o acesso direto aos moradores locais. Fica na Zona da Leopoldina, com fácil acesso pela Avenida Brasil, estação de trem e linhas de BRT. Berço do samba e chorinho, abriga o Piscinão de Ramos, que oferece lazer, áreas esportivas e eventos culturais. É uma opção para quem busca um bairro suburbano com tradição e boa conectividade. AVALIADO em R$ 135.000,00 (centro e trinta e cinco mil reais) e autorizada a venda com lance acima de 50% da avaliação e com opção de parcelamento.
+
+</div>
+               </div>
+            </div>
+
+				
+            
+
+            <div style="display:-webkit-flex; display:flex;">
+
+           		<div class="Letra18 CorBranca Negrito" style="float:left; width:72%; min-width:453px; height:44px; margin-top:15px; background-color:#3a3b80;"><div style="padding-top:10px; padding-left:10px;">ABERTO PARA LANCES</div></div>
+
+					
+           		<div class="classBotaoSaibaMais" style="float:right; width:28%; min-width:160px; max-width:26%; height:44px; margin-top:15px; font-size:14px; margin-left:2%;" onClick="acessarAuditorio('22061876401060502860402','https://comprei.pgfn.gov.br/anuncio/detalhe/66032','2458');"><div style="padding-top:7px; margin-left:28px;" class="Letra_stretch">Auditório de leilão</div><div style="position:absolute; top:12px; left:8px;"><img src="Imagens/imgMartelo2.png" width="26"></div></div>
+
+				</div>
+
+
+
+            <div style="display:-webkit-flex; display:flex; margin-top:15px;">
+
+				
+           		<div style="float:left; width:72%; min-width:453px; height:83px; background-color:#d4d4e1;">
+               	<div class="Letra14 Negrito" style="position:absolute; padding-top:10px; padding-left:10px;">1° Leilão</div>
+
+
+               	<div class="Letra14 Negrito" style="position:absolute; padding-top:10px; padding-left:107px;">Abertura dos lances:</div>
+						<div class="Letra14 Letra_stretch" style="position:absolute; padding-top:10px; padding-left:265px;">08/03/2026 a partir das 00:00</div>
+
+			
+               	<div class="Letra14 Negrito" style="position:absolute; padding-top:32px; padding-left:152px;">Data do leilão:</div>
+						<div class="Letra14 Letra_stretch" style="position:absolute; padding-top:32px; padding-left:268px;">16/02/2026 às 17:00</div>
+
+               	<div class="Letra14 Negrito" style="position:absolute; padding-top:54px; padding-left:160px;">Fechamento:</div>
+						<div class="Letra14 Letra_stretch" style="position:absolute; padding-top:54px; padding-left:269px;">16/02/2026 às 17:03</div>
+
+
+               </div>
+
+
+					
+           		<div style="float:right; width:28%; min-width:160px; max-width:26%; height:83px; margin-left:2%; background-color:#d4d4e1;" align="center">
+               	<div class="Letra14 Negrito" style="padding-top:20px;">Lance inicial</div>
+               	<div class="Letra14" style="padding-top:5px;">135.000,00</div>
+
+
+
+					</div>
+
+
+            </div>
+
+
+
+
+
+            <div style="display:-webkit-flex; display:flex; margin-top:15px;">
+
+				
+           		<div style="float:left; width:72%; min-width:453px; height:83px; background-color:#d4d4e1;">
+               	<div class="Letra14 Negrito" style="position:absolute; padding-top:10px; padding-left:10px;">2° Leilão</div>
+
+
+               	<div class="Letra14 Negrito" style="position:absolute; padding-top:10px; padding-left:107px;">Abertura dos lances:</div>
+						<div class="Letra14 Letra_stretch" style="position:absolute; padding-top:10px; padding-left:265px;">17/02/2026 a partir das 00:00</div>
+
+			
+
+               	<div class="Letra14 Negrito" style="position:absolute; padding-top:32px; padding-left:152px;">Data do leilão:</div>
+						<div class="Letra14 Letra_stretch" style="position:absolute; padding-top:32px; padding-left:268px;">19/03/2026 às 17:00</div>
+
+
+
+               	<div class="Letra14 Negrito" style="position:absolute; padding-top:54px; padding-left:160px;">Fechamento:</div>
+						<div class="Letra14 Letra_stretch" style="position:absolute; padding-top:54px; padding-left:269px;">19/03/2026 às 17:03</div>
+
+
+               </div>
+
+					
+           		<div style="float:right; width:28%; min-width:160px; max-width:26%; height:83px; margin-left:2%; background-color:#d4d4e1;" align="center">
+               	<div class="Letra14 Negrito" style="padding-top:20px;">Lance inicial</div>
+               	<div class="Letra14" style="padding-top:5px; /*border:1px solid #00FF00*/">67.500,00</div>
+
+
+
+					</div>
+            </div>
+
+
+            <div style="display:-webkit-flex; display:flex; margin-top:15px;">
+
+				
+           		<div style="float:left; width:72%; min-width:453px; height:83px; background-color:#d4d4e1;">
+               	<div class="Letra14 Negrito" style="position:absolute; padding-top:10px; padding-left:10px;">3° Leilão</div>
+
+
+
+               	<div class="Letra14 Negrito" style="position:absolute; padding-top:10px; padding-left:107px;">Abertura dos lances:</div>
+						<div class="Letra14 Letra_stretch" style="position:absolute; padding-top:10px; padding-left:265px;">20/03/2026 a partir das 00:00</div>
+
+			
+
+               	<div class="Letra14 Negrito" style="position:absolute; padding-top:32px; padding-left:152px;">Data do leilão:</div>
+						<div class="Letra14 Letra_stretch" style="position:absolute; padding-top:32px; padding-left:268px;">28/10/2026 às 17:00</div>
+
+
+
+               	<div class="Letra14 Negrito" style="position:absolute; padding-top:54px; padding-left:160px;">Fechamento:</div>
+						<div class="Letra14 Letra_stretch" style="position:absolute; padding-top:54px; padding-left:269px;">28/10/2026 às 17:03</div>
+
+
+               </div>
+
+					
+           		<div style="float:right; width:28%; min-width:160px; max-width:26%; height:83px; margin-left:2%; background-color:#d4d4e1;" align="center">
+               	<div class="Letra14 Negrito" style="padding-top:20px;">Lance inicial</div>
+               	<div class="Letra14" style="padding-top:5px; /*border:1px solid #00FF00*/">67.500,00</div>
+
+
+
+					</div>
+            </div>
+
+            <div style="position:relative; width:100%; height:3px; padding-top:0px;"></div>
+
+
+
+				
+            <div style="position:relative; width:100%; height:3px; padding-top:0px;"></div>
+
+
+
+				
+            <div style="position:relative; width:100%; height:auto; padding-top:8px; /*border:1px solid #ff0000;*/">
+               <div class="Pags_inside" style="position:relative; left:0px; width:100%; min-width:623px; height:auto;/*top:0px;*/ /*border:1px solid #000000;*/">
+               	<div class="Letra14 Negrito" style="position:relative; padding-top:0px; padding-left:10px;">Incremento mínimo:</div>
+						<div class="Letra14" style="position:relative; padding-top:0px; padding-left:10px;">R$ 200,00</div>
+					</div>
+				</div>
+
+            <div style="position:relative; width:100%; height:auto; padding-top:8px; /*border:1px solid #ff0000;*/">
+               <div class="Pags_inside" style="position:relative; left:0px; width:100%; min-width:623px; height:auto; /*border:1px solid #cccccc;*/">
+               	<div class="Letra14 Negrito" style="position:relative; padding-top:0px; padding-left:10px;">Visita&ccedil;&atilde;o:</div>
+						<div class="Letra14" style="position:relative; padding-top:0px; padding-left:10px;" align="justify">Rua Operário Fortes, 43, lj. B, Ramos, na cidade do Rio de Janeiro.</div>
+					</div>
+				</div>
+
+            <div style="position:relative; width:100%; height:auto; padding-top:8px; /*border:1px solid #ff0000;*/">
+               <div class="Pags_inside" style="position:relative; left:0px; width:100%; min-width:623px; height:auto; /*border:1px solid #cccccc;*/">
+               	<div class="Letra14 Negrito" style="position:relative; padding-top:0px; padding-left:10px;">Retirada:</div>
+						<div class="Letra14" style="position:relative; padding-top:0px; padding-left:10px;" align="justify">A posse do imóvel será realizada mediante expedição de Mandado que será despachado pelo M.M. Juízo Comitente.</div>
+					</div>
+            </div>
+
+            <div style="position:relative; width:100%; height:auto; padding-top:8px; /*border:1px solid #ff0000;*/">
+               <div class="Pags_inside" style="position:relative; left:0px; width:100%; min-width:623px; height:auto; /*border:1px solid #cccccc;*/">
+               	<div class="Letra14 Negrito" style="position:relative; padding-top:0px; padding-left:10px;">Observa&ccedil;&atilde;o:</div>
+						<div class="Letra14" style="position:relative; padding-top:0px; padding-left:10px;" align="justify">Autorizada a venda do bem por valor acima de 50% da avaliação. Imóvel em venda através do Programa da Procuradoria Geral da Fazenda Nacional e sob intermediação do Leiloeiro Público credenciado Maurício Kronemberg, Jucerja n° 0217. Nestes processos de venda, Maurício Kronemberg, com credenciamento público, promove o encontro entre a oportunidade e o cliente, sendo responsável por todas as fases do negócio. O comprador recebe o bem sem pendências e com a segurança jurídica de uma venda judicial. Os pagamentos relativos aos negócios no Comprei serão feitos mediante DARF (Documento de Arrecadação de Receitas Federais) emitido na plataforma. O Comprei não envia links de pagamento. A compra de bens no Comprei é causa originária de aquisição de propriedade, portanto, o comprador recebe o bem desembaraçado e livre de ônus em registro imobiliário. As dívidas anteriores à alienação, oriundas de obrigações propter rem (como dívidas de condomínio, IPTU etc), serão de responsabilidade do adquirente, podendo, contudo, sub-rogarem-se em eventual excedente do produto da alienação (venda superior ao valor da dívida tributária). A alienação de bens ocorre ad corpus, ou seja, os bens serão vendidos no estado de conservação em que se encontrarem, não havendo responsabilidade do Comprei ou da União quanto a consertos, reparos ou mesmo providências referentes à retirada, embalagem, impostos, encargos sociais e transportes. Em caso de compra parcelada, deverá ser registrada a hipoteca em favor da União, a qual será cancelada mediante apresentação de termo de quitação de parcelamento, emitido pelo Comprei quando da quitação do acordo. O pagamento, ou a entrada de parcelamento, será realizado no prazo máximo de 2 (dois) dias úteis após a efetivação da alienação, por meio de DARF simples gerada pelo Leiloeiro Maurício Kronemberg. O inadimplemento autoriza a promoção, em face do comprador, da execução do valor devido. O usuário declara estar ciente das limitações para celebração de negócio previstas no art. 890, da Lei nº 13.105, de 2015 (Código de processo civil). Para maiores informações, diretamente na Vara do Processo, pelos canais do Comprei ou fale direto com o Leiloeiro Público Maurício Kronemberg através dos canais: tel (21) 2242-0999, móvel (21)97990-2997 ou pelo endereço eletrônico do leiloeiro <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="dcbfb3b2a8bda8b39cb1bda9aeb5bfb5b3b7aeb3b2b9b1beb9aebbf2bfb3b1f2beae">[email&#160;protected]</a> . Endereço na Rua da Uruguaiana 10, Conj. 1505, Centro – Rio de Janeiro/RJ.</div>
+					</div>
+            </div>
+
+
+
+			</div>
+		</div>
+
+   	<div id="dddddddddddivSuspensoLote2458" style="position:absolute; top:0px; left:0px; width:100%; height:100%; margin-top:8px; background: rgba(255, 0, 0, 0.3); display:none;"></div>
+
+	</div>
+
+
+	<div style="position:relative; width:100%; height:auto; margin-top:12px;">
+		<div class="Pags_inside" style="position:relative; height:auto; border-top:3px solid #d4d4e1;"></div>
+	</div>
+	<div style="position:relative; width:100%; height:80px;">
+		<div class="Pags_inside" style="position:relative;/*top:0px;*/ height:auto;">
+
+			<div style="position:relative; margin-top:10px; width:59%; min-width:583px;*/ border:1px solid #FFff00*/"></div>
+
+			<div style="position:relative; margin-top:10px; width:41%; min-width:393px; /*border:1px solid #000000;*/">
+				<div class="Letra14 CorCinzaEsc" style="position:absolute; top:0px; text-align:right; right:0px;" align="right">
+
+            Total: 1 lote / 1 página
+            </div>
+				<div style="position:absolute; top:25px; text-align:right; right:0px;" align="right">
+
+<div class='Anuncio1_seletorIna' align='center'><div class='Anuncio1_seletorStr'>>></div></div><div class="Anuncio1_seletorEsp"></div><div class='Anuncio1_seletorIna' align='center'><div class='Anuncio1_seletorStr'>></div></div><div class="Anuncio1_seletorEsp"></div><div class='Anuncio1_seletorSel' align='center'>1</div><div class="Anuncio1_seletorEsp"></div><div class='Anuncio1_seletorIna' align='center'><div class='Anuncio1_seletorStr'><</div></div><div class="Anuncio1_seletorEsp"></div><div class='Anuncio1_seletorIna' align='center'><div class='Anuncio1_seletorStr'><<</div></div><div class="Anuncio1_seletorEsp"></div>
+
+				</div>
+         </div>
+		</div>
+	</div>
+</div>
+
+
+
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><SCRIPT LANGUAGE="JavaScript">
+
+function verificaProposta2(){
+
+	var vVlr;
+	var vPerc;
+	
+	var vPvf=document.getElementById('txtPvf2').value;
+	var vPv=document.getElementById('txtPv2').value;
+
+	if(vPvf=='S'){
+	
+		vVlr=document.getElementById('txtPropValor2').value;
+		if(vVlr==''){
+			document.getElementById('txtPropVista2').value=''; 
+			return false;
+		}
+		vVlr=vVlr.replace('.','');
+		vVlr=vVlr.replace('.','');
+		vVlr=vVlr.replace(',','.');
+		vVlr=parseFloat(vVlr);
+
+		vPerc=vPv;
+		vPerc=parseFloat(vPerc);
+		vVlr=vVlr*vPerc/100;
+		vVlr = vVlr.toLocaleString('pt-br', {minimumFractionDigits: 2,  maximumFractionDigits: 2});
+		document.getElementById('txtPropVista2').value=vVlr;
+
+	}else{
+		document.getElementById('txtPropVista2').value=''; 
+		document.getElementById('txtPropVistaPerc2').value=''; 
+	}
+
+}
+
+
+function verificaAPrazo2(){
+	if(document.getElementById('txtPropValor2').value==''){
+		document.getElementById('txtPropVista2').value='';
+		alert('Primeiro digite o VALOR DA PROPOSTA R$');
+		document.getElementById('txtPropValor2').focus();
+		return false;
+	}
+	var vVlr=document.getElementById('txtPropValor2').value;
+	if(vVlr==''){
+		return false;
+	}
+	if(document.getElementById('txtPropVista2').value==''){
+		document.getElementById('txtPropVistaPerc2').value=''; 
+		return false;
+	}
+	vVlr=vVlr.replace('.','');
+	vVlr=vVlr.replace('.','');
+	vVlr=vVlr.replace(',','.');
+	vVlr=parseFloat(vVlr);
+
+	var vVlrV=document.getElementById('txtPropVista2').value;
+	vVlrV=vVlrV.replace('.','');
+	vVlrV=vVlrV.replace('.','');
+	vVlrV=vVlrV.replace(',','.');
+	vVlrV=parseFloat(vVlrV);
+
+	var vPerc;
+	vPerc=(vVlrV*100)/vVlr;
+	vPerc=parseFloat(vPerc);
+	vPerc = vPerc.toLocaleString('pt-br', {minimumFractionDigits: 0,  maximumFractionDigits: 0});
+	document.getElementById('txtPropVistaPerc2').value=vPerc;
+}
+
+
+function editarModalidade2(){
+	document.getElementById('divPropModalidadeEditar2').style.display='none';
+	document.getElementById('txtPropModalidade2').disabled=false;
+	document.getElementById('txtPropModalidade2').focus();
+}
+function editarIndexador2(){
+	document.getElementById('divPropIndexadorEditar2').style.display='none';
+	document.getElementById('txtPropIndexador2').disabled=false;
+	document.getElementById('txtPropIndexador2').focus();
+}
+function editarCondicoes2(){
+	document.getElementById('divPropCondicoesEditar2').style.display='none';
+	document.getElementById('txtPropCondicoes2').disabled=false;
+	document.getElementById('txtPropCondicoes2').focus();
+}
+function enviarProposta2(){
+	if(document.getElementById('txtPropValor2').value==''){
+		alert('Campo VALOR DA PROPOSTA R$ é de preenchimento obrigatório.');
+		return false;
+	}
+	if(document.getElementById('txtPropVista2').value==''){
+		alert('Campo ENTRADA À VISTA R$ é de preenchimento obrigatório.');
+		return false;
+	}
+	if(document.getElementById('txtPropModalidade2').value==''){
+		alert('Campo MODALIDADE é de preenchimento obrigatório.');
+		return false;
+	}
+	if(document.getElementById('txtPropIndexador2').value==''){
+		alert('Campo INDEXADOR é de preenchimento obrigatório.');
+		return false;
+	}
+	if(document.getElementById('txtPropCondicoes2').value==''){
+		alert('Campo CONDIÇÕES é de preenchimento obrigatório.');
+		return false;
+	}
+	if (confirm("Confirme: ENVIAR proposta de aquisição?")) {
+		document.getElementById('txtPropVista2').disabled=false;
+		document.getElementById('cboPropPrazo2').disabled=false;
+		document.getElementById('txtPropModalidade2').disabled=false;
+		document.getElementById('txtPropVistaPerc2').disabled=false;
+		document.getElementById('txtPropIndexador2').disabled=false;
+		document.getElementById('txtPropCondicoes2').disabled=false;
+		document.frmPropLancar2.action='Leilao_Prop2_G.asp';
+		document.frmPropLancar2.zz.value='22061876401060502860402';
+		frmPropLancar2.submit();
+	}
+}
+
+function MascaraMoeda(objTextBox, SeparadorMilesimo, SeparadorDecimal, e){
+    var sep = 0;
+    var key = '';
+    var i = j = 0;
+    var len = len2 = 0;
+    var strCheck = '0123456789';
+    var aux = aux2 = '';
+    var whichCode = (window.Event) ? e.which : e.keyCode;
+    if (whichCode == 13) return true;
+    if (whichCode == 8) return true;
+	if (whichCode == 0 ) return true;  
+	if (whichCode == 9 ) return true; //tecla tab  
+	if (whichCode == 13) return true; //tecla enter  
+	if (whichCode == 16) return true; //shift internet explorer  
+	if (whichCode == 17) return true; //control no internet explorer  
+	if (whichCode == 27 ) return true; //tecla esc  
+	if (whichCode == 34 ) return true; //tecla end  
+	if (whichCode == 35 ) return true;//tecla end  
+	if (whichCode == 36 ) return true; //tecla home  
+
+    key = String.fromCharCode(whichCode); // Valor para o código da Chave
+    if (strCheck.indexOf(key) == -1) return false; // Chave inválida
+    len = objTextBox.value.length;
+    for(i = 0; i < len; i++)
+        if ((objTextBox.value.charAt(i) != '0') && (objTextBox.value.charAt(i) != SeparadorDecimal)) break;
+    aux = '';
+    for(; i < len; i++)
+        if (strCheck.indexOf(objTextBox.value.charAt(i))!=-1) aux += objTextBox.value.charAt(i);
+    aux += key;
+    len = aux.length;
+    if (len == 0) objTextBox.value = '';
+    if (len == 1) objTextBox.value = '0'+ SeparadorDecimal + '0' + aux;
+    if (len == 2) objTextBox.value = '0'+ SeparadorDecimal + aux;
+    if (len > 2) {
+        aux2 = '';
+        for (j = 0, i = len - 3; i >= 0; i--) {
+            if (j == 3) {
+                aux2 += SeparadorMilesimo;
+                j = 0;
+            }
+            aux2 += aux.charAt(i);
+            j++;
+        }
+        objTextBox.value = '';
+        len2 = aux2.length;
+        for (i = len2 - 1; i >= 0; i--)
+        objTextBox.value += aux2.charAt(i);
+        objTextBox.value += SeparadorDecimal + aux.substr(len - 2, len);
+    }
+    return false;
+}
+
+function textCounter(field, countfield, maxlimit){
+	if(field.value.length > maxlimit){
+		field.value = field.value.substring(0, maxlimit);
+	}else{
+		document.getElementById(countfield).innerHTML= maxlimit - field.value.length+'/'+maxlimit
+	}
+}
+
+function abrePropLancar2(){
+	document.getElementById('divPropLancar2').className='classDIVLogin';
+	document.getElementById('divFdo').style.zIndex='904';
+	document.getElementById('divFdo').style.display='';
+	document.getElementById('divPropLancar2').style.display='';
+}
+function fechaPropLancar2(){
+	document.getElementById('divPropLancar2').className='classDIVLogin2';
+	document.getElementById('divFdo').style.display='none';
+}
+function preparaAbrirPropLancar2(vNlo){
+
+	
+
+	var head = document.getElementsByTagName('head').item(0);
+	var eScript = document.createElement('script');
+	eScript.setAttribute('type','text/javascript');
+	eScript.setAttribute('src','Leilao_Prop2_A.asp?nlo='+vNlo);
+	head.appendChild(eScript);
+}
+
+</script>
+
+
+<div id="divPropLancar2" class="classDIVLogin" style="display:none; z-index:1000;">
+
+	<div style="position:absolute; top:0px; width:100%; left:0px; height:110px; background-color:#402900;"></div>
+
+
+
+   <div onClick="fechaPropLancar2()" style="position:absolute; width:30px; height:30px; right:10px; top:10px; cursor:pointer; z-index:906">
+      <div style="position:absolute; top:0px; left:-6px; width:32px; height:32px; border-radius:50%; overflow:hidden; background:rgba(0, 0, 0, 0.5);"></div>
+      <div style="position:absolute; top:15px; left:0px; width:20px;	height:1px;	background-color:#ffffff; -ms-transform: rotate(45deg); transform: rotate(45deg);"></div>
+      <div style="position:absolute; top:15px; left:0px;	width:20px; height:1px; background-color:#ffffff; -ms-transform: rotate(-45deg); transform: rotate(-45deg);"></div>
+   </div>
+
+	<div class="Topo1_logo" style="position:absolute; top:15px; width:100%; left:50%; margin-left:-120px;"><img src="Imagens/imgLogo.png" width="240"></div>
+
+   <div class="JanLoginFdo" style="left:20px; top:110px; height:330px; width:410px;">
+
+      <form name="frmPropLancar2" id="frmPropLancar2" method="post">
+
+      <div id="divPropTitulo2" class="JanLoginTit Negrito" align="center" style="top:20px; font-family:ARIAL; font-size:20px; width:410px;"></div>
+
+
+      <div style="position:absolute; left:0px; top:65px; width:400px;" class="Letra14 Negrito">Valor da proposta R$</div>
+      <div style="position:absolute; left:210px; top:65px; width:400px;" class="Letra14 Negrito">Modalidade:</div>
+
+      <div style="position:absolute; left:0px; top:85px;"><input name="txtPropValor2" type="text" class="Letra16" id="txtPropValor2"  onKeyPress="return(MascaraMoeda(this,'.',',',event));" onKeyUp="verificaProposta2();" size="20" maxlength="20" style="width:150px;"></div>
+      <div style="position:absolute; left:210px; top:85px;"><input name="txtPropModalidade2" type="text" class="Letra16" id="txtPropModalidade2" size="20" maxlength="20" style="width:140px;"></div>
+
+      <div id="divPropModalidadeEditar2" style="position:absolute; left:360px; top:90px; width:200px;"><a href="#void" onClick="editarModalidade2();" class="EsqueciPW">Alterar</a></div>
+
+
+
+      <div style="position:absolute; left:0px; top:125px; width:400px;" class="Letra14 Negrito">Entrada à vista R$</div>
+      <div style="position:absolute; left:160px; top:125px; width:400px;" class="Letra14 Negrito">%</div>
+      <div style="position:absolute; left:210px; top:125px; width:400px;" class="Letra14 Negrito">A prazo:</div>
+
+
+      <div style="position:absolute; left:0px; top:145px;">
+         <input name="txtPropVista2" type="text" class="Letra16" id="txtPropVista2" onKeyPress="return(MascaraMoeda(this,'.',',',event))" onKeyUp="verificaAPrazo2();" size="20" maxlength="20" style="width:150px;">
+		</div>
+      <div style="position:absolute; left:160px; top:145px;">
+         <input name="txtPropVistaPerc2" type="text" class="Letra16" id="txtPropVistaPerc2" style="width:40px;" disabled>
+      </div>
+      <div style="position:absolute; left:210px; top:145px;">
+         <select name="cboPropPrazo2" id="cboPropPrazo2" class="Letra16" style="width:50px; height:25px;"></select>
+		</div>      
+
+
+      <div id="divProp2PrazoParc" style="position:absolute; left:270px; top:146px; width:400px;" class="Letra16">parcelas</div>
+
+
+      <div id="divPropMinVista2" style="position:absolute; left:0px; top:171px; width:400px;" class="Letra10 CorVermelha"></div>
+      <div id="divProp2PrazoParc2" style="position:absolute; left:210px; top:171px; width:400px;" class="Letra10 CorVermelha">Prazo único</div>
+
+
+
+      <div style="position:absolute; left:0px; top:185px; width:400px;" class="Letra14 Negrito">Indexador:</div>
+
+      <div style="position:absolute; left:0px; top:205px;"><input name="txtPropIndexador2" type="text" class="Letra16" id="txtPropIndexador2"  maxlength="50" style="width:350px;"></div>
+
+      <div id="divPropIndexadorEditar2" style="position:absolute; left:360px; top:210px; width:400px;"><a href="#void" onClick="editarIndexador2();" class="EsqueciPW">Alterar</a></div>
+
+
+
+      <div style="position:absolute; left:0px; top:245px; width:400px;" class="Letra14 Negrito">Condições:</div>
+
+      <div style="position:absolute; left:0px; top:265px;"><input name="txtPropCondicoes2" type="text" class="Letra16" id="txtPropCondicoes2" maxlength="50" style="width:350px;"></div>
+
+      <div id="divPropCondicoesEditar2" style="position:absolute; left:360px; top:270px; width:400px;"><a href="#void" onClick="editarCondicoes2();" class="EsqueciPW">Alterar</a></div>
+
+
+
+      <div style="position:absolute; left:0px; top:305px; width:400px;" class="Letra14 Negrito">Comentários:</div>
+
+      <div style="position:absolute; left:0px; top:325px;">
+      	<textarea name="txtComent2" cols="78" rows="3" id="txtComent2" class="Letra16" style="width:400px; height:50px;" onKeyDown="textCounter(this.form.txtComent2,'divTXTComent2',250);" onKeyUp="textCounter(this.form.txtComent2,'divTXTComent2',250);"></textarea>
+		</div>
+
+
+      <div id="divTXTComent2" style="position:absolute; left:0px; top:385px; width:300px;" class="Letra12">0/250</div>
+
+
+      <div class="JanLoginEntrar" style="top:395px; width:410px; left:0px" align="center">
+		<input type="button" name="btnAuroriz" id="btnAutoriz" value="Enviar proposta" class="classBotao" onClick="enviarProposta2();" style="width:150px;">
+      </div>
+
+      <input type="hidden" name="zz" id="zz">
+      <input type="hidden" name="nlo" id="nlo">
+      <input type="hidden" name="txtPvf2" id="txtPvf2">
+      <input type="hidden" name="txtPv2" id="txtPv2">
+      </form>
+
+
+	</div>
+
+
+
+</div>
+
+
+<div id="divSinoHover" class="hoverSino" onClick="toScrolltoAviso();" style="display:none;"><div style="position:absolute; top:11px; left:20px;" class="Letra14 CorBranca Negrito">Avisos importantes. Clique aqui para ler.</div></div>
+<div id="divSino" style="position:fixed; bottom:20px; right:20px; cursor:hand; cursor:pointer; display:none; text-align:right; z-index:900;" onClick="toScrolltoAviso();" onMouseOver="overSino();" onMouseOut="outSino();" align="right"><img id="btnSino" src="Imagens/imgSino.png" width="60"></div>
+
+
+
+<div style="position:relative; width:100%; width:100vw; margin-left:0px; margin-right:0px; padding-left:0px; padding-right:0px;">
+<script language="JavaScript">
+
+function enviarCadasInf(){
+	var vEnv='S';
+	if(document.getElementById('txtNome_inf').value==''||document.getElementById('txtEMail_inf').value==''){
+		vEnv='N';
+		alert('Todos os campos são de preenchimento obrigatório.');
+	}
+	if(vEnv=='S'){
+	
+		var vEMail=document.getElementById('txtEMail_inf').value;
+		while(vEMail.indexOf(" ")!=-1){
+			vEMail=vEMail.replace(" ","");
+		}
+		vEMail=vEMail.toLowerCase(); 
+		var vErrados="áàãâäéèêëíìîïóòõôöúùûüç";
+		var vCertos= "aaaaaeeeeiiiiooooouuuuc";
+		for (i = 0; i < vErrados.length; i++){
+			vEMail=vEMail.replace(vErrados.substr(i,1),vCertos.substr(i,1));
+		}
+	
+		var vUsuario = vEMail.substring(0, vEMail.indexOf("@"));
+		var vDominio = vEMail.substring(vEMail.indexOf("@")+ 1, vEMail.length);
+	
+		if((vUsuario.length >=1) &&
+		 (vDominio.length >=3) && 
+		 (vUsuario.search("@")==-1) && 
+		 (vDominio.search("@")==-1) &&
+		 (vUsuario.search(" ")==-1) && 
+		 (vDominio.search(" ")==-1) &&
+		 (vDominio.search(".")!=-1) &&      
+		 (vDominio.indexOf(".") >=1)&& 
+		 (vDominio.lastIndexOf(".") < vDominio.length - 1)){
+		}else{
+			vEnv='N';
+			alert('E-MAIL inválido.');
+			document.getElementById("txtEMail_inf").value='';
+			document.getElementById("txtEMail_inf").placeholder='Digite o seu e-mail';
+			document.getElementById("txtEMail_inf").focus();
+			vOk="N";
+		};
+	}
+	
+	if(vEnv=='S'){
+		document.frm1N.action='CadastroNews_G.asp';
+		document.frm1N.n.value=document.getElementById('txtNome_inf').value;
+		document.frm1N.e.value=document.getElementById('txtEMail_inf').value;
+		frm1N.submit();
+	}
+}
+
+function toScrollto(){
+	if(window.scrollY!=0){
+  		setTimeout(function() {
+    	window.scrollTo(0,window.scrollY-10);
+      toScrollto();
+    	}, 1);
+   }
+}
+
+</script>
+<div id="divRodape1_topo1" class="Rodape1_btn_topo" style="top: -20px;" align="center" onclick="toScrollto();"><div class="Rodape1_stretch">^</div></div>
+<div id="divRodape1_topo2" class="Rodape1_linha" style="top: 0px;"></div>
+
+<div id="divRodape1_topo3" class="Rodape1_container" style="top: 5px;">
+
+   <div class="Rodape1_lateral" style="top:0px; /*border:1px solid #00FFFF;*/"></div>
+   <div class="Rodape1_inside" style="top:0px; height:320px; /*border:1px solid #0000ff;*/">
+
+		<div class="Rodape1_bloco1">
+
+         <div style="position: absolute; top: 30px; left: 8px;"><img src="Imagens/imgMartelo.png" height="23" width="23"></div>
+         <div class="Rodape1_textos" style="top: 30px; color: #e7aa2d; font-weight: bold; font-size:16px;">Mauricio Kronemberg</div>
+         <div class="Rodape1_textos" style="top: 50px; color: #e7aa2d; font-weight: bold; font-size:16px;">Leiloeiro Público - JUCERJA 0217</div>
+   
+         <div style="position: absolute; top: 80px; left: 8px;"><img src="Imagens/imgEMail.png" height="23" width="23"></div>
+         <div class="Rodape1_textos" style="top: 82px; left:41px"><a href="/cdn-cgi/l/email-protection#83e0ecedf7e2f7ecc3eee2f6f1eae0eaece8f1ecede6eee1e6f1e4ade0eceeade1f1" class="EMail"><span class="__cf_email__" data-cfemail="7c1f1312081d08133c111d090e151f1513170e131219111e190e1b521f1311521e0e">[email&#160;protected]</span></a></div>
+   
+         <div style="position: absolute; top: 109px; left: 8px;"><img src="Imagens/imgPhone.png" height="23" width="23"></div>
+         <div class="Rodape1_textos" style="top: 112px"><a href="tel:2122420999" class="EMail">(21) 2242-0999</a> - <a href="tel:21979902997" class="EMail">(21) 97990-2997</a></div>
+   
+         <div style="position: absolute; top: 140px; left: 8px;"><img src="Imagens/imgLocal.png" height="23" width="23"></div>
+         <div class="Rodape1_textos" style="top: 142px">Rua Uruguaiana, 10, conj. 1505 - Centro</div>
+         <div class="Rodape1_textos" style="top: 162px">Rio de Janeiro / RJ</div>
+
+		</div>
+
+		<div class="Rodape1_bloco2">
+     		<div class="Rodape1_bloco_meio_titulo negrito" style="color:#ffffff;">Receba nossos informativos</div>
+         <div class="Rodape1_base_txt_nome" align="right"><input name="txtNome_inf" type="text" id="txtNome_inf" maxlength="250" placeholder="Digite o seu nome" class="Rodape1_txt_nome"></div>
+         <div class="Rodape1_icon_nome"><img src="Imagens/imgLoginIntra.png" width="18" height="18"></div>
+         <div class="Rodape1_base_txt_email" align="right"><input name="txtEMail_inf" type="text" id="txtEMail_inf" maxlength="250" placeholder="Digite o seu e-mail" class="Rodape1_txt_email"></div>
+         <div class="Rodape1_icon_email"><img src="Imagens/imgEMailIntra.png" width="18" height="18"></div>
+         <div class="Rodape1_botao_enviar"><input type="button" name="btnEnviar" id="btnEnviar" value="ENVIAR" class="classBotao" onClick="enviarCadasInf();" style="width: 250px; background-color:#ff9000" onmouseover="this.style.backgroundColor='#CC6600';" onmouseout="this.style.backgroundColor='#ff9000';"></div>
+		</div>   
+
+		<div class="Rodape1_bloco3">
+     		<div class="Rodape1_bloco_dir_titulo negrito" style="color:#ffffff;">Informações</div>
+      	<div style="position: absolute; top: 40px; width:100%;" align="left"><a href="#void" onclick="acionarMenu('TERMOS');" class="EMail">Termos de uso</a></div>
+      	<div style="position: absolute; top: 70px; width:100%;" align="left"><a href="#void" onclick="acionarMenu('POLPRIV');" class="EMail">Política de Privacidade</a></div>
+      	<div style="position: absolute; top: 100px; width:100%;"><a href="#void" onclick="acionarMenu('CONTATO');" class="EMail">Contato</a></div>
+      	<div style="position: absolute; top: 130px; width:100%;"><a href="#void" onclick="acionarMenu('AJUDA');" class="EMail">Ajuda</a></div>
+		</div>   
+
+		<div class="Rodape1_bloco4">
+         <div class="RodapeMSIS_logo"><a href="https://www.msis.com.br" target="_blank"><img src="Imagens/imgLogoMSIS2.gif" width="27" height="27" border="0"></a></div>
+         <div class="RodapeMSIS_textos" style="color:#cccccc;">desenvolvido por</div>
+		</div>
+
+   </div>
+
+</div>
+
+<form name="frm1N" id="frm1N" method="post">
+<input name="e" type="hidden" id="e">
+<input name="n" type="hidden" id="n">
+</form>
+</div>
+
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script></body>
+</html>
+
+<form name="frm1" method="post">
+<input type="hidden" name="pag" id="pag">
+<input type="hidden" name="n" id="n">
+<input type="hidden" name="nl" id="nl">
+<input type="hidden" name="na" id="na">
+<input type="hidden" name="naOld" id="naOld">
+<input type="hidden" name="nlo" id="nlo">
+</form>
+
+<script language="JavaScript">
+
+function abrirModalAviso(vT){
+	document.getElementById('divFdoModalAv').style.display='';
+	document.getElementById('divJanelaModalAv').style.left = '50%';
+	document.getElementById('divJanelaModalAv').style.marginLeft = '-215px';
+}
+
+function fecharModalAviso(){
+	document.getElementById('divFdoModalAv').style.display='none';
+}
+
+function ajustaAviso() {
+	var str=document.getElementById('txtAviso').value
+	com_acento = "ÄÅÆÈËÌÎÏÐÑÒÖØÙÛÜÝRÞßäåæèëìîïðñòöøùûüýþÿr";
+	sem_acento = "AAAEEIIIDNOOOUUUYRsBaaaeeiiionooouuuybyr";
+	novastr="";
+	for(i=0; i<str.length; i++) {
+		troca=false;
+		for (a=0; a<com_acento.length; a++) {
+			if (str.substr(i,1)==com_acento.substr(a,1)) {
+				novastr+=sem_acento.substr(a,1);
+				troca=true;
+				break;
+			}
+		}
+		if (troca==false) {
+			novastr+=str.substr(i,1);
+		}
+	}
+	document.getElementById('txtAviso').value=novastr;
+}		
+
+function confirmGravarAviso(){
+	if (confirm("Confirme: GRAVAR aviso?")) {
+		var vAv=document.getElementById('txtAviso').value;
+		if(document.getElementById('txtAviso').value==''){
+			alert('Campo AVISO é de preenchimento obrigatório.');
+			return false
+		}
+		document.frmGravar.action='_ModalAviso2_G.asp?';
+		frmGravar.submit();
+	}
+}
+
+</script>
+
+<div id="divFdoModalAv" class="FdoModal" style="display:none">
+	<form name="frmGravar" id="frmGravar" method="post">
+	<div id="divJanelaModalAv" class="JanelaModal">
+		<div id="divBarraTitModalAv" class="BarraTitModal"></div>
+		<div id="divTitModalAv" class="TitModal">Informe o Aviso</div>
+		<div id="divXModalAv" class="XModal"><a href="#void" onClick="fecharModalAviso();"><img src="Imagens/btnXModal.png" width="27" height="27"></a></div>
+		<div id="divHtmlModalAv" class="HtmlModal" align="center">
+			<div style="position:absolute; right:5px;" class="Letra9 CorCinza" align="right">* alguns caracteres não são permitidos.</div>
+			<div style="position:absolute; left:5px; top:10px; width:410px;"><textarea name="txtAviso" id="txtAviso" class="Letra12" onkeyup="ajustaAviso();" style="width:410px; height:140px;"></textarea></div>
+		</div>
+
+      <div id="divDivisaoModalAv" class="DivisaoModal"></div>
+      <div id="divBtnsModalAv" class="BtnsModal">
+      	<div class="MargemDir10" align="right">		
+         	<input type="button" name="btnGravar" id="btnGravar" value="Gravar" class="classBotao" onClick="confirmGravarAviso();">&nbsp;&nbsp;<input type="button" name="btnVoltar" id="btnVoltar" value="Voltar" class="classBotao" onClick="fecharModalAviso();">
+   
+         	<input type="hidden" name="zz" id="zz" value="22061876401060502860402">
+   
+   		</div>
+      </div>
+
+	</div>
+
+	</form>
+</div><div id="divFdoModalYoutube" class="FdoModalY" style="display:none;" onclick="fecharYoutube();">
+	<div id="player" class="classPlayer"></div>
+</div>
+
+<script src="https://www.youtube.com/player_api"></script>
+
+<script>
+
+var vVV=0;
+
+var player;
+function onYouTubePlayerAPIReady() {
+}
+
+function abrirModalYoutube(vId) {
+
+	document.getElementById('divFdoModalYoutube').style.display='';
+
+	if(vVV>0){
+		player.loadVideoById(vId);
+	}else{
+		vVV=1;
+		player = new YT.Player('player', {
+			height: '315',
+			width: '560',
+			videoId: vId,
+			events: {
+			'onReady': onPlayerReady,
+			'onStateChange': onPlayerStateChange
+			}
+		});
+
+	}
+}
+
+// autoplay video
+function onPlayerReady(event) {
+}
+
+// when video ends
+function onPlayerStateChange(event) { 
+}
+
+function fecharYoutube(){
+	document.getElementById('divFdoModalYoutube').style.display='none';
+	player.stopVideo();
+	player.clearVideo();
+}
+
+</script>
+
+
+
+         
+
+<script language="JavaScript">
+
+function fecharModalFoto(){
+	document.getElementById('divFdoModalF').style.display='none';
+}
+
+function abrirModalFoto(vN){
+	document.getElementById('divFdoModalF').style.display='';
+	document.getElementById('divJanelaModalF').style.left = '50%';
+	document.getElementById('divJanelaModalF').style.marginLeft = '-488px';
+
+	puxaFoto(vN);
+}
+
+function puxaFoto(vN){
+
+	document.getElementById('divFotoModalF').style.display='none';
+	document.getElementById('divCarregandoFoto').style.display='';
+
+   var head = document.getElementsByTagName('head').item(0);
+   var eScript = document.createElement('script');
+   eScript.setAttribute('type','text/javascript');
+   eScript.setAttribute('src','_ModalFoto_cod.asp?n='+vN);
+   head.appendChild(eScript);
+
+}
+
+function setaFoto(vArq,vE,vD){
+
+//	document.getElementById('divFotoModalF').style.display='none';
+	
+	document.getElementById('divFotoModalF').innerHTML="<img id='idImg' src='"+vArq+"'>";
+	idImg.onload=function(){
+		abreFoto(vArq,vE,vD);
+	};
+	
+}
+
+function abreFoto(vArq,vE,vD){
+
+	var vH=document.getElementById('idImg').height;
+	var vW=document.getElementById('idImg').width;
+	var vL = (976/2) - (vW/2);
+	var vT = (580/2) - (vH/2);
+	document.getElementById('divFotoModalF').style.left=vL;
+	document.getElementById('divFotoModalF').style.top=vT;
+
+	document.getElementById('divSetaDC').onclick = function(){puxaFoto(vD);};
+	document.getElementById('divSetaEC').onclick = function(){puxaFoto(vE);};
+
+//	document.getElementById('divFdoModalF').style.display='';
+//	var posicaoX = (screen.width / 2) - (976  / 2);
+//	document.getElementById('divJanelaModalF').style.left = posicaoX + "px"; 
+
+	document.getElementById('divFotoModalF').style.display='';
+	document.getElementById('divCarregandoFoto').style.display='none';
+}
+
+</script>
+
+<div id="divFdoModalF" class="FdoModalF" style="display:none">
+<div id="divJanelaModalF" class="JanelaModalF">
+<div class="XModalF" onClick="fecharModalFoto()" style="width:30px; height:30px; right:5px; top:5px; cursor:pointer;// border:1px solid #FF0000">
+
+	<div style="position:absolute; top:0px; left:-6px; width:32px; height:32px; border-radius:50%; overflow:hidden; background:rgba(0, 0, 0, 0.5);// border:1px solid #FF0000;"></div>
+  	<div style="position:absolute; top:15px; left:0px; width:20px;	height:1px;	background-color:#ffffff; -ms-transform: rotate(45deg); transform: rotate(45deg);"></div>
+  	<div style="position:absolute; top:15px; left:0px;	width:20px; height:1px; background-color:#ffffff; -ms-transform: rotate(-45deg); transform: rotate(-45deg);"></div>
+
+</div>
+
+<div id="divCarregandoFoto" class="carregandoFoto" style="display:none"><img src="Imagens/imgCarregando.gif" /></div>
+
+<div id="divSetaDC" class="FotoSetaDC" onmouseover="document.getElementById('divFotoSetaD').style.color='#ffcc00';" onmouseout="document.getElementById('divFotoSetaD').style.color='#cccccc';">
+<div id="divFotoSetaD" class="FotoSetaD">></div>
+</div>
+
+<div id="divSetaEC" class="FotoSetaEC" onmouseover="document.getElementById('divFotoSetaE').style.color='#ffcc00';" onmouseout="document.getElementById('divFotoSetaE').style.color='#cccccc';">
+<div id="divFotoSetaE" class="FotoSetaE"><</div>
+</div>
+
+<div id="divFotoModalF" class="FotoModalF"></div>
+</div>
+</div><script language="JavaScript">
+
+function abrirModalHabil(vNNL){
+	document.frmSolicHabil.nnl.value=vNNL;
+	document.getElementById('divFdoModal').style.display='';
+	document.getElementById('divJanelaModal').style.left = '50%';
+	document.getElementById('divJanelaModal').style.marginLeft = '-215px';
+}
+
+function fecharModalHabil(){
+	document.getElementById('divFdoModal').style.display='none';
+	if(document.getElementById('divSolicHabil2').style.display=='none'){
+		refreshPag();
+	}
+}
+
+function solicHabil(){
+
+	var vPav='n';
+
+	if(document.getElementById('chkHabilitese').checked==false){
+		alert('Você deve marcar que leu e tomou conhecimento do edital para solicitar sua habilitação.');
+	}else{
+		document.getElementById('divSolicHabil2').style.display='none';
+		document.getElementById('divBTNSolicHabil').style.display='none';
+		document.getElementById('divCarregandoDIV').style.display='';
+		
+		var vPa;
+		if(vPav=='s'){
+			if(document.getElementById('optPossuiAdvS').checked==true){
+				vPa='S';
+			}else{
+				vPa='N';
+			}
+		}
+
+		var vNNL=document.frmSolicHabil.nnl.value;
+		var head = document.getElementsByTagName('head').item(0);
+		var eScript = document.createElement('script');
+		eScript.setAttribute('type','text/javascript');
+		eScript.setAttribute('src','_ModalHabil2_G.asp?n='+vNNL+'&pa='+vPa);
+		head.appendChild(eScript);
+	}
+}
+
+</script>
+         
+<div id="divFdoModal" class="FdoModal" style="display:none">
+	<div id="divJanelaModal" class="JanelaModal">
+		<div id="divBarraTitModal" class="BarraTitModal"></div>
+		<div id="divTitModal" class="TitModal">Habilitação</div>
+		<div id="divXModal" class="XModal"><a href="#void" onClick="fecharModalHabil()"><img src="Imagens/btnXModal.png" width="27" height="27"></a></div>
+		<div id="divHtmlModal" class="HtmlModal" align="center">
+			<table width="400" Border="0" CELLSPACING="0" CELLPADDING="0">
+            <tr>
+               <td><img src="Imagens/imgBlank.GIF" width="10" height="50"></td>
+            </tr>	
+            <tr>
+               <td class="Letra14 CorCinzaEsc">
+
+			<div id="divCarregandoDIV" class="carregandoDIV" style="display:none"><img src="Imagens/imgCarregando.gif" width="80" height="80" /></div>
+
+			<div id="divSolicHabil2" style="width:400px;"><input type="checkbox" name="chkHabilitese" id="chkHabilitese" value="S"> DECLARO que li e tomei conhecimento do Edital deste leil&atilde;o e concordo integralmente com todas as suas condi&ccedil;&otilde;es.         
+        
+         </div>
+      
+			<div id="divSolicHabil4" style="display:none; width:400px;">A sua solicitação para participar neste leilão foi processada com sucesso. Uma mensagem de confirmação foi enviada para a sua caixa postal.</div>
+			<div id="divSolicHabil44" style="display:none; width:400px;">A sua solicitação para participar neste leilão foi processada com sucesso, mas a mensagem de confirmação falhou ao ser enviada.</div>
+			<div id="divSolicHabil3" style="display:none; width:400px;">A sua solicitação para participar neste leilão foi AUTORIZADA com sucesso. Uma mensagem de confirmação foi enviada para o sua caixa postal.</div>
+			<div id="divSolicHabil33" style="display:none; width:400px;">A sua solicitação para participar neste leilão foi AUTORIZADA com sucesso, mas a mensagem de confirmação falhou ao ser enviada.</div>
+
+               </td>
+            </tr>
+			</table> 
+		</div>
+
+		<div id="divDivisaoModal" class="DivisaoModal"></div>
+
+		<div id="divBtnsModal" class="BtnsModal">
+			<div style="padding-right:10px;" align="right"><div id="divBTNSolicHabil" style="width:400px; display: inline;">
+				
+      			<input type="button" name="btnSolic" id="btnSolic" value="Solicitar habilitação" class="classBotao" onClick="solicHabil();" style="width:150px;">
+         		&nbsp;&nbsp;
+				
+   		</div>
+   		<input type="button" name="btnVoltar" id="btnVoltar" value="Voltar" class="classBotao" onClick="fecharModalHabil();">
+		</div>
+	</div>
+
+	<form name="frmSolicHabil" method="post">
+	<input type="hidden" name="nnl" id="nnl">
+	</form>
+
+</div>
+
+
+
+
+<div id="divCookie" class="baseCk" style="display:none">
+	<div style="position: absolute; width:976px; top:0px; left:50%; margin-left:-488px; height:50px;">
+		<div style="position: absolute; width:820px; top:5px; left:20px;" class="letraCk">Utilizamos cookies para melhorar a sua experiência de navegação em nosso site.  Ao visitar o site, está a consentir a sua utilização. Para mais informações sobre os cookies utilizados, visite nossa <a href="#void" onclick="abreCookiePol();" class="linkCookie">POLÍTICA DE PRIVACIDADE</a>.</div>
+
+		<div style="position: absolute; width:10px; top:10px; left:856px;"><input type="button" name="btnOkCookie" id="btnOkCookie" value="ACEITAR" class="classBotao" onClick="criarCk(3650);" style="width: 100px; background-color:#ff9000" onmouseover="this.style.backgroundColor='#CC6600';" onmouseout="this.style.backgroundColor='#ff9000';"></div>
+
+	</div>
+</div>
+
+
+<SCRIPT LANGUAGE="JavaScript">
+
+var vCkName='MARIKRON';
+var vCkVlr='CCLeiloes';
+
+function abreAvisoCookie(){
+	document.getElementById('divCookie').style.display='';
+}
+
+function criarCk(daysToExpire){
+	var vDt = new Date();
+	vDt.setTime(vDt.getTime()+(daysToExpire*24*60*60*1000));
+   document.cookie = vCkName + "=" + vCkVlr + "; expires=" + vDt.toGMTString();
+	document.getElementById('divCookie').style.display='none';
+}
+
+function lerCookie() {
+
+	var name = vCkName + "=";
+  	var decodedCookie = decodeURIComponent(document.cookie);
+	var vFound='n';
+  	var ca = decodedCookie.split(';');
+
+  	for(var i = 0; i <ca.length; i++) {
+   	var c = ca[i];
+    	while (c.charAt(0) == ' ') {
+      	c = c.substring(1);
+    	}
+    	if (c.indexOf(name) == 0) {
+			var vCkTest=c.substring(name.length, c.length);
+			if(vCkTest==vCkVlr){
+				vFound='s';
+			}
+    	}
+  	}
+	if(vFound=='n'){
+		abreAvisoCookie();
+	}
+
+}
+
+lerCookie();
+
+
+//deleteCookie();
+function deleteCookie() {
+	document.cookie = vCkName + "=" + "; expires=Thu, 01-Jan-70 00:00:01 GMT";
+}
+
+function abreCookiePol(){
+	window.location.href=('PoliticaPrivacidade.asp');
+}
+
+</script>

@@ -1,0 +1,1475 @@
+
+
+
+
+<div id="divCookie" class="baseCk" style="display:none">
+	<div style="position: absolute; width:976px; top:0px; left:50%; margin-left:-488px; height:50px;">
+		<div style="position: absolute; width:820px; top:5px; left:20px;" class="letraCk">Utilizamos cookies para melhorar a sua experiência de navegação em nosso site.  Ao visitar o site, está a consentir a sua utilização. Para mais informações sobre os cookies utilizados, visite nossa <a href="#void" onclick="abreCookiePol();" class="linkCookie">POLÍTICA DE PRIVACIDADE</a>.</div>
+
+		<div style="position: absolute; width:10px; top:10px; left:856px;"><input type="button" name="btnOkCookie" id="btnOkCookie" value="ACEITAR" class="classBotao" onClick="criarCk(3650);" style="width: 100px; background-color:#ff9000" onmouseover="this.style.backgroundColor='#CC6600';" onmouseout="this.style.backgroundColor='#ff9000';"></div>
+
+	</div>
+</div>
+
+
+<SCRIPT LANGUAGE="JavaScript">
+
+var vCkName='BSPLEILOES';
+var vCkVlr='CCLeiloes';
+
+function abreAvisoCookie(){
+	document.getElementById('divCookie').style.display='';
+}
+
+function criarCk(daysToExpire){
+	var vDt = new Date();
+	vDt.setTime(vDt.getTime()+(daysToExpire*24*60*60*1000));
+   document.cookie = vCkName + "=" + vCkVlr + "; expires=" + vDt.toGMTString();
+	document.getElementById('divCookie').style.display='none';
+}
+
+function lerCookie() {
+
+	var name = vCkName + "=";
+  	var decodedCookie = decodeURIComponent(document.cookie);
+	var vFound='n';
+  	var ca = decodedCookie.split(';');
+
+  	for(var i = 0; i <ca.length; i++) {
+   	var c = ca[i];
+    	while (c.charAt(0) == ' ') {
+      	c = c.substring(1);
+    	}
+    	if (c.indexOf(name) == 0) {
+			var vCkTest=c.substring(name.length, c.length);
+			if(vCkTest==vCkVlr){
+				vFound='s';
+			}
+    	}
+  	}
+	if(vFound=='n'){
+		abreAvisoCookie();
+	}
+
+}
+
+lerCookie();
+
+
+//deleteCookie();
+function deleteCookie() {
+	document.cookie = vCkName + "=" + "; expires=Thu, 01-Jan-70 00:00:01 GMT";
+}
+
+function abreCookiePol(){
+	var vL="https://www.bspleiloes.com.br";
+	window.location.href=(vL+'/PoliticaPrivacidade.asp');
+}
+
+</script>
+
+
+<script language="JavaScript">
+  var check = false;
+  (function(a){
+    if(/(android|bb\d+|meego).+mobile|avantgo|bada\/|blackberry|blazer|compal|elaine|fennec|hiptop|iemobile|ip(hone|od)|iris|kindle|lge |maemo|midp|mmp|mobile.+firefox|netfront|opera m(ob|in)i|palm( os)?|phone|p(ixi|re)\/|plucker|pocket|psp|series(4|6)0|symbian|treo|up\.(browser|link)|vodafone|wap|windows ce|xda|xiino/i.test(a)||/1207|6310|6590|3gso|4thp|50[1-6]i|770s|802s|a wa|abac|ac(er|oo|s\-)|ai(ko|rn)|al(av|ca|co)|amoi|an(ex|ny|yw)|aptu|ar(ch|go)|as(te|us)|attw|au(di|\-m|r |s )|avan|be(ck|ll|nq)|bi(lb|rd)|bl(ac|az)|br(e|v)w|bumb|bw\-(n|u)|c55\/|capi|ccwa|cdm\-|cell|chtm|cldc|cmd\-|co(mp|nd)|craw|da(it|ll|ng)|dbte|dc\-s|devi|dica|dmob|do(c|p)o|ds(12|\-d)|el(49|ai)|em(l2|ul)|er(ic|k0)|esl8|ez([4-7]0|os|wa|ze)|fetc|fly(\-|_)|g1 u|g560|gene|gf\-5|g\-mo|go(\.w|od)|gr(ad|un)|haie|hcit|hd\-(m|p|t)|hei\-|hi(pt|ta)|hp( i|ip)|hs\-c|ht(c(\-| |_|a|g|p|s|t)|tp)|hu(aw|tc)|i\-(20|go|ma)|i230|iac( |\-|\/)|ibro|idea|ig01|ikom|im1k|inno|ipaq|iris|ja(t|v)a|jbro|jemu|jigs|kddi|keji|kgt( |\/)|klon|kpt |kwc\-|kyo(c|k)|le(no|xi)|lg( g|\/(k|l|u)|50|54|\-[a-w])|libw|lynx|m1\-w|m3ga|m50\/|ma(te|ui|xo)|mc(01|21|ca)|m\-cr|me(rc|ri)|mi(o8|oa|ts)|mmef|mo(01|02|bi|de|do|t(\-| |o|v)|zz)|mt(50|p1|v )|mwbp|mywa|n10[0-2]|n20[2-3]|n30(0|2)|n50(0|2|5)|n7(0(0|1)|10)|ne((c|m)\-|on|tf|wf|wg|wt)|nok(6|i)|nzph|o2im|op(ti|wv)|oran|owg1|p800|pan(a|d|t)|pdxg|pg(13|\-([1-8]|c))|phil|pire|pl(ay|uc)|pn\-2|po(ck|rt|se)|prox|psio|pt\-g|qa\-a|qc(07|12|21|32|60|\-[2-7]|i\-)|qtek|r380|r600|raks|rim9|ro(ve|zo)|s55\/|sa(ge|ma|mm|ms|ny|va)|sc(01|h\-|oo|p\-)|sdk\/|se(c(\-|0|1)|47|mc|nd|ri)|sgh\-|shar|sie(\-|m)|sk\-0|sl(45|id)|sm(al|ar|b3|it|t5)|so(ft|ny)|sp(01|h\-|v\-|v )|sy(01|mb)|t2(18|50)|t6(00|10|18)|ta(gt|lk)|tcl\-|tdg\-|tel(i|m)|tim\-|t\-mo|to(pl|sh)|ts(70|m\-|m3|m5)|tx\-9|up(\.b|g1|si)|utst|v400|v750|veri|vi(rg|te)|vk(40|5[0-3]|\-v)|vm40|voda|vulc|vx(52|53|60|61|70|80|81|83|85|98)|w3c(\-| )|webc|whit|wi(g |nc|nw)|wmlb|wonu|x700|yas\-|your|zeto|zte\-/i.test(a.substr(0,4))) 
+      check = true;
+  })(navigator.userAgent||navigator.vendor||window.opera);
+
+if(check==true){
+	window.open('mPrincipal.asp','_self');
+}
+</script>
+
+
+<html>
+<head>
+<title>BSP Leilões</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<meta name="description" content="Confira nossos leilões - Bianca Pais - Leiloeira Pública"/>
+<meta name="keywords" content="leilões de imóveis, leilões de imóveis Rio de Janeiro, leilões judiciais, venda apartamentos, venda de imóveis, leilões extrajudiciais, leilões judiciais, leiloeiros públicos, imóveis em leilão, leiloeiro público, investimento imóveis leilão, investir imóveis, leilões melhor oferta"/>
+
+<link href="https://fonts.googleapis.com/css?family=Montserrat" rel="stylesheet">
+<link rel="stylesheet" type="text/css" href="_styleGeneral4.css" />
+<link rel="shortcut icon" href="https://www.bspleiloes.com.br/imagens/iconBSP.ico">
+
+<script src="https://www.google.com/recaptcha/api.js" async defer></script>
+
+</head>
+
+<body leftmargin="0" topmargin="0" bgcolor="#f7f7f7">
+        <div id="google_translate_element2" style="height:0px"></div>
+        <script type="text/javascript" src="https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/js/bootstrap.bundle.min.js" integrity="sha384-ENjdO4Dr2bkBIFxQpeoTz1HIcje39Wm4jDKdf19U8gI4ddQ3GYNS7NTKfAdVQSZe" crossorigin="anonymous"></script>
+        <script src="translate/translate.js"></script>
+
+<div id="divFdo" class="Fdo" style="display:none"></div>
+
+<div class="Topo1_container">
+	<div class="Topo1_linha1"></div>
+	<div class="Topo1_barrasup"></div>
+	<div class="Topo1_lateral" style="top:3px;"></div>
+	<div class="Topo1_inside" style="top:3px; height:40px;">
+		<div class="Topo1_msg">Leilões Judiciais e Extrajudiciais. Presencial e Online</div>
+
+		<div style="position:absolute; top:11px; right:280px; cursor:pointer;" onclick="doGTranslate('pt|pt');return false;"><img src="translate/flags/portuguese.png" height="18" width="18" alt="Português"/> </div>
+		<div style="position:absolute; top:11px; right:310px; cursor:pointer;" onclick="doGTranslate('pt|en');return false;"><img src="translate/flags/english.png" height="18" width="18" alt="Português"/> </div>
+
+
+
+      <div class="Topo1_cadastrese1"><img src="Imagens/imgCadastrese.png" width="23" height="23"></div>
+      <div class="Topo1_cadastrese2"><a href="#void" onclick="abreCadastrar();" class="Login">Cadastre-se</a></div>
+      <div class="Topo1_login1"><img src="Imagens/imgLoginBco.png" width="23" height="23"></div>
+      <div class="Topo1_login2"><a href="#void" onclick="abreLogin();" class="Login">Login</a></div>
+
+
+
+   </div>
+
+	<div class="Topo1_linha2"></div>
+	<div class="Topo1_barraprinc"></div>
+	<div class="Topo1_lateral" style="top:3px;"></div>
+	<div class="Topo1_inside" style="top:46px; height:120px;">
+		<div class="Topo1_logo" style="left:0px; top:15px;"><img src="Imagens/imgLogo2.png" height="100"></div>
+      <div class="Topo1_busca1" id="divBusca1"><div align="right"><input name="txtDado" type="text" id="txtDado" size="30" maxlength="50" placeholder="Digite o que procura" class="Topo1_classTXT" onfocus="expandeContraiDado('e');" onfocusout="expandeContraiDado('c');" onKeyPress="detectarEnter(event);" value=""></div></div>
+      <div class="Topo1_busca2" onclick="pesquisarTopo();"><div align="right"><img src="Imagens/imgLupa.png" width="30" height="30"></div></div>
+	</div>
+
+	<div class="Topo1_linha3"></div>
+	<div class="Topo1_barramenu"></div>
+	<div class="Topo1_inside" style="top:180px; z-index:1; display:-webkit-flex; display:flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center;">
+		<div style="display:-webkit-flex; display:flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; top:0px; /*border:1px solid #FFFF00;*/">
+			<div class="Topo1_mnu_PrincH" onclick="acionarMenu('HOME');" align="center">Home</div>
+			<div class="Topo1_mnu_PrincL" onclick="acionarMenu('HOME');" align="center">Leilões</div>
+         <div class="Topo1_mnu_PrincLe" onclick="acionarMenu('LEILOEIRO');" align="center">Leiloeira</div>
+         <div class="Topo1_mnu_PrincC" onclick="acionarMenu('COMOVENDER');" align="center">Como vender</div>
+         <div class="Topo1_mnu_PrincCo" onclick="acionarMenu('CONTATO');" align="center">Contato</div>
+         <div class="Topo1_mnu_PrincA" onclick="acionarMenu('AJUDA');" align="center">Ajuda</div>
+		</div>
+	</div>
+	<div class="Topo1_mnu_Princ_grad" style="z-index:2;"></div>
+</div>
+
+
+
+<form name="frmTopo" method="post">
+<input type="hidden" name="pesq">
+</form>
+
+<script language="JavaScript">
+
+function abreLogin(){
+	document.getElementById('divLogin').className='classDIVLogin';
+	document.getElementById('divFdo').style.zIndex='904';
+	document.getElementById('divFdo').style.display='';
+	document.getElementById('divLogin').style.display='';
+}
+function fechaLogin(){
+	document.getElementById('divLogin').className='classDIVLogin2';
+	document.getElementById('divFdo').style.display='none';
+}
+
+function abreLoginTrocaSenha(){
+	document.getElementById('divLoginTrocaSenha').className='classDIVLogin';
+	document.getElementById('divFdo').style.zIndex='904';
+	document.getElementById('divFdo').style.display='';
+	document.getElementById('divLoginTrocaSenha').style.display='';
+}
+function fechaLoginTrocaSenha(){
+	window.location.href=('Sair.asp');
+}
+
+function abreLogado(){
+//	window.location.href=('AreaCliente.asp');
+	var vL="https://www.bspleiloes.com.br";
+	top.location.href=(vL+'/AreaCliente.asp');
+}
+
+function abreCadastrar(){
+/* com SSL
+	window.location.href=('Cadastro.asp');
+*/
+	var vL="https://www.bspleiloes.com.br";
+	top.location.href=(vL+'/?pag=7');
+}
+
+function acionarMenu(vD){
+/* com SSL
+	if(vD=='HOME'){
+		window.location.href=('Principal.asp');
+	}else if(vD=='LEILOEIRO'){
+		window.location.href=('Leiloeiro.asp');
+	}else if(vD=='COMOVENDER'){
+		window.location.href=('ComoVender.asp');
+	}else if(vD=='CONTATO'){
+		window.location.href=('Contato.asp');
+	}else if(vD=='AJUDA'){
+		window.location.href=('Ajuda.asp');
+	}else if(vD=='TERMOS'){
+		window.location.href=('Termos.asp');
+	}else if(vD=='POLPRIV'){
+		window.location.href=('PoliticaPrivacidade.asp');
+	}
+*/
+	var vL='https://www.bspleiloes.com.br';
+
+	if(vD=='HOME'){
+		top.location.href=(vL+'/?pag=1');
+	}else if(vD=='LEILOEIRO'){
+		top.location.href=(vL+'/?pag=2');
+	}else if(vD=='COMOVENDER'){
+		top.location.href=(vL+'/?pag=3');
+	}else if(vD=='CONTATO'){
+		top.location.href=(vL+'/?pag=4');
+	}else if(vD=='AJUDA'){
+		top.location.href=(vL+'/?pag=5');
+	}else if(vD=='TERMOS'){
+		top.location.href=(vL+'/?pag=6');
+	}else if(vD=='POLPRIV'){
+		top.location.href=(vL+'/?pag=9');
+	}
+
+}
+
+function detectarEnter(e){
+	var code = (e.keyCode ? e.keyCode : e.which);
+	if(code == 13) { //Enter keycode
+		pesquisarTopo();
+	}
+}
+
+function detectarEnter2(e){
+	var code = (e.keyCode ? e.keyCode : e.which);
+	if(code == 13) { //Enter keycode
+		entrar();
+	}
+}
+
+function detectarEnter3(e){
+	var code = (e.keyCode ? e.keyCode : e.which);
+	if(code == 13) { //Enter keycode
+		document.frmLoginTrocarSenha.txtNSenha2.focus();
+	}
+}
+
+function detectarEnter4(e){
+	var code = (e.keyCode ? e.keyCode : e.which);
+	if(code == 13) { //Enter keycode
+		trocar();
+	}
+}
+
+function pesquisarTopo(){
+	document.frmTopo.action='https://www.bspleiloes.com.br/Principal.asp';
+	document.frmTopo.pesq.value=document.getElementById('txtDado').value;
+	frmTopo.submit();
+}
+
+function esqueciSenha(){
+	document.frmTopo.action='EsqueciASenha.asp';
+	frmTopo.submit();
+}
+
+var vKKK="9383695";
+var vrR="Principal.asp";
+var vrN="";
+var vrNL="";
+
+function entrar(){
+	document.frmLogin.action='Login.asp?kkk='+vKKK;
+	if(document.frmLogin.txtLogin.value==''){
+		alert('Campos LOGIN e SENHA são de preenchimento obrigatório.');
+	}else{
+		document.frmLogin.r.value=vrR;
+		document.frmLogin.n.value=vrN;
+		document.frmLogin.nl.value=vrNL;
+		document.frmLogin.submit();
+	}
+}
+
+function RightEsp(str, n){
+    if (n <= 0)
+       return "";
+    else if (n > String(str).length)
+       return str;
+    else {
+       var iLen = String(str).length;
+       return String(str).substring(iLen, iLen - n);
+    }
+}
+
+function LeftEsp(str, n){
+	if (n <= 0)
+	    return "";
+	else if (n > String(str).length)
+	    return str;
+	else
+	    return String(str).substring(0,n);
+}
+
+function verificaLogin(){
+
+	var vPw=document.frmLoginTrocaSenha.txtNSenha.value;
+	if(vPw.length>5&&vPw.length<11){
+		document.getElementById('divLoginItem1').style.backgroundColor='#003a75';
+		document.getElementById('divLoginItem1texto').className='Letra12 CorAzulEsc';
+	}else{
+		document.getElementById('divLoginItem1').style.backgroundColor='#7a7a7a';
+		document.getElementById('divLoginItem1texto').className='Letra12 CorCinza';
+	}
+
+	var vLt='aáàâãbcçdeéêfghiíjklmnoóõpqrstuúvwxyzAÂÀÁÃBCÇDEÉÊFGHIÍJKLMNOÓÕPQRSTUÚVWXYZ';
+	var vNt='0123456789';
+	var vEt='@.,:?{}/\\';
+	var vC;
+	var vL=0;
+	var vN=0;
+	var vE=0;
+
+	var vCd=RightEsp(vPw,1);
+	var vLtC=vLt+vNt+vEt;
+
+  	if(vLtC.indexOf(vCd)<0){
+		alert('O caracter abaixo não é permitido e por isso vamos removê-lo.\n\n'+vCd+'\n\nA SENHA deve ter entre 6 e 10 caracteres, contendo no mínimo: 2 letras, 2 números e 1 símbolo especial   @   .   ,   :   ?   {   }   /   \\.');
+		document.frmLoginTrocaSenha.txtNSenha.value=LeftEsp(vPw,vPw.length-1);
+		return false;
+	}
+
+	for (i = 0; i < vPw.length; i++) {
+	  vC=vPw.substr(i, 1);
+	  if(vLt.indexOf(vC)>-1){vL=vL+1};
+	  if(vNt.indexOf(vC)>-1){vN=vN+1};
+	  if(vEt.indexOf(vC)>-1){vE=vE+1};
+	}
+
+	if(vL>1){
+		document.getElementById('divLoginItem2').style.backgroundColor='#003a75';
+		document.getElementById('divLoginItem2texto').className='Letra12 CorAzulEsc';
+	}else{
+		document.getElementById('divLoginItem2').style.backgroundColor='#7a7a7a';
+		document.getElementById('divLoginItem2texto').className='Letra12 CorCinza';
+	}
+
+
+	if(vN>1){
+		document.getElementById('divLoginItem3').style.backgroundColor='#003a75';
+		document.getElementById('divLoginItem3texto').className='Letra12 CorAzulEsc';
+	}else{
+		document.getElementById('divLoginItem3').style.backgroundColor='#7a7a7a';
+		document.getElementById('divLoginItem3texto').className='Letra12 CorCinza';
+	}
+
+
+	if(vE==1){
+		document.getElementById('divLoginItem4').style.backgroundColor='#003a75';
+		document.getElementById('divLoginItem4texto').className='Letra12 CorAzulEsc';
+	}else{
+		document.getElementById('divLoginItem4').style.backgroundColor='#7a7a7a';
+		document.getElementById('divLoginItem4texto').className='Letra12 CorCinza';
+	}
+
+
+}
+
+function trocar(){
+
+	if(document.frmLoginTrocaSenha.txtNSenha.value==''||document.frmLoginTrocaSenha.txtNSenha2.value==''){
+		alert('Campos DIGITE A NOVA SENHA e REDIGITE A NOVA SENHA são de preenchimento obrigatório.');
+		return false;
+	}
+	if(document.frmLoginTrocaSenha.txtNSenha.value!=document.frmLoginTrocaSenha.txtNSenha2.value){
+		alert('Campos DIGITE A NOVA SENHA e REDIGITE A NOVA SENHA devem ser iguais.');
+		return false;
+	}
+
+	var vPw=document.frmLoginTrocaSenha.txtNSenha.value;
+	if(vPw.length<6||vPw.length>10){
+		alert('Nova senha inválida. A SENHA deve ter entre 6 e 10 caracteres, contendo no mínimo: 2 letras, 2 números e 1 símbolo especial   @   .   ,   :   ?   {   }   /   \\. Não são permitidos outros caracteres especiais.');
+		return false;
+	}
+
+	var vLt='aáàâãbcçdeéêfghiíjklmnoóõpqrstuúvwxyzAÂÀÁÃBCÇDEÉÊFGHIÍJKLMNOÓÕPQRSTUÚVWXYZ';
+	var vNt='0123456789';
+	var vEt='@.,:?{}/\\';
+	var vC;
+	var vL=0;
+	var vN=0;
+	var vE=0;
+	for (i = 0; i < vPw.length; i++) {
+	  vC=vPw.substr(i, 1);
+	  if(vLt.indexOf(vC)>-1){vL=vL+1};
+	  if(vNt.indexOf(vC)>-1){vN=vN+1};
+	  if(vEt.indexOf(vC)>-1){vE=vE+1};
+	}
+	if(vL<2||vN<2||vE<1){
+		alert('Nova senha inválida. A SENHA deve ter entre 6 e 10 caracteres, contendo no mínimo: 2 letras, 2 números e 1 símbolo especial   @   .   ,   :   ?   {   }   /   \\. Não são permitidos outros caracteres especiais.');
+		return false;
+	}
+
+	document.frmLoginTrocaSenha.action='LoginTrocaSenha.asp';
+	document.frmLoginTrocaSenha.submit();
+
+}
+
+function enableBtnL(){
+	document.getElementById('btnEntrarL').className='classBotaoL';
+	document.getElementById('btnEntrarL').setAttribute("onclick","entrar();");
+} 
+
+function disableBtnL(){
+	document.getElementById('btnEntrarL').className='classBotaoInativo';
+	document.getElementById('btnEntrarL').removeAttribute("onclick");
+} 
+
+function enableBtnT(){
+	document.getElementById('btnEntrarT').className='classBotaoL';
+	document.getElementById('btnEntrarT').setAttribute("onclick","trocar();");
+} 
+
+function disableBtnT(){
+	document.getElementById('btnEntrarT').className='classBotaoInativo';
+	document.getElementById('btnEntrarT').removeAttribute("onclick");
+} 
+
+function expandeContraiDado(vT){
+	if(vT=='e'){
+		document.getElementById('divBusca1').style.zIndex='930'; 
+		document.getElementById('divFdo').style.display='';
+	}else if(vT=='c'){
+		document.getElementById('divBusca1').style.zIndex='1'; 
+		document.getElementById('divFdo').style.display='none';
+	}
+}
+
+function confereLogin(){
+
+	var vLogin=document.getElementById('txtLogin').value;
+	
+	if(vLogin.trim()===''){
+		alert('Digite o seu e-mail ou login');
+		return false;
+	}
+
+	var head = document.getElementsByTagName('head').item(0);
+	var eScript = document.createElement('script');
+	eScript.setAttribute('type','text/javascript');
+	eScript.setAttribute('src','_Topo_cl.asp?l='+vLogin+'&f=d');
+	head.appendChild(eScript);
+}
+
+</script>
+
+
+
+
+
+
+
+
+<div id="divLogin" class="classDIVLogin" style="display:none; z-index:1000;">
+
+
+	<div style="position:absolute; top:0px; width:100%; left:0px; height:110px; background-color:#370000;"></div>
+
+
+
+   <div onClick="fechaLogin()" style="position:absolute; width:30px; height:30px; right:10px; top:10px; cursor:pointer; z-index:906">
+      <div style="position:absolute; top:0px; left:-6px; width:32px; height:32px; border-radius:50%; overflow:hidden; background:rgba(0, 0, 0, 0.5);"></div>
+      <div style="position:absolute; top:15px; left:0px; width:20px;	height:1px;	background-color:#ffffff; -ms-transform: rotate(45deg); transform: rotate(45deg);"></div>
+      <div style="position:absolute; top:15px; left:0px;	width:20px; height:1px; background-color:#ffffff; -ms-transform: rotate(-45deg); transform: rotate(-45deg);"></div>
+   </div>
+
+	<div class="Topo1_logo" style="position:absolute; top:20px; width:100%; left:50%; margin-left:-60px;"><img src="Imagens/imgLogo2.png" width="120"></div>
+
+   <div class="JanLoginFdo" style="left:63px; top:110px; height:330px; width:323px;">
+
+      <form name="frmLogin" method="post">
+
+      <div class="JanLoginTit" align="center" style="top:25px; font-family:ARIAL; font-size:20px; width:323px;"><strong>Acesso de clientes</strong></div>
+      <div class="JanLoginLoginIcon" style="left:18px; top:75px;"><img src="Imagens/imgLoginIntra.png" width="20" height="20"></div>
+      <div class="JanLoginLogin" style="left:10px; width:300px; top:70px;" align="right"><input name="txtLogin" type="text" id="txtLogin" maxlength="255" placeholder="Digite o seu e-mail ou login" class="JanLoginLoginTXT" style="font-size:16px; width:260px;"></div>
+
+      <div id="divLoginKeyIntra" class="JanLoginPWIcon" style="left:18px; top:116px; margin-top:5px; display:none;"><img src="Imagens/imgKeyIntra.png" width="22" height="22"></div>
+      <div id="divLogintxtPW" class="JanLoginPW" align="right" style="left:10px; width:300px; top:110px; margin-top:5px; display:none;"><input name="txtPW" type="password" id="txtPW" maxlength="30" placeholder="Digite a sua senha" class="JanLoginPWTXT" onKeyPress="detectarEnter2(event);" style="font-size:16px; width:260px;"></div>
+
+      <div id="divLoginRecaptcha" class="g-recaptcha" data-sitekey="6Lc1OrAZAAAAABR0-2aMlKpJyN3kl_-jgYS0OT0z" data-callback="enableBtnL" data-expired-callback="disableBtnL" style="position:absolute; top:160px; left:10px; display:none;"></div>
+
+      <div id="divLoginBtnEntrarL" class="JanLoginEntrar" style="top:260px; width:323px; left:0px; display:none;" align="center"><input type="button" name="btnEntrarL" id="btnEntrarL" value="ENTRAR" class="classBotaoInativo" style="width:300px; height:40px; line-height:40px; font-size:14px;"></div>
+
+      <div id="divLoginBtnAvancarL" class="JanLoginEntrar" style="top:130px; width:323px; left:0px" align="center"><input type="button" name="btnAvancarL" id="btnAvancarL" value="AVANÇAR" class="classBotaoL" style="width:300px; height:40px; line-height:40px; font-size:14px;" onclick="confereLogin()"></div>
+
+      <input type="hidden" name="r">
+      <input type="hidden" name="n">
+      <input type="hidden" name="nl">
+      <input type="hidden" name="rcp" id="rcp">
+      </form>
+
+      <div id="divLoginEsqueci" class="JanLoginEsqueci" style="position:absolute; top:180px; width:323px; left:0px" align="center"><a href="#void" onclick="esqueciSenha();" class="esqueciPW">esqueci a senha</a></div>
+
+      <div id="divLoginbtnEntrarL2" class="JanLoginEntrar" style="top:220px; width:323px; left:0px" align="center"><input type="button" name="btnEntrarL2" id="btnEntrarL2" value="Não tem cadastro? Cadastre-se" class="classBotaoL2" onclick="abreCadastrar();"></div>
+
+	</div>
+
+</div>
+
+
+<div id="divLoginTrocaSenha" class="classDIVLogin" style="display:none; z-index:1000;">
+
+	<div style="position:absolute; top:0px; width:100%; left:0px; height:110px; background-color:#370000;"></div>
+
+
+   <div onClick="fechaLoginTrocaSenha()" style="position:absolute; width:30px; height:30px; right:10px; top:10px; cursor:pointer; z-index:906">
+      <div style="position:absolute; top:0px; left:-6px; width:32px; height:32px; border-radius:50%; overflow:hidden; background:rgba(0, 0, 0, 0.5);"></div>
+      <div style="position:absolute; top:15px; left:0px; width:20px;	height:1px;	background-color:#ffffff; -ms-transform: rotate(45deg); transform: rotate(45deg);"></div>
+      <div style="position:absolute; top:15px; left:0px;	width:20px; height:1px; background-color:#ffffff; -ms-transform: rotate(-45deg); transform: rotate(-45deg);"></div>
+   </div>
+
+	<div class="Topo1_logo" style="position:absolute; top:20px; width:100%; left:50%; margin-left:-60px;"><img src="Imagens/imgLogo2.png" width="120"></div>
+
+   <div class="JanLoginFdo" style="left:63px; top:110px; height:330px; width:323px;">
+
+      <form name="frmLoginTrocaSenha" method="post">
+      <div class="JanLoginTit" align="center" style="top:25px; font-family:ARIAL; font-size:20px; width:323px;"><strong>Troca de senha obrigatória</strong></div>
+      <div class="JanLoginLoginIcon" style="left:18px; top:80px;"><img src="Imagens/imgLoginIntra.png" width="20" height="20"></div>
+      <div class="JanLoginLogin" style="left:10px; width:300px; top:74px;"><span class="Letra16" style="position:absolute; left:48px; top:5px;"></span></div>
+      <div class="JanLoginPWIcon" style="left:18px; top:116px; margin-top:5px"><img src="Imagens/imgKeyIntra.png" width="22" height="22"></div>
+      <div class="JanLoginPW" align="right" style="left:10px; width:300px; top:110px; margin-top:5px;"><input name="txtNSenha" type="password" id="txtNSenha" maxlength="30" placeholder="Digite a nova senha" class="JanLoginPWTXT" onKeyPress="detectarEnter3(event);" onKeyUp="verificaLogin();" style="font-size:16px; width:260px;" onpaste="return false" ondrop="return false"></div>
+      <div class="JanLoginPWIcon" style="left:18px; top:157px; margin-top:5px"><img src="Imagens/imgKeyIntra.png" width="22" height="22"></div>
+      <div class="JanLoginPW" align="right" style="left:10px; width:300px; top:151px; margin-top:5px;"><input name="txtNSenha2" type="password" id="txtNSenha2" maxlength="30" placeholder="Redigite a nova senha" class="JanLoginPWTXT" onKeyPress="detectarEnter4(event);" style="font-size:16px; width:260px;" onpaste="return false" ondrop="return false"></div>
+
+      <div class="g-recaptcha" data-sitekey="6Lc1OrAZAAAAABR0-2aMlKpJyN3kl_-jgYS0OT0z" data-callback="enableBtnT" data-expired-callback="disableBtnT" style="position:absolute; top:200px; left:10px;"></div>
+
+      <div class="JanLoginEntrar" style="top:290px; width:323px; left:0px" align="center"><input type="button" name="btnEntrarT" id="btnEntrarT" value="TROCAR" class="classBotaoInativo" style="width:300px; height:40px; line-height:40px; font-size:14px;"></div>
+
+      <div style="position:absolute; top:320px; width:323px; height:80px; background-color:#FFffFF">
+         <div style="position:absolute; top:26px; width:300px; left:12px;"><span class="Letra12">Regras para composição da nova senha:</span></div>
+      </div>
+
+      <div style="position:absolute; top:370px; width:323px; left:18px;">
+         <div id="divLoginItem1" style="position:absolute; top:0px; left:-6px; width:14px; height:14px; border-radius:50%; overflow:hidden; background-color:#7a7a7a;"></div>
+         <div style="position:absolute; top:8px; left:-4px; width:5px; height:1px; background-color:#ffffff; -ms-transform: rotate(45deg); transform: rotate(45deg);"></div>
+         <div style="position:absolute; top:7px; left:-2px; width:8px; height:1px; background-color:#ffffff; -ms-transform: rotate(-60deg); transform: rotate(-60deg);"></div>
+
+         <div id="divLoginItem1texto" style="position:absolute; top:-1px; width:300px; left:14px;" class="Letra12 CorCinza">Tamanho entre 6 e 10 caracteres</div>
+
+      </div>
+
+      <div style="position:absolute; top:390px; width:323px; left:18px;">
+         <div id="divLoginItem2" style="position:absolute; top:0px; left:-6px; width:14px; height:14px; border-radius:50%; overflow:hidden; background-color:#7a7a7a;"></div>
+         <div style="position:absolute; top:8px; left:-4px; width:5px; height:1px; background-color:#ffffff; -ms-transform: rotate(45deg); transform: rotate(45deg);"></div>
+         <div style="position:absolute; top:7px; left:-2px; width:8px; height:1px; background-color:#ffffff; -ms-transform: rotate(-60deg); transform: rotate(-60deg);"></div>
+
+         <div id="divLoginItem2texto" style="position:absolute; top:-1px; width:300px; left:14px;" class="Letra12 CorCinza">Deve ter pelo menos 2 letras</div>
+
+      </div>
+
+      <div style="position:absolute; top:410px; width:323px; left:18px;">
+         <div id="divLoginItem3" style="position:absolute; top:0px; left:-6px; width:14px; height:14px; border-radius:50%; overflow:hidden; background-color:#7a7a7a;"></div>
+         <div style="position:absolute; top:8px; left:-4px; width:5px; height:1px; background-color:#ffffff; -ms-transform: rotate(45deg); transform: rotate(45deg);"></div>
+         <div style="position:absolute; top:7px; left:-2px; width:8px; height:1px; background-color:#ffffff; -ms-transform: rotate(-60deg); transform: rotate(-60deg);"></div>
+
+         <div id="divLoginItem3texto" style="position:absolute; top:-1px; width:300px; left:14px;" class="Letra12 CorCinza">Deve ter pelo menos 2 números</div>
+
+      </div>
+
+      <div style="position:absolute; top:430px; width:323px; left:18px;">
+         <div id="divLoginItem4" style="position:absolute; top:0px; left:-6px; width:14px; height:14px; border-radius:50%; overflow:hidden; background-color:#7a7a7a;"></div>
+         <div style="position:absolute; top:8px; left:-4px; width:5px; height:1px; background-color:#ffffff; -ms-transform: rotate(45deg); transform: rotate(45deg);"></div>
+         <div style="position:absolute; top:7px; left:-2px; width:8px; height:1px; background-color:#ffffff; -ms-transform: rotate(-60deg); transform: rotate(-60deg);"></div>
+
+         <div id="divLoginItem4texto" style="position:absolute; top:-1px; width:300px; left:14px;" class="Letra12 CorCinza">Deve ter 1 símbolo especial:<br /> &nbsp;&nbsp;&nbsp; @&nbsp;&nbsp;&nbsp; .&nbsp;&nbsp;&nbsp; ,&nbsp;&nbsp;&nbsp; :&nbsp;&nbsp;&nbsp; ?&nbsp;&nbsp;&nbsp; {&nbsp;&nbsp;&nbsp; }&nbsp;&nbsp;&nbsp; /&nbsp;&nbsp;&nbsp; \</div>
+
+      </div>
+
+      </form>
+
+	</div>
+
+</div>
+
+
+
+<script language="JavaScript">
+
+function abreAceitePolPriv(){
+	document.getElementById('divPolPriv').className='classDIVLogin';
+	document.getElementById('divFdo').style.zIndex='904';
+	document.getElementById('divFdo').style.display='';
+	document.getElementById('divPolPriv').style.display='';
+}
+function fechaAceitePolPriv(){
+		window.location.href=('Sair.asp');
+}
+function abrePolPriv(){
+	document.getElementById('divFdoModalPolPriv').style.display='';
+}
+function fechaPolPriv(){
+	document.getElementById('divFdoModalPolPriv').style.display='none';
+}
+
+function enviarAceite(){
+
+	if(document.getElementById('chkPolPriv2').checked==false){
+		alert('Para prosseguir, você deve marcar que deu consentimento para coleta, uso e tratamento de seus dados, conforme a nossa política de privacidade.');
+		return false;
+	}
+	document.frmAceitePolPriv.action='AceitePolPriv.asp';
+	frmAceitePolPriv.submit();
+
+}
+
+</script>
+
+<div id="divPolPriv" class="classDIVLogin" style="display:none; z-index:1000;">
+
+  	<form name="frmAceitePolPriv" id="frmAceitePolPriv" method="post">
+
+	<div style="position:absolute; top:0px; width:100%; left:0px; height:110px; background-color:#370000;"></div>
+
+
+
+   <div onClick="fechaAceitePolPriv();" style="position:absolute; width:30px; height:30px; right:10px; top:10px; cursor:pointer; z-index:906">
+      <div style="position:absolute; top:0px; left:-6px; width:32px; height:32px; border-radius:50%; overflow:hidden; background:rgba(0, 0, 0, 0.5);"></div>
+      <div style="position:absolute; top:15px; left:0px; width:20px;	height:1px;	background-color:#ffffff; -ms-transform: rotate(45deg); transform: rotate(45deg);"></div>
+      <div style="position:absolute; top:15px; left:0px;	width:20px; height:1px; background-color:#ffffff; -ms-transform: rotate(-45deg); transform: rotate(-45deg);"></div>
+   </div>
+
+	<div class="Topo1_logo" style="position:absolute; top:20px; width:100%; left:50%; margin-left:-60px;"><img src="Imagens/imgLogo2.png" width="120"></div>
+
+   <div style="position:absolute; top:125px; width:323px; left:63px; font-family:'Montserrat', sans-serif; font-size:15px; font-weight:bold;">
+      <div align="center" style="position:absolute; top:20px; width:323px; font-family:'Montserrat', sans-serif; font-size:20px; color:#e12d00;"><strong>Aviso importante</strong></div>
+      <div align="center" style="position:absolute; top:57px; width:323px; font-family:'Montserrat', sans-serif; font-size:20px; color:#000000;"><strong>Política de Privacidade</strong><!-- politica de privacidade removida da fixture -->      
+	</div>
+</div>
+
+
+
+
+
+<script language="JavaScript">
+
+var vAcm='';
+if(vAcm!=''){
+	if(String(vAcm).substring(0,8)=='polpriv#'){
+		abreAceitePolPriv();
+	}else{
+		abreLoginTrocaSenha();
+	}
+}
+
+
+</script>
+
+<div id="divBanners1" class="Banners" style="top:219px; background-color:#f7f7f7; display:none;" onClick="abrirLink('20051826501068005040002');">
+
+	<div class="BannerLateral" style="padding-top:10px;"></div>
+	<div class="BannerContainer" style="margin-top:20px;">
+
+		<div id="divBanner1" class="Banner">
+
+
+			<div id="divImagem" style="position: absolute; top:0px; left:0px; height:240px; width:100%;"><img src="Arquivos/Banners/BANN_1303_WhatsApp Image 2026-09-25 at 10.49.26.jpeg" width="100%" height="240"></div>
+
+
+		</div>
+	</div>
+</div>
+
+
+
+
+<div id="divBanners2" class="Banners" style="top:219px; background-color:#f7f7f7; display:none;" onClick="abrirLink('20051826901068009040002');">
+
+	<div class="BannerLateral" style="padding-top:10px;"></div>
+	<div class="BannerContainer" style="margin-top:20px;">
+
+		<div id="divBanner2" class="Banner">
+
+
+			<div id="divImagem" style="position: absolute; top:0px; left:0px; height:240px; width:100%;"><img src="Arquivos/Banners/BANN_1304_Cópia de BSP - Banner Site (2).png" width="100%" height="240"></div>
+
+
+		</div>
+	</div>
+</div>
+
+
+
+<div class="Banner_navegs" align="center">
+
+	<div style="position:relative; display:inline; height:9px; width:11px; padding-left:10px; padding-right:10px;">
+		<div id="divBanner1_naveg" class="Banner2_naveg" onclick="iniciaBanner(0,2);"></div>
+	</div>
+
+	<div style="position:relative; display:inline; height:9px; width:11px; padding-left:10px; padding-right:10px;">
+		<div id="divBanner2_naveg" class="Banner2_naveg" onclick="iniciaBanner(1,2);"></div>
+	</div>
+
+</div>
+
+<script language="JavaScript">
+
+var vX_b="2";
+var vCont;
+
+if(vX_b==1){
+	document.getElementById('divBanners1').style.display='';
+}else if(vX_b>1){
+	iniciaBanner(0,vX_b);
+}
+
+function iniciaBanner(vB,vT){
+
+	clearTimeout(vCont);
+	var i;
+	for (i = 0; i < vT; i++) {
+		document.getElementById('divBanners'+(i+1)).style.display='none';
+		document.getElementById('divBanner'+(i+1)+'_naveg').className='Banner2_naveg';
+	}
+	document.getElementById('divBanners'+(vB+1)).style.display='';
+	document.getElementById('divBanner'+(vB+1)+'_naveg').className='Banner2_navegSel';
+	vB=vB+1;
+	if(vB==vT){
+		vB=0;
+	}
+	contadorBanner(0,vB,vT);
+}
+
+function contadorBanner(vC,vB,vT){
+	if(vC>60){
+		iniciaBanner(vB,vT);
+	}else{
+		vC=vC+1;
+		vCont=setTimeout('contadorBanner('+vC+','+vB+','+vT+')', 100);
+	}
+}
+
+function abrirLink(vN){
+	if(vN==0){
+	}else{
+		abrirDetalhesLeilao(vN);
+	}	
+}
+
+</script>
+
+<div class="Anuncio1_container" style="margin-top:538px; height:1px;"></div>
+<div style="clear: both;"></div>
+
+
+		
+<div style="float:left; left:0px; width:11%; height:100px;"></div>
+		
+<div id="divAnuncio1_1" class="Anuncio1_1" style="width:17.75%; min-width:226px; position:relative; height:auto; min-height:360px; float:left; aspect-ratio: 226 / 360; //border:3px solid #FF0000" onClick="abrirDetalhesLeilao('20051806901068007040002');">
+
+	<div class="Anuncio1_img" style="position:relative ;max-height:58%; //z-index:-1;">
+     	<img src="imagens/ImgPadrao.gif" width="100%">
+      <div class="Anuncio1_grad" style="position:absolute; top:0px; left:0px;//z-index:1;"></div>
+      <div class="Anuncio1_tipo">Online</div>
+      <div class="Anuncio1_cod">Cód 8409/2026</div>
+
+
+   </div>
+
+	<div style="position:relative; margin-top:0px; width:100%; min-width:226px; left:0px; border-top:1px solid #0b7500; border-bottom:1px solid #0b7500">
+
+
+      <div style="position:relative; margin-top:0px; left:0px; width:100%; height:11%; min-height:40px;">
+         <div style="position:relative; margin-top:0px; left:0px; width:50%; height:100%; min-height:40px; background-color:#dcdcdc; float:left;">
+            <div class="Anuncio1_data" style="color:#3b3b3b; top:16%;//5px; font-size:.8rem;" align="center">1º Leilão</div>
+            <div class="Anuncio1_data" style="color:#3b3b3b; top:26%;//9px; font-size:.8rem;" align="center">22/10/2026 09:00h</div>
+         </div>
+         <div style="position:relative; margin-top:0px; width:50%; height:100%; min-height:40px; background-color:#0b7500; float:left;">
+            <div class="Anuncio1_data" style="color: #FFFFFF; top:16%; font-size:.8rem;" align="center">2º Leilão</div>
+            <div class="Anuncio1_data" style="color: #FFFFFF; top:26%; font-size:.8rem;" align="center">29/10/2026 09:00h</div>
+         </div>
+		</div>
+
+   </div>
+
+	<div style="position:relative; margin-top:0px; left:0px; width:100%; height:23%; min-height:80px;">
+		<div class="Anuncio1_faixa" style="top:0px; height:100%;">
+         <div class="Anuncio1_tit"><div style="margin-left:8px; margin-right:8px; font-size: clamp(11px, 0.8rem, 12px);">Itens Diversos</div></div>
+         <div class="Anuncio1_descr"><div style="margin-left:8px; margin-right:8px; font-size: clamp(11px, 0.8rem, 12px);">Poltronas, Mesa Trio, Cadeira Iracema Classic, Um compressor de Ar, Uma máquina tipo serra, etc</div></div>
+		</div>
+   </div>
+
+	<div style="position:absolute; bottom:0px; left:0px; width:100%; height:8%; min-height:30px;">
+		<div class="Anuncio1_botao" style="position:absolute; top:0px; height:100%;"><input type="button" name="btnCons" id="btnCons" value="ABERTO PARA LANCES" class="classBotao" style="background-color: #0b7500; width:100%; height:100%; line-height:100%;" onmouseout="this.style.backgroundColor='#0b7500';" onmouseover="this.style.backgroundColor='#085a00';"></div>
+   </div>
+
+</div>
+
+		
+<div class="Anuncio1_entre1" style="width:2.34%; min-width:15px;"></div>
+		
+<div id="divAnuncio1_2" class="Anuncio1_2" style="width:17.75%; min-width:226px; position:relative; height:auto; min-height:360px; float:left; aspect-ratio: 226 / 360; //border:3px solid #FF0000" onClick="abrirDetalhesLeilao('20041826101068001040002');">
+
+	<div class="Anuncio1_img" style="position:relative ;max-height:58%; //z-index:-1;">
+     	<img src="Arquivos/008421/008421_000000_05_26342.jpg" width="100%">
+      <div class="Anuncio1_grad" style="position:absolute; top:0px; left:0px;//z-index:1;"></div>
+      <div class="Anuncio1_tipo">Online</div>
+      <div class="Anuncio1_cod">Cód 8421/2026</div>
+
+
+   </div>
+
+	<div style="position:relative; margin-top:0px; width:100%; min-width:226px; left:0px; border-top:1px solid #0b7500; border-bottom:1px solid #0b7500">
+
+
+      <div style="position:relative; margin-top:0px; left:0px; width:100%; height:11%; min-height:40px;">
+         <div style="position:relative; margin-top:0px; left:0px; width:50%; height:100%; min-height:40px; background-color:#dcdcdc; float:left;">
+            <div class="Anuncio1_data" style="color:#3b3b3b; top:16%;//5px; font-size:.8rem;" align="center">1º Leilão</div>
+            <div class="Anuncio1_data" style="color:#3b3b3b; top:26%;//9px; font-size:.8rem;" align="center">22/10/2026 11:00h</div>
+         </div>
+         <div style="position:relative; margin-top:0px; width:50%; height:100%; min-height:40px; background-color:#0b7500; float:left;">
+            <div class="Anuncio1_data" style="color: #FFFFFF; top:16%; font-size:.8rem;" align="center">2º Leilão</div>
+            <div class="Anuncio1_data" style="color: #FFFFFF; top:26%; font-size:.8rem;" align="center">29/10/2026 11:00h</div>
+         </div>
+		</div>
+
+   </div>
+
+	<div style="position:relative; margin-top:0px; left:0px; width:100%; height:23%; min-height:80px;">
+		<div class="Anuncio1_faixa" style="top:0px; height:100%;">
+         <div class="Anuncio1_tit"><div style="margin-left:8px; margin-right:8px; font-size: clamp(11px, 0.8rem, 12px);">Quarto no Hotel Formule 1</div></div>
+         <div class="Anuncio1_descr"><div style="margin-left:8px; margin-right:8px; font-size: clamp(11px, 0.8rem, 12px);">Quarto no Hotel Formule 1, com 14 m2, situado na Rua Silva Jardim, nº 32, Centro/RJ</div></div>
+		</div>
+   </div>
+
+	<div style="position:absolute; bottom:0px; left:0px; width:100%; height:8%; min-height:30px;">
+		<div class="Anuncio1_botao" style="position:absolute; top:0px; height:100%;"><input type="button" name="btnCons" id="btnCons" value="ABERTO PARA LANCES" class="classBotao" style="background-color: #0b7500; width:100%; height:100%; line-height:100%;" onmouseout="this.style.backgroundColor='#0b7500';" onmouseover="this.style.backgroundColor='#085a00';"></div>
+   </div>
+
+</div>
+
+		
+<div class="Anuncio1_entre1" style="width:2.34%; min-width:15px;"></div>
+		
+<div id="divAnuncio1_3" class="Anuncio1_3" style="width:17.75%; min-width:226px; position:relative; height:auto; min-height:360px; float:left; aspect-ratio: 226 / 360; //border:3px solid #FF0000" onClick="abrirDetalhesLeilao('20051826501068005040002');">
+
+	<div class="Anuncio1_img" style="position:relative ;max-height:58%; //z-index:-1;">
+     	<img src="Arquivos/008425/008425_000000_05_26378.jpg" width="100%">
+      <div class="Anuncio1_grad" style="position:absolute; top:0px; left:0px;//z-index:1;"></div>
+      <div class="Anuncio1_tipo">Online</div>
+      <div class="Anuncio1_cod">Cód 8425/2026</div>
+
+
+   </div>
+
+	<div style="position:relative; margin-top:0px; width:100%; min-width:226px; left:0px; border-top:1px solid #0b7500; border-bottom:1px solid #0b7500">
+
+
+      <div style="position:relative; margin-top:0px; left:0px; width:100%; height:11%; min-height:40px;">
+         <div style="position:relative; margin-top:0px; left:0px; width:50%; height:100%; min-height:40px; background-color:#dcdcdc; float:left;">
+            <div class="Anuncio1_data" style="color:#3b3b3b; top:16%;//5px; font-size:.8rem;" align="center">1º Leilão</div>
+            <div class="Anuncio1_data" style="color:#3b3b3b; top:26%;//9px; font-size:.8rem;" align="center">19/10/2026 12:00h</div>
+         </div>
+         <div style="position:relative; margin-top:0px; width:50%; height:100%; min-height:40px; background-color:#0b7500; float:left;">
+            <div class="Anuncio1_data" style="color: #FFFFFF; top:16%; font-size:.8rem;" align="center">2º Leilão</div>
+            <div class="Anuncio1_data" style="color: #FFFFFF; top:26%; font-size:.8rem;" align="center">29/10/2026 12:00h</div>
+         </div>
+		</div>
+
+   </div>
+
+	<div style="position:relative; margin-top:0px; left:0px; width:100%; height:23%; min-height:80px;">
+		<div class="Anuncio1_faixa" style="top:0px; height:100%;">
+         <div class="Anuncio1_tit"><div style="margin-left:8px; margin-right:8px; font-size: clamp(11px, 0.8rem, 12px);">Apto em Ipanema com 63 m2</div></div>
+         <div class="Anuncio1_descr"><div style="margin-left:8px; margin-right:8px; font-size: clamp(11px, 0.8rem, 12px);">Apto em Ipanema (Rua Visconde de Pirajá, n° 188), com 63 m2, 02 quartos e dependência de empregada</div></div>
+		</div>
+   </div>
+
+	<div style="position:absolute; bottom:0px; left:0px; width:100%; height:8%; min-height:30px;">
+		<div class="Anuncio1_botao" style="position:absolute; top:0px; height:100%;"><input type="button" name="btnCons" id="btnCons" value="ABERTO PARA LANCES" class="classBotao" style="background-color: #0b7500; width:100%; height:100%; line-height:100%;" onmouseout="this.style.backgroundColor='#0b7500';" onmouseover="this.style.backgroundColor='#085a00';"></div>
+   </div>
+
+</div>
+
+		
+<div class="Anuncio1_entre1" style="width:2.34%; min-width:15px;"></div>
+		
+<div id="divAnuncio1_4" class="Anuncio1_4" style="width:17.75%; min-width:226px; position:relative; height:auto; min-height:360px; float:left; aspect-ratio: 226 / 360; //border:3px solid #FF0000" onClick="abrirDetalhesLeilao('20041816001068009040002');">
+
+	<div class="Anuncio1_img" style="position:relative ;max-height:58%; //z-index:-1;">
+     	<img src="Arquivos/008410/008410_000000_05_26195.jpg" width="100%">
+      <div class="Anuncio1_grad" style="position:absolute; top:0px; left:0px;//z-index:1;"></div>
+      <div class="Anuncio1_tipo">Online</div>
+      <div class="Anuncio1_cod">Cód 8410/2026</div>
+
+
+   </div>
+
+	<div style="position:relative; margin-top:0px; width:100%; min-width:226px; left:0px; border-top:1px solid #0b7500; border-bottom:1px solid #0b7500">
+
+
+      <div style="position:relative; margin-top:0px; left:0px; width:100%; height:11%; min-height:40px;">
+         <div style="position:relative; margin-top:0px; left:0px; width:50%; height:100%; min-height:40px; background-color:#dcdcdc; float:left;">
+            <div class="Anuncio1_data" style="color:#3b3b3b; top:16%;//5px; font-size:.8rem;" align="center">1º Leilão</div>
+            <div class="Anuncio1_data" style="color:#3b3b3b; top:26%;//9px; font-size:.8rem;" align="center">22/10/2026 13:00h</div>
+         </div>
+         <div style="position:relative; margin-top:0px; width:50%; height:100%; min-height:40px; background-color:#0b7500; float:left;">
+            <div class="Anuncio1_data" style="color: #FFFFFF; top:16%; font-size:.8rem;" align="center">2º Leilão</div>
+            <div class="Anuncio1_data" style="color: #FFFFFF; top:26%; font-size:.8rem;" align="center">29/10/2026 13:00h</div>
+         </div>
+		</div>
+
+   </div>
+
+	<div style="position:relative; margin-top:0px; left:0px; width:100%; height:23%; min-height:80px;">
+		<div class="Anuncio1_faixa" style="top:0px; height:100%;">
+         <div class="Anuncio1_tit"><div style="margin-left:8px; margin-right:8px; font-size: clamp(11px, 0.8rem, 12px);">Apto no Maracanã com 86 m2</div></div>
+         <div class="Anuncio1_descr"><div style="margin-left:8px; margin-right:8px; font-size: clamp(11px, 0.8rem, 12px);">Direitos Aquisitivos do Imóvel: Apto no Maracanã (Rua Senador Furtado, nº 68) com 86 m2</div></div>
+		</div>
+   </div>
+
+	<div style="position:absolute; bottom:0px; left:0px; width:100%; height:8%; min-height:30px;">
+		<div class="Anuncio1_botao" style="position:absolute; top:0px; height:100%;"><input type="button" name="btnCons" id="btnCons" value="ABERTO PARA LANCES" class="classBotao" style="background-color: #0b7500; width:100%; height:100%; line-height:100%;" onmouseout="this.style.backgroundColor='#0b7500';" onmouseover="this.style.backgroundColor='#085a00';"></div>
+   </div>
+
+</div>
+
+
+<div style="clear: both; height:30px; width:100%;"></div>
+		
+<div style="float:left; left:0px; width:11%; height:100px;"></div>
+		
+<div id="divAnuncio1_1" class="Anuncio1_1" style="width:17.75%; min-width:226px; position:relative; height:auto; min-height:360px; float:left; aspect-ratio: 226 / 360; //border:3px solid #FF0000" onClick="abrirDetalhesLeilao('20051816601068005040002');">
+
+	<div class="Anuncio1_img" style="position:relative ;max-height:58%; //z-index:-1;">
+     	<img src="Arquivos/008416/008416_000000_05_26261.jpg" width="100%">
+      <div class="Anuncio1_grad" style="position:absolute; top:0px; left:0px;//z-index:1;"></div>
+      <div class="Anuncio1_tipo">Online</div>
+      <div class="Anuncio1_cod">Cód 8416/2026</div>
+
+
+   </div>
+
+	<div style="position:relative; margin-top:0px; width:100%; min-width:226px; left:0px; border-top:1px solid #0b7500; border-bottom:1px solid #0b7500">
+
+
+      <div style="position:relative; margin-top:0px; left:0px; width:100%; height:11%; min-height:40px;">
+         <div style="position:relative; margin-top:0px; left:0px; width:50%; height:100%; min-height:40px; background-color:#dcdcdc; float:left;">
+            <div class="Anuncio1_data" style="color:#3b3b3b; top:16%;//5px; font-size:.8rem;" align="center">1º Leilão</div>
+            <div class="Anuncio1_data" style="color:#3b3b3b; top:26%;//9px; font-size:.8rem;" align="center">19/10/2026 13:00h</div>
+         </div>
+         <div style="position:relative; margin-top:0px; width:50%; height:100%; min-height:40px; background-color:#0b7500; float:left;">
+            <div class="Anuncio1_data" style="color: #FFFFFF; top:16%; font-size:.8rem;" align="center">2º Leilão</div>
+            <div class="Anuncio1_data" style="color: #FFFFFF; top:26%; font-size:.8rem;" align="center">29/10/2026 13:00h</div>
+         </div>
+		</div>
+
+   </div>
+
+	<div style="position:relative; margin-top:0px; left:0px; width:100%; height:23%; min-height:80px;">
+		<div class="Anuncio1_faixa" style="top:0px; height:100%;">
+         <div class="Anuncio1_tit"><div style="margin-left:8px; margin-right:8px; font-size: clamp(11px, 0.8rem, 12px);">Apto em Iguaba Grande/RJ</div></div>
+         <div class="Anuncio1_descr"><div style="margin-left:8px; margin-right:8px; font-size: clamp(11px, 0.8rem, 12px);">Apto no Bairro Canellas City, em Iguaba Grande/RJ, com 60 m2 e 02 quartos</div></div>
+		</div>
+   </div>
+
+	<div style="position:absolute; bottom:0px; left:0px; width:100%; height:8%; min-height:30px;">
+		<div class="Anuncio1_botao" style="position:absolute; top:0px; height:100%;"><input type="button" name="btnCons" id="btnCons" value="ABERTO PARA LANCES" class="classBotao" style="background-color: #0b7500; width:100%; height:100%; line-height:100%;" onmouseout="this.style.backgroundColor='#0b7500';" onmouseover="this.style.backgroundColor='#085a00';"></div>
+   </div>
+
+</div>
+
+		
+<div class="Anuncio1_entre1" style="width:2.34%; min-width:15px;"></div>
+		
+<div id="divAnuncio1_2" class="Anuncio1_2" style="width:17.75%; min-width:226px; position:relative; height:auto; min-height:360px; float:left; aspect-ratio: 226 / 360; //border:3px solid #FF0000" onClick="abrirDetalhesLeilao('20041816501068004040002');">
+
+	<div class="Anuncio1_img" style="position:relative ;max-height:58%; //z-index:-1;">
+     	<img src="imagens/ImgPadrao.gif" width="100%">
+      <div class="Anuncio1_grad" style="position:absolute; top:0px; left:0px;//z-index:1;"></div>
+      <div class="Anuncio1_tipo">Online</div>
+      <div class="Anuncio1_cod">Cód 8415/2026</div>
+
+
+   </div>
+
+	<div style="position:relative; margin-top:0px; width:100%; min-width:226px; left:0px; border-top:1px solid #0b7500; border-bottom:1px solid #0b7500">
+
+
+      <div style="position:relative; margin-top:0px; left:0px; width:100%; height:11%; min-height:40px;">
+         <div style="position:relative; margin-top:0px; left:0px; width:50%; height:100%; min-height:40px; background-color:#0b7500; float:left;">
+            <div class="Anuncio1_data" style="color:#FFFFFF; top:16%;//5px; font-size:.8rem;" align="center">1º Leilão</div>
+            <div class="Anuncio1_data" style="color:#FFFFFF; top:26%;//9px; font-size:.8rem;" align="center">03/11/2026 12:00h</div>
+         </div>
+         <div style="position:relative; margin-top:0px; width:50%; height:100%; min-height:40px; background-color:#dcdcdc; float:left;">
+            <div class="Anuncio1_data" style="color: #3b3b3b; top:16%; font-size:.8rem;" align="center">2º Leilão</div>
+            <div class="Anuncio1_data" style="color: #3b3b3b; top:26%; font-size:.8rem;" align="center">13/11/2026 12:00h</div>
+         </div>
+		</div>
+
+   </div>
+
+	<div style="position:relative; margin-top:0px; left:0px; width:100%; height:23%; min-height:80px;">
+		<div class="Anuncio1_faixa" style="top:0px; height:100%;">
+         <div class="Anuncio1_tit"><div style="margin-left:8px; margin-right:8px; font-size: clamp(11px, 0.8rem, 12px);">Sala no Centro do Rio com 23m2</div></div>
+         <div class="Anuncio1_descr"><div style="margin-left:8px; margin-right:8px; font-size: clamp(11px, 0.8rem, 12px);">Sala no Centro do Rio com 23 m2 (Rua Teófilo Otoni, nº 52)</div></div>
+		</div>
+   </div>
+
+	<div style="position:absolute; bottom:0px; left:0px; width:100%; height:8%; min-height:30px;">
+		<div class="Anuncio1_botao" style="position:absolute; top:0px; height:100%;"><input type="button" name="btnCons" id="btnCons" value="ABERTO PARA LANCES" class="classBotao" style="background-color: #0b7500; width:100%; height:100%; line-height:100%;" onmouseout="this.style.backgroundColor='#0b7500';" onmouseover="this.style.backgroundColor='#085a00';"></div>
+   </div>
+
+</div>
+
+		
+<div class="Anuncio1_entre1" style="width:2.34%; min-width:15px;"></div>
+		
+<div id="divAnuncio1_3" class="Anuncio1_3" style="width:17.75%; min-width:226px; position:relative; height:auto; min-height:360px; float:left; aspect-ratio: 226 / 360; //border:3px solid #FF0000" onClick="abrirDetalhesLeilao('20041836301068004040002');">
+
+	<div class="Anuncio1_img" style="position:relative ;max-height:58%; //z-index:-1;">
+     	<img src="imagens/ImgPadrao.gif" width="100%">
+      <div class="Anuncio1_grad" style="position:absolute; top:0px; left:0px;//z-index:1;"></div>
+      <div class="Anuncio1_tipo">Online</div>
+      <div class="Anuncio1_cod">Cód 8433/2026</div>
+
+
+   </div>
+
+	<div style="position:relative; margin-top:0px; width:100%; min-width:226px; left:0px; border-top:1px solid #0b7500; border-bottom:1px solid #0b7500">
+
+
+      <div style="position:relative; margin-top:0px; left:0px; width:100%; height:11%; min-height:40px;">
+         <div style="position:relative; margin-top:0px; left:0px; width:50%; height:100%; min-height:40px; background-color:#0b7500; float:left;">
+            <div class="Anuncio1_data" style="color:#FFFFFF; top:16%;//5px; font-size:.8rem;" align="center">1º Leilão</div>
+            <div class="Anuncio1_data" style="color:#FFFFFF; top:26%;//9px; font-size:.8rem;" align="center">10/11/2026 09:00h</div>
+         </div>
+         <div style="position:relative; margin-top:0px; width:50%; height:100%; min-height:40px; background-color:#dcdcdc; float:left;">
+            <div class="Anuncio1_data" style="color: #3b3b3b; top:16%; font-size:.8rem;" align="center">2º Leilão</div>
+            <div class="Anuncio1_data" style="color: #3b3b3b; top:26%; font-size:.8rem;" align="center">17/11/2026 09:00h</div>
+         </div>
+		</div>
+
+   </div>
+
+	<div style="position:relative; margin-top:0px; left:0px; width:100%; height:23%; min-height:80px;">
+		<div class="Anuncio1_faixa" style="top:0px; height:100%;">
+         <div class="Anuncio1_tit"><div style="margin-left:8px; margin-right:8px; font-size: clamp(11px, 0.8rem, 12px);">Itens Diversos</div></div>
+         <div class="Anuncio1_descr"><div style="margin-left:8px; margin-right:8px; font-size: clamp(11px, 0.8rem, 12px);">Piano vertical acústico, aparador colonial em madeira maciça, cristaleira em estilo antigo, etc</div></div>
+		</div>
+   </div>
+
+	<div style="position:absolute; bottom:0px; left:0px; width:100%; height:8%; min-height:30px;">
+		<div class="Anuncio1_botao" style="position:absolute; top:0px; height:100%;"><input type="button" name="btnCons" id="btnCons" value="ABERTO PARA LANCES" class="classBotao" style="background-color: #0b7500; width:100%; height:100%; line-height:100%;" onmouseout="this.style.backgroundColor='#0b7500';" onmouseover="this.style.backgroundColor='#085a00';"></div>
+   </div>
+
+</div>
+
+		
+<div class="Anuncio1_entre1" style="width:2.34%; min-width:15px;"></div>
+		
+<div id="divAnuncio1_4" class="Anuncio1_4" style="width:17.75%; min-width:226px; position:relative; height:auto; min-height:360px; float:left; aspect-ratio: 226 / 360; //border:3px solid #FF0000" onClick="abrirDetalhesLeilao('20041826201068002040002');">
+
+	<div class="Anuncio1_img" style="position:relative ;max-height:58%; //z-index:-1;">
+     	<img src="imagens/ImgPadrao.gif" width="100%">
+      <div class="Anuncio1_grad" style="position:absolute; top:0px; left:0px;//z-index:1;"></div>
+      <div class="Anuncio1_tipo">Online</div>
+      <div class="Anuncio1_cod">Cód 8422/2026</div>
+
+
+   </div>
+
+	<div style="position:relative; margin-top:0px; width:100%; min-width:226px; left:0px; border-top:1px solid #0b7500; border-bottom:1px solid #0b7500">
+
+
+      <div style="position:relative; margin-top:0px; left:0px; width:100%; height:11%; min-height:40px;">
+         <div style="position:relative; margin-top:0px; left:0px; width:50%; height:100%; min-height:40px; background-color:#0b7500; float:left;">
+            <div class="Anuncio1_data" style="color:#FFFFFF; top:16%;//5px; font-size:.8rem;" align="center">1º Leilão</div>
+            <div class="Anuncio1_data" style="color:#FFFFFF; top:26%;//9px; font-size:.8rem;" align="center">10/11/2026 11:00h</div>
+         </div>
+         <div style="position:relative; margin-top:0px; width:50%; height:100%; min-height:40px; background-color:#dcdcdc; float:left;">
+            <div class="Anuncio1_data" style="color: #3b3b3b; top:16%; font-size:.8rem;" align="center">2º Leilão</div>
+            <div class="Anuncio1_data" style="color: #3b3b3b; top:26%; font-size:.8rem;" align="center">17/11/2026 11:00h</div>
+         </div>
+		</div>
+
+   </div>
+
+	<div style="position:relative; margin-top:0px; left:0px; width:100%; height:23%; min-height:80px;">
+		<div class="Anuncio1_faixa" style="top:0px; height:100%;">
+         <div class="Anuncio1_tit"><div style="margin-left:8px; margin-right:8px; font-size: clamp(11px, 0.8rem, 12px);">Bens Móveis</div></div>
+         <div class="Anuncio1_descr"><div style="margin-left:8px; margin-right:8px; font-size: clamp(11px, 0.8rem, 12px);">Furadeira de bancada, serra esquadrejadeira, coladeira de borda industrial, etc.</div></div>
+		</div>
+   </div>
+
+	<div style="position:absolute; bottom:0px; left:0px; width:100%; height:8%; min-height:30px;">
+		<div class="Anuncio1_botao" style="position:absolute; top:0px; height:100%;"><input type="button" name="btnCons" id="btnCons" value="ABERTO PARA LANCES" class="classBotao" style="background-color: #0b7500; width:100%; height:100%; line-height:100%;" onmouseout="this.style.backgroundColor='#0b7500';" onmouseover="this.style.backgroundColor='#085a00';"></div>
+   </div>
+
+</div>
+
+
+<div style="clear: both; height:30px; width:100%;"></div>
+		
+<div style="float:left; left:0px; width:11%; height:100px;"></div>
+		
+<div id="divAnuncio1_1" class="Anuncio1_1" style="width:17.75%; min-width:226px; position:relative; height:auto; min-height:360px; float:left; aspect-ratio: 226 / 360; //border:3px solid #FF0000" onClick="abrirDetalhesLeilao('20041826301068003040002');">
+
+	<div class="Anuncio1_img" style="position:relative ;max-height:58%; //z-index:-1;">
+     	<img src="Arquivos/008423/008423_000000_05_26357.jpg" width="100%">
+      <div class="Anuncio1_grad" style="position:absolute; top:0px; left:0px;//z-index:1;"></div>
+      <div class="Anuncio1_tipo">Online</div>
+      <div class="Anuncio1_cod">Cód 8423/2026</div>
+
+
+   </div>
+
+	<div style="position:relative; margin-top:0px; width:100%; min-width:226px; left:0px; border-top:1px solid #0b7500; border-bottom:1px solid #0b7500">
+
+
+      <div style="position:relative; margin-top:0px; left:0px; width:100%; height:11%; min-height:40px;">
+         <div style="position:relative; margin-top:0px; left:0px; width:50%; height:100%; min-height:40px; background-color:#0b7500; float:left;">
+            <div class="Anuncio1_data" style="color:#FFFFFF; top:16%;//5px; font-size:.8rem;" align="center">1º Leilão</div>
+            <div class="Anuncio1_data" style="color:#FFFFFF; top:26%;//9px; font-size:.8rem;" align="center">13/11/2026 11:00h</div>
+         </div>
+         <div style="position:relative; margin-top:0px; width:50%; height:100%; min-height:40px; background-color:#dcdcdc; float:left;">
+            <div class="Anuncio1_data" style="color: #3b3b3b; top:16%; font-size:.8rem;" align="center">2º Leilão</div>
+            <div class="Anuncio1_data" style="color: #3b3b3b; top:26%; font-size:.8rem;" align="center">23/11/2026 11:00h</div>
+         </div>
+		</div>
+
+   </div>
+
+	<div style="position:relative; margin-top:0px; left:0px; width:100%; height:23%; min-height:80px;">
+		<div class="Anuncio1_faixa" style="top:0px; height:100%;">
+         <div class="Anuncio1_tit"><div style="margin-left:8px; margin-right:8px; font-size: clamp(11px, 0.8rem, 12px);">Apto em Botafogo com 38 m2</div></div>
+         <div class="Anuncio1_descr"><div style="margin-left:8px; margin-right:8px; font-size: clamp(11px, 0.8rem, 12px);">Apto em Botafogo com 38 m2 (Rua Lauro Muller, nº 36)</div></div>
+		</div>
+   </div>
+
+	<div style="position:absolute; bottom:0px; left:0px; width:100%; height:8%; min-height:30px;">
+		<div class="Anuncio1_botao" style="position:absolute; top:0px; height:100%;"><input type="button" name="btnCons" id="btnCons" value="ABERTO PARA LANCES" class="classBotao" style="background-color: #0b7500; width:100%; height:100%; line-height:100%;" onmouseout="this.style.backgroundColor='#0b7500';" onmouseover="this.style.backgroundColor='#085a00';"></div>
+   </div>
+
+</div>
+
+		
+<div class="Anuncio1_entre1" style="width:2.34%; min-width:15px;"></div>
+		
+<div id="divAnuncio1_2" class="Anuncio1_2" style="width:17.75%; min-width:226px; position:relative; height:auto; min-height:360px; float:left; aspect-ratio: 226 / 360; //border:3px solid #FF0000" onClick="abrirDetalhesLeilao('20041826401068004040002');">
+
+	<div class="Anuncio1_img" style="position:relative ;max-height:58%; //z-index:-1;">
+     	<img src="Arquivos/008424/008424_000000_05_26366.jpg" width="100%">
+      <div class="Anuncio1_grad" style="position:absolute; top:0px; left:0px;//z-index:1;"></div>
+      <div class="Anuncio1_tipo">Online</div>
+      <div class="Anuncio1_cod">Cód 8424/2026</div>
+
+
+   </div>
+
+	<div style="position:relative; margin-top:0px; width:100%; min-width:226px; left:0px; border-top:1px solid #0b7500; border-bottom:1px solid #0b7500">
+
+
+      <div style="position:relative; margin-top:0px; left:0px; width:100%; height:11%; min-height:40px;">
+         <div style="position:relative; margin-top:0px; left:0px; width:50%; height:100%; min-height:40px; background-color:#0b7500; float:left;">
+            <div class="Anuncio1_data" style="color:#FFFFFF; top:16%;//5px; font-size:.8rem;" align="center">1º Leilão</div>
+            <div class="Anuncio1_data" style="color:#FFFFFF; top:26%;//9px; font-size:.8rem;" align="center">19/11/2026 11:00h</div>
+         </div>
+         <div style="position:relative; margin-top:0px; width:50%; height:100%; min-height:40px; background-color:#dcdcdc; float:left;">
+            <div class="Anuncio1_data" style="color: #3b3b3b; top:16%; font-size:.8rem;" align="center">2º Leilão</div>
+            <div class="Anuncio1_data" style="color: #3b3b3b; top:26%; font-size:.8rem;" align="center">30/11/2026 11:00h</div>
+         </div>
+		</div>
+
+   </div>
+
+	<div style="position:relative; margin-top:0px; left:0px; width:100%; height:23%; min-height:80px;">
+		<div class="Anuncio1_faixa" style="top:0px; height:100%;">
+         <div class="Anuncio1_tit"><div style="margin-left:8px; margin-right:8px; font-size: clamp(11px, 0.8rem, 12px);">Apto no Recreio com 83 m2</div></div>
+         <div class="Anuncio1_descr"><div style="margin-left:8px; margin-right:8px; font-size: clamp(11px, 0.8rem, 12px);">Apto no Recreio (CONDOMÍNIO DO EDIFÍCIO GOLDEN BALI/CORAL BALI), com 83 m2, 02 vagas de garagem</div></div>
+		</div>
+   </div>
+
+	<div style="position:absolute; bottom:0px; left:0px; width:100%; height:8%; min-height:30px;">
+		<div class="Anuncio1_botao" style="position:absolute; top:0px; height:100%;"><input type="button" name="btnCons" id="btnCons" value="ABERTO PARA LANCES" class="classBotao" style="background-color: #0b7500; width:100%; height:100%; line-height:100%;" onmouseout="this.style.backgroundColor='#0b7500';" onmouseover="this.style.backgroundColor='#085a00';"></div>
+   </div>
+
+</div>
+
+		
+<div class="Anuncio1_entre1" style="width:2.34%; min-width:15px;"></div>
+		
+<div id="divAnuncio1_3" class="Anuncio1_3" style="width:17.75%; min-width:226px; position:relative; height:auto; min-height:360px; float:left; aspect-ratio: 226 / 360; //border:3px solid #FF0000" onClick="abrirDetalhesLeilao('20051836601068007040002');">
+
+	<div class="Anuncio1_img" style="position:relative ;max-height:58%; //z-index:-1;">
+     	<img src="Arquivos/008436/008436_000000_05_26511.jpg" width="100%">
+      <div class="Anuncio1_grad" style="position:absolute; top:0px; left:0px;//z-index:1;"></div>
+      <div class="Anuncio1_tipo">Online</div>
+      <div class="Anuncio1_cod">Cód 8436/2026</div>
+
+
+   </div>
+
+	<div style="position:relative; margin-top:0px; width:100%; min-width:226px; left:0px; border-top:1px solid #0b7500; border-bottom:1px solid #0b7500">
+
+
+      <div style="position:relative; margin-top:0px; left:0px; width:100%; height:11%; min-height:40px;">
+         <div style="position:relative; margin-top:0px; left:0px; width:50%; height:100%; min-height:40px; background-color:#0b7500; float:left;">
+            <div class="Anuncio1_data" style="color:#FFFFFF; top:16%;//5px; font-size:.8rem;" align="center">1º Leilão</div>
+            <div class="Anuncio1_data" style="color:#FFFFFF; top:26%;//9px; font-size:.8rem;" align="center">04/12/2026 11:00h</div>
+         </div>
+         <div style="position:relative; margin-top:0px; width:50%; height:100%; min-height:40px; background-color:#dcdcdc; float:left;">
+            <div class="Anuncio1_data" style="color: #3b3b3b; top:16%; font-size:.8rem;" align="center">2º Leilão</div>
+            <div class="Anuncio1_data" style="color: #3b3b3b; top:26%; font-size:.8rem;" align="center">14/12/2026 11:00h</div>
+         </div>
+		</div>
+
+   </div>
+
+	<div style="position:relative; margin-top:0px; left:0px; width:100%; height:23%; min-height:80px;">
+		<div class="Anuncio1_faixa" style="top:0px; height:100%;">
+         <div class="Anuncio1_tit"><div style="margin-left:8px; margin-right:8px; font-size: clamp(11px, 0.8rem, 12px);">Sala Comercial em Copacabana</div></div>
+         <div class="Anuncio1_descr"><div style="margin-left:8px; margin-right:8px; font-size: clamp(11px, 0.8rem, 12px);">Sala Comercial em Copacabana, situada à Rua Figueiredo Magalhães, nº 286, com 24 m2</div></div>
+		</div>
+   </div>
+
+	<div style="position:absolute; bottom:0px; left:0px; width:100%; height:8%; min-height:30px;">
+		<div class="Anuncio1_botao" style="position:absolute; top:0px; height:100%;"><input type="button" name="btnCons" id="btnCons" value="ABERTO PARA LANCES" class="classBotao" style="background-color: #0b7500; width:100%; height:100%; line-height:100%;" onmouseout="this.style.backgroundColor='#0b7500';" onmouseover="this.style.backgroundColor='#085a00';"></div>
+   </div>
+
+</div>
+
+		
+<div class="Anuncio1_entre1" style="width:2.34%; min-width:15px;"></div>
+		
+<div id="divAnuncio1_4" class="Anuncio1_4" style="width:17.75%; min-width:226px; position:relative; height:auto; min-height:360px; float:left; aspect-ratio: 226 / 360; //border:3px solid #FF0000" onClick="abrirDetalhesLeilao('20041836201068003040002');">
+
+	<div class="Anuncio1_img" style="position:relative ;max-height:58%; //z-index:-1;">
+     	<img src="Arquivos/008432/008432_000000_05_26491.jpg" width="100%">
+      <div class="Anuncio1_grad" style="position:absolute; top:0px; left:0px;//z-index:1;"></div>
+      <div class="Anuncio1_tipo">Online</div>
+      <div class="Anuncio1_cod">Cód 8432/2026</div>
+
+
+   </div>
+
+	<div style="position:relative; margin-top:0px; width:100%; min-width:226px; left:0px; border-top:1px solid #0b7500; border-bottom:1px solid #0b7500">
+
+
+      <div style="position:relative; margin-top:0px; left:0px; width:100%; height:11%; min-height:40px;">
+         <div style="position:relative; margin-top:0px; left:0px; width:50%; height:100%; min-height:40px; background-color:#0b7500; float:left;">
+            <div class="Anuncio1_data" style="color:#FFFFFF; top:16%;//5px; font-size:.8rem;" align="center">1º Leilão</div>
+            <div class="Anuncio1_data" style="color:#FFFFFF; top:26%;//9px; font-size:.8rem;" align="center">08/12/2026 13:00h</div>
+         </div>
+         <div style="position:relative; margin-top:0px; width:50%; height:100%; min-height:40px; background-color:#dcdcdc; float:left;">
+            <div class="Anuncio1_data" style="color: #3b3b3b; top:16%; font-size:.8rem;" align="center">2º Leilão</div>
+            <div class="Anuncio1_data" style="color: #3b3b3b; top:26%; font-size:.8rem;" align="center">15/12/2026 13:00h</div>
+         </div>
+		</div>
+
+   </div>
+
+	<div style="position:relative; margin-top:0px; left:0px; width:100%; height:23%; min-height:80px;">
+		<div class="Anuncio1_faixa" style="top:0px; height:100%;">
+         <div class="Anuncio1_tit"><div style="margin-left:8px; margin-right:8px; font-size: clamp(11px, 0.8rem, 12px);">Imóvel em Copacabana/RJ</div></div>
+         <div class="Anuncio1_descr"><div style="margin-left:8px; margin-right:8px; font-size: clamp(11px, 0.8rem, 12px);">Prédio e respectivo terreno situado na Rua Santa Clara nº 327-A, composto de 2 pavimentos</div></div>
+		</div>
+   </div>
+
+	<div style="position:absolute; bottom:0px; left:0px; width:100%; height:8%; min-height:30px;">
+		<div class="Anuncio1_botao" style="position:absolute; top:0px; height:100%;"><input type="button" name="btnCons" id="btnCons" value="ABERTO PARA LANCES" class="classBotao" style="background-color: #0b7500; width:100%; height:100%; line-height:100%;" onmouseout="this.style.backgroundColor='#0b7500';" onmouseover="this.style.backgroundColor='#085a00';"></div>
+   </div>
+
+</div>
+
+
+<div style="clear: both; height:30px; width:100%;"></div>
+
+
+<div style="position:relative; left:11%; margin-top:0px; width:100%; height:1px;">
+	<div class="Anuncio1_linha"></div>
+</div>
+
+
+
+<div class="Anuncio1_rodape" style="margin-top:30px; //top:648px; /*border:1px solid #0000FF*/">
+   <div class="Anuncio1_rodapelateral" style="height:10px;"></div>
+   <div class="Anuncio1_seletores">
+      <div class='Anuncio1_seletor' align='center' onClick='pagina(2);'><div class='Anuncio1_seletorStr'>>></div></div><div class="Anuncio1_seletorEsp"></div><div class='Anuncio1_seletor' align='center' onClick='pagina(2);'><div class='Anuncio1_seletorStr'>></div></div><div class="Anuncio1_seletorEsp"></div><div class='Anuncio1_seletor' align='center' onClick='pagina(2);'>2</div><div class="Anuncio1_seletorEsp"></div><div class='Anuncio1_seletorSel' align='center'>1</div><div class="Anuncio1_seletorEsp"></div><div class='Anuncio1_seletorIna' align='center'><div class='Anuncio1_seletorStr'><</div></div><div class="Anuncio1_seletorEsp"></div><div class='Anuncio1_seletorIna' align='center'><div class='Anuncio1_seletorStr'><<</div></div><div class="Anuncio1_seletorEsp"></div>
+   </div>
+</div>
+
+
+<div style="position:relative; width:100%; width:100vw; margin-top:0px; margin-left:0px; margin-right:0px; padding-left:0px; padding-right:0px;">
+	<script language="JavaScript">
+
+function enviarCadasInf(){
+	var vEnv='S';
+	if(document.getElementById('txtNome_inf').value==''||document.getElementById('txtEMail_inf').value==''){
+		vEnv='N';
+		alert('Todos os campos são de preenchimento obrigatório.');
+	}
+	if(vEnv=='S'){
+	
+		var vEMail=document.getElementById('txtEMail_inf').value;
+		while(vEMail.indexOf(" ")!=-1){
+			vEMail=vEMail.replace(" ","");
+		}
+		vEMail=vEMail.toLowerCase(); 
+		var vErrados="áàãâäéèêëíìîïóòõôöúùûüç";
+		var vCertos= "aaaaaeeeeiiiiooooouuuuc";
+		for (i = 0; i < vErrados.length; i++){
+			vEMail=vEMail.replace(vErrados.substr(i,1),vCertos.substr(i,1));
+		}
+	
+		var vUsuario = vEMail.substring(0, vEMail.indexOf("@"));
+		var vDominio = vEMail.substring(vEMail.indexOf("@")+ 1, vEMail.length);
+	
+		if((vUsuario.length >=1) &&
+		 (vDominio.length >=3) && 
+		 (vUsuario.search("@")==-1) && 
+		 (vDominio.search("@")==-1) &&
+		 (vUsuario.search(" ")==-1) && 
+		 (vDominio.search(" ")==-1) &&
+		 (vDominio.search(".")!=-1) &&      
+		 (vDominio.indexOf(".") >=1)&& 
+		 (vDominio.lastIndexOf(".") < vDominio.length - 1)){
+		}else{
+			vEnv='N';
+			alert('E-MAIL inválido.');
+			document.getElementById("txtEMail_inf").value='';
+			document.getElementById("txtEMail_inf").placeholder='Digite o seu e-mail';
+			document.getElementById("txtEMail_inf").focus();
+			vOk="N";
+		};
+	}
+	
+	if(vEnv=='S'){
+		document.frm1N.action='https://www.bspleiloes.com.br/CadastroNews_G.asp';
+		document.frm1N.n.value=document.getElementById('txtNome_inf').value;
+		document.frm1N.e.value=document.getElementById('txtEMail_inf').value;
+		frm1N.submit();
+	}
+}
+
+function toScrollto(){
+	if(window.scrollY!=0){
+  		setTimeout(function() {
+    	window.scrollTo(0,window.scrollY-10);
+      toScrollto();
+    	}, 1);
+   }
+}
+
+</script>
+<div id="divRodape1_topo1" class="Rodape1_btn_topo" style="top: -20px;" align="center" onclick="toScrollto();"><div class="Rodape1_stretch">^</div></div>
+<div id="divRodape1_topo2" class="Rodape1_linha" style="top: 0px;"></div>
+
+<div id="divRodape1_topo3" class="Rodape1_container" style="top: 5px; height:400px;">
+
+   <div class="Rodape1_lateral" style="top:0px;"></div>
+   <div class="Rodape1_inside" style="top:0px; height:400px;">
+
+		<div class="Rodape1_bloco1">
+
+         <div style="position: absolute; top: 30px; left: 8px;"><img src="Imagens/imgMartelo.png" height="23" width="23"></div>
+         <div class="Rodape1_textos" style="top: 33px; color: #ffffff; font-weight: bold;">Bianca Pais - Leiloeira Pública</div>
+         <div class="Rodape1_textos" style="top: 53px; color: #ffffff; font-weight: bold;">Cadastrada na Jucerja N° 156</div>
+   
+         <div style="position: absolute; top: 80px; left: 8px;"><img src="Imagens/imgEMail.png" height="23" width="23"></div>
+         <div class="Rodape1_textos" style="top: 82px; left:41px"><a href="/cdn-cgi/l/email-protection#8be9e2eae5e8eafbeae2f8cbe9f8fbe7eee2e7e4eef8a5e8e4e6a5e9f9" class="EMail"><span class="__cf_email__" data-cfemail="d5b7bcb4bbb6b4a5b4bca695b7a6a5b9b0bcb9bab0a6fbb6bab8fbb7a7">[email&#160;protected]</span></a></div>
+
+         <div style="position: absolute; top: 109px; left: 8px;"><img src="Imagens/imgMartelo.png" height="23" width="23"></div>
+         <div class="Rodape1_textos" style="top: 112px; color: #ffffff; font-weight: bold;">Brunna Pais - Leiloeira Pública</div>
+         <div class="Rodape1_textos" style="top: 132px; color: #ffffff; font-weight: bold;">Cadastrada na Jucerja N° 370</div>
+   
+         <div style="position: absolute; top: 159px; left: 8px;"><img src="Imagens/imgEMail.png" height="23" width="23"></div>
+         <div class="Rodape1_textos" style="top: 161px; left:41px"><a href="/cdn-cgi/l/email-protection#553727203b3b3425343c261537262539303c393a30267b363a387b3727" class="EMail"><span class="__cf_email__" data-cfemail="2a48585f44444b5a4b43596a48595a464f4346454f5904494547044858">[email&#160;protected]</span></a></div>
+   
+         <div style="position: absolute; top: 188px; left: 8px;"><img src="Imagens/imgWhatsApp.png" height="23" width="23"></div>
+         <div class="Rodape1_textos" style="top: 191px; left:41px"><a href="https://api.whatsapp.com/send?phone=5521972721434" class="EMail" target="_blank">21 97272-1434</a> (WhatsApp)</div>
+   
+         <div style="position: absolute; top: 219px; left: 8px;"><img src="Imagens/imgInstagram.png" height="23" width="23"></div>
+         <div class="Rodape1_textos" style="top: 221px; left:41px"><a href="https://www.instagram.com/leiloesbsp/" class="EMail" target="_blank">@leiloesbsp</a></div>
+   
+         <div style="position: absolute; top: 249px; left: 8px;"><img src="Imagens/imgPhone.png" height="23" width="23"></div>
+         <div class="Rodape1_textos" style="top: 251px"><a href="tel:21988981434" class="EMail">(21) 98898-1434</a></div>
+   
+         <div style="position: absolute; top: 279px; left: 8px;"><img src="Imagens/imgLocal.png" height="23" width="23"></div>
+         <div class="Rodape1_textos" style="top: 281px">Avenida das Américas, nº 3443</div>
+         <div class="Rodape1_textos" style="top: 301px">Bloco 3 - Sala 202 - 2° andar</div>
+         <div class="Rodape1_textos" style="top: 321px">Américas Corporate - Barra da Tijuca</div>
+         <div class="Rodape1_textos" style="top: 341px">CEP: 22631-003 - Rio de Janeiro - RJ</div>
+
+		</div>
+
+		<div class="Rodape1_bloco2">
+     		<div class="Rodape1_bloco_meio_titulo negrito" style="color:#ffffff;">Receba nossos informativos</div>
+         <div class="Rodape1_base_txt_nome" align="right"><input name="txtNome_inf" type="text" id="txtNome_inf" maxlength="250" placeholder="Digite o seu nome" class="Rodape1_txt_nome"></div>
+         <div class="Rodape1_icon_nome"><img src="Imagens/imgLoginIntra.png" width="18" height="18"></div>
+         <div class="Rodape1_base_txt_email" align="right"><input name="txtEMail_inf" type="text" id="txtEMail_inf" maxlength="250" placeholder="Digite o seu e-mail" class="Rodape1_txt_email"></div>
+         <div class="Rodape1_icon_email"><img src="Imagens/imgEMailIntra.png" width="18" height="18"></div>
+         <div class="Rodape1_botao_enviar"><input type="button" name="btnEnviar" id="btnEnviar" value="ENVIAR" class="classBotao" onClick="enviarCadasInf();" style="width: 250px; background-color:#ff9000" onmouseover="this.style.backgroundColor='#CC6600';" onmouseout="this.style.backgroundColor='#ff9000';"></div>
+		</div>   
+
+		<div class="Rodape1_bloco3">
+     		<div class="Rodape1_bloco_dir_titulo negrito" style="color:#ffffff;">Informações</div>
+      	<div style="position: absolute; top: 40px; width:100%;" align="left"><a href="#void" onclick="acionarMenu('TERMOS');" class="EMail">Termos de uso</a></div>
+      	<div style="position: absolute; top: 70px; width:100%;" align="left"><a href="#void" onclick="acionarMenu('POLPRIV');" class="EMail">Política de Privacidade</a></div>
+      	<div style="position: absolute; top: 100px; width:100%;"><a href="#void" onclick="acionarMenu('CONTATO');" class="EMail">Contato</a></div>
+      	<div style="position: absolute; top: 130px; width:100%;"><a href="#void" onclick="acionarMenu('AJUDA');" class="EMail">Ajuda</a></div>
+		</div>   
+
+		<div class="Rodape1_bloco4">
+         <div class="RodapeMSIS_logo"><a href="https://www.msis.com.br" target="_blank"><img src="Imagens/imgLogoMSIS2.gif" width="27" height="27" border="0"></a></div>
+         <div class="RodapeMSIS_textos" style="color:#cccccc;">desenvolvido por</div>
+		</div>
+
+   </div>
+
+</div>
+
+<form name="frm1N" id="frm1N" method="post">
+<input name="e" type="hidden" id="e">
+<input name="n" type="hidden" id="n">
+</form>
+</div>
+
+
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a50b5b5d4a410162',t:'MTc5MzAzNzU4OA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
+<form name="frm1" id="frm1" method="post">
+<input type="hidden" name="pesq" id="pesq">
+<input type="hidden" name="dest">
+<input type="hidden" name="pag">
+<input type="hidden" name="n">
+<input type="hidden" name="e">
+<input type="hidden" name="acaoDest" id="acaoDest">
+</form>
+<script language="JavaScript">
+
+document.getElementById('acaoDest').value='S';
+document.getElementById('pesq').value='';
+
+function pagina(vP){
+	document.frm1.action='Principal.asp';
+	document.frm1.pag.value=vP;
+	frm1.submit();
+}
+
+function listarConsulta(vT){
+	if(vT=='0'){vT='N'}
+	if(vT=='1'){vT='S'}
+	document.frm1.action='Principal.asp';
+	document.getElementById('acaoDest').value=vT;
+	frm1.submit();
+}
+
+function abrirDetalhesLeilao(vZ){
+	document.frm1.action='Leilao.asp?zz='+vZ;
+	frm1.submit();
+}
+
+function limparBusca(){
+	document.frm1.action='Principal.asp';
+	document.getElementById('acaoDest').value='';
+	document.getElementById('pesq').value='';
+	frm1.submit();
+}
+	
+</script>
