@@ -23,6 +23,8 @@
 import { inferirTipo, extrairArea, checarQualidade } from './leilaopro-parse.mjs';
 import { num, plaus, textoDe, titleCase, montarRowDom, cidadeUFBare, cidadeNestaCidade, semPrefixoCidade, RE_IMG_DESCARTA } from './dom-parse-util.mjs';
 import { decodificarEntidades } from '../../api/_texto-imovel.js';
+import MUNICIPIOS from '../../api/_municipios.js';
+import { normCidade } from './inferir-uf.mjs';
 
 // Ordem = ordem alfabética do domínio na triagem (leiloeiro_triagem.plataforma = 'ASP_PRINCIPAL').
 // `fonte` única (conferida contra imoveis_leilao em 26/10: nenhuma em uso).
@@ -72,7 +74,8 @@ export function cardsDoCatalogo(html) {
     if (!zz) continue;
     const status = decodificarEntidades((p.match(/name=["']btnCons["'][^>]*value=["']([^"']+)["']/i) || [])[1] || '').trim();
     const titulo = decodificarEntidades(((p.match(/class=["']Anuncio1_tit["'][^>]*>\s*<div[^>]*>([\s\S]*?)<\/div>/i) || [])[1] || '').replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
-    out.push({ zz, status, titulo });
+    const descr = decodificarEntidades(((p.match(/class=["']Anuncio1_descr["'][^>]*>\s*<div[^>]*>([\s\S]*?)<\/div>/i) || [])[1] || '').replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
+    out.push({ zz, status, titulo, descr });
   }
   return out;
 }
@@ -82,7 +85,8 @@ export function extrairUrlsDeEvento(html, base) {
   const out = new Map();
   for (const c of cardsDoCatalogo(html)) {
     if (c.status && RE_ENCERRADO.test(c.status)) continue;
-    out.set(c.zz, `${base}/Leilao.asp?zz=${c.zz}`);
+    // `card=` leva status + descrição do card até o transporte, que os anota na página do leilão (ver parseLote).
+    out.set(c.zz, `${base}/Leilao.asp?zz=${c.zz}&card=${encodeURIComponent(`${c.status} | ${c.descr}`.slice(0, 300))}`);
   }
   return out;
 }
@@ -136,6 +140,12 @@ function cidadeUfDoTexto(txt) {
     const cid = semPrefixoCidade(m[1].replace(/^.*,\s*/, '').replace(/^.*\s-\s/, '').trim());
     if (cid && cid.length >= 3) return { cidade: titleCase(cid), estado: m[2] };
   }
+  // "…VERBO DIVINO, BARRA MANSA, RJ." (Sérgio Represas) e "Santa Efigênia, São Paulo| SP" (Vianna): cidade entre
+  // vírgula e UF. Só vale com o par conferido no IBGE — sem a barra o trecho antes da vírgula pode ser bairro/rua.
+  for (const x of s.matchAll(/(?:^|[,.;:]\s*)([A-Za-zÀ-ÿ'][A-Za-zÀ-ÿ' ]{2,40}?)\s*[,|]\s*([A-Z]{2})\b(?![a-zà-ÿ])/g)) {
+    const cid = x[1].trim();
+    if (Object.prototype.hasOwnProperty.call(MUNICIPIOS, `${x[2]}|${normCidade(cid)}`)) return { cidade: titleCase(cid), estado: x[2] };
+  }
   // "…Ramos, na cidade do Rio de Janeiro." / "no município de Niterói" (MK Lance, 26/10).
   const naCidade = s.match(/\b(?:na\s+cidade|no\s+munic[íi]pio|na\s+comarca)\s+(?:d[eoa]\s+)?([A-ZÀ-Ÿ][A-Za-zÀ-ÿ']+(?:\s+(?:d[aeo]s?\s+)?[A-ZÀ-Ÿ][A-Za-zÀ-ÿ']+){0,3})(?:\s*[/(-]\s*([A-Z]{2})\b)?/);
   if (naCidade) return { cidade: titleCase(naCidade[1]), estado: naCidade[2] || null };
@@ -144,11 +154,13 @@ function cidadeUfDoTexto(txt) {
   return cidadeUFBare(s);
 }
 
-/** Uma praça: "1° Leilão … Data do leilão: 08/12/2026 às 13:00 … Lance inicial 7.000.000,00". */
+/** Uma praça: "1° Leilão … Data do leilão: 08/12/2026 às 13:00 … Lance inicial 7.000.000,00". Variantes medidas em
+ * 26/10: sem "Data do leilão" (Alexandre Costa: só "Fechamento: 29/10/2026") e "1° Leilão 22/05/2025 10:00 Lance inicial
+ * R$ 420.000,00 … RS 210.000,00" (Gabriel, com o "RS" digitado no lugar de "R$"). */
 function pracasDe(txt) {
   const out = [];
-  for (const m of String(txt || '').matchAll(/(\d)\s*[°º]\s*Leil[ãa]o\s+([\s\S]{0,400}?)Lance inicial\s*(?:R\$\s*)?([\d.]+,\d{2})/gi)) {
-    const data = dataBr((m[2].match(/Data do leil[ãa]o\s*:?\s*(\d{2}\/\d{2}\/\d{4})/i) || m[2].match(/(\d{2}\/\d{2}\/\d{4})/) || [])[1]);
+  for (const m of String(txt || '').matchAll(/(\d)\s*[°º]\s*Leil[ãa]o\s+([\s\S]{0,400}?)Lance inicial\s*(?:R\s*[$S]\s*)?([\d.]+,\d{2})/gi)) {
+    const data = dataBr((m[2].match(/Data do leil[ãa]o\s*:?\s*(\d{2}\/\d{2}\/\d{4})/i) || m[2].match(/Fechamento\s*:?\s*(\d{2}\/\d{2}\/\d{4})/i) || m[2].match(/(\d{2}\/\d{2}\/\d{4})/) || [])[1]);
     out.push({ n: Number(m[1]), data, lance: plaus(num(m[3])) });
   }
   return out;
@@ -158,19 +170,32 @@ function pracasDe(txt) {
 export function parseLote(blocoHtml, leilaoHtml, base, { hoje = new Date().toISOString().slice(0, 10) } = {}) {
   const b = String(blocoHtml || '');
   const txt = decodificarEntidades(textoDe(b)).replace(/\s+/g, ' ');
-  const descricao = limpo((b.match(/<div[^>]*class=["'][^"']*Letra14 CorCinzaEsc[^"']*["'][^>]*align=["']justify["'][^>]*>([\s\S]*?)<\/div>/i) || [])[1]).slice(0, 4000) || null;
+  // Cor do texto varia por tenant (CorCinzaEsc · CorBranca no Sérgio Represas).
+  const descricao = limpo((b.match(/<div[^>]*class=["'][^"']*Letra14 Cor\w+[^"']*["'][^>]*align=["']justify["'][^>]*>([\s\S]*?)<\/div>/i) || [])[1]).slice(0, 4000) || null;
+  // Status/descrição do CARD do catálogo, anotados pelo transporte (fetch-msis) no topo da página do leilão: o Gabriel
+  // marca "VENDA DIRETA" só no card, e a Vianna escreve "DESCONSIDERAR AS DATAS NESTE SITE" só na descrição do card.
+  const card = decodificarEntidades((String(leilaoHtml).match(/<!-- msis-card: ([\s\S]*?) -->/) || [])[1] || '');
   const tituloLeilao = limpo((String(leilaoHtml).match(/<span[^>]*class=["'][^"']*Letra26[^"']*["'][^>]*>([\s\S]*?)<\/span>/i) || [])[1]);
   const status = limpo((b.match(/<div[^>]*class=["'][^"']*Letra18 CorBranca Negrito[^"']*["'][^>]*>([\s\S]*?)<\/div>\s*<\/div>/i) || [])[1]);
   const pracas = pracasDe(txt);
   const futuras = pracas.filter((p) => p.data && p.data >= hoje);
   const vigentes = futuras.length ? futuras : pracas;
   const lances = vigentes.map((p) => p.lance).filter(Boolean);
-  const avaliado = plaus(num((String(descricao || '').match(/AVALIA(?:DO|[ÇC][ÃA]O)[^R$]{0,60}R\$\s*([\d.]+,\d{2})/i) || [])[1]));
+  const avaliado = plaus(num((String(descricao || '').match(/AVALIA(?:DO|[ÇC][ÃA]O)[^R$]{0,60}R\$\s*([\d.]+,\d{2})/i)
+    || String(descricao || '').match(/Avalio\s+o\s+referido[^0-9]{0,40}([\d.]+,\d{2})/i) || [])[1]));
+  // "Avaliação: R$ 30.400.000,00 | Valor Mínimo: R$ 15.200.000,00" (lotes da Comprei/PGFN na Vianna).
+  const minDeclarado = plaus(num((String(descricao || '').match(/Valor\s+M[íi]nimo\s*:?\s*R\$\s*([\d.]+,\d{2})/i) || [])[1]));
+  // VENDA DIRETA: o leilão/lote diz que a venda é por proposta (Gabriel "VENDA DIRETA", Vianna "propostas de compra…
+  // na PLATAFORMA DA COMPREI. Desconsiderar as datas deste site") — as datas do site são de enfeite e não valem.
+  const vendaDireta = /VENDA DIRETA/i.test(`${status} ${card}`) || /venda\s+direta|propostas?\s+de\s+compra\s+s[ãa]o\s+realizadas|desconsiderar\s+as\s+datas/i.test(`${descricao || ''} ${card}`);
   const primeiro = pracas.find((p) => p.lance)?.lance || 0;
-  const minimo = lances.length ? Math.min(...lances) : primeiro;
-  // Título: 1ª frase da descrição do lote (o título do leilão costuma ser o processo ou "Itens Diversos").
-  const frase = String(descricao || '').split(/(?<=[a-zà-ú0-9)])[.;](?:\s|$)/i)[0] || '';
-  const titulo = (frase.length >= 12 ? frase : (descricao || tituloLeilao || '')).slice(0, 180).replace(/[\s,;:–-]+$/, '') || null;
+  const minimo = minDeclarado || (lances.length ? Math.min(...lances) : primeiro);
+  // Título: a 1ª frase da descrição que FALA DO BEM (a 1ª costuma ser aviso — "As propostas de compra são realizadas
+  // diretamente…", "LAUDO DE AVALIAÇÃO:"); o título do leilão é o processo ou "Itens Diversos".
+  const frases = String(descricao || '').replace(/^LAUDO DE AVALIA[ÇC][ÃA]O\s*:\s*/i, '').split(/(?<=[a-zà-ú0-9)]{3})[.;](?:\s|$)|_{5,}/i).map((f) => f.trim()).filter((f) => f.length >= 12);
+  const RE_BEM = /\b(apartamento|apto|casa|sobrado|terreno|lote|gleba|sala|loja|pr[ée]dio|galp[ãa]o|im[óo]ve(?:l|is)|fazenda|s[íi]tio|ch[áa]cara|[áa]rea|cinema|edif[íi]cio|unidade|cobertura|box|vaga|kitnet|resid[êe]ncia|constru[çc][ãa]o)/i;
+  const frase = frases.find((f) => RE_BEM.test(f) && !/proposta|desconsiderar|aten[çc][ãa]o/i.test(f.slice(0, 40))) || frases[0] || '';
+  const titulo = (frase || descricao || tituloLeilao || '').slice(0, 180).replace(/[\s,;:–_-]+$/, '') || null;
   let { cidade, estado } = cidadeUfDoTexto(descricao);
   if (!cidade) ({ cidade, estado } = cidadeUfDoTexto(tituloLeilao));
   // A plataforma é dos leiloeiros do RJ (JUCERJA); "na cidade do Rio de Janeiro" sem UF é RJ.
@@ -183,9 +208,9 @@ export function parseLote(blocoHtml, leilaoHtml, base, { hoje = new Date().toISO
   return {
     titulo, cidade, estado,
     valor_avaliacao: avaliado || primeiro || minimo, valor_minimo: minimo || avaliado,
-    modalidade: judicial ? 'judicial' : 'extrajudicial',
+    modalidade: vendaDireta ? 'venda_direta' : judicial ? 'judicial' : 'extrajudicial',
     area_m2: extrairArea(titulo || '', descricao || ''),
-    descricao, data_leilao: vigentes[0]?.data || null, data_leilao_2: vigentes.length > 1 ? vigentes[vigentes.length - 1].data : null,
+    descricao, data_leilao: vendaDireta ? null : vigentes[0]?.data || null, data_leilao_2: !vendaDireta && vigentes.length > 1 ? vigentes[vigentes.length - 1].data : null,
     numero_matricula: mat, numero_processo: processo, anexos,
     link_edital: anexos.find((a) => a.tipo === 'edital')?.url || null,
     link_matricula: anexos.find((a) => a.tipo === 'matricula')?.url || null,

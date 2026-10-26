@@ -366,7 +366,7 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
         reprov++;
         // Motivo de cada descarte no log (18/10): o dry-run do EMILIOMATOS disse "15 descartados" e nada mais —
         // sem isto, saber o porquê custava outra rodada paga. Limitado para fonte grande não inundar o log.
-        if (reprov <= 15) console.log(`   [${tenant.fonte}] descartado ${row.fonte_id}: ${q.motivo || (q.faltando || []).join(', ')}`);
+        if (reprov <= 15) console.log(`   [${tenant.fonte}] descartado ${row.fonte_id}: ${q.motivo || (q.faltando || []).join(', ')}${q.faltando?.includes('valor') ? ` (aval ${row.valor_avaliacao} · mín ${row.valor_minimo} · ${String(row.titulo || '').slice(0, 50)})` : ''}`);
         // Descarte por DECISÃO DE NEGÓCIO (fração ideal / fora do acervo) é permanente: o lote já
         // gravado sai junto, como o não-imóvel. Sem valor/data pode ser temporário — fica.
         const permanente = q.faltando?.includes('fracao_ideal') || q.faltando?.includes('fora_do_acervo') || q.faltando?.includes('vaga_garagem');

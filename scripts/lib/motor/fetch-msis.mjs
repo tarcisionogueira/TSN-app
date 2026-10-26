@@ -110,7 +110,7 @@ export function criarMotorMsis() {
     return { html, via: [...c.via].join('+') || 'direto' };
   }
 
-  async function lerLeilao(base, zz) {
+  async function lerLeilao(base, zz, card = '') {
     const host = new URL(base).host;
     const url = `${base}/Leilao.asp?zz=${zz}`;
     const p1 = await pedirComRetry(url, null);
@@ -123,7 +123,8 @@ export function criarMotorMsis() {
       if (!r.html) { cob(host).falhas.push(`leilão ${zz} pág ${p}: ${r.motivo}`); return { html: null, via: `leilão página ${p}: ${r.motivo}` }; }
       paginas.push(r.html);
     }
-    const html = paginas.join('\n<!-- msis: proxima pagina do leilao -->\n');
+    const anot = card ? `<!-- msis-card: ${card.replace(/--/g, '—').replace(/[<>]/g, ' ')} -->\n` : '';
+    const html = anot + paginas.join('\n<!-- msis: proxima pagina do leilao -->\n');
     const c = cob(host);
     c.leiloesLidos += 1;
     c.declarados += tot?.lotes ?? 0;
@@ -138,7 +139,7 @@ export function criarMotorMsis() {
       if (!catalogo.has(base)) catalogo.set(base, await lerCatalogo(base));
       return catalogo.get(base);
     }
-    if (/\/Leilao\.asp$/i.test(u.pathname) && u.searchParams.get('zz')) return lerLeilao(base, u.searchParams.get('zz'));
+    if (/\/Leilao\.asp$/i.test(u.pathname) && u.searchParams.get('zz')) return lerLeilao(base, u.searchParams.get('zz'), u.searchParams.get('card') || '');
     const r = await pedirComRetry(url, null);
     return r.html ? { html: r.html, via: 'direto' } : { html: null, via: r.motivo };
   }

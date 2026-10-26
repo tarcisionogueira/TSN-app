@@ -31,7 +31,7 @@ assert.equal(ultimaPagina(catBsp), 2);
 assert.ok(cards.every((c) => c.status === 'ABERTO PARA LANCES'));
 const ev = extrairUrlsDeEvento(catBsp, B);
 assert.equal(ev.size, 12);
-assert.equal(ev.get('20041836201068003040002'), `${B}/Leilao.asp?zz=20041836201068003040002`);
+assert.match(ev.get('20041836201068003040002'), /^https:\/\/www\.bspleiloes\.com\.br\/Leilao\.asp\?zz=20041836201068003040002&card=ABERTO%20PARA%20LANCES/, 'status do card viaja até a página do leilão');
 // Card ENCERRADO não vira leilão a ler.
 const comEncerrado = catBsp.replace(/value="ABERTO PARA LANCES"/, 'value="ENCERRADO"');
 assert.equal(extrairUrlsDeEvento(comEncerrado, B).size, 11);
@@ -76,6 +76,33 @@ const { parseLote } = await import('../lib/msis-parse.mjs');
 assert.equal(parseLote(blocoMk, leilaoMk, M, { hoje: '2026-01-01' }).data_leilao, '2026-02-16');
 // Status encerrado no lote.
 assert.equal(parseLote(blocoMk.replace('ABERTO PARA LANCES', 'ARREMATADO'), leilaoMk, M).encerrado, true);
+
+// Variantes medidas no dry-run de 26/10 (fixtures reais pelo banco):
+//  • Gabriel: card "VENDA DIRETA" (só no card), praças de 2025 e "RS 210.000,00" (typo do site) → venda direta, sem data.
+//  • Vianna: lote da Comprei/PGFN, card "DESCONSIDERAR AS DATAS NESTE SITE", "Avaliação | Valor Mínimo" no texto.
+//  • Sérgio Represas: descrição em "CorBranca" e cidade "…, BARRA MANSA, RJ." (vírgula, conferida no IBGE).
+const comCard = (h, c) => `<!-- msis-card: ${c} -->\n${h}`;
+const G = TENANTS.gabriel.base;
+const gab = comCard(fx('msis-gabriel-leilao-venda-direta.html'), 'VENDA DIRETA | Sala comercial na Barra');
+const dGab = [...detalhesDoCatalogo(gab, G).values()][0];
+assert.equal(dGab.modalidade, 'venda_direta');
+assert.equal(dGab.data_leilao, null);
+assert.equal(dGab.valor_minimo, 210000, '"RS 210.000,00" lido');
+assert.match(dGab.titulo, /^Av\. das Américas/, 'abreviação "Av." não corta o título');
+const V = TENANTS.vianna.base;
+const vian = comCard(fx('msis-vianna-leilao-comprei.html'), 'ABERTO PARA LANCES | Condições de PARCELAMENTO em até 60x. DESCONSIDERAR AS DATAS NESTE SITE.');
+assert.deepEqual(totalDeclarado(vian), { lotes: 10, paginas: 1 });
+const dets = [...detalhesDoCatalogo(vian, V).values()];
+assert.equal(dets.length, 10, 'completude: 10 de 10');
+assert.ok(dets.every((d) => d.modalidade === 'venda_direta' && d.data_leilao === null));
+const cinema = dets.find((d) => /^CINEMA/.test(d.titulo));
+assert.equal(cinema.valor_avaliacao, 30400000);
+assert.equal(cinema.valor_minimo, 15200000);
+assert.equal(cinema.cidade, 'São Paulo');
+const S = TENANTS.sergiorepresas.base;
+const dSer = [...detalhesDoCatalogo(fx('msis-sergiorepresas-leilao-barramansa.html'), S).values()];
+assert.equal(dSer.length, 2);
+assert.ok(dSer.every((d) => d.cidade === 'Barra Mansa' && d.estado === 'RJ' && d.descricao));
 
 // ── TRANSPORTE: catálogo inteiro por POST, via banco no Cloudflare ─────────────────────────────────────────
 process.env.VITE_SUPABASE_URL = 'https://banco.exemplo';
