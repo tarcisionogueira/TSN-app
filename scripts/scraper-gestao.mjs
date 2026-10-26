@@ -104,7 +104,7 @@ const ESCOPO_REDUZIDO = !!process.env.GESTAO_DOMINIOS || MAX_EVENTOS < MAX_EVENT
 const ESTRATEGIA = ESCOPO_REDUZIDO ? 'principal-escopo-reduzido' : 'principal';
 // 22/10: 30 era o teto pensado para o Bright Data (pago). No runner residencial a busca é grátis
 // (2 páginas por lote, o edital do evento em cache) — o teto de 30 deixava o Vinco inteiro sem doc.
-const DOC_CAP = Number(process.env.GESTAO_DOC_CAP || (process.env.GESTAO_HEADLESS === '1' ? 400 : GRATIS ? 120 : 30));
+const DOC_CAP = Number(process.env.GESTAO_DOC_CAP || (process.env.GESTAO_HEADLESS === '1' ? 400 : GRATIS ? 60 : 30));
 const DRYRUN = process.env.GESTAO_DRYRUN !== '0';
 const DEBUG = process.env.GESTAO_DEBUG === '1';
 const RESIDENCIAL = process.env.GESTAO_HEADLESS === '1';

@@ -34,7 +34,7 @@ sanitário gonçalves açude exigências hortolândia urbanística camaçari mon
 alumínio portões jacarepaguá tatuapé urgência operações criação conexão expansão período tributário mãe título tramandaí calçamento
 após alvará quilômetros glória usucapião metálico automóvel força milhão chão petrópolis calçada próprio segurança averbação ônibus
 demolição constituída averbações paraíba invasão decisão representação dependência pátio córrego araújo armários milhões terraços
-disponível camboriú butantã pavimento alienações judiciário judiciária extrajudicial ação crédito econômico cível penhora comarca
+disponível camboriú butantã pavimento números césar código veículo veículos máquina máquinas diversos ônibus caminhão caminhões caminhonete elétrico eletrônicos alienações judiciário judiciária extrajudicial ação crédito econômico cível penhora comarca
 `.split(/\s+/).filter(Boolean);
 
 const esqueleto = (w) => w.replace(/[áàâãéêíóôõúüçºª]/g, FFFD);
