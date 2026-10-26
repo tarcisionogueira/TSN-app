@@ -55,6 +55,7 @@
     "testar:gestao-gratis": "node scripts/testes/gestao-fidalgo-gratis.mjs",
     "testar:roisoft": "node scripts/testes/roisoft-parse.mjs",
     "testar:milan": "node scripts/testes/milan-parse.mjs",
+    "testar:leilaobrasil-atlantico": "node scripts/testes/leilaobrasil-atlantico.mjs",
     "testar:sweep-trava": "node scripts/testes/sweep-trava.mjs && node scripts/testes/sweep-por-tenant.mjs",
     "testar:pecini-fila": "node scripts/testes/pecini-fila.mjs",
     "testar:cidade-nesta-cidade": "node scripts/testes/cidade-nesta-cidade.mjs",

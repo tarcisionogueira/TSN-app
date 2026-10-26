@@ -177,12 +177,17 @@ export function parseLoteObj(lote) {
   // avaliação atualizada (2.503 m², R$ 66.650,75) — é o que o arrematante leva e o que vale.
   const multiBem = somaAreasMultiBem(descTexto);
   const avaliacao = avaliacaoAtualizadaDoTexto(descTexto) || plaus(num(lote.valorAvaliacao ?? bem.valorAvaliacao));
-  const minimo = plaus(num(lote.valorMinimo ?? bem.valorMinimo)) || avaliacao;
+  // ATLÂNTICO (26/10): `valorMinimo` e `valorAvaliacao` vêm 0 e o lance de abertura está em `valorInicial` (90.000 /
+  // 45.000 na 2ª). Só entra quando o mínimo veio vazio — LEILAOBRASIL/LUTHERO preenchem valorMinimo e não mudam.
+  const minimo = plaus(num(lote.valorMinimo ?? bem.valorMinimo)) || plaus(num(lote.valorInicial)) || avaliacao;
   const linkEdital = leilao?._urls?.edital
     || (Array.isArray(leilao.documentos) ? leilao.documentos[0]?.url : null)
     || (Array.isArray(bem.arquivos) ? bem.arquivos[0]?.url : null)
     || null;
-  const linkFoto = bem?.image?.full?.url || bem?.image?.thumb?.url || null;
+  // Sem `bem.image` (Atlântico, 26/10), a foto mora em `bem.arquivos` (…/bens/<id>/arquivos/<x>.jpg).
+  const fotoArquivo = (Array.isArray(bem?.arquivos) ? bem.arquivos : []).map((a) => a?.url || a?.full?.url || '')
+    .find((u) => /^https?:\/\/.+\.(?:jpe?g|png|webp)(?:\?|$)/i.test(u)) || null;
+  const linkFoto = bem?.image?.full?.url || bem?.image?.thumb?.url || fotoArquivo || null;
   const dataLeilao = dataDe(leilao.dataProximoLeilao) || dataDe(leilao.dataFimPraca2) || dataDe(leilao.dataFimPraca1) || dataDe(lote.dataFechamento);
   // 2ª PRAÇA (06/10): o JSON sempre trouxe `dataFimPraca2` e `valorInicial2`, mas o row gravava
   // data_leilao_2: null fixo — 155 de 155 lotes ativos sem a 2ª praça, que é a MAIS BARATA (achado
