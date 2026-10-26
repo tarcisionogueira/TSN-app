@@ -7,11 +7,12 @@
 import fs from 'node:fs';
 import { createClient } from '@supabase/supabase-js';
 import { ORIGENS_EXTRAJUDICIAIS } from '../../src/utils/origemVeiculo.js';
+import { marcasDoTermo } from '../../src/lib/marcas.js';
 
 const src = fs.readFileSync(new URL('../../src/pages/BuscaVeiculos.jsx', import.meta.url), 'utf8');
 const corta = (ini) => { const i = src.indexOf(ini); if (i < 0) throw new Error(`não achei ${ini}`); return src.slice(i, src.indexOf('\n}\n', i) + 2); };
-const aplicarFiltros = new Function('MONTA_NAO_INFORMADA', 'ORIGENS_EXTRAJUDICIAIS', 'parseDataLocal',
-  `${corta('function calcularJanelaPrazo(')}\n${corta('function aplicarFiltros(')}\nreturn aplicarFiltros;`)('nao_informado', ORIGENS_EXTRAJUDICIAIS, (d) => new Date(d));
+const aplicarFiltros = new Function('MONTA_NAO_INFORMADA', 'ORIGENS_EXTRAJUDICIAIS', 'parseDataLocal', 'marcasDoTermo',
+  `${corta('function calcularJanelaPrazo(')}\n${corta('function aplicarFiltros(')}\nreturn aplicarFiltros;`)('nao_informado', ORIGENS_EXTRAJUDICIAIS, (d) => new Date(d), marcasDoTermo);
 const sb = createClient('https://exemplo.supabase.co', 'x');
 const vazio = { estado: [], cidade: [], tipoVeiculo: '', marca: '', modelo: '', anoMin: '', anoMax: '', valorMax: '', valorAvaliacaoMax: '', descontoMin: '', tipoMonta: [], origem: '', prazo: '', resultadoLeilao: '', motor: '' };
 const url = (f) => decodeURIComponent(aplicarFiltros(sb.from('veiculos_leilao').select('id'), { ...vazio, ...f }).url.search).replace(/\+/g, ' ');
@@ -24,10 +25,15 @@ for (const t of ['estado=in.(SP,PR)', 'and(cidade.eq."Guarulhos",estado.eq.SP)',
   'marca.ilike.%honda%', 'modelo.ilike.%civic%', 'ano_fabricacao=gte.2010', 'ano_fabricacao=lte.2024', 'valor_minimo=lte.80000',
   'sinistro.is.null', 'origem_venda=in.(', 'resultado_leilao.eq.vendido', 'motor_status=eq.nao_funciona']) tem('tudo junto', tudo, t);
 const nOr = (tudo.match(/[?&]or=/g) || []).length;
-nOr === 5 ? ok++ : (falhas++, console.log('✗ esperava 5 OR separados (cidade, marca, modelo, monta, resultado), veio', nOr));
+// 5 dos filtros marcados + 2 padrões da busca (leilão ainda não passou; sucata oculta) — 472e7987.
+nOr === 7 ? ok++ : (falhas++, console.log('✗ esperava 7 OR separados (cidade, marca, modelo, monta, resultado + data e sucata padrão), veio', nOr));
 tem('motor não informado', url({ motor: 'nao_informado' }), 'motor_status=is.null');
 tem('cidade com apóstrofo', url({ cidade: ["Santa Bárbara D'Oeste|SP"] }), `cidade.eq."Santa Bárbara D'Oeste"`);
 const nada = url({});
-!/estado=|cidade|motor_status|or=/.test(nada) ? ok++ : (falhas++, console.log('✗ sem filtro marcado não pode filtrar nada:', nada));
+// Sem filtro marcado sobram SÓ os dois padrões da busca (leilão ainda não passou; sucata oculta).
+tem('padrão: leilão ainda não passou', nada, 'or=(data_leilao.gte.');
+tem('padrão: sucata oculta', nada, 'or=(is_sucata.is.null,is_sucata.eq.false)');
+const semPadrao = nada.replace(/&or=\(data_leilao\.gte\.[^)]*\)/, '').replace('&or=(is_sucata.is.null,is_sucata.eq.false)', '');
+!/estado=|cidade|motor_status|or=/.test(semPadrao) ? ok++ : (falhas++, console.log('✗ sem filtro marcado não pode filtrar além dos padrões:', nada));
 console.log(`${falhas ? '✗' : '✓'} filtros-veiculos-combinados: ${ok} ok, ${falhas} falha(s)`);
 process.exit(falhas ? 1 : 0);
