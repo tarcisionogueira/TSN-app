@@ -1,0 +1,36 @@
+name: Scraper Roisoft (7 leiloeiros, POST do catálogo, fetch puro)
+
+# Plataforma Roisoft (Leilões Brasil, Caiapó, Leiloeiro Eduardo, Lira, Teles & Lima, Tríade, Ubaldo). O banco (IP da
+# AWS) leva 403; o runner do GitHub abre com fetch puro (recon grátis, 26/10). Custo zero: nunca Bright Data, nunca
+# Firecrawl. O cron GRAVA; para ensaio, dispare com dryrun=1 (tabela de completude no fim).
+on:
+  schedule:
+    - cron: '55 9 * * *'  # diário, 9h55 UTC
+  workflow_dispatch:
+    inputs:
+      dryrun:
+        description: '1 = dry-run (não grava); 0 = grava'
+        required: false
+        default: '0'
+      max_lotes:
+        description: 'Máx. de lotes por tenant'
+        required: false
+        default: '200'
+
+jobs:
+  scraper-roisoft:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      - name: Rodar scraper Roisoft
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          ROISOFT_DRYRUN: ${{ github.event.inputs.dryrun || '0' }}
+          ROISOFT_MAX_LOTES: ${{ github.event.inputs.max_lotes || '200' }}
+        run: node scripts/scraper-roisoft.mjs
