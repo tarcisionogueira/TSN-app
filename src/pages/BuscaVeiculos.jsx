@@ -434,6 +434,9 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
   const [resultados, setResultados] = useState([]);
   const [total, setTotal] = useState(0);
   const [diagnostico, setDiagnostico] = useState(null); // resultado vazio: quanto cada filtro corta
+  // MOTOR SEM INFORMAÇÃO (26/10, print do dono: "filtros não funcionam"): 89% dos carros vêm do leiloeiro
+  // sem dizer nada do motor, e "Funcionando" mostrava 123 de 2.378 sem avisar que o resto ficou de fora.
+  const [foraPorMotor, setForaPorMotor] = useState(0);
   const [pagina, setPagina] = useState(() => Math.max(1, Number(lerSessao('veic_pagina', 1)) || 1));
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState('');
@@ -502,6 +505,14 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
       }
       setResultados(linhas); setTotal(count || 0);
       setDiagnostico(null);
+      setForaPorMotor(0);
+      if (f.motor && f.motor !== 'nao_informado' && p === 1) {
+        // Quantos SEM INFORMAÇÃO de motor batem com os demais filtros (contagem `head`, sem trazer linhas).
+        // Falha = não avisa nada, em vez de avisar um número errado.
+        aplicarFiltros(supabase.from(fonteVeiculos(role)).select('id', { count: 'exact', head: true }).eq('ativo', true).in('status_patio', PATIO_VISIVEL), { ...f, motor: 'nao_informado' })
+          .then(({ count: semInfo, error: e2 }) => { if (!e2 && semInfo > 0) setForaPorMotor(semInfo); })
+          .catch((e2) => console.warn('[veiculos] contagem sem motor falhou:', e2?.message || e2));
+      }
       if (!(data || []).length && p === 1) diagnosticarVazio(f);
     } catch (e) {
       console.warn('[veiculos] busca falhou:', e?.message || e);
@@ -737,6 +748,15 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
         </div>
       )}
 
+      {!loading && !erro && foraPorMotor > 0 && filtros.motor && filtros.motor !== 'nao_informado' && (
+        <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '10px 14px', marginBottom: 10, fontSize: 13, color: '#78350f', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span><strong>+{foraPorMotor.toLocaleString('pt-BR')} veículos</strong> com os mesmos filtros ficaram de fora porque o leiloeiro não informou a condição do motor.</span>
+          <button onClick={() => { const f = { ...filtros, motor: 'nao_informado' }; setFiltros(f); setPagina(1); buscar(1, f); }}
+            style={{ background: '#b45309', color: 'white', border: 'none', borderRadius: 8, padding: '6px 12px', fontWeight: 800, fontSize: 12.5, cursor: 'pointer' }}>
+            Ver os sem informação do motor
+          </button>
+        </div>
+      )}
       {/* QUANTOS VEÍCULOS (26/10, dono: "igual aos imóveis") — o total que bate com os filtros aplicados. */}
       {!loading && !erro && resultados.length > 0 && (
         <div style={{ fontSize: 13, color: '#334155', fontWeight: 700, margin: '0 0 10px' }}>
