@@ -218,6 +218,13 @@ async function handler(req) {
     const { error: eLn } = await supabase.rpc('landing_numeros_atualizar');
     if (eLn) console.error('[monitor-fontes] landing_numeros_atualizar:', eLn.message);
   }
+  // COBERTURA DAS JUNTAS (26/10, dono): leiloeiro_junta re-cruzada com o acervo 1x/dia — sem isto o status
+  // "coletado/falta" envelhecia a cada integração (a tabela dizia 151 coletados com 392 de fato). Sem lista
+  // de domínios do código, a função usa o que já sabia (coletado_via 'codigo' + leiloeiro_triagem).
+  {
+    const { error: eJr } = await supabase.rpc('leiloeiro_junta_recruzar', { p_aplicar: true });
+    if (eJr) console.error('[monitor-fontes] leiloeiro_junta_recruzar:', eJr.message);
+  }
   let gemeosCoanuncio = null;
   {
     const { data, error: eGco } = await supabase.rpc('reconciliar_gemeos_coanuncio');

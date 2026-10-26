@@ -145,3 +145,16 @@ $fn$;
 
 comment on function public.leiloeiro_junta_recruzar(boolean, text[]) is
   'Recalcula leiloeiro_junta.coletado_status/coletado_via contra o acervo ATIVO (host do lote = domínio do tenant; nome do leiloeiro; domínios no código). p_aplicar=false é ensaio a seco. Só service_role/postgres.';
+
+-- 26/10 — FALLBACK SEM leiloeiro_triagem. Rodando do cron diário (sem lista do repositório), o fallback somava
+-- os domínios com `parser_existente` na triagem: isso é "a plataforma é de uma família conhecida", não "está
+-- configurado no código". Ensaio a seco: 198 nao_coletado virariam codigo_sem_lote (arrematabem.com.br,
+-- Leilotech pronto mas NÃO integrado) — o número de "faltam" cairia sem nada ter sido conectado (forma nº 10).
+-- Agora o fallback é só o que uma rodada com a lista do repositório já marcou (`coletado_via` com 'codigo').
+do $$
+declare d text := pg_get_functiondef('public.leiloeiro_junta_recruzar(boolean, text[])'::regprocedure); n text;
+begin
+  n := replace(d, E'    union\n    select dominio from leiloeiro_triagem where parser_existente is not null));', '));');
+  if n = d then raise exception 'fallback: trecho não encontrado'; end if;
+  execute n;
+end $$;
