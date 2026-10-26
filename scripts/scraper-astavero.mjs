@@ -142,12 +142,18 @@ async function coletar(tenant) {
   console.log(`[${tenant.fonte}] via ${vias.get(tenant.fonte) || '?'} · listagem: ${itens.length} imóvel(is)${Number.isFinite(declarado) ? ` de ${declarado} declarados` : ''}`);
 
   const prontos = []; let descartados = 0, naoImovel = 0;
+  // NO SITE ≠ PRONTO (26/10). A varredura recebia só os `prontos`: lote listado e aberto que caía no filtro de
+  // qualidade por falta de campo (detalhe que não abriu — o disjuntor desliga o detalhe após 3 falhas seguidas)
+  // era desligado como `sumiu_da_fonte`, com o leilão de pé. `noSite` é o que a listagem prova que existe:
+  // fora dele só o lote que o detalhe diz FECHADO e o que não é imóvel.
+  const noSite = new Set();
   const lerDetalhe = criarLeitorDetalhe(tenant);
   for (const item of itens) {
     const det = await lerDetalhe(item);
     if (det?.lote?.status && det.lote.status !== 'Aberto') { descartados++; continue; }
     const row = montarRowAstavero(item, det, tenant);
     if (naoEhImovel(`${row.titulo} ${row.descricao.slice(0, 600)}`)) { naoImovel++; continue; }
+    noSite.add(row.fonte_id);
     if (checarQualidade(row, { estrito: false }).descartar) { descartados++; continue; }
     prontos.push(row);
   }
@@ -167,7 +173,7 @@ async function coletar(tenant) {
   }
   const n = await gravar(prontos);
   console.log(`✅ [${tenant.fonte}] ${n} imóveis gravados/atualizados.`);
-  if (completa) await varrerSumidos(tenant, new Set(prontos.map((r) => r.fonte_id)));
+  if (completa) await varrerSumidos(tenant, noSite);
   else console.log(`  [${tenant.fonte}] varredura PULADA — listagem parcial.`);
   await registrarSaude(supabase, tenant.fonte, prontos, 'astavero-api', { enumerados: itens.length });
   await registrarConhecimento(supabase, { fonte: tenant.fonte, plataforma: 'Astavero (Angular + API JSON)', acesso: 'fetch-post',

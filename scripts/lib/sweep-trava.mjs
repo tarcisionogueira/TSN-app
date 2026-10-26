@@ -51,3 +51,25 @@ export function pisoEnumeracao(linhas, pisoFixo) {
 // Quantos ausentes uma rodada pode desligar de uma vez: mais da metade do acervo (ou de 5, em fonte pequena)
 // sumindo junto é lista ruim, não site esvaziado — mesma régua do motor (runner.mjs, "sumidos pela lista").
 export const demaisParaUmaRodada = (sumidos, ativos) => sumidos > Math.max(5, ativos * 0.5);
+
+// SWEEP POR TENANT (26/10). Fonte multi-tenant (LEILOTECH, SUPORTE, HASTAPUBLICA por leilão) grava vários
+// leiloeiros na MESMA `fonte`, e o sweep desliga o que a rodada não tocou NA FONTE. Um tenant que deu erro, que
+// voltou com a paginação cortada, ou que voltou VAZIO tendo lote ativo no banco tinha o acervo dele inteiro marcado
+// `sumiu_da_fonte` — a LEILOTECH perdeu 13 lotes vivos assim no 1º dia. Este é o veredito de UM tenant: devolve o
+// motivo para protegê-lo do sweep (o resto da fonte segue varrido normalmente), ou null quando a rodada dele é prova
+// de ausência. `ativosNoBanco` null = não consegui contar ⇒ na dúvida, protege (forma nº 2 do CLAUDE.md).
+export function tenantParcial({ erro = null, n = 0, parcial = null, ativosNoBanco = 0 } = {}) {
+  if (erro) return `erro (${String(erro).slice(0, 80)})`;
+  if (parcial) return `parcial (${String(parcial).slice(0, 80)})`;
+  if (n > 0) return null;
+  if (ativosNoBanco == null || !Number.isFinite(Number(ativosNoBanco))) return 'vazio e acervo do tenant ilegível';
+  if (Number(ativosNoBanco) > 0) return `vazio com ${ativosNoBanco} ativo(s) no banco`;
+  return null;
+}
+
+// Prefixo de fonte_id como literal de LIKE: `_` e `%` são curingas, e `sl_bl_` casaria `slXblX…`.
+export const likePrefixo = (prefixo) => `${String(prefixo).replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+
+// Mais prefixos que isso viram URL enorme no PostgREST e, de todo modo, já não é "um tenant caiu" — é a rodada
+// que caiu: aí o sweep inteiro fica para a próxima.
+export const MAX_PROTEGIDOS = 40;

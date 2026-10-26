@@ -42,7 +42,7 @@ import { capturarContatoSeAusente, lojaSuperbid, gravarContatosTenant } from './
 import { localVeiculoZuk } from './lib/zuk-local-veiculo.mjs';
 import { galeriaDoHtml, montarFotos, fotosPreservadas } from './lib/galeria-veiculo.mjs';
 import { fotoDoMeta } from './lib/dom-parse-util.mjs';
-import { travaDoSweep, medianaTotais } from './lib/sweep-trava.mjs';
+import { travaDoSweep, medianaTotais, tenantParcial, likePrefixo, MAX_PROTEGIDOS } from './lib/sweep-trava.mjs';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -420,12 +420,17 @@ async function salvarEFinalizar(imoveis, fonte) {
   // o site já não lista e o sweep nunca desliga. Na VIP eram 74 de 95 ativos: gravava 39 (tudo que o site tem),
   // 39 < 95 × 0,5, e o sweep era PULADO todo dia — o lote que saiu do site sem apuração ficava ativo. O
   // denominador da trava tem que ser a mesma população que o numerador pode cobrir — ver lib/sweep-trava.mjs.
-  const { count: ativosAntes, error: eAtivos } = await supabase
+  // TENANT PROTEGIDO (26/10): fonte multi-tenant marca em `imoveis.sweepProtegidos` o prefixo de fonte_id de cada
+  // tenant (ou leilão) que falhou / veio cortado / veio vazio com acervo no banco — ver coletarPorTenant. O sweep e a
+  // trava de proporção olham só o RESTO da fonte; o acervo do tenant protegido fica como está até a rodada dele valer.
+  const protegidos = Array.isArray(imoveis.sweepProtegidos) ? [...new Set(imoveis.sweepProtegidos)] : [];
+  const semProtegidos = (q) => { for (const p of protegidos) q = q.not('fonte_id', 'like', likePrefixo(p)); return q; };
+  const { count: ativosAntes, error: eAtivos } = await semProtegidos(supabase
     .from('imoveis_leilao').select('id', { count: 'exact', head: true })
-    .eq('fonte', fonte).eq('ativo', true);
-  const { count: varriveisAntes, error: eVarr } = await supabase
+    .eq('fonte', fonte).eq('ativo', true));
+  const { count: varriveisAntes, error: eVarr } = await semProtegidos(supabase
     .from('imoveis_leilao').select('id', { count: 'exact', head: true })
-    .eq('fonte', fonte).eq('ativo', true).or(ORFILTRO_VARRIVEL);
+    .eq('fonte', fonte).eq('ativo', true).or(ORFILTRO_VARRIVEL));
   // Tamanho recente da fonte: mediana do total das últimas rodadas sadias (antes desta). Ilegível ⇒ null
   // ⇒ a trava volta à régua antiga (todo o acervo ativo), que é a mais conservadora.
   const { data: saudeRecente, error: eHist } = await supabase.from('fonte_saude').select('total')
@@ -476,7 +481,8 @@ async function salvarEFinalizar(imoveis, fonte) {
   // a limpeza por data do leilão continua aposentando o que venceu.
   const trava = travaDoSweep({ salvos, coletados: imoveis.length, varriveisAntes, ativosAntes, totalRecente });
   const metadeDoAcervo = trava.bloqueado;
-  const sweepBloqueado = imoveis.coletaParcial || eAtivos || metadeDoAcervo;
+  const demaisProtegidos = protegidos.length > MAX_PROTEGIDOS;
+  const sweepBloqueado = imoveis.coletaParcial || eAtivos || metadeDoAcervo || demaisProtegidos;
   // PISO DO SWEEP (22/10, #277): era `salvos > 50` fixo — fonte pequena (TOTALLEILOES 10, CALIL…) nunca
   // desligava o lote que saiu do site. O que protege contra lista ruim é o freio RELATIVO (metadeDoAcervo)
   // e a coleta parcial; o piso absoluto só evita varrer por 1–2 lotes soltos.
@@ -484,6 +490,7 @@ async function salvarEFinalizar(imoveis, fonte) {
   if (sweepBloqueado && gravouTudo && salvos >= SWEEP_MIN) {
     const pq = imoveis.coletaParcial ? `coleta parcial (${imoveis.coletaParcial})`
       : eAtivos ? 'acervo ativo não pôde ser contado'
+      : demaisProtegidos ? `${protegidos.length} tenants/leilões falharam nesta rodada`
       : trava.motivo;
     console.error(`  🛑 ${fonte}: sweep PULADO — ${pq}. Desativar aqui aposentaria lote que a fonte ainda tem.`);
   }
@@ -496,15 +503,15 @@ async function salvarEFinalizar(imoveis, fonte) {
     // lista oferta ABERTA) — então todo "sem lance" apurado era desligado aqui na coleta
     // seguinte (186 de 186 SUPERBID invisíveis). Mesma janela de desativar_leiloes_encerrados():
     // sem_lance/indeterminado apurado há < 15 dias continua ativo, para a proposta de compra.
-    const { error, count } = await supabase
+    const { error, count } = await semProtegidos(supabase
       .from('imoveis_leilao')
       .update({ ativo: false, suprimido_motivo: 'sumiu_da_fonte' }, { count: 'exact' })
       .eq('fonte', fonte)
       .eq('ativo', true)
       .lt('atualizado_em', runStart)
-      .or(ORFILTRO_VARRIVEL);
+      .or(ORFILTRO_VARRIVEL));
     if (error) console.error(`  Erro ao desativar ${fonte} obsoletos:`, error.message);
-    else console.log(`  🔻 ${fonte}: ${count ?? 0} lotes obsoletos desativados`);
+    else console.log(`  🔻 ${fonte}: ${count ?? 0} lotes obsoletos desativados${protegidos.length ? ` (${protegidos.length} tenant(s)/leilão(ões) protegidos: ${protegidos.slice(0, 8).join(', ')})` : ''}`);
   } else if (gravouTudo && salvos < SWEEP_MIN) {
     console.log(`  ⚠️ ${fonte} gravou ${salvos} (< ${SWEEP_MIN}) — pulando desativação por segurança`);
   }
@@ -615,6 +622,11 @@ async function registrarSaude(fonte, imoveis, estrategia, validacao) {
   if (imoveis?.coletaParcial) {
     if (status === 'ok') status = 'degradado';
     motivo = [motivo, `coleta parcial (${imoveis.coletaParcial})`].filter(Boolean).join('; ');
+  }
+  // Tenant protegido do sweep (26/10) também é coleta parcial — só que de UM pedaço da fonte.
+  if (imoveis?.tenantsParciais) {
+    if (status === 'ok') status = 'degradado';
+    motivo = [motivo, `coleta parcial de tenant (${String(imoveis.tenantsParciais).slice(0, 300)})`].filter(Boolean).join('; ');
   }
   const grav = gravacaoPorFonte.get(fonte);
   if (grav && grav.salvos < grav.esperados) {
@@ -3373,7 +3385,8 @@ async function salvarVeiculos(registros, rotulo) {
   }
   console.log(`    ${nome}: ${salvos} salvos em veiculos_leilao`);
   await saudeVeiculos(fonteV, Object.assign(aptos, { coletaParcial: registros.coletaParcial }), { gravados: salvos });
-  await desligarVeiculosSemDataSumidos(fonteV, aptos, salvos, nome);
+  if (registros.coletaParcial) console.log(`  🛑 ${nome}: coleta parcial (${String(registros.coletaParcial).slice(0, 160)}) — sumidos não desligados`);
+  else await desligarVeiculosSemDataSumidos(fonteV, aptos, salvos, nome);
   return salvos;
 }
 
@@ -4795,14 +4808,26 @@ export async function scraperHastaPublica(browser) {
     const RE_IMOVEL = /im[óo]vel|terreno|apartamento|\bcasa\b|s[íi]tio|ch[áa]cara|fazenda|galp[ãa]o|sala comercial|\bloja\b|[áa]rea constru|direitos?\s+d[eo]\s+im[óo]vel/i;
     const imoveis = [];
     let visitados = 0;
+    // LEILÃO QUE NÃO FOI LIDO NÃO É LEILÃO QUE SUMIU (26/10). A HASTAPUBLICA grava todos os leilões (e 5 leiloeiros)
+    // na MESMA fonte, e o sweep desliga o que a rodada não tocou: painel que não abriu, que veio sem texto ou que
+    // ainda não tinha renderizado os lotes (socket.io), e leilão além do teto de visitas, tinham os lotes marcados
+    // `sumiu_da_fonte` — 48 com praça futura em 20–22/10. Cada um desses entra em `sweepProtegidos` pelo prefixo
+    // `hastapublica_<leilão>_`; leilão que saiu da agenda continua sendo varrido normalmente.
+    const protegidos = [];
+    const motivosProt = [];
+    const proteger = (id, motivo) => { protegidos.push(`hastapublica_${id}_`); motivosProt.push(`${id}: ${motivo}`); };
     for (const [id, href] of leiloes) {
-      if (visitados >= 250) break; // cap de segurança
+      // Teto 250 → 350 (26/10): a agenda tinha 276 leilões (medido pelo banco, /agenda/0…260) e os 26 do fim saíam
+      // do acervo todo dia. O que passar do teto agora fica protegido, não aposentado.
+      if (visitados >= 350) { proteger(id, 'além do teto de 350 leilões'); continue; } // cap de segurança
       visitados++;
       try {
         const url = href.startsWith('http') ? href : `${BASE}${href}`;
         await page.goto(url, { waitUntil: 'networkidle2', timeout: 45000 });
         const texto = (await page.evaluate(() => document.body.innerText).catch(() => '')).replace(/\r/g, '');
-        if (!texto) continue;
+        if (!texto) { proteger(id, 'painel sem texto'); continue; }
+        // Painel aberto mas sem NENHUMA linha de lote (de qualquer tipo): os lotes não renderizaram a tempo.
+        if (!/\d+\s*\|\s*[^\n]+\nLance Atual:/.test(texto)) proteger(id, 'painel sem linha de lote');
         // FOTO + LEILOEIRO (28/09): o painel é montado por socket.io e este laço lê só o texto —
         // 126/126 lotes saíam sem foto, e `leiloeiro` recebia o "Comitente:" (a vara, o banco, às
         // vezes com a data da praça colada). A página ESTÁTICA /leilao/<id> vem pronta do servidor
@@ -4878,10 +4903,11 @@ export async function scraperHastaPublica(browser) {
             forma_pagamento: 'a_vista',
           });
         }
-      } catch { /* pula leilão que falhar */ }
+      } catch (e) { proteger(id, `painel não abriu (${String(e?.message || e).slice(0, 60)})`); }
       await new Promise((r) => setTimeout(r, 250));
     }
-    console.log(`    HastaPública: ${imoveis.length} imóveis mapeados (${visitados} leilões visitados)`);
+    if (protegidos.length) { imoveis.sweepProtegidos = protegidos; imoveis.tenantsParciais = `${protegidos.length} leilão(ões) não lidos — ${motivosProt.slice(0, 6).join('; ')}`; }
+    console.log(`    HastaPública: ${imoveis.length} imóveis mapeados (${visitados} leilões visitados)${protegidos.length ? ` · ${protegidos.length} leilão(ões) PROTEGIDOS do sweep: ${motivosProt.slice(0, 6).join('; ')}` : ''}`);
     return imoveis;
   } finally {
     await page.close().catch(() => {});
@@ -5411,6 +5437,7 @@ async function scraperLeilotechTenant(browser, tenant) {
   // primaryLote (lanceAtual, avaliacao, location, coverImageUrl), então o mapLoteLeilotech serve igual.
   // O HTML server-rendered lista os lotes mas sem o lance (20 de 72 ativos têm lance < avaliação).
   const leiloes = new Map(); // leilaoId → leilão da home (imóvel)
+  let parcialLt = null;
   let amostraLogada = false;
   const ehImovel = (leilao, lote) => LT_IMOVEL.test(`${leilao.title || ''} ${leilao.categoriaMascara || ''} ${lote.categoria?.nome || ''} ${lote.titulo || ''}`);
   page.on('response', async (resp) => {
@@ -5468,6 +5495,11 @@ async function scraperLeilotechTenant(browser, tenant) {
       if (itens.size === antes) faltou++;
     }
     if (multi.length) console.log(`    [${tenant.domain}] ${multi.length} leilões com 2+ lotes abertos${faltou ? ` · ${faltou} sem lote novo (página não respondeu ou lotes não são imóvel)` : ''}`);
+    // 26/10: leilão de vários lotes cuja página não respondeu deixava só o primaryLote — os irmãos (O Leilões
+    // 7498/7499, mesmo prédio) saíam do acervo pelo sweep. Página que não trouxe lote novo, ou leilão além do teto
+    // de 30, torna o tenant PARCIAL: fica fora do sweep nesta rodada.
+    const alemDoTeto = [...leiloes.values()].filter((l) => Number(l.lotesAtivosCount ?? l.lotesCount) > 1).length - multi.length;
+    if (faltou || alemDoTeto > 0) parcialLt = [faltou && `${faltou} leilão(ões) multi-lote sem resposta`, alemDoTeto > 0 && `${alemDoTeto} além do teto de 30`].filter(Boolean).join(', ');
   } finally { await page.close().catch(() => {}); }
 
   const imoveis = [];
@@ -5478,35 +5510,50 @@ async function scraperLeilotechTenant(browser, tenant) {
     seen.add(row.fonte_id);
     imoveis.push(row);
   }
-  console.log(`    [${tenant.domain}] ${tenant.leiloeiro}: ${imoveis.length} imóveis (${itens.size} lotes de imóvel)`);
+  console.log(`    [${tenant.domain}] ${tenant.leiloeiro}: ${imoveis.length} imóveis (${itens.size} lotes de imóvel)${parcialLt ? ` · PARCIAL: ${parcialLt}` : ''}`);
+  if (parcialLt) imoveis.parcial = parcialLt;
   return imoveis;
+}
+
+// COLETA POR TENANT COM SWEEP POR TENANT (26/10). Fonte multi-tenant (LEILOTECH, SUPORTE — imóveis e veículos)
+// grava vários leiloeiros na MESMA `fonte`, e o sweep desliga o que a rodada não tocou na fonte. Tenant que deu
+// erro, veio com a paginação cortada (`lista.parcial`) ou veio VAZIO tendo lote ativo no banco entra em
+// `sweepProtegidos` (prefixo de fonte_id): o salvarEFinalizar varre o resto da fonte e deixa o acervo dele como está.
+// Antes era o contrário — a LEILOTECH perdeu 13 lotes vivos de 5 tenants no 1º dia (26/10), e o SUPORTE nunca
+// conferiu nada (catch que só logava). Veredito por tenant: tenantParcial (lib/sweep-trava.mjs, testado).
+async function coletarPorTenant({ rotulo, tabela, fonte, tenants, prefixoDe, coletarUm }) {
+  const todos = [];
+  const vistos = new Set();
+  const protegidos = [];
+  const motivos = [];
+  for (const tenant of tenants) {
+    let lista = null, erro = null;
+    try { lista = await coletarUm(tenant); }
+    catch (e) { erro = String(e?.message || e); console.log(`    [${tenant.domain}] erro: ${erro.slice(0, 80)}`); }
+    lista = lista || [];
+    for (const im of lista) { if (!vistos.has(im.fonte_id)) { vistos.add(im.fonte_id); todos.push(im); } }
+    const prefixo = prefixoDe(tenant);
+    let ativosNoBanco = 0;
+    if (!erro && !lista.parcial && !lista.length) {
+      const { count, error } = await supabase.from(tabela).select('id', { count: 'exact', head: true })
+        .eq('fonte', fonte).eq('ativo', true).like('fonte_id', likePrefixo(prefixo));
+      ativosNoBanco = error ? null : count;
+      if (error) console.log(`    [${tenant.domain}] acervo do tenant ilegível: ${error.message}`);
+    }
+    const motivo = tenantParcial({ erro, n: lista.length, parcial: lista.parcial || null, ativosNoBanco });
+    if (motivo) { protegidos.push(prefixo); motivos.push(`${tenant.domain}: ${motivo}`); }
+  }
+  if (protegidos.length) { todos.sweepProtegidos = protegidos; todos.tenantsParciais = motivos.join('; '); }
+  // salvarVeiculos não sabe de prefixo: lá, tenant parcial = coleta parcial (o desligamento de sumidos é pulado).
+  if (protegidos.length && tabela === 'veiculos_leilao') todos.coletaParcial = todos.tenantsParciais;
+  console.log(`    ${rotulo}: ${todos.length} de ${tenants.length} leiloeiros${protegidos.length ? ` · ${protegidos.length} tenant(s) PROTEGIDO(S) do sweep: ${todos.tenantsParciais}` : ''}`);
+  return todos;
 }
 
 async function scraperLeilotech(browser) {
   console.log('  Leilotech — plataforma white-label (interceptando GraphQL de cada tenant)...');
-  const todos = [];
-  const vistos = new Set();
-  // TENANT QUE FALHA OU VOLTA VAZIO NÃO PODE APOSENTAR O ACERVO DELE (26/10). Os 9 tenants gravam todos na fonte
-  // LEILOTECH, e o sweep do salvarEFinalizar desliga o que não foi tocado NA FONTE: um tenant com erro (ou com a
-  // interceptação do GraphQL vindo vazia) tinha os lotes dele marcados `sumiu_da_fonte` — 12 lotes com leilão
-  // entre 29/10 e 02/12 caíram assim no 1º dia. Erro, ou zero onde o banco tem lote ativo do tenant = coleta parcial.
-  const parciais = [];
-  for (const tenant of LEILOTECH_TENANTS) {
-    let imoveis = null;
-    try {
-      imoveis = await scraperLeilotechTenant(browser, tenant);
-      for (const im of imoveis) { if (!vistos.has(im.fonte_id)) { vistos.add(im.fonte_id); todos.push(im); } }
-    } catch (e) { console.log(`    [${tenant.domain}] erro: ${String(e.message).slice(0, 80)}`); parciais.push(`${tenant.domain}: erro`); continue; }
-    if (!imoveis.length) {
-      const { count, error } = await supabase.from('imoveis_leilao').select('id', { count: 'exact', head: true })
-        .eq('fonte', 'LEILOTECH').eq('ativo', true).eq('leiloeiro', tenant.leiloeiro);
-      if (error) parciais.push(`${tenant.domain}: vazio e acervo ilegível (${error.message})`);
-      else if (count > 0) parciais.push(`${tenant.domain}: vazio com ${count} ativo(s) no banco`);
-    }
-  }
-  if (parciais.length) todos.coletaParcial = parciais.join('; ');
-  console.log(`    Leilotech: ${todos.length} imóveis de ${LEILOTECH_TENANTS.length} leiloeiros${parciais.length ? ` · PARCIAL: ${todos.coletaParcial}` : ''}`);
-  return todos;
+  return coletarPorTenant({ rotulo: 'Leilotech', tabela: 'imoveis_leilao', fonte: 'LEILOTECH', tenants: LEILOTECH_TENANTS,
+    prefixoDe: (t) => `lt_${t.domain.replace(/\..*/, '')}_`, coletarUm: (t) => scraperLeilotechTenant(browser, t) });
 }
 
 // ─── SUPORTE LEILÕES (plataforma white-label server-rendered) ─────────────────
@@ -5766,25 +5813,13 @@ async function scraperSuporteTenant(browser, tenant) {
   const page = await browser.newPage();
   await page.setUserAgent(USER_AGENT);
   await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
-  const bens = new Map();
-  const DEADLINE = Date.now() + 5 * 60 * 1000;
-  try {
-    // 21/10: o parâmetro era `pagina=`, que a plataforma IGNORA (devolve a pág. 1) — a regra
-    // "página sem novidade = acabou" parava na 2ª e cada tenant rendia 12 cards. A Líder tinha
-    // 565 imóveis no site e 10 aqui. O link real da paginação é `page=` (o recon-suporte.mjs já
-    // lia assim). Teto 60: a Líder tem 48 páginas de 12.
-    for (let p = 1; p <= 60; p++) {
-      if (Date.now() > DEADLINE) break;
-      const antes = bens.size;
-      try {
-        await page.goto(`https://${tenant.domain}/buscador?categoria=2&page=${p}`, { waitUntil: 'domcontentloaded', timeout: 45000 });
-        await new Promise(r => setTimeout(r, 1200));
-      } catch { break; }
-      const lotes = await suporteParsePagina(page);
-      for (const l of lotes) { if (l.id && !bens.has(l.id)) bens.set(l.id, l); }
-      if (bens.size === antes) break; // página sem novidade → acabou
-    }
-  } finally { await page.close().catch(() => {}); }
+  // 21/10: o parâmetro era `pagina=`, que a plataforma IGNORA (devolve a pág. 1) — a regra
+  // "página sem novidade = acabou" parava na 2ª e cada tenant rendia 12 cards. A Líder tinha
+  // 565 imóveis no site e 10 aqui. O link real da paginação é `page=` (o recon-suporte.mjs já
+  // lia assim). Teto 60: a Líder tem 48 páginas de 12.
+  let bens, parcial;
+  try { ({ bens, parcial } = await paginarBuscadorSuporte(page, tenant, 2, 5 * 60 * 1000)); }
+  finally { await page.close().catch(() => {}); }
 
   const imoveis = [];
   const seen = new Set();
@@ -5825,22 +5860,42 @@ async function scraperSuporteTenant(browser, tenant) {
     seen.add(row.fonte_id);
     imoveis.push(row);
   }
-  console.log(`    [${tenant.domain}] ${tenant.leiloeiro}: ${imoveis.length} imóveis (${bens.size} lotes)`);
+  console.log(`    [${tenant.domain}] ${tenant.leiloeiro}: ${imoveis.length} imóveis (${bens.size} lotes)${parcial ? ` · PARCIAL: ${parcial}` : ''}`);
+  if (parcial) imoveis.parcial = parcial;
   return imoveis;
+}
+
+// PAGINAÇÃO DO /buscador DA SUPORTE (26/10) — imóveis (categoria 2) e veículos (1). Antes, `catch { break; }` na
+// navegação tratava "a página 1 não abriu" como catálogo vazio e "a página 4 não abriu" como fim da lista — e o
+// sweep da fonte SUPORTE aposentava o que faltou. Agora: página 1 que não abre LANÇA (tenant com erro); página
+// seguinte que não abre, prazo estourado ou teto de páginas com lote novo = `parcial` (o tenant fica fora do sweep).
+async function paginarBuscadorSuporte(page, tenant, categoria, prazoMs, tetoPaginas = 60) {
+  const bens = new Map();
+  const DEADLINE = Date.now() + prazoMs;
+  let parcial = null;
+  for (let p = 1; p <= tetoPaginas; p++) {
+    if (Date.now() > DEADLINE) { parcial = `prazo de ${Math.round(prazoMs / 60000)} min estourou na página ${p}`; break; }
+    const antes = bens.size;
+    try {
+      await page.goto(`https://${tenant.domain}/buscador?categoria=${categoria}&page=${p}`, { waitUntil: 'domcontentloaded', timeout: 45000 });
+      await new Promise(r => setTimeout(r, 1200));
+    } catch (e) {
+      if (p === 1) throw new Error(`buscador não abriu: ${String(e?.message || e).slice(0, 80)}`, { cause: e });
+      parcial = `página ${p} não abriu (${String(e?.message || e).slice(0, 60)})`;
+      break;
+    }
+    const lotes = await suporteParsePagina(page);
+    for (const l of lotes) { if (l.id && !bens.has(l.id)) bens.set(l.id, l); }
+    if (bens.size === antes) break; // página sem novidade → acabou
+    if (p === tetoPaginas) parcial = `teto de ${tetoPaginas} páginas ainda trazendo lote novo`;
+  }
+  return { bens, parcial };
 }
 
 async function scraperSuporte(browser) {
   console.log('  Suporte Leilões — plataforma white-label (/buscador?categoria=2 por tenant)...');
-  const todos = [];
-  const vistos = new Set();
-  for (const tenant of SUPORTE_TENANTS) {
-    try {
-      const imoveis = await scraperSuporteTenant(browser, tenant);
-      for (const im of imoveis) { if (!vistos.has(im.fonte_id)) { vistos.add(im.fonte_id); todos.push(im); } }
-    } catch (e) { console.log(`    [${tenant.domain}] erro: ${String(e.message).slice(0, 80)}`); }
-  }
-  console.log(`    Suporte Leilões: ${todos.length} imóveis de ${SUPORTE_TENANTS.length} leiloeiros`);
-  return todos;
+  return coletarPorTenant({ rotulo: 'Suporte Leilões', tabela: 'imoveis_leilao', fonte: 'SUPORTE', tenants: SUPORTE_TENANTS,
+    prefixoDe: (t) => `sl_${t.domain.replace(/\..*/, '')}_`, coletarUm: (t) => scraperSuporteTenant(browser, t) });
 }
 
 // ─── SUPORTE LEILÕES — VEÍCULOS (piloto, 11/09) ────────────────────────────────
@@ -6083,23 +6138,11 @@ async function scraperSuporteVeiculosTenant(browser, tenant) {
   const page = await browser.newPage();
   await page.setUserAgent(USER_AGENT);
   await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
-  const bens = new Map();
   // Teto menor que o do bloco de imóveis: é piloto, catálogo de veículo por tenant
-  // tende a ser bem menor.
-  const DEADLINE = Date.now() + 3 * 60 * 1000;
-  try {
-    for (let p = 1; p <= 60; p++) {   // `page=`, não `pagina=` — ver scraperSuporteTenant (21/10)
-      if (Date.now() > DEADLINE) break;
-      const antes = bens.size;
-      try {
-        await page.goto(`https://${tenant.domain}/buscador?categoria=1&page=${p}`, { waitUntil: 'domcontentloaded', timeout: 45000 });
-        await new Promise(r => setTimeout(r, 1200));
-      } catch { break; } // padrao-ok: mesmo padrão de scraperSuporteTenant (imóveis, linha ~3332) — falha de navegação na paginação encerra o loop, próxima rodada tenta de novo; não é I/O de dado, é fim de paginação best-effort
-      const lotes = await suporteParsePagina(page);
-      for (const l of lotes) { if (l.id && !bens.has(l.id)) bens.set(l.id, l); }
-      if (bens.size === antes) break; // página sem novidade → acabou
-    }
-  } finally { await page.close().catch(() => {}); }
+  // tende a ser bem menor. `page=`, não `pagina=` — ver scraperSuporteTenant (21/10).
+  let bens, parcial;
+  try { ({ bens, parcial } = await paginarBuscadorSuporte(page, tenant, 1, 3 * 60 * 1000)); }
+  finally { await page.close().catch(() => {}); }
 
   // VISITA À PÁGINA DO LOTE PARA PEGAR A MODALIDADE (11/09, pedido do dono) — mesmo padrão
   // e mesmo teto (env própria) já usado pra data de praça em `scraperSuporteTenant`
@@ -6150,22 +6193,15 @@ async function scraperSuporteVeiculosTenant(browser, tenant) {
     seen.add(row.fonte_id);
     veiculos.push(row);
   }
-  if (veiculos.length) console.log(`    [${tenant.domain}] ${tenant.leiloeiro}: ${veiculos.length} veículos (${bens.size} lotes)`);
+  if (veiculos.length) console.log(`    [${tenant.domain}] ${tenant.leiloeiro}: ${veiculos.length} veículos (${bens.size} lotes)${parcial ? ` · PARCIAL: ${parcial}` : ''}`);
+  if (parcial) veiculos.parcial = parcial;
   return veiculos;
 }
 
 async function scraperSuporteVeiculosTodos(browser) {
   console.log('  Suporte Leilões (veículos, piloto) — /buscador?categoria=1 por tenant...');
-  const todos = [];
-  const vistos = new Set();
-  for (const tenant of SUPORTE_TENANTS) {
-    try {
-      const veiculos = await scraperSuporteVeiculosTenant(browser, tenant);
-      for (const v of veiculos) { if (!vistos.has(v.fonte_id)) { vistos.add(v.fonte_id); todos.push(v); } }
-    } catch (e) { console.log(`    [${tenant.domain}] erro (veículos): ${String(e.message).slice(0, 80)}`); }
-  }
-  console.log(`    Suporte Leilões (veículos): ${todos.length} veículos de ${SUPORTE_TENANTS.length} leiloeiros`);
-  return todos;
+  return coletarPorTenant({ rotulo: 'Suporte Leilões (veículos)', tabela: 'veiculos_leilao', fonte: 'SUPORTE', tenants: SUPORTE_TENANTS,
+    prefixoDe: (t) => `slv_${t.domain.replace(/\..*/, '')}_`, coletarUm: (t) => scraperSuporteVeiculosTenant(browser, t) });
 }
 
 // ─── GRUPO LANCE ──────────────────────────────────────────────────────────────
