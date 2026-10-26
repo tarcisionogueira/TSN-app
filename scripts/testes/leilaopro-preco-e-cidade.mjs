@@ -4,7 +4,7 @@
 //  - cidade: o og:title termina com o nome do site ("… - JAC Leilões | Site do leiloeiro oficial de Cascavel/PR") e
 //    o Cascavel/PR do LEILOEIRO virava a cidade do lote; "Cidade - UF" no título só vale com prova do IBGE.
 import assert from 'node:assert/strict';
-import { parseDetalhe, cidadeUF, cidadeDoCorpo, extrairUrlsDeLote, idDaUrl } from '../lib/leilaopro-parse.mjs';
+import { parseDetalhe, cidadeUF, cidadeDoCorpo, cidadeDoSlugLeilao, extrairUrlsDeLote, idDaUrl } from '../lib/leilaopro-parse.mjs';
 
 const pagina = (ogTitle, corpo) => `<html><head><title>${ogTitle}</title>
 <meta property="og:title" content="${ogTitle}"><meta property="og:description" content="${ogTitle}"></head>
@@ -101,5 +101,14 @@ assert.deepEqual([d.cidade, d.estado], ['Suzano', 'SP']);
 // Bianchi 1795: corpo só diz "desta cidade de Horizontina" — município de UMA UF no IBGE vira cidade/UF.
 assert.deepEqual(cidadeDoCorpo('DESCRIÇÃO keyboard_arrow_down IMÓVEL: TERRENO URBANO NO 15, sito na Vila São José, zona Sul, desta cidade de Horizontina, com as seguintes confrontações. ÚLTIMOS LANCES'),
   { cidade: 'Horizontina', estado: 'RS' });
+
+// CIDADE DO SLUG (26/10, URLs REAIS de Luci Vera e Santayana): lote "CASA"/"TERRENO COM ÁREA…" sem cidade no texto.
+const sl = (u) => { const r = cidadeDoSlugLeilao(u); return [r.cidade, r.estado]; };
+assert.deepEqual(sl('https://www.luciverareisleiloes.com.br/leilao/imovel-porto-alegre-rs-25-09-2026-16-21-36/lote_id/3165/alienacao'), ['Porto Alegre', 'RS']);
+assert.deepEqual(sl('https://www.santayanaleiloes.com.br/leilao/terreno-no-loteamento-residencial-colina-ritzel-em-campo-bom-rs-25-09-2026-16-31-13/lote_id/10411/alienacao'), ['Campo Bom', 'RS']);
+assert.deepEqual(sl('https://www.luciverareisleiloes.com.br/leilao/comarca-de-crissiumal-rs-imovel-humaita-rs/lote_id/3176'), ['Humaita', 'RS'], 'o par mais perto do fim: o bem, não a comarca');
+assert.deepEqual(sl('https://www.luciverareisleiloes.com.br/leilao/comarca-de-crissiumal-imovel-rural-02-09-2026-15-46-11/lote_id/3135'), [null, null], 'comarca sem UF não é a cidade do bem');
+assert.deepEqual(sl('https://www.santayanaleiloes.com.br/leilao/imovel-onde-atualmente-funciona-a-empresa-beto-pizzaria-localizado-na-rodovia-sc-434-em-garopaba-25-09-2026-16-52-45/lote_id/10412/alienacao'), ['Garopaba', 'SC'], '"em <cidade>" no fim, nome de uma UF só');
+assert.deepEqual(sl('https://www.swleiloes.com.br/venda-direta/bem_id/152'), [null, null]);
 
 console.log('leilaopro-preco-e-cidade: todos os casos passaram');

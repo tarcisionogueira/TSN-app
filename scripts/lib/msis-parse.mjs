@@ -132,26 +132,47 @@ function documentosDe(html, base) {
   return out;
 }
 
+// CIDADE SÓ COM PROVA DO IBGE (26/10, dry-run): sem a conferência saíam "Ofício da Cidade do Rio de Janeiro" (MK 2496)
+// e "Barra da Tijuca" (bairro, Gabriel 8). Cada candidato — "Cidade/UF" (o MAIOR sufixo que é município), "…, CIDADE,
+// UF." / "Cidade| UF", "na cidade de X" — só vale se o par existe; nenhum valeu e o texto diz "Rio de Janeiro" (os 21
+// são leiloeiros do RJ: "Centro do Rio de Janeiro", "Barra da Tijuca - Rio de Janeiro") → Rio de Janeiro/RJ.
+const UFS_BR = /^(AC|AL|AP|AM|BA|CE|DF|ES|GO|MA|MT|MS|MG|PA|PB|PR|PE|PI|RJ|RN|RS|RO|RR|SC|SP|SE|TO)$/;
+const ehMun = (c, uf) => !!c && !!uf && Object.prototype.hasOwnProperty.call(MUNICIPIOS, `${uf}|${normCidade(c)}`);
+const unicaUf = (c) => {
+  const n = normCidade(c); let achou = null;
+  for (const uf of ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']) {
+    if (Object.prototype.hasOwnProperty.call(MUNICIPIOS, `${uf}|${n}`)) { if (achou) return null; achou = uf; }
+  }
+  return achou;
+};
 function cidadeUfDoTexto(txt) {
   const s = String(txt || '');
-  // "…, Copacabana, Rio de Janeiro/RJ." — cidade antes da barra; o bairro fica antes da vírgula.
-  const m = [...s.matchAll(/([A-Za-zÀ-ÿ'][A-Za-zÀ-ÿ' .]{1,40}?)\s*\/\s*([A-Z]{2})\b/g)].find((x) => /^(AC|AL|AP|AM|BA|CE|DF|ES|GO|MA|MT|MS|MG|PA|PB|PR|PE|PI|RJ|RN|RS|RO|RR|SC|SP|SE|TO)$/.test(x[2]));
-  if (m) {
-    const cid = semPrefixoCidade(m[1].replace(/^.*,\s*/, '').replace(/^.*\s-\s/, '').trim());
-    if (cid && cid.length >= 3) return { cidade: titleCase(cid), estado: m[2] };
+  // "…, Copacabana, Rio de Janeiro/RJ." e "Ofício da Cidade do Rio de Janeiro/RJ": o maior sufixo que é município.
+  for (const x of s.matchAll(/([A-Za-zÀ-ÿ'][A-Za-zÀ-ÿ' .]{1,60}?)\s*\/\s*([A-Z]{2})\b/g)) {
+    if (!UFS_BR.test(x[2])) continue;
+    const pal = x[1].replace(/^.*,\s*/, '').replace(/^.*\s-\s/, '').trim().split(/\s+/);
+    for (let k = 0; k < pal.length; k++) { const c = pal.slice(k).join(' '); if (ehMun(c, x[2])) return { cidade: titleCase(c), estado: x[2] }; }
   }
-  // "…VERBO DIVINO, BARRA MANSA, RJ." (Sérgio Represas) e "Santa Efigênia, São Paulo| SP" (Vianna): cidade entre
-  // vírgula e UF. Só vale com o par conferido no IBGE — sem a barra o trecho antes da vírgula pode ser bairro/rua.
-  for (const x of s.matchAll(/(?:^|[,.;:]\s*)([A-Za-zÀ-ÿ'][A-Za-zÀ-ÿ' ]{2,40}?)\s*[,|]\s*([A-Z]{2})\b(?![a-zà-ÿ])/g)) {
-    const cid = x[1].trim();
-    if (Object.prototype.hasOwnProperty.call(MUNICIPIOS, `${x[2]}|${normCidade(cid)}`)) return { cidade: titleCase(cid), estado: x[2] };
+  // "…VERBO DIVINO, BARRA MANSA, RJ." (Sérgio Represas) e "Santa Efigênia, São Paulo| SP" (Vianna).
+  for (const x of s.matchAll(/(?:^|[,.;:]\s*)([A-Za-zÀ-ÿ'][A-Za-zÀ-ÿ' ]{2,40}?)\s*[,|-]\s*([A-Z]{2})\b(?![a-zà-ÿ])/g)) {
+    if (ehMun(x[1].trim(), x[2])) return { cidade: titleCase(x[1].trim()), estado: x[2] };
   }
-  // "…Ramos, na cidade do Rio de Janeiro." / "no município de Niterói" (MK Lance, 26/10).
-  const naCidade = s.match(/\b(?:na\s+cidade|no\s+munic[íi]pio|na\s+comarca)\s+(?:d[eoa]\s+)?([A-ZÀ-Ÿ][A-Za-zÀ-ÿ']+(?:\s+(?:d[aeo]s?\s+)?[A-ZÀ-Ÿ][A-Za-zÀ-ÿ']+){0,3})(?:\s*[/(-]\s*([A-Z]{2})\b)?/);
-  if (naCidade) return { cidade: titleCase(naCidade[1]), estado: naCidade[2] || null };
+  // "…Ramos, na cidade do Rio de Janeiro." / "no município de Niterói" — sem UF, só nome de UMA UF no IBGE.
+  for (const x of s.matchAll(/\b(?:na\s+cidade|no\s+munic[íi]pio)\s+(?:d[eoa]\s+)?([A-ZÀ-Ÿ][A-Za-zÀ-ÿ']+(?:\s+(?:d[aeo]s?\s+)?[A-ZÀ-Ÿ][A-Za-zÀ-ÿ']+){0,3})/g)) {
+    const uf = /^rio de janeiro$/i.test(x[1]) ? 'RJ' : unicaUf(x[1]);
+    if (uf && ehMun(x[1], uf)) return { cidade: titleCase(x[1]), estado: uf };
+  }
   const nesta = cidadeNestaCidade(s);
-  if (nesta?.cidade) return { cidade: nesta.cidade, estado: nesta.estado || null };
-  return cidadeUFBare(s);
+  if (nesta?.cidade && ehMun(nesta.cidade, nesta.estado)) return { cidade: nesta.cidade, estado: nesta.estado };
+  const bare = cidadeUFBare(s);
+  if (ehMun(bare.cidade, bare.estado)) return bare;
+  // "Rio de Janeiro" que é ESTADO/foro ("Estado do Rio de Janeiro", "Comarca da Capital do Rio de Janeiro", "Tribunal…")
+  // não conta: só a menção solta (endereço, bairro + cidade).
+  for (const x of s.matchAll(/\bRio\s+de\s+Janeiro\b/gi)) {
+    const antes = s.slice(Math.max(0, x.index - 40), x.index);
+    if (!/(estado|tribunal|comarca|vara|ju[íi]zo|jucerja|regi[ãa]o|capital)\s+(?:d[oae]s?\s+)?(?:\S+\s+){0,2}$/i.test(antes)) return { cidade: 'Rio de Janeiro', estado: 'RJ' };
+  }
+  return { cidade: null, estado: null };
 }
 
 /** Uma praça: "1° Leilão … Data do leilão: 08/12/2026 às 13:00 … Lance inicial 7.000.000,00". Variantes medidas em
@@ -198,8 +219,6 @@ export function parseLote(blocoHtml, leilaoHtml, base, { hoje = new Date().toISO
   const titulo = (frase || descricao || tituloLeilao || '').slice(0, 180).replace(/[\s,;:–_-]+$/, '') || null;
   let { cidade, estado } = cidadeUfDoTexto(descricao);
   if (!cidade) ({ cidade, estado } = cidadeUfDoTexto(tituloLeilao));
-  // A plataforma é dos leiloeiros do RJ (JUCERJA); "na cidade do Rio de Janeiro" sem UF é RJ.
-  if (cidade && !estado && /^rio de janeiro$/i.test(cidade)) estado = 'RJ';
   const processo = (`${tituloLeilao} ${txt}`.match(/Proc(?:esso|\.)\s*n?\s*[°º.]?\s*:?\s*(\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4})/i) || [])[1] || null;
   const mat = (String(descricao || '').match(/matr[íi]cula\s*(?:n[º°.o]*\s*)?:?\s*([\d.]{3,})/i) || [])[1]?.replace(/\.$/, '') || null;
   const anexos = [...documentosDe(b, base), ...documentosDe(leilaoHtml, base)].filter((a, i, arr) => arr.findIndex((x) => x.url === a.url) === i);
@@ -217,6 +236,9 @@ export function parseLote(blocoHtml, leilaoHtml, base, { hoje = new Date().toISO
     link_foto: foto && !RE_IMG_DESCARTA.test(foto) ? `${base}/${foto}` : null,
     encerrado: !!status && RE_ENCERRADO.test(status),
     status,
+    // Lote cuja venda acontece no COMPREI (PGFN) — auditório/proposta em comprei.pgfn.gov.br/anuncio/detalhe/<id>: já
+    // entra pela fonte COMPREI; aqui seria o mesmo imóvel duas vezes (mesma regra do Degrau/UP Leilão 89).
+    naoImovel: /comprei\.pgfn\.gov\.br\/anuncio\/detalhe\/\d+/i.test(b) || undefined,
   };
 }
 

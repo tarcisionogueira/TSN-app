@@ -5680,8 +5680,20 @@ function mapLoteSuporte(l, tenant, datas = null) {
   // ou "…, BELO HORIZONTE/MG" (fim). Sem isto, o lote entrava SEM cidade/UF (geocode falha, o
   // relatório imprime "não informada"). Só age quando `local` não resolveu — não toca quem já tem.
   if (!cidade || !uf) {
-    const dm = titulo.match(/^\s*([A-Za-zÀ-ÿ .'-]{2,40})\s*\/\s*([A-Z]{2})\b/)
-      || [...String(titulo).matchAll(/([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ .'-]{1,39})\s*\/\s*([A-Z]{2})\b/g)].pop();
+    // 26/10 (Sandra Santos 4105): "…do Cartório de Registro de Imóveis de Ubá/MG" saía cidade "O Cartório De Registro De
+    // Imóveis De Ubá". Cada "<palavras>/<UF>" vale pelo MAIOR sufixo (até 5 palavras) que é município da UF no IBGE;
+    // sem nenhum, segue o recorte antigo (não piora quem já saía certo sem estar no IBGE).
+    const cands = [titulo.match(/^\s*([A-Za-zÀ-ÿ .'-]{2,40})\s*\/\s*([A-Z]{2})\b/), ...[...String(titulo).matchAll(/([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ .'-]{1,60})\s*\/\s*([A-Z]{2})\b/g)].reverse()].filter(Boolean);
+    let dm = null;
+    for (const c of cands) {
+      const pal = c[1].trim().split(/\s+/).slice(-5);
+      for (let k = 0; k < pal.length && !dm; k++) {
+        const nome = pal.slice(k).join(' ');
+        if (Object.prototype.hasOwnProperty.call(MUNICIPIOS, `${c[2]}|${normCidadeBR(nome)}`)) dm = [null, nome, c[2]];
+      }
+      if (dm) break;
+    }
+    dm = dm || cands[0] || null;
     if (dm) { cidade = cidade || dm[1].trim(); uf = uf || dm[2].toUpperCase(); }
   }
   const ext = extrairDaDescricao(titulo);

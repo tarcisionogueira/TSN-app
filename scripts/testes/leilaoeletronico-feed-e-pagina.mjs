@@ -123,6 +123,24 @@ const g303 = parseDetalhe(pgGF('Im&#xF3;vel | &#xC1;rea de 352,00m&#xB2; | Aveni
   'Im&#xF3;vel | &#xC1;rea de 352,00m&#xB2; | Regente Feij&#xF3;/SP', 'Imóvel com 352,00m².'), URL_G303, { agora: AGORA });
 assert.deepEqual([g303.cidade, g303.estado], ['Regente Feijó', 'SP'], 'município de verdade no título continua valendo');
 
+// (7c) KTZ 1004 (26/10, texto REAL): a cidade está no fim do nome ("… - GUARUJÁ", sem UF) e na descrição com hífen
+//      ("município e comarca de Guaruja-SP"); o feed manda Acrelândia. Sai Guarujá/SP, acentuada como no título.
+const TK = TENANTS.ktz;
+const URL_K1004 = 'https://www.ktzleiloes.com.br/lote/apartamento-duplex-cobertura-guaruja-33973m2/1004/';
+extrairUrlsDeLote(`<listings>${gfFeed(URL_K1004)}</listings>`, TK.base);
+const k1004 = parseDetalhe(pgGF('APARTAMENTO DUPLEX COBERTURA - GUARUJ&#xC1;', 'APARTAMENTO DUPLEX COBERTURA - GUARUJ&#xC1;',
+  'DESCRIÇÃO DO IMÓVEL – APARTAMENTO DUPLEX COBERTURA nº64, situado a Rua Maria Martha Arruda Estefno nº679, nesta cidade, municipio e comarca de Guaruja-SP, contendo a area útil de 339.73m2'), URL_K1004, { agora: AGORA });
+assert.deepEqual([k1004.cidade, k1004.estado], ['Guarujá', 'SP'], 'KTZ: cidade do fim do nome, conferida com a UF da descrição');
+
+// (7d) Projud 1858 (26/10, texto REAL): o feed manda São Paulo (cidade do escritório) e o lote é em Marília — o nome diz
+//      "MARÍLIA- LOTE DE TERRENO DE 300M² - RESIDENCIAL VILLA FLORA" (hífen colado), conferido no IBGE com a UF do feed.
+const TPJ = TENANTS.projud;
+const URL_P1858 = 'https://www.projudleiloes.com.br/lote/marilia-lote-de-terreno-de-300m_-residencial-villa-flora/1858/';
+extrairUrlsDeLote(`<listings>${gfFeed(URL_P1858, 'São Paulo', 'São Paulo')}</listings>`, TPJ.base);
+const p1858 = parseDetalhe(pgGF('MAR&#xCD;LIA- LOTE DE TERRENO DE 300M&#xB2; - RESIDENCIAL VILLA FLORA', 'MAR&#xCD;LIA- LOTE DE TERRENO DE 300M&#xB2; - RESIDENCIAL VILLA FLORA',
+  'DO BEM: TERRENO DE 300 M², LOCALIZADO NA RUA ANTÔNIO BLAGITIS SOBRINHO, NO RESIDENCIAL VILLA FLORA, JARDIM COLIBRI, MARÍLIA – SP'), URL_P1858, { agora: AGORA });
+assert.deepEqual([p1858.cidade, p1858.estado], ['Marília', 'SP'], 'Projud: cidade do nome do lote vence a cidade do escritório no feed');
+
 // (8) MULTI-TENANT (24/10). O id é sequencial por SITE: o 375 da Milhão não pode receber o feed do 375 de outro
 //     tenant lido antes no mesmo processo, e lote que só existe no feed de OUTRO site não está "no feed" deste.
 const TM = TENANTS.milhao, TT = TENANTS.taba;

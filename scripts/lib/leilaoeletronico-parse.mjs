@@ -295,10 +295,22 @@ export function parseDetalhe(html, url, { agora = new Date() } = {}) {
   // IBGE; e o feed não vence a página: UF do feed diferente da UF que o título declara = valor padrão, não endereço.
   const noIbge = (c, uf) => !!c && !!uf && Object.prototype.hasOwnProperty.call(MUNICIPIOS, `${uf}|${normCidade(c)}`);
   const feedConfere = !feedPlaceholder && (!ufPagina || feed?.estado === ufPagina);
+  // KTZ (26/10): "APARTAMENTO DUPLEX COBERTURA - GUARUJÁ" (cidade no último trecho do nome, sem UF) e a descrição
+  // "nesta cidade, município e comarca de Guaruja-SP" (hífen, não barra). Os dois só valem conferidos no IBGE com a
+  // UF que a página/feed/descrição declara — o feed manda "Acrelândia/AC" de padrão, então nunca ele sozinho.
+  const munDesc = (`${descricao || ''}`.match(/\b(?:cidade|munic[íi]pio)(?:,?\s+(?:munic[íi]pio\s+)?e\s+comarca)?\s+de\s+([A-Za-zÀ-ÿ' ]{3,40}?)\s*[-/]\s*([A-Z]{2})\b/) || []);
+  const ufsConhecidas = [...new Set([ufPagina, daDescricao?.estado, munDesc[2], feedConfere ? feed?.estado : null].filter(Boolean))];
+  // Trecho do nome entre hífens que é município (KTZ "… - GUARUJÁ"; Projud 1858 "MARÍLIA- LOTE DE TERRENO … - RESIDENCIAL
+  // VILLA FLORA"). Vem ANTES do feed: o feed da Projud manda a cidade do escritório (São Paulo) para um lote em Marília.
+  const segTitulo = String(tituloCru || '').split(/\s*[-–]\s+|\s+[-–]\s*|(?<=[A-ZÀ-Ý])-\s/).map((seg) => seg.replace(/\s*\|.*$/, '').trim()).reverse()
+    .map((seg) => [titleCase(seg), ufsConhecidas.find((uf) => noIbge(seg, uf))])
+    .find(([, uf]) => uf) || [];
   const candidatos = [
     [cidadeTitulo, doTitulo[2]],
+    segTitulo,
     feedConfere ? [feed?.cidade, feed?.estado] : [],
     [daDescricao?.cidade, daDescricao?.estado],
+    munDesc[1] ? [titleCase(munDesc[1].trim()), munDesc[2]] : [],
   ];
   const [cidade, ufCidade] = candidatos.find(([c, uf]) => noIbge(c, uf)) || [null, null];
   const estado = ufCidade || ufPagina || (feedConfere && feed?.estado) || daDescricao?.estado || null;

@@ -70,6 +70,9 @@ assert.equal(dMk.cidade, 'Rio de Janeiro');
 assert.equal(dMk.estado, 'RJ');
 assert.equal(dMk.numero_matricula, '139711');
 assert.equal(dMk.area_m2, 70);
+// O auditório deste lote é o COMPREI (PGFN): já entra pela fonte COMPREI — fica fora para não duplicar.
+assert.equal(dMk.naoImovel, true);
+assert.equal(dBsp.naoImovel, undefined);
 // Com "hoje" antes da 1ª praça, a data vigente é a da 1ª.
 const blocoMk = leilaoMk.slice(leilaoMk.indexOf('id="divLote2458"'));
 const { parseLote } = await import('../lib/msis-parse.mjs');
@@ -99,6 +102,7 @@ const cinema = dets.find((d) => /^CINEMA/.test(d.titulo));
 assert.equal(cinema.valor_avaliacao, 30400000);
 assert.equal(cinema.valor_minimo, 15200000);
 assert.equal(cinema.cidade, 'São Paulo');
+assert.equal(cinema.naoImovel, true, 'lote da Comprei não duplica a fonte COMPREI');
 const S = TENANTS.sergiorepresas.base;
 const dSer = [...detalhesDoCatalogo(fx('msis-sergiorepresas-leilao-barramansa.html'), S).values()];
 assert.equal(dSer.length, 2);

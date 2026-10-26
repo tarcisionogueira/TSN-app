@@ -344,6 +344,34 @@ function sufixoMunicipio(trecho, uf) {
   }
   return null;
 }
+// CIDADE DO SLUG DO LEILÃO (26/10, achado na ligação de Luci Vera/Santayana/SW): lote cujo título é só "CASA"/"TERRENO
+// COM ÁREA…" e cujo corpo não nomeia cidade tem a cidade no slug da URL — "…/leilao/imovel-porto-alegre-rs-25-09-2026-
+// 16-21-36/lote_id/3165", "…-em-campo-bom-rs-…", "comarca-de-crissiumal-rs-imovel-humaita-rs". Regra: o par "<cidade>-
+// <uf>" MAIS PERTO DO FIM do slug (o lugar do bem vem depois da comarca), conferido no IBGE; sem UF não vale nada —
+// "comarca-de-crissiumal-imovel-rural" fica sem cidade (comarca não é a cidade do bem, mesma regra do cidadeUF).
+const UFS_SLUG = new Set(['ac','al','ap','am','ba','ce','df','es','go','ma','mt','ms','mg','pa','pb','pr','pe','pi','rj','rn','rs','ro','rr','sc','sp','se','to']);
+export function cidadeDoSlugLeilao(url = '') {
+  const slug = (String(url).match(/\/leilao\/([^/?#]+)\/lote_id\//i) || [])[1];
+  if (!slug) return { cidade: null, estado: null };
+  const t = decodeURIComponent(slug).toLowerCase().replace(/(?:-\d{1,2}){3,6}$/, '').replace(/-\d{2}-\d{2}-\d{4}.*$/, '').split('-').filter(Boolean);
+  for (let j = t.length - 1; j >= 1; j--) {
+    if (!UFS_SLUG.has(t[j])) continue;
+    const uf = t[j].toUpperCase();
+    for (let n = Math.min(5, j); n >= 1; n--) {
+      const c = t.slice(j - n, j).join(' ');
+      if (Object.prototype.hasOwnProperty.call(MUNICIPIOS, `${uf}|${normCidade(c)}`)) return { cidade: titleCase(c).slice(0, 60), estado: uf };
+    }
+  }
+  // "…-localizado-na-rodovia-sc-434-em-garopaba": "em <cidade>" no FIM do slug, sem UF — só nome que existe em UMA UF.
+  const iEm = t.lastIndexOf('em');
+  if (iEm >= 0 && iEm < t.length - 1 && t.length - iEm - 1 <= 4) {
+    const c = t.slice(iEm + 1).join(' ');
+    const x = inferirUF({ cidade: c });
+    if (x?.via === 'cidade_unica') return { cidade: titleCase(c).slice(0, 60), estado: x.uf };
+  }
+  return { cidade: null, estado: null };
+}
+
 export function cidadeDoCorpo(txt = '') {
   const t = String(txt || '');
   const loc = t.match(/\bLocaliza[çc][ãa]o\s+([A-Za-zÀ-ÿ'.\- ]{2,50}?)\s*\/\s*([A-Z]{2})\b/);
@@ -427,6 +455,7 @@ export function parseDetalhe(html, url) {
     : (!temPraca && /venda\s*direta/i.test(txt)) ? 'venda_direta' : 'extrajudicial';
   let { cidade, estado } = cidadeUF(titulo, descricao);
   if (!cidade) ({ cidade, estado } = cidadeDoCorpo(txt));
+  if (!cidade) ({ cidade, estado } = cidadeDoSlugLeilao(url));
   // TÍTULO QUE É O NOME DO JUÍZO (26/10, Cecilia Delzeir 515): og:title "3ª VARA CÍVEL DO FORO DA COMARCA DE SUZANO/SP"
   // e o og:description igual — o portão lia "nem imóvel nem veículo" e um terreno de 5.338 m² saía do acervo. Só
   // nesse caso o título e a descrição vêm do início do bloco DESCRIÇÃO do lote; a cidade acima já foi lida.
