@@ -42,6 +42,14 @@ assert.ok(dCA.link_edital?.endsWith('/principal/226.pdf?v=6940'));
 assert.equal(montarRow(`${CA}/imoveis/lote/7367`, dCA, TENANTS.caiapo).fonte_id, 'caiapo_7367');
 assert.equal(parseDetalhe('<html>login</html>', `${CA}/imoveis/lote/1`), null, 'página que não é o detalhe = "não li"');
 
+// Lote de prefeitura "desta cidade" sem nome (Leilões Brasil 191493, 26/10): a cidade vem do breadcrumb do leilão.
+const bc = fx('roisoft-leiloesbrasil-lote-191542.html')
+  .replace(/26\/10\/2026 - \(ARAGUA[^<]*/, '17/11/2026 - 51 Imóveis, Veículos e uma Motoniveladora | Pref Hidrolândia-GO')
+  .replace(/content="M-2803 - ARAGUACU\/TO - MISTO - Com a área de 437,72m2 "/, 'content="4533 - LOTE - COM 378 M2"')
+  .replace(/ARAGUACU - TO/g, '').replace(/Araguaçu-TO/g, '').replace(/situado nesta cidade/, 'situado desta cidade');
+const dBc = parseDetalhe(bc, `${LB}/imoveis/lote/191493`);
+assert.deepEqual([dBc.cidade, dBc.estado], ['Hidrolândia', 'GO']);
+
 // Transporte: catálogo inteiro (61 → 4 páginas) por POST; página que falha derruba a lista.
 const pag = JSON.parse(fx('roisoft-leiloesbrasil-catalogo-pag1.json'));
 const pagN = (n) => JSON.stringify({ ...pag, dados: pag.dados.replace(/data-rowid="(\d+)"/g, (m, id) => `data-rowid="${n}${id}"`) });

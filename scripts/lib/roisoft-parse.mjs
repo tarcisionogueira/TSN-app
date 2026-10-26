@@ -83,7 +83,18 @@ export function parseDetalhe(html, url) {
   const enc = dataBr((txt.match(/Encerramento:\s*(\d{2}\/\d{2}\/\d{4})/i) || [])[1]);
   const status = limpo((h.match(/id=["']pregao-detalhe["'][^>]*>([\s\S]*?)<\//i) || [])[1]);
   const endereco = limpo((h.match(/class=["']endereco[^"']*["'][^>]*>([\s\S]*?)<\/div>/i) || [])[1]) || null;
-  const { cidade, estado } = cidadeUf(og('description'), endereco, descricao);
+  let { cidade, estado } = cidadeUf(og('description'), endereco, descricao);
+  // "…situado na Rua Frei Caetano… desta cidade" sem nome (Leilões Brasil 191493, leilão da prefeitura): a cidade é a
+  // do LEILÃO, no breadcrumb "17/11/2026 - 51 Imóveis… | Pref Hidrolândia-GO". Só com o "desta cidade/deste município"
+  // no texto — leilão de várias cidades não empresta a sua ao lote — e conferida no IBGE.
+  if (!cidade && /\b(?:dest[ae]|nest[ae])\s+(?:cidade|munic[íi]pio)\b/i.test(descricao || '')) {
+    const bc = limpo((h.match(/<li class=["']breadcrumb-item["']>\s*<a[^>]*>([\s\S]*?)<\/a>/i) || [])[1]);
+    for (const x of bc.matchAll(/([A-Za-zÀ-ÿ'][A-Za-zÀ-ÿ' ]{2,40}?)\s*[-/]\s*([A-Z]{2})\b/g)) {
+      const pal = x[1].trim().split(/\s+/);
+      for (let k = 0; k < pal.length && !cidade; k++) { const c = pal.slice(k).join(' '); if (ehMun(c, x[2])) { cidade = titleCase(c); estado = x[2]; } }
+      if (cidade) break;
+    }
+  }
   const foto = og('image');
   const anexos = [];
   // Edital do leilão: link direto `/principal/<idLeilao>.pdf` no bloco "Downloads".
