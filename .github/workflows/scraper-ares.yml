@@ -1,4 +1,4 @@
-name: Scraper Ares (Picelli + Shiokawa + Zaccarino + Cunha, API PostgREST)
+name: Scraper Ares (Picelli, Shiokawa, Zaccarino, Cunha, Savoy + 8 da junta, API PostgREST)
 
 # Plataforma Ares (picellileiloes + shiokawaleiloes): catálogo por API PostgREST pública com a chave
 # publishable do próprio site — sem navegador, custo Bright Data zero (recon 13/10). Cron GRAVA;

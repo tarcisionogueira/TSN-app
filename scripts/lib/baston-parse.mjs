@@ -18,6 +18,11 @@ import { decodificarEntidades } from '../../api/_texto-imovel.js';
 
 export const TENANTS = {
   baston: { fonte: 'BASTON', leiloeiro: 'Baston Leilões', base: 'https://bastonleiloes.leilao.br', catalogo: '/leiloes/imoveis' },
+  // 26/10 (triagem da junta): a Baston é PLATAFORMA — o rodapé de outros leiloeiros diz "Plataforma Baston Leilões"
+  // (static.bastonleiloes.com.br, mesmo /leiloes/imoveis e /leilao/<id>/lote/<n>). Medido pelo banco (pg_net) em 26/10:
+  // Custódio 8 leilões de imóvel no catálogo · André Araújo 0 (catálogo responde 200 e vem vazio — entra mesmo assim).
+  custodio: { fonte: 'CUSTODIO', leiloeiro: 'Custódio Leilões', base: 'https://www.custodioleiloes.com.br', catalogo: '/leiloes/imoveis' },
+  andrearaujo: { fonte: 'ANDREARAUJO', leiloeiro: 'André Araújo Leilões', base: 'https://www.andrearaujoleiloes.com.br', catalogo: '/leiloes/imoveis' },
 };
 
 /** Catálogo → leilões (cada card). */

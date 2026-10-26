@@ -5328,6 +5328,20 @@ const LEILOTECH_TENANTS = [
   // é tenant Leilotech confirmado — GET direto no /go/graphql (query de branding, appName
   // "SF Leilões") e /lote//leilao/ com slugs reais já visíveis na home server-rendered.
   { domain: 'sfleiloes.com.br',          leiloeiro: 'SF Leilões' },
+  // 26/10 (triagem da junta pelo banco — `cdn.leilotech.workers.dev` na home): 9 tenants que estavam
+  // `nao_coletado`. Todos com `/agenda` server-rendered respondendo 200 pelo pg_net; leilões listados na
+  // agenda em 26/10: Arremata Bem 12 · Shop 9 · Lance Justo 6 · Vargas & Pinto 5 · LB 4 · Marques 2 ·
+  // Jorge Marco 1 · AJB 0 · DS 0 ("Nenhum leilão público encontrado" — entram assim mesmo: catálogo provado,
+  // pedido do dono de ligar todos). `arrematebem.com.br` (com E) redireciona para a Vasconcelos, já acima.
+  { domain: 'arrematabem.com.br',        leiloeiro: 'Arremata Bem Leilões' },
+  { domain: 'shopleiloes.leilao.br',     leiloeiro: 'Shop Leilões' },
+  { domain: 'lancejusto.com.br',         leiloeiro: 'Lance Justo Leilões' },
+  { domain: 'vargasepintoleiloes.com.br',leiloeiro: 'Vargas & Pinto Leilões' },
+  { domain: 'lbleiloes.com.br',          leiloeiro: 'LB Leilões' },
+  { domain: 'marquesleiloes.com.br',     leiloeiro: 'Marques Leilões' },
+  { domain: 'jorgemarcoleiloes.com.br',  leiloeiro: 'Jorge Marco Leilões' },
+  { domain: 'ajbleiloes.com.br',         leiloeiro: 'AJB Leilões' },
+  { domain: 'dsleiloes.com.br',          leiloeiro: 'DS Leilões' },
 ];
 
 // Extrai um número de campos que podem vir número OU string BR OU objeto de valores.

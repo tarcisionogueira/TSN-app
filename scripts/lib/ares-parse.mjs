@@ -45,6 +45,44 @@ export const TENANTS = {
     fonte: 'SAVOY', leiloeiro: 'Savoy Leilões', site: 'https://www.savoyleiloes.com.br',
     base: 'https://api.savoyleiloes.com.br', headers: { apikey: 'sb_publishable__NGN6fHZ_XB-PWeVqYDgjA_nHEmpnNB' },
   },
+  // 26/10 (triagem da junta pelo banco, "Ares Plataforma de Leilões" no <meta description> da home): 8 tenants
+  // que a 1ª triagem viu como "DESCONHECIDA" (título "Carregando...", SPA). API e chave publishable tiradas do
+  // `assets/client-*.js` de cada site; contagem medida pelo banco (pg_net + ?apikey=) na mesma data:
+  //   DR 14 vivos (8 imóveis + 6 veíc./motos) · GRUPO ARREMATE 22 (19 + 3) · DBM 18 · POLI 15 (12 imóveis, 4 fazendas)
+  //   MAURO MARCELLO 12 · BRAME 3 · ROCKET 0 (só encerrados) · STILO 101 eletrônicos (0 imóvel/veículo).
+  // ROCKET e STILO entram com catálogo PROVADO e vazio do que coletamos (pedido do dono: ligar todos).
+  drleiloes: {
+    fonte: 'DRLEILOES', leiloeiro: 'DR Leilões', site: 'https://www.drleiloes.com.br',
+    base: 'https://api.drleiloes.com.br', headers: { apikey: 'sb_publishable_QNXbjK_MVrDktWNY3aa_HQ_m1BsICzI' },
+  },
+  grupoarremate: {
+    fonte: 'GRUPOARREMATE', leiloeiro: 'Grupo Arremate Leilões', site: 'https://www.grupoarremateleiloes.com.br',
+    base: 'https://api.grupoarremateleiloes.com.br', headers: { apikey: 'sb_publishable_jlMuf5p1E-JPfhVc0W2AGA_AoeCVrXp' },
+  },
+  dbm: {
+    fonte: 'DBMLEILOES', leiloeiro: 'DBM Leilões', site: 'https://www.dbmleiloes.com.br',
+    base: 'https://api.dbmleiloes.com.br', headers: { apikey: 'sb_publishable__kPSBsRDYdYrao568cNSJw_A5Az8-gE' },
+  },
+  poli: {
+    fonte: 'POLILEILOES', leiloeiro: 'Poli Leilões', site: 'https://www.polileiloes.com.br',
+    base: 'https://api.polileiloes.net', headers: { apikey: 'sb_publishable_A1pWx3J4e3y2pDp21IftOQ_uJBxKLNv' },
+  },
+  mauromarcello: {
+    fonte: 'MAUROMARCELLO', leiloeiro: 'Mauro Marcello Leilões', site: 'https://www.mauromarcello.lel.br',
+    base: 'https://api.mauromarcello.lel.br', headers: { apikey: 'sb_publishable_g4XnQtJJVYr0OuT19JB06w_VaURsLA9' },
+  },
+  brame: {
+    fonte: 'BRAMELEILOES', leiloeiro: 'Brame Leilões', site: 'https://www.brameleiloes.com.br',
+    base: 'https://api.brameleiloes.com', headers: { apikey: 'sb_publishable_ISuLo-uJxq5tfrqdGp2SnQ_Yw-iUNzy' },
+  },
+  rocket: {
+    fonte: 'ROCKETLEILOES', leiloeiro: 'Rocket Leilões', site: 'https://www.rocketleiloes.com.br',
+    base: 'https://api.rocketleiloes.com.br', headers: { apikey: 'sb_publishable_FIAmv6wqk3yAGFuBYcHJxA_wBzd2vbh' },
+  },
+  stilo: {
+    fonte: 'STILOLEILOES', leiloeiro: 'Stilo Leilões', site: 'https://www.stiloleiloes.com.br',
+    base: 'https://api.stiloleiloes.com.br', headers: { apikey: 'sb_publishable_e-EH2SJsZybcDpTB63ciUw_m_Ym4r-z' },
+  },
 };
 const SITE_POR_API = new Map(Object.values(TENANTS).map(t => [t.base, t.site]));
 
@@ -61,7 +99,8 @@ const num = v => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 const plaus = v => (v >= 1000 && v <= 500_000_000) ? v : 0;
 const stripHtml = s => String(s || '').replace(/<br\s*\/?>|<\/p>/gi, '\n').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ')
   .replace(/&amp;/gi, '&').replace(/[ \t]+/g, ' ').replace(/\n\s*\n+/g, '\n').trim();
-const ehImovelCat = slug => /^(imove|imovei|areas|terren|casa|apart|rura|galp|sala|predi)/i.test(String(slug || ''));
+// 26/10: `fazendas` (POLI) e `chacaras`/`sitios` também são imóvel — sem eles 4 fazendas vivas ficavam fora.
+const ehImovelCat = slug => /^(imove|imovei|areas|terren|casa|apart|rura|galp|sala|predi|fazend|chacar|sitio|lote)/i.test(String(slug || ''));
 const urlLote = (base, id) => `${SITE_POR_API.get(base) || base.replace('//api.', '//www.')}/lote/${id}`;
 
 function lotes(txt) {
@@ -116,7 +155,8 @@ export function detalhesDoCatalogo(txt, base) {
 }
 
 // VEÍCULOS (21/10): o MESMO catálogo traz a categoria `veiculos` (Picelli 10, Cunha 1 — medido pelo banco).
-const ehVeiculoCat = slug => /^veicul/i.test(String(slug || ''));
+// 26/10: cada tenant batiza a categoria do seu jeito — `automoveis`/`motos_e_similares` (DR), `veiculos_leves` (POLI).
+const ehVeiculoCat = slug => /^(veicul|automove|carros|motos|caminh|utilitar)/i.test(String(slug || ''));
 export function extrairUrlsDeVeiculo(txt, base) {
   const urls = new Map();
   for (const l of lotes(txt)) if (l?.id && ehVeiculoCat(l.categories?.slug)) urls.set(l.id, urlLote(base, l.id));
