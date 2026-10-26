@@ -23,6 +23,7 @@ import NotasFiscaisSaqueAdmin from '../components/NotasFiscaisSaqueAdmin'; // 16
 import PagamentosConferenciaAdmin from '../components/PagamentosConferenciaAdmin'; // 20/10: #231/#232
 import CarteiraPropostas from '../components/CarteiraPropostas'; // 14/10: lotes sem lance para proposta
 import Contratos from './Contratos'; // tela ÚNICA de contratos (mesma de "Meus Contratos", modo admin)
+import MercadoEvolucao from '../components/MercadoEvolucao'; // 26/10: evolução mensal imóveis × veículos
 import { ACEITA_DOCUMENTO } from '../utils/arquivo';
 import { maskMoedaDigitando } from '../utils/moeda';
 import { setItemSeguro } from '../utils/storageSeguro.js';
@@ -6456,6 +6457,7 @@ function ScrapersTab() {
     { key: 'fontes',    label: '🏛️ Fontes',    desc: `Caixa + ${FONTES_LEILAO.length} leiloeiros` },
     { key: 'parceiros', label: '🤝 Parceiros',  desc: `${parceiros.length} leiloeiros` },
     { key: 'geocod',    label: '📍 Geo',        desc: `${geoPct}% · on-demand` },
+    { key: 'mercado',   label: '📈 Mercado',    desc: 'evolução por mês' },
   ];
 
   return (
@@ -6722,6 +6724,9 @@ function ScrapersTab() {
           <LeiloeiroContatoManager />
         </div>
       )}
+
+      {/* ═══ ABA MERCADO ═══ */}
+      {abaAtiva === 'mercado' && <MercadoEvolucao />}
 
       {/* ═══ ABA GEOCODIFICAÇÃO ═══ */}
       {abaAtiva === 'geocod' && (

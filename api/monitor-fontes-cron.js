@@ -464,6 +464,12 @@ async function handler(req) {
     const { error: eSnap } = await supabase.rpc('snapshot_metricas_fontes');
     if (eSnap) console.error('snapshot_metricas_fontes:', eSnap.message);
   } catch (e) { console.error('snapshot_metricas_fontes:', e?.message); }
+  // Foto diária do acervo ativo (imóvel E veículo) para o gráfico "Mercado" do admin (26/10). Dia sem foto
+  // vira buraco na média do mês, não zero — por isso só loga.
+  try {
+    const { error: eEst } = await supabase.rpc('snapshot_acervo_estoque');
+    if (eEst) console.error('snapshot_acervo_estoque:', eEst.message);
+  } catch (e) { console.error('snapshot_acervo_estoque:', e?.message); }
   // Comparação com o piso APRENDIDO (mediana*0.5; tem_baseline já exige volume >= 20 p/ não
   // falsar em fonte minúscula). Compara o TOTAL do último scrape (imune à Seção D).
   try {
