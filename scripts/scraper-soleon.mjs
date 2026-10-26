@@ -143,6 +143,28 @@ const TODOS_TENANTS = [
   { fonte: 'NIEWINSKI', leiloeiro: 'Bruno Niewinski Leilões', base: 'https://brunoniewinskileiloes.com.br' }, //   2 (RS)
   { fonte: 'LEILBRASILIA', leiloeiro: 'Leiloeiros de Brasília (Borba Assunção)', base: 'https://leiloeirosdebrasilia.com.br' }, //   1 (DF)
   { fonte: 'SANTIAGOLEIL', leiloeiro: 'Santiago Leilões (André Viana Hemann)', base: 'https://santiagoleiloes.com.br' }, //   1 (RS)
+  // 26/10 (3ª leva — leiloeiro_junta ATIVO nao_coletado, triagem `junta_2410`: PE/SC/BA/ES/GO/MT/MA/RJ/PR). /lotes/imovel
+  // pelo banco (grátis); "Total N Lotes" do próprio site = itens enumerados em todos (página única, sem ?page=2); TODOS
+  // os lotes lidos no coletor real em seco (fetch simulado, nada gravado). Nenhum lote destes domínios estava no acervo.
+  // Entre parênteses: Total do site em 26/10. FORA com /lotes/imovel vazio hoje (SOLEON confirmado): conceitoleiloes,
+  // felfilileiloes, focoleiloes, gutembergaraujoleiloes, kildareleiloes, luminaleiloes, macedoleiloes, machadoleiloes.
+  // FORA também: leiloeironacif.com (1 lote listado, mas a página /item/N/detalhes só abre com LOGIN — 1 KB de texto).
+  { fonte: 'ARAGAOLEIL', leiloeiro: 'Aragão Leilões', base: 'https://aragaoleiloes.com.br' }, //   7 (PE)
+  { fonte: 'BESTLEIL', leiloeiro: 'Best Leilões', base: 'https://bestleiloes.com.br' }, //   3 (SC)
+  { fonte: 'BRASILSULLEIL', leiloeiro: 'Brasil Sul Leilões', base: 'https://brasilsulleiloes.com.br' }, //   8 (SC)
+  { fonte: 'CENTRALDOSLEIL', leiloeiro: 'Central dos Leilões', base: 'https://centraldosleiloes.com.br' }, //   1 (BA)
+  { fonte: 'COLODETE', leiloeiro: 'Colodete Leilões', base: 'https://colodeteleiloes.com.br' }, //   5 (ES)
+  { fonte: 'DIEGOLEIL', leiloeiro: 'Diego Leilões', base: 'https://diegoleiloes.com.br' }, //   2 (GO/PR/SC)
+  { fonte: 'FALEILOES', leiloeiro: 'FA Leilões', base: 'https://faleiloes.com.br' }, //   9 (MT)
+  { fonte: 'GRLEILOES', leiloeiro: 'GR Leilões', base: 'https://grleiloes.com' }, //   1 (ES/MA)
+  { fonte: 'GUARIGLIA', leiloeiro: 'Guariglia Leilões', base: 'https://guariglialeiloes.com.br' }, //   1 (BA)
+  { fonte: 'JUNKESLEIL', leiloeiro: 'Junkes Leilões', base: 'https://junkesleiloes.com.br' }, //   1 (SC)
+  { fonte: 'VARONESLEIL', leiloeiro: 'Varones Leilões', base: 'https://leiloeirojudicial.com.br' }, //   7 (SC)
+  { fonte: 'LKLEILOES', leiloeiro: 'LK Leilões', base: 'https://lkleiloes.com.br' }, //   4 (GO)
+  { fonte: 'PLUSLEIL', leiloeiro: 'Plus Leilões', base: 'https://plusleiloes.lel.br' }, //   2 (SC)
+  { fonte: 'QUADRADOLEIL', leiloeiro: 'Quadrado Leilões', base: 'https://quadradoleiloes.com.br' }, //   1 (SC)
+  { fonte: 'ROSENTALLEIL', leiloeiro: 'Rosental Leilões', base: 'https://rosentalleiloes.com.br' }, //   3 (SC)
+  { fonte: 'VALDEIRPEREIRA', leiloeiro: 'Valdeir Pereira Leiloeiro', base: 'https://valdeirpereiraleiloeiro.com.br' }, //   1 (MT)
 ];
 
 // ── REPROVADOS NO MESMO DRY-RUN — ficam FORA, e o registro é o que impede re-tentar às cegas:
@@ -713,6 +735,9 @@ async function coletarTenant(tenant) {
         } else console.log(`  [${tenant.fonte}] Comprei ${idComprei}: ${resp.ok ? 'sem ficha' : `HTTP ${resp.status}`}`);
       } catch (e) { console.log(`  [${tenant.fonte}] Comprei ${idComprei} não lido: ${String(e?.message || e).slice(0, 60)}`); }
     }
+    // Lote de TESTE do próprio leiloeiro (26/10, ARAGAOLEIL 6645 "IMOVEL TESTE", R$ 10.000, praça em 31/12): a
+    // plataforma o lista no catálogo como qualquer outro. Mesmo critério do RE_SUPORTE_TESTE de scraper-puppeteer.mjs.
+    if (/\b(?:im[óo]vel|lote|bem|leil[ãa]o)[\s-]+(?:de[\s-]+)?teste\b|\bsomente[\s-]*teste\b/i.test(`${row.titulo || ''}`)) { reprov++; continue; }
     const q = checarQualidade(row, { estrito: false });
     if (q.descartar) { reprov++; continue; }
     prontos.push(row);
@@ -869,7 +894,10 @@ const VEICULOS_NAO_VALIDADOS = new Set(['PATIOROCHALEIL', 'LEILOPAR', 'WINLEILOE
   'MGLEILOESRS', 'RAFAELARIBEIRO', 'AGENCIALEILAO', 'MACHADOLEIL', 'PIMENTELLEIL',
   // 2ª leva (triagem575, 24/10) — mesma razão.
   'CARGNELUTTI', 'LEILOESRN', 'OROLEIL', 'RECHLEIL', 'BRONZATTO', 'AGUIAROLIANI', 'ITALOLEIL', 'MORAESLEIL', 'LANCESE',
-  'LEVYLEIL', 'ZAGOLEIL', 'BACKLEIL', 'NIEWINSKI', 'LEILBRASILIA', 'SANTIAGOLEIL']);
+  'LEVYLEIL', 'ZAGOLEIL', 'BACKLEIL', 'NIEWINSKI', 'LEILBRASILIA', 'SANTIAGOLEIL',
+  // 3ª leva (26/10) — mesma razão.
+  'ARAGAOLEIL', 'BESTLEIL', 'BRASILSULLEIL', 'CENTRALDOSLEIL', 'COLODETE', 'DIEGOLEIL', 'FALEILOES', 'GRLEILOES', 'GUARIGLIA',
+  'JUNKESLEIL', 'VARONESLEIL', 'LKLEILOES', 'PLUSLEIL', 'QUADRADOLEIL', 'ROSENTALLEIL', 'VALDEIRPEREIRA']);
 
 async function mainVeiculos() {
   const tenantsVeic = TENANTS.filter(t => !VEICULOS_NAO_VALIDADOS.has(t.fonte) || filtro.includes(t.fonte));

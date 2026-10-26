@@ -20,7 +20,7 @@ import { fazendaEhNome } from '../../api/_tipo.js';
 import { extrairGenerico, checarQualidade } from './scraper-core.mjs';
 import { decodificarEntidades, extrairAreaM2 } from '../../api/_texto-imovel.js';
 import MUNICIPIOS from '../../api/_municipios.js';
-import { normCidade } from './inferir-uf.mjs';
+import { normCidade, inferirUF } from './inferir-uf.mjs';
 
 // Tenants da plataforma (fonte por LEILOEIRO — o monitor aprende baseline por fonte).
 export const TENANTS = {
@@ -112,6 +112,27 @@ export const TENANTS = {
   // 24/10 (pendência 356): Trevisan — todos os links da listagem são /lote_id/N/alienacao (venda por alienação
   // particular); entrou quando extrairUrlsDeLote passou a aceitar o sufixo (antes enumerava 0).
   trevisan: { fonte: 'TREVISANLEIL', leiloeiro: 'Marcelo Trevisan Leiloeiro', base: 'https://www.trevisanleiloes.com.br', sufixo: 'Marcelo Trevisan' }, // 27, RS/SC
+  // 26/10 (3ª leva, leiloeiro_junta ATIVO nao_coletado com triagem `junta_2410` — SC/MT/ES/BA/RS). /leilao/lotes/imoveis
+  // pelo banco (grátis); "N itens" do contador IMÓVEIS do próprio site × lote_id enumerados; todos os lotes no seco.
+  agili: { fonte: 'AGILILEIL', leiloeiro: 'Agili Leilões', base: 'https://agilileiloes.com.br', sufixo: 'Agili Leilões' },
+  bianchi: { fonte: 'BIANCHILEIL', leiloeiro: 'Bianchi Leilões', base: 'https://bianchileiloes.com.br', sufixo: 'Bianchi Leilões' },
+  delzeir: { fonte: 'DELZEIRLEIL', leiloeiro: 'Cecilia Delzeir Leilões', base: 'https://ceciliadelzeirleiloes.com.br', sufixo: 'Cecilia Delzeir Leilões' },
+  delucca: { fonte: 'DELUCCALEIL', leiloeiro: 'De Lucca Leilões', base: 'https://deluccaleiloes.com.br', sufixo: 'De Lucca Leilões' },
+  djleilao: { fonte: 'DJLEILAO', leiloeiro: 'DJ Leilão', base: 'https://djleilao.com.br', sufixo: 'DJ Leilão' },
+  lessa: { fonte: 'LESSALEIL', leiloeiro: 'Mário Lessa Freitas Filho Leiloeiro', base: 'https://lessaleiloes.com.br', sufixo: 'Mário Lessa Freitas Filho' },
+  szortyka: { fonte: 'SZORTYKA', leiloeiro: 'Szortyka Leilões', base: 'https://szortykaleiloes.com.br', sufixo: 'Szortyka Leilões' },
+  wendelgarcia: { fonte: 'WENDELGARCIA', leiloeiro: 'Wendel Garcia Leiloeiro', base: 'https://wendelgarcia.com.br', sufixo: 'Wendel Garcia' },
+  zuccalmaglio: { fonte: 'ZUCCALMAGLIO', leiloeiro: 'Zuccalmaglio Leilões', base: 'https://zuccalmaglioleiloes.com.br', sufixo: 'Zuccalmaglio Leilões' },
+  // Só VENDA DIRETA de imóvel aberta hoje (0 lote de leilão na listagem; 1 bem /venda-direta/bem_id/N em cada).
+  // FORA, com a venda direta da listagem toda ENCERRADA hoje (lida no seco): amtleiloes (2), assertivaleiloes (4),
+  // deborabarzleiloes (3), leilaobutia (5). Os demais da leva com listagem vazia: alegranzzi, costasalman, fumagalli,
+  // gbleiloes, oscarleiloes.com.br (≠ OSCAR, oscar.leilao.br), praleiloes, aurora, beltrame, bis, ck, cpk, deboramuller,
+  // eleva, lipinski, rangel, rogerserafim, sr, veronica, zaccarias, lottermann — LeilãoPro confirmado, entram com uma
+  // linha quando publicarem imóvel. swleiloes tem 1 venda direta (pavilhão, R$ 3 mi) cuja página não fecha o bloco
+  // DESCRIÇÃO antes do rodapé: sem cidade provada, ficaria invisível em /leiloes — fora até o parser ler esse caso.
+  michelesandor: { fonte: 'MICHELESANDOR', leiloeiro: 'Michele Sandor Leilões', base: 'https://michelesandorleiloes.com.br', sufixo: 'Michele Sandor Leilões' },
+  moresco: { fonte: 'MORESCOLEIL', leiloeiro: 'Cesar Moresco Leiloeiro', base: 'https://morescoleiloes.com.br', sufixo: 'Cesar Moresco Leiloeiro' },
+  agencia: { fonte: 'CHAIEBLEIL', leiloeiro: 'Agência de Leilões (Daniel Chaieb)', base: 'https://www.agenciadeleiloes.com.br', sufixo: 'Agência de Leilões' },
 };
 
 const num = s => parseFloat(String(s || '').replace(/[^\d.,]/g, '').replace(/\./g, '').replace(',', '.')) || 0;
@@ -137,11 +158,26 @@ export function inferirTipo(titulo = '', url = '') {
 export function extrairUrlsDeLote(html, base) {
   const urls = new Map();
   for (const m of html.matchAll(/href=["'](\/leilao\/[^"']*?\/lote_id\/(\d+)(?:\/alienacao)?)["']/gi)) {
+    // Leilão de SIMULAÇÃO/teste da plataforma (26/10, Cecilia Delzeir: /leilao/leilao-simulacao-31-07-2023…/lote_id/7,
+    // praça em 2050) aparece na listagem como lote de verdade. O slug do leilão é a prova; fica fora já aqui.
+    if (/\/leilao\/(?:[^/]*-)?(?:simulacao|simulado|teste|treinamento)(?:-[^/]*)?\/lote_id\//i.test(m[1])) continue;
     try { urls.set(m[2], new URL(decodificarEntidades(m[1]), base).href); } catch { /* skip */ }
+  }
+  // VENDA DIRETA (26/10): a mesma página /leilao/lotes/imoveis tem, abaixo dos lotes de leilão, a seção "IMÓVEIS EM
+  // VENDA DIRETA" com /venda-direta/bem_id/<N> — bem à venda sem praça, que o regex acima nunca via. Medido no dia:
+  // Agili 1 lote + 1 VD, Lessa 7 + 2, Wendel Garcia 2 + 4, MP Leilão 33 + 7, Hasta Pública .lel.br 76 + 7. A chave
+  // leva o prefixo `vd` porque bem_id e lote_id são numerações diferentes no mesmo site (colidiriam no fonte_id).
+  for (const m of html.matchAll(/href=["'](\/venda-direta\/bem_id\/(\d+))["']/gi)) {
+    try { urls.set(`vd${m[2]}`, new URL(decodificarEntidades(m[1]), base).href); } catch { /* skip */ }
   }
   return urls;
 }
-export const idDaUrl = url => (String(url).match(/\/lote_id\/(\d+)/) || [])[1] || null;
+export const idDaUrl = url => {
+  const s = String(url);
+  const vd = s.match(/\/venda-direta\/bem_id\/(\d+)/);
+  if (vd) return `vd${vd[1]}`;
+  return (s.match(/\/lote_id\/(\d+)/) || [])[1] || null;
+};
 
 // Cidade/UF do TÍTULO. Formato LeilãoPro: "…CIDADE DE <cidade>/<UF>" ou "…MUNICÍPIO DE <cidade>/<UF>".
 // Fallback: último "<Cidade>/<UF>" solto (1–3 palavras), sem conector inicial. O foro ("Comarca…/UF")
@@ -275,13 +311,24 @@ export function cidadeDoCorpo(txt = '') {
     const c = sufixoMunicipio(loc[1], loc[2].toUpperCase());
     if (c) return { cidade: c, estado: loc[2].toUpperCase() };
   }
-  const bloco = (t.match(/\bDESCRI[ÇC][ÃA]O\s+keyboard_arrow_down\s+([\s\S]{20,4000}?)\s+(?:[ÚU]LTIMOS LANCES|INFORMA[ÇC][ÕO]ES JUDICIAIS|LOCALIZA[ÇC][ÃA]O \/|EDITAL E DOCUMENTOS)/) || [])[1];
+  const bloco = (t.match(/\bDESCRI[ÇC][ÃA]O\s+keyboard_arrow_down\s+([\s\S]{20,4000}?)\s+(?:[ÚU]LTIMOS LANCES|OBSERVA[ÇC][ÕO]ES|INFORMA[ÇC][ÕO]ES JUDICIAIS|LOCALIZA[ÇC][ÃA]O \/|EDITAL E DOCUMENTOS)/) || [])[1];
   if (!bloco) return { cidade: null, estado: null };
   const r = cidadeUF('', bloco);
   if (r.cidade && r.estado && ehMunicipioUF(r.cidade, r.estado)) return r;
   for (const m of bloco.matchAll(/([A-ZÀ-Ÿ][A-Za-zÀ-ÿ'.\-]+(?:\s+[A-Za-zÀ-ÿ'.\-]+){0,4}),\s*([A-Z]{2})\b/g)) {
     const c = sufixoMunicipio(m[1], m[2]);
     if (c) return { cidade: c, estado: m[2] };
+  }
+  // 3º (26/10, Bianchi/RS): corpo que só diz "…desta cidade de Horizontina" / "situado no município de X", sem UF.
+  // Vale só quando o nome existe em UMA única UF do IBGE (inferirUF 'cidade_unica'); "CRI de"/"Comarca de" NÃO entram
+  // (cartório e foro podem ser de outra cidade — ver o caso Paiçandu × Maringá no cidadeUF).
+  for (const m of bloco.matchAll(/\b(?:cidade|munic[íi]pio)\s+de\s+([A-ZÀ-Ÿ][A-Za-zÀ-ÿ'.\-]+(?:\s+(?:de|do|da|dos|das|[A-ZÀ-Ÿ][A-Za-zÀ-ÿ'.\-]+)){0,3})/g)) {
+    const pal = m[1].trim().split(/\s+/);
+    for (let n = pal.length; n >= 1; n--) {
+      const c = pal.slice(0, n).join(' ').replace(/[.,;:]+$/, '').replace(/-[A-Z]{2}$/, ''); // "cidade de Suzano-SP"
+      const x = inferirUF({ cidade: c });
+      if (x?.via === 'cidade_unica') return { cidade: titleCase(c).slice(0, 60), estado: x.uf };
+    }
   }
   return { cidade: null, estado: null };
 }
@@ -321,17 +368,37 @@ export function parseDetalhe(html, url) {
   const atualAbaixo = atual && plaus(atual.valor) && atual.valor < avaliacao ? atual.valor : 0;
   let minimo = plaus(p2?.valor || 0) || atualAbaixo || avaliacao;
   if (!avaliacao && minimo) avaliacao = minimo;
+  // VENDA DIRETA (/venda-direta/bem_id/N): sem praça; o preço é o rótulo "VALOR R$ X" (a COMISSÃO logo ao lado é
+  // ignorada). Avaliação só se o texto a declara e ela fica ACIMA do preço (Lessa 297: "Avaliação: R$ 155.000" e
+  // VALOR R$ 75.950); senão avaliação = preço, desconto 0 — nunca inventado.
+  const ehVendaDireta = /\/venda-direta\/bem_id\/\d+/.test(String(url));
+  if (ehVendaDireta) {
+    const valor = plaus(num((txt.match(/\bVALOR\s+R\$\s*([\d.]+,\d{2})/) || [])[1]));
+    minimo = valor;
+    avaliacao = avalExpl && avalExpl > valor ? avalExpl : valor;
+  }
 
   // GATE DE PRAÇA (09/09, mesmo achado do BAYIT: praça com data ⇒ nunca venda direta, regra
   // literal do dono). p1/p2 (lance do 1º/2º leilão, já extraídos acima) são o sinal — achar
   // um valor de leilão numerado é a assinatura de praça formal, incompatível com venda direta.
-  const temPraca = !!(p1 || p2);
-  const modalidade = /processo\s*n|\bju[íi]z\b|judicial/i.test(txt) && !/extrajudicial/i.test(txt) ? 'judicial'
+  const temPraca = !!(p1 || p2) && !ehVendaDireta;
+  const modalidade = ehVendaDireta ? 'venda_direta' : /processo\s*n|\bju[íi]z\b|judicial/i.test(txt) && !/extrajudicial/i.test(txt) ? 'judicial'
     : /extrajudicial/i.test(txt) ? 'extrajudicial'
     : (!temPraca && /venda\s*direta/i.test(txt)) ? 'venda_direta' : 'extrajudicial';
-  const area = extrairArea(titulo, descricao) || extrairArea(txt.slice(0, 400));
   let { cidade, estado } = cidadeUF(titulo, descricao);
   if (!cidade) ({ cidade, estado } = cidadeDoCorpo(txt));
+  // TÍTULO QUE É O NOME DO JUÍZO (26/10, Cecilia Delzeir 515): og:title "3ª VARA CÍVEL DO FORO DA COMARCA DE SUZANO/SP"
+  // e o og:description igual — o portão lia "nem imóvel nem veículo" e um terreno de 5.338 m² saía do acervo. Só
+  // nesse caso o título e a descrição vêm do início do bloco DESCRIÇÃO do lote; a cidade acima já foi lida.
+  let tituloOut = titulo, descricaoOut = descricao;
+  if (/^\s*(?:\d+\s*[ªºa°]?\s*)?(?:vara|foro|ju[íi]zo|tribunal|comarca|cart[óo]rio)\b/i.test(titulo)) {
+    const bloco = (txt.match(/\bDESCRI[ÇC][ÃA]O\s+keyboard_arrow_down\s+([\s\S]{20,4000}?)\s+(?:[ÚU]LTIMOS LANCES|OBSERVA[ÇC][ÕO]ES|INFORMA[ÇC][ÕO]ES JUDICIAIS|EDITAL E DOCUMENTOS)/) || [])[1];
+    if (bloco) {
+      tituloOut = bloco.slice(0, 160).replace(/\s+\S*$/, '').replace(/[,;:]$/, '');
+      descricaoOut = bloco.slice(0, 600);
+    }
+  }
+  const area = extrairArea(tituloOut, descricaoOut) || extrairArea(txt.slice(0, 400));
   const mat =(txt.match(/matr[íi]cula\s*(?:n[º°.]?\s*)?([\d.]{4,})/i) || [])[1] || null;
 
   // Docs: PDFs de /uploads/media/documentos_leilao (edital) e /documentos_bem (matrícula/laudo).
@@ -349,17 +416,22 @@ export function parseDetalhe(html, url) {
   }
 
   return {
-    titulo: titulo.slice(0, 180) || null,
+    titulo: tituloOut.slice(0, 180) || null,
     cidade, estado, link_foto: base.link_foto || null,
     valor_avaliacao: avaliacao, valor_minimo: minimo,
     modalidade, area_m2: area,
     // 20/09 (pedido do dono: descrição completa, como o leiloeiro publica): parser
     // compartilhado por vários tenants (JELEILOES/KLEILOES etc.) — 500 truncava no meio.
-    descricao: (descricao || '').slice(0, 8000) || null,
-    data_leilao: proximaData(txt),
+    descricao: (descricaoOut || '').slice(0, 8000) || null,
+    data_leilao: ehVendaDireta ? null : proximaData(txt),
     numero_matricula: mat,
     link_edital, link_matricula, anexos,
-    encerrado: estaEncerrado(txt),
+    // Venda direta não tem praça: a única data da página é "Disponibilizado em: 28/06/2025" (passada), e o
+    // estaEncerrado leria todo bem à venda como morto. Vale só o status do bloco do preço (entre a data de publicação
+    // e a DESCRIÇÃO).
+    encerrado: ehVendaDireta
+      ? /vendid|indispon[íi]vel|negociad|encerrad|arrematad/i.test((txt.match(/Disponibilizado em[\s\S]{0,600}?DESCRI[ÇC][ÃA]O/i) || [''])[0])
+      : estaEncerrado(txt),
   };
 }
 

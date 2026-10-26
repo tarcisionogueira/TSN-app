@@ -44,6 +44,11 @@ export const TENANTS = {
   // 1º template, mas com o endereço no LOCAL ("Rua Guapore nº 64, Bairro …, PONTA PORA-MS") e as praças
   // como "Início/Encerramento 1º Leilão".
   ipc: { fonte: 'IPCLEILOES', leiloeiro: 'IPC Leilões (Cibele Rigolin Pereira de Figueiredo, JUCEMS 038)', base: 'https://ipcleiloes.com.br' },
+  // 26/10 (3ª leva das Juntas, triagem `junta_2410`). Home → leilões → lotes lidos pelo banco e passados no motor em seco.
+  dux: { fonte: 'DUXLEILOES', leiloeiro: 'Dux Leilões', base: 'https://duxleiloes.com.br', catalogo: '/' },
+  flaviocosta: { fonte: 'FLAVIOCOSTA', leiloeiro: 'Flávio Costa Leilões', base: 'https://flaviocostaleiloes.com.br', catalogo: '/' },
+  jussiara: { fonte: 'JUSSIARALEIL', leiloeiro: 'Jussiara Leilões', base: 'https://jussiaraleiloes.com', catalogo: '/' },
+  mrl4: { fonte: 'MRL4LEILOES', leiloeiro: 'MRL4 Leilões', base: 'https://mrl4leiloes.com.br', catalogo: '/' },
 };
 
 // Leilão/lote de TESTE da plataforma (brasilialeiloes, rodrigo, IPC, marquesbarreto, lucasignacio — 24/10) e de
@@ -246,12 +251,21 @@ function parseResponsivo(h, url) {
   const { cidade, estado } = cidadeDoLote({ url, local, texto: `${curta} ${completa}` });
 
   // Praças do cabeçalho: "<b>1º Leilão</b><p> 10/11/2026 às 10:00:00" ou "<b>Data</b><p> …" (uma por praça).
-  const pracas = [...h.matchAll(/<b>\s*([^<]{0,30}?)\s*<\/b>\s*<p>\s*(\d{2}\/\d{2}\/\d{4}\s*(?:[àa]s)?\s*\d{2}:\d{2})/gi)]
-    .filter((m) => /leil|data|pra[çc]a/i.test(m[1])).map((m) => dataPlausivel(dataHora(m[2]))).filter(Boolean);
+  // `<b class="me-1">1ª Hasta</b>` (26/10, Dux): rótulo com atributo e "Hasta" no lugar de "Leilão".
+  const pracas = [...h.matchAll(/<b(?:\s[^>]*)?>\s*([^<]{0,30}?)\s*<\/b>\s*<p>\s*(\d{2}\/\d{2}\/\d{4}\s*(?:[àa]s)?\s*\d{2}:\d{2})/gi)]
+    .filter((m) => /leil|data|pra[çc]a|hasta/i.test(m[1])).map((m) => dataPlausivel(dataHora(m[2]))).filter(Boolean);
+  // Sem praça no cabeçalho, o prazo do lote: "Este lote se encerrará no dia: <p>23/11/2026 <span>a partir 13:00:00" (MRL4).
+  if (!pracas.length) {
+    const fim = h.match(/se\s+encerrar[áa]\s+no\s+dia:?\s*<\/h6>\s*<p[^>]*>\s*(\d{2}\/\d{2}\/\d{4})(?:[\s\S]{0,120}?(\d{2}:\d{2}))?/i);
+    const iso = fim && dataPlausivel(dataHora(`${fim[1]}${fim[2] ? ` às ${fim[2]}` : ''}`));
+    if (iso) pracas.push(iso);
+  }
 
   // Valores por rótulo. "Incremento" não é preço. Rótulo de praça ("1º Leilão") ou VAZIO (Rodrigo) = valores em
   // ordem de praça; na 1ª praça judicial o mínimo É a avaliação. "Valor de Venda" (venda direta) não é avaliação.
-  const vals = [...h.matchAll(/<p class="mb-0 destaque">\s*<b>([^<]*)<\/b>\s*R\$\s*([\d.]+,\d{2})/gi)]
+  // `<div class="bem-lance-valores"><div><strong>Avaliação: </strong>R$ …` (26/10, Dux) é a mesma ficha em outra marcação.
+  const vals = [...h.matchAll(/<p class="mb-0 destaque">\s*<b>([^<]*)<\/b>\s*R\$\s*([\d.]+,\d{2})|<div>\s*<strong>([^<]*)<\/strong>\s*R\$\s*([\d.]+,\d{2})/gi)]
+    .map((m) => (m[1] != null ? m : [m[0], m[3], m[4]]))
     .map((m) => ({ rot: limpar(m[1]).replace(/:\s*$/, '').trim(), v: plaus(num(m[2])) }))
     .filter((x) => x.v && !/incremento/i.test(x.rot));
   const mins = vals.filter((x) => !/^avalia/i.test(x.rot)).map((x) => x.v);
@@ -293,7 +307,9 @@ export function parseDetalhe(html, url, { agora = new Date() } = {}) {
   // Leilão/lote de teste da plataforma: nunca vira lote.
   if (ehTeste(nomeLeilao) || ehTeste((String(url).match(/\/lote\/\d+\/([a-z0-9-]+)/) || [])[1])) return { encerrado: true, teste: true };
   // Status do lote diferente de ABERTO (VENDIDO, ENCERRADO, SUSPENSO, RETIRADO, CANCELADO…) = fora.
-  if (status && !/ABERTO|EM LOTEAMENTO|AGUARDANDO|EM BREVE/.test(status)) return { ...det, encerrado: true };
+  // "ENVIE SUA PROPOSTA" (26/10, Jussiara: 24 lotes do leilão de venda direta 851, prazo 31/12/2026) é bem recebendo
+  // proposta — aberto; tratá-lo como status desconhecido descartava o leilão inteiro como encerrado.
+  if (status && !/ABERTO|EM LOTEAMENTO|AGUARDANDO|EM BREVE|PROPOSTA/.test(status)) return { ...det, encerrado: true };
   // 1ª praça vencida e 2ª por vir: o lance de agora é o da 2ª.
   const t = (d) => (d ? Date.parse(d) : NaN);
   if (det.data_leilao_2 && t(det.data_leilao) < agora && t(det.data_leilao_2) >= agora) {

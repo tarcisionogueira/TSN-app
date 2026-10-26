@@ -11,7 +11,11 @@ export const TENANTS_POR_CHAVE = TENANTS;   // { leffa, oscar } — o wrapper fi
 export default {
   chave: 'leilaopro',                 // proposito Bright Data + rótulo
   catalogo: '/leilao/lotes/imoveis',
-  paginaParam: 'pagina',
+  // `page_a` (26/10): a listagem mostra 40 lotes de leilão por página e pagina por `?page_a=N` (o link "Próximo" do
+  // próprio site). `?pagina=N` era ignorado e devolvia a pág. 1 de novo — o laço parava nela e quem tinha mais de 40
+  // imóveis ficava cortado em 40 sem aviso: GRANDES 40 de 59, RAUPP 40 de 45, RENOVAR 40 de 47, SANTOSBORIN 40 de 51,
+  // HASTAPUBLICALEL 40 de 76. Com `page_a`, o `temProxima` do runner também passa a enxergar o corte.
+  paginaParam: 'page_a',
   maxPages: 3,
   tenants: Object.values(TENANTS),    // default: todos os tenants conhecidos
   parse: { extrairUrlsDeLote, idDaUrl, parseDetalhe, montarRow, checarQualidade },

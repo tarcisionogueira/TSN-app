@@ -37,6 +37,11 @@ export const TENANTS = {
   aba: { fonte: 'ABALEILOES', leiloeiro: 'ABA Leilões', base: 'https://abaleiloes.com.br' }, // 6, SE
   araujo: { fonte: 'LEILOESARAUJO', leiloeiro: 'Leilões Araújo', base: 'https://leiloesaraujo.com.br' }, // 1, RN/PB
   rapidaovende: { fonte: 'RAPIDAOVENDE', leiloeiro: 'Rapidão Vende', base: 'https://rapidaovende.com.br' }, // 3, TO
+  // 26/10 (3ª leva das Juntas, regra do dono: 1 lote já vale): /buscador?categoria=2 dá 404, /busca?tipo=Imoveis abre com
+  // `var lote`. Catálogo e lote lidos pelo banco e passados no motor em seco.
+  edgarcarvalho: { fonte: 'EDGARCARVALHO', leiloeiro: 'Edgar de Carvalho Jr. Leiloeiro', base: 'https://edgarcarvalholeiloeiro.com.br' }, // 1, RJ
+  // camilaleiloes.com.br segue FORA: o único lote (Sítio Vargem Grande, id 22) diz "Aberto para lances" na 2ª praça com
+  // `dataProximoLeilao` e `dataLimitePropostas` vazios — sem data que prove leilão vivo (o mesmo caso de elydaluzramos).
 };
 
 export function extrairUrlsDeLote(html, base) {
@@ -86,6 +91,18 @@ function cidadeAntesDaBarra(t) {
 // presente nos sites do mesmo front (Portella, De Paula, Fabiano Ayupp, Leilões JA, Rodrigo Costa — 24/10). É o campo
 // estruturado do próprio site; o título nem sempre traz a cidade ("Apartamento no Engenho Novo") e a descrição enganava
 // ("…Rio de Janeiro/RJ" virava "Janeiro"). Só vale cidade que existe no IBGE para a UF — senão cai no caminho antigo.
+// "…, Urca, Rio de Janeiro/RJ." na descrição (26/10, Edgar de Carvalho): o padrão antigo `de <X>/<UF>` pegava
+// "Janeiro". Agora: cada "<palavras>/<UF>" do texto, com o MAIOR sufixo de até 4 palavras que existe no IBGE para a UF.
+function cidadeDaDescricao(desc) {
+  for (const m of String(desc || '').replace(/<[^>]+>/g, ' ').matchAll(/((?:[A-Za-zÀ-ÿ'.-]+\s+){0,3}[A-Za-zÀ-ÿ'.-]+)\s*[-/]\s*([A-Z]{2})\b/g)) {
+    const pal = m[1].trim().split(/\s+/);
+    for (let i = 0; i < pal.length; i++) {
+      const nome = pal.slice(i).join(' ');
+      if (Object.prototype.hasOwnProperty.call(MUNICIPIOS, `${m[2]}|${normCidade(nome)}`)) return [null, nome, m[2]];
+    }
+  }
+  return null;
+}
 function cidadeDoPino(html) {
   const m = String(html || '').match(/<span class=["']s1["'][^>]*>\s*(?:<svg[\s\S]*?<\/svg>)?\s*([A-Za-zÀ-ÿ'][A-Za-zÀ-ÿ' .-]{1,50}?)\s+-\s+([A-Z]{2})\s*</);
   if (!m) return null;
@@ -117,7 +134,7 @@ export function parseDetalhe(html, url) {
   // "… EM JUIZ DE FORA - MG", "PRÉDIO DO ABC HOTEL CARATINGA/MG", "… CRI TIROS/MG" — cidade/UF no fim do título.
   const cu = cidadeDoPino(html) || (titulo || '').match(/\bEM\s+([A-ZÀ-Ú][A-ZÀ-Ú ]+?)\s*[-/]\s*([A-Z]{2})\s*$/i)
     || cidadeAntesDaBarra(titulo || '')
-    || String(lote.descricao || '').match(/\bde\s+([A-ZÀ-Ú][\wÀ-ú ]+?)[-/]([A-Z]{2})\b/);
+    || cidadeDaDescricao(lote.descricao);
   const desc = String(lote.descricao || '').replace(/\s*\n\s*/g, ' ').trim();
   const reMat = /matr[íi]cula\s*:?\s*(?:n[º°.o]*\s*)?:?\s*([\d.]{3,})/i;
   const mat = (desc.match(reMat) || String(titulo || '').match(reMat) || [])[1] || null;

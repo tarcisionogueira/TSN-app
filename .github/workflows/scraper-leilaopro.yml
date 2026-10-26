@@ -32,9 +32,9 @@ on:
         required: false
         default: '1'
       tenants:
-        description: 'tenants csv (padrão: os 10 da 1ª leva + 35 da triagem575 de 24/10 + trevisan — ver leilaopro-parse.mjs; igual ao LEILAOPRO_TENANTS abaixo)'
+        description: 'tenants csv (padrão: 1ª leva + triagem575 de 24/10 + trevisan + 12 da 3ª leva de 26/10 — ver leilaopro-parse.mjs; igual ao LEILAOPRO_TENANTS abaixo)'
         required: false
-        default: 'leffa,oscar,hastapublicalel,raupp,renovar,qleilao,nsleiloes,jac,bidgo,soleiloes,santoseborin,grandes,mercado,pietoso,mpleilao,santamaria,scholante,regional,schonardie,vsleiloes,bartmann,rz,gabrielrosa,gt,scotto,rabuske,ferronato,clademir,tonial,arnoldo,dld,ritta,ju,scheid,super,vidal,kirinus,blm,barbieri,machadors,michelli,clovis,feliperotta,eduardovivian,farias,trevisan'
+        default: 'leffa,oscar,hastapublicalel,raupp,renovar,qleilao,nsleiloes,jac,bidgo,soleiloes,santoseborin,grandes,mercado,pietoso,mpleilao,santamaria,scholante,regional,schonardie,vsleiloes,bartmann,rz,gabrielrosa,gt,scotto,rabuske,ferronato,clademir,tonial,arnoldo,dld,ritta,ju,scheid,super,vidal,kirinus,blm,barbieri,machadors,michelli,clovis,feliperotta,eduardovivian,farias,trevisan,agili,bianchi,delzeir,delucca,djleilao,lessa,szortyka,wendelgarcia,zuccalmaglio,michelesandor,moresco,agencia'
       max_lotes:
         description: 'Máx. de lotes NOVOS por execução (por tenant)'
         required: false
@@ -66,7 +66,7 @@ jobs:
         # Todas as fontes dos tenants, não só LEFFA: com LEFFA fresco pelo runner de casa o freio pulava os 45
         # tenants novos (25/10). Fonte sem lote ativo conta como VELHA, então o cron roda — custo contido pela
         # busca grátis primeiro e pelo teto do propósito 'leilaopro' no Bright Data.
-        run: node scripts/coleta-recente.mjs "LEFFA,OSCAR,ILEILOES,LUISLEIL,VERSALLES,HASTAPUBLICALEL,RAUPP,RENOVAR,QLEILAO,NSLEILOES,JACLEILOES,BIDGO,SOLEILOES,SANTOSBORIN,GRANDESLEIL,MERCADOLEIL,PIETOSO,MPLEILAO,SANTAMARIALEIL,SCHOLANTE,REGIONALLEIL,SCHONARDIE,VSLEILOES,BARTMANN,RZLEILOES,GABRIELROSA,GTLEILOES,SCOTTOLEIL,RABUSKE,FERRONATO,CLADEMIR,TONIALLEIL,ARNOLDOLEIL,DLDLEILOEIRO,RITTALEIL,JULEILOES,SCHEIDLEIL,SUPERLEIL,VIDALLEIL,KIRINUSLEIL,BLMLEILOES,BARBIERILEIL,MACHADORS,MICHELLILEIL,CLOVISLEIL,FELIPEROTTA,EDUARDOVIVIAN,FARIASLEIL,TREVISANLEIL" 7 >> "$GITHUB_OUTPUT"
+        run: node scripts/coleta-recente.mjs "LEFFA,OSCAR,ILEILOES,LUISLEIL,VERSALLES,HASTAPUBLICALEL,RAUPP,RENOVAR,QLEILAO,NSLEILOES,JACLEILOES,BIDGO,SOLEILOES,SANTOSBORIN,GRANDESLEIL,MERCADOLEIL,PIETOSO,MPLEILAO,SANTAMARIALEIL,SCHOLANTE,REGIONALLEIL,SCHONARDIE,VSLEILOES,BARTMANN,RZLEILOES,GABRIELROSA,GTLEILOES,SCOTTOLEIL,RABUSKE,FERRONATO,CLADEMIR,TONIALLEIL,ARNOLDOLEIL,DLDLEILOEIRO,RITTALEIL,JULEILOES,SCHEIDLEIL,SUPERLEIL,VIDALLEIL,KIRINUSLEIL,BLMLEILOES,BARBIERILEIL,MACHADORS,MICHELLILEIL,CLOVISLEIL,FELIPEROTTA,EDUARDOVIVIAN,FARIASLEIL,TREVISANLEIL,AGILILEIL,BIANCHILEIL,DELZEIRLEIL,DELUCCALEIL,DJLEILAO,LESSALEIL,SZORTYKA,WENDELGARCIA,ZUCCALMAGLIO,MICHELESANDOR,MORESCOLEIL,CHAIEBLEIL" 7 >> "$GITHUB_OUTPUT"
       - name: Rodar scraper LEILAOPRO
         if: github.event.inputs.forcar == '1' || steps.freio.outputs.pular != '1'
         env:
@@ -77,6 +77,6 @@ jobs:
           BRIGHTDATA_MAX_REQ_SEMANA: ${{ secrets.BRIGHTDATA_MAX_REQ_SEMANA }}
           LEILAOPRO_DEBUG: ${{ github.event.inputs.debug || '0' }}
           LEILAOPRO_DRYRUN: ${{ github.event.inputs.dryrun || '0' }}
-          LEILAOPRO_TENANTS: ${{ github.event.inputs.tenants || 'leffa,oscar,hastapublicalel,raupp,renovar,qleilao,nsleiloes,jac,bidgo,soleiloes,santoseborin,grandes,mercado,pietoso,mpleilao,santamaria,scholante,regional,schonardie,vsleiloes,bartmann,rz,gabrielrosa,gt,scotto,rabuske,ferronato,clademir,tonial,arnoldo,dld,ritta,ju,scheid,super,vidal,kirinus,blm,barbieri,machadors,michelli,clovis,feliperotta,eduardovivian,farias,trevisan' }}
+          LEILAOPRO_TENANTS: ${{ github.event.inputs.tenants || 'leffa,oscar,hastapublicalel,raupp,renovar,qleilao,nsleiloes,jac,bidgo,soleiloes,santoseborin,grandes,mercado,pietoso,mpleilao,santamaria,scholante,regional,schonardie,vsleiloes,bartmann,rz,gabrielrosa,gt,scotto,rabuske,ferronato,clademir,tonial,arnoldo,dld,ritta,ju,scheid,super,vidal,kirinus,blm,barbieri,machadors,michelli,clovis,feliperotta,eduardovivian,farias,trevisan,agili,bianchi,delzeir,delucca,djleilao,lessa,szortyka,wendelgarcia,zuccalmaglio,michelesandor,moresco,agencia' }}
           LEILAOPRO_MAX_LOTES: ${{ github.event.inputs.max_lotes || '40' }}
         run: node scripts/scraper-leilaopro.mjs

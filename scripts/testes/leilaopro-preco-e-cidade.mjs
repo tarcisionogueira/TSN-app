@@ -70,4 +70,36 @@ assert.deepEqual([...urlsTrev.keys()].sort(), ['148', '7208'], 'sufixo /alienaca
 assert.equal(urlsTrev.get('148'), 'https://www.trevisanleiloes.com.br/leilao/terreno-de-esquina-232-75m2-em-campo-bom-rs-16-09-2026-15-39-18/lote_id/148/alienacao');
 assert.equal(idDaUrl(urlsTrev.get('148')), '148');
 
+// 26/10 (3ª leva das Juntas) — textos REAIS do seco.
+// Venda direta: /venda-direta/bem_id/N na MESMA listagem de imóveis, com chave `vd<N>` (bem_id ≠ lote_id).
+const listagemVD = `<a href="/leilao/leilao-alienacao-fiduciaria-gdbiosul/lote_id/608">x</a>
+<a href="/venda-direta/bem_id/364"><img></a><a href="/venda-direta/bem_id/364">COBERTURA</a>
+<a href="/leilao/leilao-simulacao-31-07-2023-17-36-24/lote_id/7">simulação</a>`;
+const urlsVD = extrairUrlsDeLote(listagemVD, 'https://agilileiloes.com.br');
+assert.deepEqual([...urlsVD.keys()].sort(), ['608', 'vd364'], 'venda direta entra; leilão de SIMULAÇÃO não');
+assert.equal(idDaUrl(urlsVD.get('vd364')), 'vd364');
+// Agili VD 364: "VALOR R$ 1.300.000,00 COMISSÃO 6% R$ 78.000,00" — a comissão não é preço; data de publicação não é praça.
+d = parseDetalhe(pagina('COBERTURA DUPLEX PRAIA DE MARISCAL, BOMBINHAS SANTA CATARINA - Agili Leilões',
+  'HOME VENDA DIRETA COBERTURA DUPLEX Disponibilizado em: 28/06/2025 16:04:11 SOLICITAR MAIS INFORMAÇÕES VALOR R$ 1.300.000,00 COMISSÃO 6% R$ 78.000,00 ESTE SITE PRECISA DO JAVASCRIPT HABILITADO PARA FUNCIONAR! Propostas Nenhuma proposta recebida DESCRIÇÃO keyboard_arrow_down Apartamento Duplex nº 04 (204), município de Bombinhas/SC, área real privativa de 12,50m². OBSERVAÇÕES keyboard_arrow_down Faturamento por temporada'),
+  'https://agilileiloes.com.br/venda-direta/bem_id/364');
+assert.deepEqual([d.valor_avaliacao, d.valor_minimo, d.modalidade, d.data_leilao, d.encerrado], [1300000, 1300000, 'venda_direta', null, false]);
+assert.deepEqual([d.cidade, d.estado], ['Bombinhas', 'SC']);
+// Lessa VD 297: avaliação declarada ACIMA do preço vale como avaliação.
+d = parseDetalhe(pagina('SALA NA RUA ITAPEVA - Mário Lessa Freitas Filho', 'Disponibilizado em: 17/02/2022 12:04:58 VALOR R$ 75.950,00 COMISSÃO 10% R$ 7.595,00 Propostas DESCRIÇÃO keyboard_arrow_down Sala nº 406. Avaliação: R$ 155.000,00 (cento e cinquenta e cinco mil reais). OBSERVAÇÕES'),
+  'https://lessaleiloes.com.br/venda-direta/bem_id/297');
+assert.deepEqual([d.valor_avaliacao, d.valor_minimo], [155000, 75950]);
+// Zuccalmaglio VD 339: "ENCERRA EM ENCERRADO" no bloco do preço = encerrado.
+d = parseDetalhe(pagina('X - Zuccalmaglio', 'Disponibilizado em: 07/08/2024 12:14:49 VALOR R$ 500.000,00 COMISSÃO 10% R$ 50.000,00 ENCERRA EM ENCERRADO ENCERRAMENTO 30/07/2025 11:21:00 Propostas DESCRIÇÃO keyboard_arrow_down Casa.'),
+  'https://zuccalmaglioleiloes.com.br/venda-direta/bem_id/339');
+assert.equal(d.encerrado, true);
+// Cecilia Delzeir 515: og:title é o nome do JUÍZO — título e descrição vêm do bloco DESCRIÇÃO.
+d = parseDetalhe(pagina('3ª VARA CÍVEL DO FORO DA COMARCA DE SUZANO/SP - Cecilia Delzeir Leilões',
+  'LANCE INICIAL 1º LEILÃO R$ 1.791.827,46 LANCE INICIAL 2º LEILÃO R$ 1.254.279,22 DESCRIÇÃO keyboard_arrow_down Um Terreno distando aproximadamente 16 km da cidade de Suzano-SP, encerrando a área de 5.338,09m². OBSERVAÇÕES keyboard_arrow_down x'),
+  'https://ceciliadelzeirleiloes.com.br/leilao/x/lote_id/515');
+assert.match(d.titulo, /^Um Terreno distando/);
+assert.deepEqual([d.cidade, d.estado], ['Suzano', 'SP']);
+// Bianchi 1795: corpo só diz "desta cidade de Horizontina" — município de UMA UF no IBGE vira cidade/UF.
+assert.deepEqual(cidadeDoCorpo('DESCRIÇÃO keyboard_arrow_down IMÓVEL: TERRENO URBANO NO 15, sito na Vila São José, zona Sul, desta cidade de Horizontina, com as seguintes confrontações. ÚLTIMOS LANCES'),
+  { cidade: 'Horizontina', estado: 'RS' });
+
 console.log('leilaopro-preco-e-cidade: todos os casos passaram');
