@@ -22,6 +22,9 @@ conferir('status 1 (aberto) — fixture original', comProximo(base, futuro), fal
 conferir('status 2 com próximo leilão no futuro (caso Rafael 27/10)', comProximo(comLote(base, 2), futuro), false);
 conferir('status 2 com próximo leilão já passado', comProximo(comLote(base, 2), '2026-01-10'), true);
 conferir('status 4 (fora do aberto)', comProximo(comLote(base, 4), futuro), true);
+// Ramos Leilões / Rodrigo Costa (27/10): status 1 "Aberto para lances" com TODAS as praças vencidas (fixture: 1º 30/09,
+// 2º 22/10/2026; próximo leilão trocado para 10/01/2026) — praça vencida não entra como lote ativo.
+conferir('status 1 com todas as praças vencidas', comProximo(base, '2026-01-10'), true);
 
 console.log(`${falhas ? '✗' : '✓'} suporte-oferta-status: ${ok} ok, ${falhas} falha(s)`);
 process.exit(falhas ? 1 : 0);

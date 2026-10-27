@@ -5635,7 +5635,7 @@ const SUPORTE_TENANTS = [
   // 1º leilão 24/11/2026, 2º 01/12/2026).
   // FICARAM DE FORA, de propósito: leiloesgoias.com.br (é o MESMO site da Bueno — mesmos 9 lotes, mesmo HTML);
   // kleiberleiloes/kleiberjrleiloes/alvaroantonioleiloes/lumussaleiloes (um banco só, os MESMOS 2 lotes nos quatro,
-  // cidade ilegível no card); www.facanhaleiloes.com.br (= facanhaleiloes); emleilao.com.br (493 itens, todos
+  // cidade ilegível no card — 27/10: o kleiberleiloes entrou como o representante do banco, bloco 27/10 abaixo); www.facanhaleiloes.com.br (= facanhaleiloes); emleilao.com.br (493 itens, todos
   // "Leilão CAIXA … licitação aberta" — imóvel da Caixa, que já entra pela fonte CEF; duplicaria); trileiloes.com.br
   // (vitrine de "Melhor Proposta" sem praça nem data, foto em 1 de 24 cards).
   { domain: 'buenoleiloes.com.br', leiloeiro: 'Bueno Leilões' },
@@ -5688,6 +5688,16 @@ const SUPORTE_TENANTS = [
   { domain: 'bessaleiloes.com.br', leiloeiro: 'Bessa Leilões (Paulo Roberto Araújo de Oliveira Bessa)' },
   { domain: 'maglianoleiloes.com.br', leiloeiro: 'Magliano Leilões (Raphael Queiroga Magliano)' },
   { domain: 'sallesleiloes.com.br', leiloeiro: 'Salles Leilões (Liliane de Narde Salles)' },
+  // 27/10 — conectados os dois que ficaram de fora com motivo. Pelo banco (pg_net): /buscador (sem filtro) devolve o
+  // MESMO `article.lote-main` deste template (24 cards em cada), então o parser é o certo.
+  //  - Kleiber (MT): Kleiber, Kleiber Jr., Álvaro Antônio e Lumussa são UM banco — as quatro homes listam os mesmos
+  //    eventos (136…158) e os mesmos lotes. Entra SÓ o kleiberleiloes (um tenant = um fonte_id por lote; os quatro
+  //    duplicariam cada lote). Hoje: só prefeituras (veículos/máquinas — o coletor de veículos lê a mesma lista);
+  //    imóvel em /buscador?categoria=2: 0.
+  //  - ES Leilões: o "evento de imóvel" da home (área de 250.542 m² em São José do Calçado/ES) é o leilão 1, praça de
+  //    18/06/2025 — encerrado. O buscador de imóveis vazio é o retrato certo (0 de 0 vivos); o resto é prefeitura.
+  { domain: 'kleiberleiloes.com.br', leiloeiro: 'Kleiber Leilões (Kleiber Leite Pereira)' },
+  { domain: 'esleiloes.com.br', leiloeiro: 'ES Leilões (Sérgio de Paula Pereira)' },
   // `donizetteleiloes.leilao.br` é o MESMO site do .com.br (mesmo `arrematante.` e mesmo
   // static). Fora de propósito: o `tenantKey` deriva do domínio antes do primeiro ponto, então
   // os dois gerariam o mesmo `fonte_id` e um sobrescreveria o outro sem nada aparecer.

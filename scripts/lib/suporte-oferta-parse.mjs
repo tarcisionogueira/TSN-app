@@ -52,8 +52,20 @@ export const TENANTS = {
   uni: { fonte: 'UNILEILOES', leiloeiro: 'Unileilões (Fabiana Cusato)', base: 'https://www.unileiloes.com.br' }, // 2 (SP)
   // FORA: simoesleiloes e vjleiloes (MG) — outro front da Suporte ("Aguarde…", bens montados por JS): /busca e /buscador
   // não trazem bem nenhum no HTML; nenhum parser nosso lê esse front.
-  // camilaleiloes.com.br segue FORA: o único lote (Sítio Vargem Grande, id 22) diz "Aberto para lances" na 2ª praça com
-  // `dataProximoLeilao` e `dataLimitePropostas` vazios — sem data que prove leilão vivo (o mesmo caso de elydaluzramos).
+  // 27/10 — os 4 que estavam FORA entram (pedido do dono: ATIVO em família que já lemos fica conectado, mesmo sem lote
+  // aproveitável hoje). Pelo banco (pg_net), /busca?tipo=Imoveis 200 com `var lote` na página do lote. Entre parênteses:
+  // imóveis no catálogo em 27/10. O que os deixava de fora agora é tratado no parser, não na lista:
+  //  - Ramos (elydaluzramos) e Rodrigo Costa: lote "Aberto para lances" com TODAS as praças vencidas (Ramos 21/10 e
+  //    21/11/2025; Rodrigo Costa 14/10/2026) → `pracasVencidas` marca encerrado; o que tiver praça futura entra.
+  //  - Rymer: a página não tem o pino de cidade; a cidade sai do título/descrição quando houver, senão o lote entra sem
+  //    cidade (UF do leiloeiro), como os do Monteiro no front antigo.
+  //  - Camila: o único lote não traz data de praça (`dataProximoLeilao` nulo) — a checagem de qualidade decide.
+  rymer: { fonte: 'RYMERLEILOES', leiloeiro: 'Rymer Leilões (Jonas Rymer)', base: 'https://www.rymerleiloes.com.br' }, // 50 (RJ/SP)
+  ramos: { fonte: 'RAMOSLEILOES', leiloeiro: 'Ramos Leilões (Ely da Luz Ramos)', base: 'https://www.elydaluzramos.com.br' }, // 4 (SC)
+  rodrigocosta: { fonte: 'RODRIGOCOSTA', leiloeiro: 'Rodrigo Costa Leiloeiro', base: 'https://www.rodrigocostaleiloeiro.com.br' }, // 3 (RJ)
+  camila: { fonte: 'CAMILALEILOES', leiloeiro: 'Camila Leilões (Camila Nogueira Lima)', base: 'https://www.camilaleiloes.com.br' }, // 1 (RJ)
+  // FORA: sevidanesleiloeira.com.br — catálogo com 20 imóveis, mas a página de lote responde HTTP 500 (3 de 3 testadas
+  // pelo banco em 27/10, inclusive a URL exata do card): sem página lida não há lote.
 };
 
 export function extrairUrlsDeLote(html, base) {
@@ -124,6 +136,14 @@ function cidadeDoPino(html) {
 
 // Data da praça (ISO local devolvido por dataBr) ainda por acontecer.
 const pracaFutura = (iso) => { const t = Date.parse(String(iso || '')); return Number.isFinite(t) && t > Date.now(); };
+// Todas as praças conhecidas (próximo leilão, 1º e 2º) passaram há mais de 2 dias. Ramos Leilões (elydaluzramos, 27/10):
+// lote.status 1 e "Aberto para lances" com 1º leilão em 21/10/2025 e 2º em 21/11/2025; Rodrigo Costa: próximo leilão
+// 14/10/2026. A vitrine não fecha o lote sozinha — sem esta regra ele entraria ativo com praça vencida. Sem data
+// nenhuma não decide (fica com o status do site).
+const pracasVencidas = (...isos) => {
+  const ts = isos.map((d) => Date.parse(String(d || ''))).filter(Number.isFinite);
+  return ts.length > 0 && Math.max(...ts) < Date.now() - 2 * 864e5;
+};
 
 export function parseDetalhe(html, url) {
   const lote = varJson(html, 'lote');
@@ -179,6 +199,7 @@ export function parseDetalhe(html, url) {
     // segue "Aberto para lances" rumo à praça seguinte (Rafael 1014–1018, 27/10: 2º leilão em 27/10) — só
     // vale como aberto com o próximo leilão no FUTURO, para não reabrir lote de praça já passada.
     encerrado: !(Number(lote.status) === 1 || (Number(lote.status) === 2 && pracaFutura(dataLeilao)))
+      || pracasVencidas(prox, d1, d2)
       || /arrematad|encerrad|cancelad|suspens/i.test(String(leilao.statusString || '')),
   };
 }
