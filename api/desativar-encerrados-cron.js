@@ -86,7 +86,14 @@ export default async function handler(req, res) {
 
   // Cópias do mesmo bem (13/10): veículo relistado e 2ª praça publicada como outro anúncio.
   // RPC própria — dentro de desativar_leiloes_encerrados somava ~2 s a quem já estourava o teto.
-  const relistados = await rpcFinal('reconciliar_relistados', true);
+  // 27/10 (pendência 305): uma RPC por tabela. Juntas somavam os dois heaps frios num só statement
+  // timeout de 8 s (medido: veículos 1 s + imóveis 4,9 s frio; pico 7,9 s). Cada uma tem os seus 8 s.
+  const relVeic = await rpcFinal('reconciliar_relistados_veiculos', true);
+  const relImov = await rpcFinal('reconciliar_relistados_imoveis', true);
+  const relistados = (relVeic?.erro || relImov?.erro)
+    ? { erro: [relVeic?.erro && `veiculos: ${relVeic.erro}`, relImov?.erro && `imoveis: ${relImov.erro}`].filter(Boolean).join(' | '),
+        ...(!relVeic?.erro && relVeic), ...(!relImov?.erro && relImov) }
+    : { ...relVeic, ...relImov };
 
   // Mesma varredura horária cuida do DESCONTO ANUNCIADO: ele é o da praça mais descontada ainda
   // DISPONÍVEL, e "ainda disponível" muda com o relógio sem ninguém escrever na linha. Quando a
