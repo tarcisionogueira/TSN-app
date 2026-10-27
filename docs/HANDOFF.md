@@ -7,6 +7,63 @@
 
 
 
+## 26–27/10 — ARENA DE UX POR NÍVEL · COFRE DO LEILOEIRO · 656 LEILOEIROS CONECTADOS · GRÁFICO MERCADO
+
+**Contagem de leiloeiros (leiloeiro_junta, domínios distintos, 27/10 ~01h30 UTC, já com recruzar):** coletado 365 ·
+codigo_sem_lote 291 (conectado, sem lote hoje) · agregador 62 · nao_coletado **301** (eram 402 em 26/10 à tarde).
+Total conectado = 656. Acervo: ~35,8 mil imóveis · ~12,9 mil veículos.
+- **LeilõesBR (44, 906395ab):** leitor novo no motor (`LBR_<nome>`, scraper-leiloesbr.yml seg/qui). É plataforma de
+  ARTE/antiguidade: 0 imóvel em ~120 mil peças; ficam ligados. Revisar gabrielrota (3) e errolflynn (2) peças
+  "Veículos" (lista marcada como cortada); jpjoias e thomazdeaquino com DNS falho.
+- **Lojas Superbid (32, b769d41e):** storeId lido do `siteconfig.superbid.net/<host>/style.config.json`; quase tudo já
+  vinha pelo portal SUPERBID. Coletor `scraper-sbidloja` (`SBL_<loja>`, diário 15h40 UTC) só grava oferta que nenhum
+  coletor tem (1 gravada: Davison, Santa Inês/MA). Mapa domínio×loja no recruzar (20261027_recruzar_lojas_superbid_mapa.sql).
+  SBL_CS e SBL_PEDROKRONBERG "falhou" = único lote é fração ideal (descartado), não defeito.
+- **Faltam por família:** BomValor (8 dos rotulados SUPERBID + 4) · Nova Serrana 4 · Triacca 2 · Leilo GO 2 · Trade
+  Leilões (codepen) 3 · sites próprios Next.js · 82 DESCONHECIDA · 49 DNS morto · 17 SSL inválido.
+
+**Regra do recruzar (não errar de novo):** o diário (monitor-fontes-cron) roda SEM lista; fallback = domínios já
+marcados `codigo`. Para marcar domínio conectado sem lote, passe no 2º argumento a lista dos já `codigo` + os
+novos, sempre em seco antes (`p_aplicar` false). NUNCA `leiloeiro_triagem.parser_existente` como lista (moveu 69/198
+domínios errado em 26/10). Função reescrita para 3,9 s (era 11 s > teto 8 s do PostgREST; 20261026_recruzar_rapido.sql).
+
+**Leiloeiro e matrícula só para pagante (dono):** `imoveis_leilao` revogada para anon/authenticated (dono rodou);
+leitura pela view `imoveis_leilao_mascarado` (mascara leiloeiro, processo, edital, matrícula, ficha_cef.matricula,
+doc_fatos); canário `leiloeiro_vaza_para_anon()` = 6 zeros. Pro anual mantém acesso até o fim do período pago.
+Migrações 20261026_cofre_leiloeiro.sql e 20261026_matricula_so_pagante.sql.
+
+**Arena 2 (UX por nível: sem login → explorador → Pro → veículos → combo → assessorado):** HomeCliente por
+capacidade, cadeados com CTA, "Custo total estimado do arremate" na análise, origem do veículo + "o que conferir",
+checkout com `volta`/origem e AvisoProAnualParaVeiculos. Pesquisa de mercado entregue ao dono.
+
+**Captura (26–27/10):** Suporte Next/clássico (LanceVIP, VIX, Portal dos Leilões só lote aberto, Simões, VJ, Marco,
+Bessa, Magliano, Salles, Rymer, Rodrigo Costa, Camila, Kleiber, ES), Astavero/Leiloador/Gestão/Atlântico, LeilõesBR,
+lojas Superbid. Consertos: LeilãoPro paginava só 40; DESTAK 21→204 (404 pausava o banco — `fetch-fonte.viaBanco`);
+SILVA retry em 5xx; freio de varredura multi-tenant (coletaParcial/sweepProtegidos); fantasma e encerrado saem
+(#277 fechada); LJUD veículo com praça vencida nasce inativo (#357 fechada); Suporte oferta: status 2 com praça
+futura = aberto (Rafael 1014–1018), praças todas vencidas = encerrado; RJ upsert em lotes de 10 (57014).
+Residencial: falha do runner grava `sistema_heartbeat` `runner_falha_<FONTE>`.
+
+**Banco/infra:** `desativar_leiloes_encerrados` 2.083→24 ms (índices idx_il_ativo_dl10/idx_il_ativo_sem_dl);
+`geocode_fila` metade novos + metade antigos (havia pendente desde 09/09); trava `trg_area_urbana_preserva`
+(urbano > 10 ha não sobrescreve área plausível; Feira bb0c2247 = 275 m²); endereço numerado novo re-geocodifica.
+Timeouts (#305 aberta): 13 em 12 h em 26/10, isolados (upserts com gatilho, reconciliar_*, acervo_por_fonte).
+
+**Gráfico Mercado (Admin › acervo › 📈 Mercado):** `acervo_estoque_dia` (foto diária imóvel+veículo, gravada pelo
+monitor-fontes-cron; imóveis com backfill desde 21/07, veículos desde 26/10) + `mercado_evolucao_mensal()` (só admin).
+Duas barras: Total (cobertura) × Mesmos leiloeiros (painel fixo = sinal de mercado). Não há série pública mensal.
+
+**Outros:** cards "Leiloeiro não divulgou foto" × "Foto indisponível" (RJ/LJUD publicam só imagem genérica; edital
+DJEN não tem foto). Busca de veículos com contagem exata e aviso de filtro que esconde veículo sem a informação.
+Advogados: acompanhamento SEMANAL toda segunda 09h20 BRT (QUINZENAL_LIGADO=false); próximo 02/11. E-mail manual
+da sessão em formato de carta (regra no CLAUDE.md).
+
+**Abrir amanhã:** (1) próxima família: BomValor (12 domínios); (2) Feira bb0c2247 ganhou pino?; (3) SUBLIME
+saiu de `acervo_lotes_fantasma()` após a rodada de casa (#358); (4) ATLANTICO veículos vazio confirmado (#280);
+(5) Rymer: 38 lotes sem cidade ("Bairro/RJ") — ler cidade do endereço da descrição (oferecido ao dono);
+(6) FERNANDO/LUCAS veículos precisam de Firecrawl (decisão do dono). Dono: #270 convite Cajado, #308 Neuma/Airton,
+#266 MP 12×.
+
 ## 22/10 — FRANQUIAS GRÁTIS SEM CUSTO NOVO + BUSCA SÓ COM O QUE DÁ PARA DISPUTAR
 
 **Franquias (dono: "inicialmente não quero novos custos de uso").** Regra e tabela no CLAUDE.md (seção 💳).
