@@ -69,9 +69,13 @@ export const TENANTS = {
   federal: { fonte: 'FEDERALLEIL', leiloeiro: 'Federal Leilões', base: 'https://www.leiloesfederal.com.br' }, // 1 leilão, 7 lotes
   oa: { fonte: 'OALEILOES', leiloeiro: 'OA Leilões', base: 'https://www.oaleiloes.com.br' }, // 8 leilões
   tenorio: { fonte: 'TENORIOLEIL', leiloeiro: 'Tenório Leilões (Luis Guilherme Tenório)', base: 'https://tenorioleiloes.com.br', catalogo: '/' }, // 0 imóvel (MS)
+  // 27/10 — Brasília Leilões entra vazia (regra do dono: ATIVO em família que já lemos fica conectado). Pelo banco: /externo/
+  // 200 com o template da Leiloar e um só leilão, o 558 de TESTE da plataforma — que o filtro de teste abaixo já descarta.
+  brasilia: { fonte: 'BRASILIALEIL', leiloeiro: 'Brasília Leilões (André Gustavo Bouças Ignácio)', base: 'https://brasilialeiloes.com.br' }, // 0 (DF)
   // FORA (26/10): prosperarleiloes (GO) — a home lista 8 leilões de imóvel, mas a página /externo/leilao/<id> deste tenant
   // não tem NENHUM link /lote/ (só o auditório ao vivo); o motor enumera só os 5 lotes em destaque na home (3 prontos no
-  // seco): 5 de ≥ 8, abaixo dos 90% de cobertura — pede recon de onde o lote mora; brasilialeiloes (só o "leilao-teste" 558 — site de teste/simulação); fkleiloes e salgueiroleiloes
+  // seco): 5 de ≥ 8, abaixo dos 90% de cobertura — pede recon de onde o lote mora (27/10: /externo/bens/pesquisaAvancada
+  // devolve "Sua pesquisa não retornou resultados" e /externo/bens repete a home; segue fora); fkleiloes e salgueiroleiloes
   // (/externo/ 404 e a raiz é uma casca vazia, só o rodapé "Copyright Plataforma Leiloar" — não há catálogo que prove
   // onde o leilão apareceria).
 };

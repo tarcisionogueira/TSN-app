@@ -16,6 +16,8 @@
 import { inferirTipo, extrairArea, proximaData, checarQualidade } from './leilaopro-parse.mjs';
 import { num, plaus, textoDe, titleCase, montarRowDom, cidadeUFBare, RE_IMG_DESCARTA } from './dom-parse-util.mjs';
 import { decodificarEntidades } from '../../api/_texto-imovel.js';
+import MUNICIPIOS from '../../api/_municipios.js';
+import { normCidade } from './inferir-uf.mjs';
 
 export const TENANTS = {
   flex: { fonte: 'FLEXLEILOES', leiloeiro: 'Flex Leilões', base: 'https://www.flexleiloes.com.br', catalogo: '/imoveis/' },
@@ -29,12 +31,13 @@ export const TENANTS = {
   araujo: { fonte: 'ARAUJOLEILMT', leiloeiro: 'Araújo Leilões (Wellington Martins Araújo)', base: 'https://araujoleiloes.com.br', catalogo: '/' }, // 0 (MT)
   dalcanale: { fonte: 'DALCANALE', leiloeiro: 'Dalcanale Leilões (Lucas Eduardo Dalcanale)', base: 'https://dalcanaleleiloes.com.br', catalogo: '/' }, // 0 (PR)
   lelialenz: { fonte: 'LELIALENZ', leiloeiro: 'Lelia Lenz Leiloeira', base: 'https://lelialenz.com.br', catalogo: '/' }, // 0 (PR)
-  // rmmleiloes.com.br (PR) fica FORA: o único leilão (8 terrenos, TRT Umuarama) foi em 26/10 e nenhum lote saía com
-  // cidade/UF ("situado na cidade de Mariluz-PR" fica no corpo, que o parser não lê). À tarde a home já veio sem
-  // leilão, mas o defeito é do parser neste tenant, não do catálogo: entra quando o detalhe der cidade.
-  // pbcastro.com.br (PR) fica FORA: 21 leilões de 1 lote cada, mas o detalhe deste tenant sai sem data de praça em todos,
-  // com cidade em 2 de 11 e com moto/carro (Honda CG 160, Kia Sportage, Fiat Uno) passando como imóvel — pede ajuste do
-  // parser antes de entrar.
+  // 27/10 — RMM entra: o defeito que a segurava (cidade só no corpo, "situado na cidade de Mariluz-PR") foi corrigido no
+  // parser (`cidadeDaDescricao` + descrição da seção "DETALHE DO LOTE"; testar:softgt-cidade). Home sem leilão hoje
+  // (conferido pelo banco em 27/10) — ligada vazia, regra do dono.
+  rmm: { fonte: 'RMMLEILOES', leiloeiro: 'RMM Leilões', base: 'https://rmmleiloes.com.br', catalogo: '/' }, // 0 (PR)
+  // pbcastro.com.br (PR) segue FORA: 21 leilões de 1 lote cada; a cidade agora sai do corpo (fixture 3470/1), mas a DATA
+  // da praça não está nem no leilão nem no lote — só no card da home ("1ª HASTA: 10/11/2026 - 11:00"), que o motor não
+  // leva até o detalhe — e moto/carro (Honda CG 160, Kia Sportage, Fiat Uno) passam como imóvel. Pede data do card.
 };
 
 /** Catálogo → leilões (nível 2 do motor). */
@@ -71,6 +74,21 @@ function cidadeUf(...textos) {
   return { cidade: null, estado: null };
 }
 
+// Cidade/UF no TEXTO da descrição, só se existir no IBGE para a UF (27/10). Template da PB Castro e da RMM (PR): o título
+// não diz a cidade e não há "ENDEREÇO DO BEM" — ela mora no corpo: "situado na cidade de Mariluz-PR" (RMM, 26/10),
+// "… matrícula 10.769 do 7º CRI de Curitiba/Pr" (PB Castro 3470/1). Cada "<palavras>[-/]<UF>" do texto, com o maior
+// sufixo de até 4 palavras que o IBGE conhece; a UF pode vir minúscula ("Pr"). Sem casar o IBGE, não chuta.
+function cidadeDaDescricao(desc) {
+  for (const m of String(desc || '').matchAll(/((?:[A-Za-zÀ-ÿ'.]+\s+){0,3}[A-Za-zÀ-ÿ'.]+)\s*[-/]\s*([A-Za-z]{2})\b/g)) {
+    const uf = m[2].toUpperCase(), pal = m[1].trim().split(/\s+/);
+    for (let i = 0; i < pal.length; i++) {
+      const nome = pal.slice(i).join(' ');
+      if (Object.prototype.hasOwnProperty.call(MUNICIPIOS, `${uf}|${normCidade(nome)}`)) return { cidade: titleCase(nome), estado: uf };
+    }
+  }
+  return { cidade: null, estado: null };
+}
+
 export function parseDetalhe(html, url) {
   const h = String(html || '');
   // Os caminhos do site (`arquivos/…`) são relativos à RAIZ (`<base href>` na Luiz) — contra a URL do lote
@@ -84,14 +102,17 @@ export function parseDetalhe(html, url) {
     .filter((t) => t && !/^LOTE\s+\d/i.test(t) && !/^(?:Leil[õo]es\b|Acesso R[áa]pido|Localiza[çc][ãa]o|Informativo|Contato)/i.test(t));
   const titulo = (proprio || titulos[0] || '').replace(/^[\s\-–]+/, '').replace(/\s*CEP\s*:?\s*[\d.\-]+\s*$/i, '').slice(0, 180) || null;
   const endereco = (txt.match(/ENDERE[ÇC]O DO BEM\s*:\s*(.{5,200}?)(?:CEP|DESCRI[ÇC][ÃA]O|$)/i) || [])[1] || '';
-  const { cidade, estado } = cidadeUf(titulo, endereco).cidade ? cidadeUf(titulo, endereco) : cidadeUFBare(`${titulo || ''} ${endereco}`);
+  let { cidade, estado } = cidadeUf(titulo, endereco).cidade ? cidadeUf(titulo, endereco) : cidadeUFBare(`${titulo || ''} ${endereco}`);
 
   const avaliacao = valor(txt, /Avalia[çc][ãa]o\s*:?/);
   const minimo = valor(txt, /Lance\s+Inicial\s*:?/) || valor(txt, /Lance\s+M[íi]nimo[^:R]{0,60}:?/) || valor(txt, /Valor\s+M[íi]nimo\s+de\s+Venda\s*:?/);
   // 2ª praça: o "Lance Mínimo" depois de "2° Hasta"/"2º Leilão".
   const seg = txt.match(/2\s*[°º]\s*(?:Hasta|Leil[ãa]o|Pra[çc]a)[\s\S]{0,300}?Encerramento\s+em\s*:?\s*(\d{2}\/\d{2}\/\s*\d{4})/i);
   const data = dataBr((txt.match(/Data do Leil[ãa]o\s*:\s*(\d{2}\/\d{2}\/\d{4})/i) || [])[1]) || proximaData(txt.slice(0, 6000));
-  const descricao = ((txt.match(/DESCRI[ÇC][ÃA]O DO BEM\s*:\s*([\s\S]{20,2500}?)(?:Valor M[íi]nimo de Venda|Em caso de diverg|LOTE \d{3}\b|$)/i) || [])[1] || '').trim() || null;
+  // PB Castro/RMM: sem "DESCRIÇÃO DO BEM:" — o texto vem na seção "DETALHE DO LOTE" (até o rodapé).
+  const descricao = ((txt.match(/DESCRI[ÇC][ÃA]O DO BEM\s*:\s*([\s\S]{20,2500}?)(?:Valor M[íi]nimo de Venda|Em caso de diverg|LOTE \d{3}\b|$)/i) || [])[1] || '').trim()
+    || ((txt.match(/DETALHE DO LOTE\s+([\s\S]{20,2500}?)(?:Edif[íi]cio PB Castro|Acesso R[áa]pido|Copyright|$)/i) || [])[1] || '').trim() || null;
+  if (!cidade && descricao) ({ cidade, estado } = cidadeDaDescricao(descricao));
   const mat = (txt.match(/matr[íi]cula\s*(?:n[º°.]?\s*)?:?\s*([\d.]{3,})/i) || [])[1]?.replace(/\.$/, '') || null;
   const status = limpo((h.match(/id=["']status["'][^>]*>([\s\S]{0,120}?)<\/span>/i) || [])[1] || '');
 
