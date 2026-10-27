@@ -1,0 +1,36 @@
+name: Scraper LeilõesBR (44 leiloeiros de arte/antiguidades, fetch puro)
+
+# Plataforma LeilõesBR (leiloesbr.com.br): mede, por catálogo ativo, peças declaradas × classificadas por tipo e só aceita
+# tipo de imóvel/veículo como candidato (27/10: zero em todos — o leiloeiro fica conectado, com medição em fonte_saude).
+# Custo zero: nunca Bright Data, nunca Firecrawl. O cron GRAVA; para ensaio, dispare com dryrun=1.
+on:
+  schedule:
+    - cron: '25 10 * * 1,4'  # seg e qui, 10h25 UTC (catálogo de arte muda por semana, não por hora)
+  workflow_dispatch:
+    inputs:
+      dryrun:
+        description: '1 = dry-run (não grava); 0 = grava'
+        required: false
+        default: '0'
+      tenants:
+        description: 'chaves separadas por vírgula (vazio = todos)'
+        required: false
+        default: ''
+
+jobs:
+  scraper-leiloesbr:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      - name: Rodar scraper LeilõesBR
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          LEILOESBR_DRYRUN: ${{ github.event.inputs.dryrun || '0' }}
+          LEILOESBR_TENANTS: ${{ github.event.inputs.tenants || '' }}
+        run: node scripts/scraper-leiloesbr.mjs

@@ -54,6 +54,7 @@
     "testar:msis": "node scripts/testes/msis-parse.mjs",
     "testar:gestao-gratis": "node scripts/testes/gestao-fidalgo-gratis.mjs",
     "testar:roisoft": "node scripts/testes/roisoft-parse.mjs",
+    "testar:leiloesbr": "node scripts/testes/leiloesbr-parse.mjs",
     "testar:milan": "node scripts/testes/milan-parse.mjs",
     "testar:leilaobrasil-atlantico": "node scripts/testes/leilaobrasil-atlantico.mjs",
     "testar:sweep-trava": "node scripts/testes/sweep-trava.mjs && node scripts/testes/sweep-por-tenant.mjs",
