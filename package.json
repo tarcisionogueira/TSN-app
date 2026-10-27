@@ -119,6 +119,7 @@
     "testar:leilaoeletronico": "node scripts/testes/leilaoeletronico-feed-e-pagina.mjs",
     "testar:suportev2": "node scripts/testes/suportev2-rsc-lote.mjs",
     "testar:suportenext": "node scripts/testes/suporte-next.mjs",
+    "testar:suporte-oferta-status": "node scripts/testes/suporte-oferta-status.mjs",
     "testar:veiculos-vazio": "node scripts/testes/veiculos-vazio-nao-e-falha.mjs",
     "testar:veiculo-praca-vencida": "node scripts/testes/veiculo-praca-vencida-na-entrada.mjs",
     "testar:leiloar": "node scripts/testes/leiloar-parse.mjs",

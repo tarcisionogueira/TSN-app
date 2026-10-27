@@ -122,6 +122,9 @@ function cidadeDoPino(html) {
   return Object.prototype.hasOwnProperty.call(MUNICIPIOS, `${uf}|${normCidade(nome)}`) ? [null, nome, uf] : null;
 }
 
+// Data da praça (ISO local devolvido por dataBr) ainda por acontecer.
+const pracaFutura = (iso) => { const t = Date.parse(String(iso || '')); return Number.isFinite(t) && t > Date.now(); };
+
 export function parseDetalhe(html, url) {
   const lote = varJson(html, 'lote');
   const leilao = varJson(html, 'leilao') || {};
@@ -172,8 +175,11 @@ export function parseDetalhe(html, url) {
     link_edital: linkEdital,
     anexos: linkEdital ? [{ tipo: 'edital', nome: 'Edital', url: linkEdital }] : [],
     comissao_pct: comissao != null ? Number(comissao) : null,
-    // status do leilão 3 = "Aberto para lances"; lote.status 1 = ativo. Fora disso não entra.
-    encerrado: !(Number(lote.status) === 1) || /arrematad|encerrad|cancelad|suspens/i.test(String(leilao.statusString || '')),
+    // status do leilão 3 = "Aberto para lances"; lote.status 1 = ativo. lote.status 2 aparece no lote que
+    // segue "Aberto para lances" rumo à praça seguinte (Rafael 1014–1018, 27/10: 2º leilão em 27/10) — só
+    // vale como aberto com o próximo leilão no FUTURO, para não reabrir lote de praça já passada.
+    encerrado: !(Number(lote.status) === 1 || (Number(lote.status) === 2 && pracaFutura(dataLeilao)))
+      || /arrematad|encerrad|cancelad|suspens/i.test(String(leilao.statusString || '')),
   };
 }
 
