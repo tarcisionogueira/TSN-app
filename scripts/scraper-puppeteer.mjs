@@ -12,7 +12,7 @@ import { marcaModeloAnoVIP } from './lib/vip-veiculo.mjs';
 import { createClient } from '@supabase/supabase-js';
 import puppeteer from 'puppeteer';
 import { vasculharDocumentos, chaveDocCanonica, ehDocumento } from '../api/_doc-scan.js';
-import { extrairDescricaoDoCorpo, decodificarEntidades, areaFichaCaixa } from '../api/_texto-imovel.js';
+import { extrairDescricaoDoCorpo, decodificarEntidades, areaFichaCaixa, numeroArea } from '../api/_texto-imovel.js';
 // Mesma heurística já validada em texto de matrícula PDF (api/_registro-matricula.js, usada
 // por scripts/enriquecer-cartorio-matricula.mjs): "situado(a) na/no/à <logradouro>". Reaproveitada
 // aqui (20/09) pra preencher `endereco` a partir do TEXTO DA DESCRIÇÃO do lote (nunca da página
@@ -817,8 +817,8 @@ function mapearMega(c) {
 
   const categoria = (c.href.match(/\/imoveis\/([a-z-]+)\//) || [])[1] || '';
   const tipo = MEGA_CAT_TIPO[categoria] || normalizarTipo(c.titulo);
-  const areaM = (c.titulo || '').match(/(\d+(?:[.,]\d+)?)\s*m[²2]/i);
-  const area = areaM ? parseFloat(areaM[1].replace('.', '').replace(',', '.')) : 0;
+  const areaM = (c.titulo || '').match(/(\d[\d.,]*)\s*m[²2]/i); // número inteiro ("1.302,50m²"), não o pedaço depois do milhar
+  const area = areaM ? numeroArea(areaM[1]) : 0;
   const modalidade = /judicial/i.test(c.instTitle) && !/extra/i.test(c.instTitle)
     ? 'judicial' : (/extra/i.test(c.instTitle) ? 'extrajudicial'
     : (/judicial/i.test(c.titulo) ? 'judicial' : 'extrajudicial'));
@@ -2098,8 +2098,8 @@ async function enriquecerDatasZuk(browser, imoveis) {
       // total antes deste conserto, e `!im.area_m2` os deixaria errados para sempre.
       const utilTxt  = (txt.match(/metragem\s*(?:[úu]til|privativa)[^\d]*([\d.,]+)\s*m/i) || [])[1];
       const totalTxt = (txt.match(/metragem\s*total[^\d]*([\d.,]+)\s*m/i) || [])[1];
-      const areaUtil = utilTxt ? parseBRL(utilTxt) : 0;
-      const areaZuk = areaUtil || (totalTxt ? parseBRL(totalTxt) : (ext.area_m2 || 0));
+      const areaUtil = utilTxt ? numeroArea(utilTxt) : 0;
+      const areaZuk = areaUtil || (totalTxt ? numeroArea(totalTxt) : (ext.area_m2 || 0));
       if (areaUtil > 0 && areaUtil !== Number(im.area_m2 || 0)) im.area_m2 = areaUtil;
       else if (areaZuk && !im.area_m2) im.area_m2 = areaZuk;
       if (ext.ocupacao && !im.ocupacao) im.ocupacao = ext.ocupacao;
@@ -3439,7 +3439,9 @@ function extrairDaDescricao(txt) {
   // lia "0.323m²" e gravava 323 m² para 1.870.323 m² (invariante area_truncada_no_milhar).
   const ha = !ap && t.match(/(\d{1,3}(?:\.\d{3})*|\d+)\s*ha\s*(\d[\d.]*(?:,\d+)?)\s*m(?:²|2)(?![a-z0-9])/i);
   if (ha) { const n = Number(ha[1].replace(/\./g, '')) * 10000 + parseFloat(ha[2].replace(/\./g, '').replace(',', '.')); if (n > 0 && n < 1e9) out.area_m2 = n; }
-  else if (am) { const n = parseFloat(am[1].replace(/\./g, '').replace(',', '.')); if (n > 0 && n < 1e7) out.area_m2 = n; }
+  // 28/10 (#375): `numeroArea`, não "apaga todo ponto" — "195.66 m2" (SUPERBID, decimal com ponto) virava 19.566 m².
+  // A linha do hectare acima segue apagando o ponto de propósito: em "187ha0.323m²" o 0.323 É 323 m².
+  else if (am) { const n = numeroArea(am[1]); if (n > 0 && n < 1e7) out.area_m2 = n; }
   const om = t.match(/\b(desocupad[ao]|ocupad[ao])\b/i);
   if (om) out.ocupacao = /desocupad/i.test(om[1]) ? 'Desocupado' : 'Ocupado';
   return out;
@@ -3624,7 +3626,7 @@ async function scraperFrazao(browser) {
     for (const im of imoveis.slice(0, 400)) {
       const d = await detalheFrazao(page, im.link_edital);
       if (d) {
-        const area = brl2num(d.areaTxt);
+        const area = numeroArea(d.areaTxt);
         if (area > 0) im.area_m2 = area;
         if (d.matriculaTxt) { const mm = d.matriculaTxt.replace(/\D/g, ''); if (mm) im.numero_matricula = mm; }
         if (d.ocupacao) im.ocupacao = /desocupad/i.test(d.ocupacao) ? 'Desocupado' : 'Ocupado';
@@ -3743,7 +3745,7 @@ async function scraperLeiloesJudiciais(browser) {
       if (!valMin) return null;
       const uf = String(it.nm_estado || '').toUpperCase().slice(0, 2);
       const areaM = (titulo.match(/([\d.,]+)\s*m²/) || [])[1];
-      const area = areaM ? parseBRL(areaM) : 0;
+      const area = areaM ? numeroArea(areaM) : 0;
       const leiloeiroTit = String(it.nm_titulo_leilao || '');
       const foto = (it.fotos && it.fotos[0] && it.fotos[0].nm_path_completo)
         ? it.fotos[0].nm_path_completo.replace('/196x146/', '/640x480/')
@@ -3873,7 +3875,7 @@ function mapLoteLJUD_pp(it) {
     modalidade: /extrajudicial/i.test(it.nm_titulo_leilao || it.nm_tipo_leilao || '') ? 'extrajudicial' : 'judicial',
     estado: String(it.nm_estado || '').toUpperCase().slice(0, 2), cidade: toTitleCase(cidade),
     bairro: '', endereco: '', valor_avaliacao: avalApi, valor_minimo: valMin, valor_minimo_2: valMin2,
-    area_m2: (() => { const m = (titulo.match(/([\d.,]+)\s*m²/) || [])[1]; return m ? parseBRL(m) : 0; })(),
+    area_m2: (() => { const m = (titulo.match(/([\d.,]+)\s*m²/) || [])[1]; return m ? numeroArea(m) : 0; })(),
     descricao: descricaoRealLJUD(it, titulo),
     // Documentos reais do lote (antes tudo apontava p/ a home do leiloeiro).
     // PÁGINA NÃO É EDITAL. O fallback para `loteUrl` fazia 423 lotes carregarem a página do
@@ -4302,7 +4304,7 @@ function mapLotePestana(lote, leilao, leiloesPorId, { tipoBem = PESTANA_TIPOBEM_
   let area = 0;
   for (const c of (bem.caracteristicas || [])) {
     const mm = String((c && c.valor) || '').match(/([\d.,]+)\s*m²/);
-    if (mm) { area = parseBRL(mm[1]); break; }
+    if (mm) { area = numeroArea(mm[1]); break; }
   }
   // Foto: campo `media` do bem (imagemPrincipal ou 1ª de imagens) → GED redimensionado.
   // Terrenos costumam não ter foto (imagens vazio) — fica null, sem inventar.

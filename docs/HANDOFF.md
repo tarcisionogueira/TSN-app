@@ -7,6 +7,24 @@
 
 
 
+## 28/10 (madrugada, 4) — #375: ÁREA 10–1000× NA ESCALA ERRADA
+
+**Causa:** leitores de área antigos no `scraper-puppeteer.mjs` usavam o leitor de R$ (`parseBRL`) ou apagavam todo ponto:
+"195.66 m2" (SUPERBID, decimal com ponto) → 19.566 m²; "Apto 52m²" com 52.49 → 5.249. Outras fontes por outros caminhos:
+PICELLI (atributo da API "47.835" = decimal americano, lido como milhar), MERCADOLEIL (fazendas ×1000), INOVALEILAO ÷10.
+
+**Código:** `numeroArea` exportado de `api/_texto-imovel.js` (a regra que o extrator central já usava: ponto é milhar só
+em grupo EXATO de 3 dígitos ou com vírgula) e usado em todos os leitores de área do puppeteer (MEGA, ZUK, SUPERBID
+`extrairDaDescricao`, Sold/Sodré, PESTANA…). A linha do hectare ("187ha0.323m²" = 323 m²) segue apagando o ponto de
+propósito. Teste `testar:area-milhar` (existia e NÃO estava no package.json — o CI nunca o rodava).
+
+**Banco (20261028_area_escala_pelo_titulo):** rede de segurança `area_na_escala_do_titulo` + gatilho `trg_zx_area_escala_titulo`:
+corrige SÓ quando a área não bate com nenhuma metragem do título e bate ×10ⁿ (n = ±1..3, 1%) com uma delas. Gravada maior
+→ divide (guarda as casas: "Apto 60m²" 6.018 → 60,18); menor → vale o título. Backfill: 340 linhas (124 ativas: SUPERBID 114,
+MERCADOLEIL 5, BARRETO, HASTAPUBLICA, INOVALEILAO, LEILOTECH, PICELLI), backup `_bkp_area_escala_20261028`; restantes 0.
+Conhecido: "IMÓVEL RURAL … 338.00m² - MIRAGUAÍ/RS" ficou 338 m² porque é o que o título diz (antes 33.800 pelo ponto lido
+como milhar) — se for erro de digitação do leiloeiro, é dele.
+
 ## 28/10 (madrugada, 3) — VARREDURA "ID REAPROVEITADO" EM TODAS AS FONTES
 
 **Resultado:** nenhuma outra fonte mostra o imóvel fantasma da Globo (descrição × local divergente: só GESTAO e

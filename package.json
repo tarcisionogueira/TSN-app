@@ -39,6 +39,7 @@
     "testar:zero-declarado": "node scripts/testes/zero-declarado-pelo-site.mjs",
     "testar:zuk-local-veiculo": "node scripts/testes/zuk-local-veiculo.mjs",
     "testar:area-hectares": "node scripts/testes/area-em-hectares.mjs",
+    "testar:area-milhar": "node scripts/testes/area-milhar-e-decimal-com-ponto.mjs",
     "testar:bairro-fazenda-publica": "node scripts/testes/bairro-nao-e-fazenda-publica.mjs",
     "testar:endereco-do-texto": "node scripts/testes/endereco-do-texto.mjs",
     "testar:parcelamento-arremate": "node scripts/testes/parcelamento-arremate.mjs",

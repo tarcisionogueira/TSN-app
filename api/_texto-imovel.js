@@ -179,6 +179,19 @@ export function areaEmAlqueires(t, uf) {
   return fator && Number.isFinite(v) && v >= 1000 && v <= 5e9 ? Math.round(v * 100) / 100 : 0;
 }
 
+// NÚMERO DE ÁREA (28/10, #375): a MESMA regra de `paraNumero` abaixo, exportada para os leitores de área espalhados pelos
+// coletores. Eles usavam o leitor de R$ (`parseBRL`) ou apagavam todo ponto — "195.66 m2" virava 19.566 m², "Apto 52m²"
+// gravava 5.249 (de "52.49"), "216.0" virava 2.160: 138 lotes SUPERBID com área 10–100× maior. Ponto só é milhar quando
+// fecha grupo EXATO de 3 dígitos ("1.302", "21.404") ou vem com vírgula decimal ("1.234,56"); senão é decimal.
+export function numeroArea(s) {
+  s = String(s ?? '').trim().replace(/[^\d.,]/g, '');
+  if (!s) return 0;
+  if (/^\d{1,3}(?:\.\d{3})+\.\d{1,2}$/.test(s)) return Number(s.replace(/\.(?=\d{3}\.)/g, '')) || 0; // 1.201.00
+  const n = s.includes(',') ? Number(s.replace(/\./g, '').replace(',', '.'))
+    : /^\d{1,3}(?:\.\d{3})+$/.test(s) ? Number(s.replace(/\./g, '')) : Number(s);
+  return Number.isFinite(n) ? n : 0;
+}
+
 export function extrairAreaM2(texto, { permitirSolta = true, uf = null } = {}) {
   // `permitirSolta=false` (22/08): quando o texto é a PÁGINA INTEIRA (e não uma descrição
   // recortada), o último recurso `NUM m²` casa "área de lazer 300 m²", a metragem de OUTRO lote
@@ -196,17 +209,11 @@ export function extrairAreaM2(texto, { permitirSolta = true, uf = null } = {}) {
   // fechava o número inteiro e a solta começava no MEIO dele. A 1ª alternativa lê essa forma, e o
   // lookbehind impede começar depois de dígito ou ponto (o mesmo cuidado de areaEmHectares).
   const NUM = '(?<![\\d.])(\\d{1,3}(?:\\.\\d{3})+\\.\\d{1,2}(?![\\d.])|\\d{1,3}(?:\\.\\d{3})*(?:,\\d{1,4})?|\\d+(?:[.,]\\d{1,4})?)';
-  const paraNumero = (s) => {
-    if (!s) return 0;
-    // "1.234,56" (pt-BR) vs "1234.56": só trata o ponto como milhar quando há vírgula decimal.
-    // 30/09: "58.255m²" / "13.584m²" (grupo de milhar EXATO, sem vírgula) é milhar — lido como
-    // decimal, 18 lotes ativos tinham área mil vezes menor (Gleba 13.584 m² gravada 13,584 m²).
-    // "1.5 m²" (1 ou 2 casas depois do ponto) continua decimal.
-    if (/^\d{1,3}(?:\.\d{3})+\.\d{1,2}$/.test(s)) return Number(s.replace(/\.(?=\d{3}\.)/g, '')) || 0; // 1.201.00
-    const n = s.includes(',') ? Number(s.replace(/\./g, '').replace(',', '.'))
-      : /^\d{1,3}(?:\.\d{3})+$/.test(s) ? Number(s.replace(/\./g, '')) : Number(s);
-    return Number.isFinite(n) ? n : 0;
-  };
+  // "1.234,56" (pt-BR) vs "1234.56": só trata o ponto como milhar quando há vírgula decimal.
+  // 30/09: "58.255m²" / "13.584m²" (grupo de milhar EXATO, sem vírgula) é milhar — lido como
+  // decimal, 18 lotes ativos tinham área mil vezes menor (Gleba 13.584 m² gravada 13,584 m²).
+  // "1.5 m²" (1 ou 2 casas depois do ponto) continua decimal. Regra em `numeroArea` (exportada).
+  const paraNumero = (s) => (s ? numeroArea(s) : 0);
   const plausivel = (v) => (v >= 8 && v <= 1_000_000 ? v : 0);
   const tentativas = [
     // "área privativa coberta de 41,64m e a área privativa (acessória) de 7,78m, TOTALIZANDO a área
