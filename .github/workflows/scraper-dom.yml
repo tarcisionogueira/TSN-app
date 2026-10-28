@@ -118,7 +118,9 @@ jobs:
     # RODA_TUDO. Estourar o teto CORTA as fontes seguintes (incidente de 10–12/08) — folga de propósito.
     # 24/10: 75 → 120. Com a HASTA em 18 min (teto 120 lotes), a rodada de 23/10 ainda chegou a 70 min no Simon
     # e cortou Globo, Nakakogue, Astavero, Leje, Freitas e o passo de veículos. Repo público = minutos sem custo.
-    timeout-minutes: 120  # 15/10: era 55; a rodada de 14/10 levou 54:40 e a FRANCO pelo feed (+~4 min) estourou, cortando o Astavero
+    # 28/10: 120 → 180 e o passo de veículos virou o job `veiculos` (em paralelo). As agendadas de 27 e 28/10
+    # estouraram os 120 (Leilão Eletrônico ~32 min): a de 27 cortou do Leiloar em diante; a de 28, os veículos.
+    timeout-minutes: 180  # 15/10: era 55; a rodada de 14/10 levou 54:40 e a FRANCO pelo feed (+~4 min) estourou, cortando o Astavero
     env:
       # Nome pelo EFEITO no _DRYRUN de cada fonte (1=dry-run, 0=grava) — não pelo gatilho.
       # (achado 07/09, revisão externa: "GRAVA" antes chamava 1 de "grava", exatamente o
@@ -467,16 +469,6 @@ jobs:
       # VEÍCULOS das fontes do motor deste job (21/10, pedido do dono): JE/K Leilões (/veiculos), Simon
       # (/leiloes/veiculos), Nakakogue (/lotes/consulta/2). Mesmo parser de cada fonte; conversão e pátio em
       # lib/veiculo-do-lote.mjs. Só via grátis (VEIC_BD desligado).
-      - name: Veículos (Globo, JE, Simon, Nakakogue, Suporte v2, VIX, LanceVIP, Portal dos Leilões)
-        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'veiculos')) }}
-        env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          VEIC_FONTES: globo,jeleiloes,simon,nakakogue,suportev2,vixleiloes,lancevip,portaldosleiloes
-          VEIC_DRYRUN: ${{ env.DRYRUN_PADRAO }}
-          VEIC_MAX_LOTES: '80'
-        run: node scripts/scraper-veiculos-motor.mjs
-
       - name: Notify on failure
         # `cancelled()` também: estourar o timeout-minutes não é `failure()` pro GitHub, e sem
         # isto uma rodada agendada cortada no meio termina sem aviso nenhum (mesma lição já
@@ -491,4 +483,52 @@ jobs:
             -H "x-cron-secret: ${CRON_SECRET}" \
             -H "Content-Type: application/json" \
             -d '{"tipo":"Scraper DOM","etapa":"'"$JOB_STATUS"'","run_id":"'$GITHUB_RUN_ID'","run_url":"https://github.com/'$GITHUB_REPOSITORY'/actions/runs/'$GITHUB_RUN_ID'"}' || true
+        continue-on-error: true
+
+  # 28/10: era o ÚLTIMO passo do job acima e o primeiro a ser cortado quando ele estoura o teto (cortado
+  # em 27 e 28/10). Tabela própria (veiculos_leilao) — roda em paralelo, sem esperar as fontes de imóvel.
+  veiculos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      DRYRUN_PADRAO: ${{ (github.event_name == 'schedule' || github.event.inputs.gravar == '1') && '0' || '1' }}
+      RODA_TUDO: ${{ github.event_name == 'push' || github.event_name == 'schedule' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Chromium system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            libatk-bridge2.0-0 libdrm2 libxkbcommon0 libxcomposite1 \
+            libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64 \
+            libpango-1.0-0 libcairo2 libatspi2.0-0 libgtk-3-0
+
+      - name: Veículos (Globo, JE, Simon, Nakakogue, Suporte v2, VIX, LanceVIP, Portal dos Leilões)
+        if: ${{ env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'veiculos') }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          VEIC_FONTES: globo,jeleiloes,simon,nakakogue,suportev2,vixleiloes,lancevip,portaldosleiloes
+          VEIC_DRYRUN: ${{ env.DRYRUN_PADRAO }}
+          VEIC_MAX_LOTES: '80'
+        run: node scripts/scraper-veiculos-motor.mjs
+
+      - name: Notify on failure
+        if: ${{ github.event_name == 'schedule' && (failure() || cancelled()) }}
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          curl -s -L --post301 --post302 --post303 -X POST "${APP_BASE_URL:-https://bidprobrasil.com.br}/api/notify-scraper" \
+            -H "x-cron-secret: ${CRON_SECRET}" \
+            -H "Content-Type: application/json" \
+            -d '{"tipo":"Scraper DOM (veículos)","etapa":"'"$JOB_STATUS"'","run_id":"'$GITHUB_RUN_ID'","run_url":"https://github.com/'$GITHUB_REPOSITORY'/actions/runs/'$GITHUB_RUN_ID'"}' || true
         continue-on-error: true
