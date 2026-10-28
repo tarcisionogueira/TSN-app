@@ -5228,8 +5228,11 @@ function DashboardTab({ irParaTab }) {
       // pacote de prazo fixo (Assessoria R$6.000/12) — receita que não se repete sozinha e que
       // some inteira quando o contrato acaba. Chamar isso de recorrente prometia uma
       // previsibilidade que o número não tem.
-      const mrrAssinatura = mrrPlano('top2', 49.90);
-      const contratoMensalizado = mrrPlano('assessorado', 500) + mrrPlano('clube', 5000);
+      // Sem fallback de preço (28/10): o `49.90` era o preço VELHO do top2 (hoje 89,90) e, como o
+      // efeito não dependia de `planosCtx`, o MRR ficava calculado com ele quando os contadores
+      // chegavam antes do planos_config. Preço não lido = 0 até o config chegar e o efeito rodar de novo.
+      const mrrAssinatura = mrrPlano('top2', 0);
+      const contratoMensalizado = mrrPlano('assessorado', 0) + mrrPlano('clube', 0);
       const mrr = mrrAssinatura + contratoMensalizado; // mantido p/ os marcos e o rateio abaixo
       const taxaPix = mrr * 0.01;
       const receita = m?.receita || {};
@@ -5242,7 +5245,7 @@ function DashboardTab({ irParaTab }) {
       // "Se todo mundo pagasse": só os EXPLORADOR (grátis) têm pra onde subir — quem já é
       // pagante já está contado no MRR real. Assume conversão pro plano de ENTRADA (Investidor
       // Pro), não o mix atual — é a leitura mais conservadora e a mais fácil de explicar.
-      const precoEntrada = mrrMensalPlano(planosCtx?.top2, 49.90);
+      const precoEntrada = mrrMensalPlano(planosCtx?.top2, 0);
       const receitaPotencial = mrr + (contagem.explorador || 0) * precoEntrada;
 
       setDados({
@@ -5268,7 +5271,7 @@ function DashboardTab({ irParaTab }) {
 
     load();
     if (equipeDetalhe) loadEquipeDetalhe(equipeDetalhe, periodo, dataInicio, dataFim);
-  }, [periodo, dataInicio, dataFim]);
+  }, [periodo, dataInicio, dataFim, planosCtx]);
 
   // Fontes que NÃO dependem do período (saldo Asaas/MP, custos de integrações, health-check):
   // buscam 1× na montagem. Antes estavam no mesmo efeito do seletor de período — cada troca de

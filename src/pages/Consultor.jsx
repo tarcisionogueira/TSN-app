@@ -406,7 +406,8 @@ export default function Consultor() {
                       {
                         emoji: '⭐',
                         label: `Assinatura ${pNome('top2')}`,
-                        sub: planosCtx?.top2 ? `${fmtPreco(planosCtx.top2.preco)}/mês` : 'R$ 49,90/mês',
+                        // Sem preço lido, sem preço: o fallback era o R$ 49,90 velho (hoje 89,90).
+                        sub: Number(planosCtx?.top2?.preco) > 0 ? `${fmtPreco(planosCtx.top2.preco)}/mês` : 'Assinatura mensal',
                         url: `${origin}/#/checkout?plano=top2${codigo?`&ref=${codigo}`:''}`,
                         comissao: comissaoDePlano('top2'),
                         recorrente: true,

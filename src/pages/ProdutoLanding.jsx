@@ -10,7 +10,6 @@ import { pedirComprovanteEmail, esquecerComprovanteEmail } from '../lib/comprova
 const PLANOS_INFO = {
   top2: {
     tagline: 'Acesse leilões, análises e cursos com o melhor custo-benefício',
-    precoLabel: 'R$ 49,90/mês',
     features: [
       'Busca ilimitada de imóveis em leilão em todo o Brasil',
       'Acesso completo à biblioteca de cursos e videoaulas',
@@ -22,7 +21,6 @@ const PLANOS_INFO = {
   },
   assessorado: {
     tagline: 'Assessoria personalizada por 12 meses para sua jornada nos leilões',
-    precoLabel: '12× R$ 500/mês',
     features: [
       'Tudo do plano Investidor',
       'Assessoria individual com especialista por 12 meses',
@@ -35,7 +33,6 @@ const PLANOS_INFO = {
   },
   assessorado_vista: {
     tagline: 'Assessoria completa 12 meses, pagamento único com desconto',
-    precoLabel: 'R$ 4.800 à vista',
     features: [
       'Tudo do plano Assessorado',
       'Desconto especial no pagamento à vista',
@@ -44,7 +41,6 @@ const PLANOS_INFO = {
   },
   clube: {
     tagline: 'Acesso premium com encontros presenciais e clube de negócios',
-    precoLabel: 'R$ 5.000/mês',
     features: [
       'Tudo do plano Assessorado',
       'Encontros presenciais mensais com a equipe BidPro Brasil',
@@ -56,7 +52,6 @@ const PLANOS_INFO = {
   },
   clube_vista: {
     tagline: 'Clube de Negócios, pagamento único anual com máximo desconto',
-    precoLabel: 'R$ 48.000 à vista',
     features: [
       'Tudo do Clube de Negócios mensal',
       '12 meses de acesso com valor diferenciado',
@@ -384,7 +379,10 @@ export default function ProdutoLanding() {
           const baseKey = id.replace(/_vista$/, '');
           const isVista = id !== baseKey;
           const { data } = await supabase.from('planos_config').select('plano_key,nome,preco,preco_vista,assinatura,ativo').eq('plano_key', baseKey).single();
-          let precoLabel = info.precoLabel;
+          // Sem preço fixo no código (28/10): os rótulos estáticos eram valores velhos (R$ 49,90 do
+          // Investidor Pro, hoje 89,90; R$ 4.800 à vista da assessoria, hoje 5.000) e apareciam ao
+          // público sempre que a leitura do planos_config falhava. Valor não lido = nenhum preço.
+          let precoLabel = null;
           let nome = id === 'top2' ? 'Investidor Pro' : id === 'assessorado' ? 'Assessorado' : id === 'assessorado_vista' ? 'Assessorado (À Vista)' : id === 'clube' ? 'Clube de Negócios' : 'Clube de Negócios (À Vista)';
           if (data) {
             nome = data.nome || nome;
@@ -453,7 +451,7 @@ export default function ProdutoLanding() {
   const ocultarValor = isPlano && !isLoggedIn && VALOR_SOB_CADASTRO.includes(produto.key);
   const preco = ocultarValor
     ? 'Condições e valores após criar sua conta'
-    : (isPlano ? produto.precoLabel : (Number(produto.preco) > 0 ? `R$ ${Number(produto.preco).toFixed(2).replace('.',',')}` : 'Gratuito'));
+    : (isPlano ? (produto.precoLabel || 'Valor exibido no checkout') : (Number(produto.preco) > 0 ? `R$ ${Number(produto.preco).toFixed(2).replace('.',',')}` : 'Gratuito'));
 
   return (
     <div style={{ minHeight:'100vh', background:'#111111', fontFamily:"'Inter', sans-serif", color:'#e2e8f0' }}>
