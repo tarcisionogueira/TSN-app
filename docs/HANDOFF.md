@@ -7,6 +7,42 @@
 
 
 
+## 28/10 — TIMEOUT DE DESCONTOS · CI VERDE · SOLEON DESTRAVADO · SAÚDE DO LJUD
+
+**Banco (#305):** com o relistados ok (27/10), o passo `descontos` do desativar-encerrados passou a dar 57014
+(média 2,3 s, pico 8 s). Causa: `desconto_da_praca_mais_descontada()` 2× por linha, aninhando
+`lance_praca_mais_descontada()` — as duas têm `SET search_path`, então nunca são embutidas. Migração
+20261028_desconto_praca_sem_timeout (030ab860): a mesma regra direto no UPDATE, 1× por linha. 11,4 s → 0,1 s;
+5.270/5.270 iguais à função antiga. Se a regra do desconto mudar, mudar nos DOIS lugares. Fechar #305 com 48 h
+sem 57014 em qualquer passo (revisar 30/10).
+
+**CI (6c3d6b7):** "Testes (sem credencial)" falhava em todo commit desde 21/10 (09da4b10). 4 testes atrás do
+código: taxa-honorario (regra de 21/10: boleto/cartão 1× sem taxa), mensagem-grupo (Pro = R$ 89,90 / R$ 899),
+analise-url (irParaAnalise de 25/10 + view mascarada do cofre), leilaoeletronico (fixture vencia com o calendário;
+`extrairUrlsDeLote(html, base, { hojeISO })` opcional). 151/151. No Windows o executor só roda com
+`shell: true` e 2 scripts usam `VAR=x` — rodar a suíte pelo bash.
+
+**SOLEON (c8f001a, #369):** 13 tenants congelados desde 22/10 (DANIELGARCIA, FERREIRALEIL, APICE, ISAIAS,
+CERULI, PURCENA, LANCEJA, TMLEILOES, INFINITY, AGOSTINHO, ALEXANDREPEDROSA, JOAOEMILIO, CASAMARTILLO;
+~340 imóveis). O runner lia tudo (1.267 prontos) e o upsert ÚNICO estourava o statement timeout; o
+process.exit(1) levava a varredura de sumidos e a saúde. Agora lotes de 10 + 1 nova tentativa (como o RJ).
+Rastro útil: `sistema_heartbeat.runner_falha_<FONTE>` traz o fim do log. O freio do workflow do GitHub
+(coleta residencial < 7 dias) não supre quando o residencial RODA mas FALHA.
+
+**LJUD (9091b8d, #370):** não estava sem link — 100% dos 1.733 ativos têm url_lote. A cópia local de
+`metricasColeta` no scraper-puppeteer contava link só por link_edital (PDF) e foto só por link_foto; agora
+importa a de `_saude-fonte.mjs`. Simulado: link 0,496 → 1,000. A métrica é o portão da esteira (get-lotes
+reprovado caía na reserva get-bens, link 0, em 15/17/21/24/10). CI deste commit NÃO confirmado (API do GitHub
+em limite) — conferir na aba Actions.
+
+**Dono:** 2 rascunhos no Resend (tarcisio@bidprobrasil.com.br) para o Dr. José Roberto com o relato e os 7 anexos
+da Claudia (Brotas/Salvador) — 35 MB, divididos em parte 1 (resposta ao "me reenvie") e parte 2 (escritura
+163/165/167, 19,5 MB). Enviar manualmente. Uploads do Resend expiram em 7 dias.
+
+**Abrir amanhã:** (1) #369 1ª rodada SOLEON gravou? (2) #370 LJUD ok e nenhuma fonte do puppeteer mudou de
+status de forma estranha; CI de 9091b8d; (3) #305 fecha em 30/10; (4) BomValor (12 domínios); (5) LEILOTECH
+spencerleiloes parcial, EMILIOMATOS/LEJE no teto; (6) fallback R$ 49,90 em Admin.jsx (MRR) e Consultor.jsx.
+
 ## 26–27/10 — ARENA DE UX POR NÍVEL · COFRE DO LEILOEIRO · 656 LEILOEIROS CONECTADOS · GRÁFICO MERCADO
 
 **Contagem de leiloeiros (leiloeiro_junta, domínios distintos, 27/10 ~01h30 UTC, já com recruzar):** coletado 365 ·
