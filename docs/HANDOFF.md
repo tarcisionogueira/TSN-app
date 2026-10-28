@@ -7,6 +7,27 @@
 
 
 
+## 28/10 (madrugada) — #371: REDE DE SEGURANÇA DE LOCALIZAÇÃO NO BANCO · #374 GLOBO COM DESCRIÇÃO TROCADA
+
+**#371 (migração 20261028_local_do_texto):** `local_do_texto(titulo, descricao, url)` + gatilho `trg_zx_local_do_texto`
+(só dispara em lote SEM UF, SEM cidade ou com cidade suja). Lê cidade/UF do título, do slug (data do LeilãoPro fora,
+"poa" = Porto Alegre, estado por extenso → sigla) e da descrição (rodapé com CNPJ, CRI/ORI/comarca/distrito judiciário
+riscados); sem UF, só nome que existe em UMA UF e nunca dentro de logradouro; sufixo colado em "vila/jardim/bairro…" não
+vale ("Vila Olímpia (SP)" ≠ Olímpia). Tabela `municipio_norm` (5.570, índice por nome sem acento + UF).
+Precisão em 1.353 lotes de localização conhecida: **UF 99,8% · cidade 98,6%**. Resultado: **sem UF 204 → 118**, sem
+cidade 291 → 202, cidade suja 16 → 0 (SUPORTE "Betim/mg", LJUD código IBGE 1506138 — que estava ERRADO: Recife/PE, não
+Redenção/PA; código só vale se a UF bate —, GESTAO com o texto do lote inteiro no campo). Os 118 restantes não citam
+lugar nenhum no texto gravado: só o parser, lendo o bloco de localização da página (SUPORTE 21, GRANDESLEIL 11,
+HASTAPUBLICALEL 9, SCHULMANN 8, BARTMANN 6…). O LeilãoPro roda às quintas — 56 dos sem-UF dele já seriam resolvidos
+pelo `cidadeDoSlugLeilao` de 26/10; não tinham sido regravados desde então.
+
+**#374 (aberta, P1) — GLOBOLEILOES:** ~125 lotes mostram a DESCRIÇÃO (e a ÁREA) de outro imóvel. Título/URL/cidade certos;
+descrição errada ("Loja - Mooca", URL `loja-a-t-330-m-mooca`, R$ 4,39 mi, com texto e área de um terreno de 13.584 m² em
+Pindamonhangaba). ⚠️ ERRO MEU NESTA SESSÃO, desfeito antes de gravar: "consertei" a cidade da Globo pela descrição e
+"validei" com o CEP — mas o CEP está DENTRO da descrição trocada, a prova era circular. A verdade externa (URL do lote,
+valor) mostrou o contrário. Nada foi gravado na Globo; o parser voltou ao original. Lição: validação precisa de fonte
+independente do dado que está sendo corrigido.
+
 ## 28/10 (noite) — PENDÊNCIAS DO CLAUDE + BUG BOUNTY
 
 **Resolvido nesta rodada (main):**
