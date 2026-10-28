@@ -7,6 +7,22 @@
 
 
 
+## 28/10 (fim de tarde) — OS OUTROS DOIS TIMEOUTS: FOTOS ÓRFÃS CONSERTADA, SOLEON JÁ ESTAVA
+
+- **limpar-fotos-orfas (04:20)** — não era só cache frio: `fotos_orfas_para_limpeza()` fazia um NOT EXISTS
+  **por arquivo** (~39 mil sondas, 162 mil buffers) para achar 3 órfãs — 5,9 s até quente. Reescrita para ler o
+  acervo vivo de uma vez e cruzar por hash, com índice novo `idx_il_link_foto_bucket` (5,6 MB, index-only):
+  **152 ms quente**, mesmo resultado (3 arquivos). Migração `20261028_fotos_orfas_anti_join`.
+- **SOLEON (01:45)** — o 57014 não era a leitura de `duplicata_comprei` (só a última linha antes de gravar) nem
+  o gatilho de fração ideal (medido: <10 ms por fonte). Era o **upsert único de 1.269 lotes** do código antigo — a
+  mensagem não tem o "(lote i-j)" do `c8f001a`. A rodada das 10:33 já gravou em lotes de 10 e passou. Nada a fazer.
+- **14:03 — timeout causado por nós**: o `create index` (sem CONCURRENTLY) da migração do #305 segurou a tabela
+  ~9 s e derrubou um update do geocoder (log: "still waiting for RowExclusiveLock"). Regra: em `imoveis_leilao`,
+  índice novo **sempre** `create index concurrently` via SQL avulso (apply_migration roda em transação).
+- **Achado, não mexido**: `value too long for type character varying(8)` em `cep` — ~42/h desde 27/10 16h,
+  constante (o mesmo lote tentando de novo). Algum enriquecedor de geocode/proximidades grava CEP com máscara
+  ou lixo; o update inteiro do lote falha (lat/long/pontos_proximos também se perdem).
+
 ## 28/10 (tarde) — #305: O TIMEOUT DOS DESCONTOS ERA HEAP FRIO, NÃO A CONTA
 
 Abertura: 3 timeouts 57014 em 14 h no banco todo (eram 13 em 12 h no dia 26) — 01h runner SOLEON
