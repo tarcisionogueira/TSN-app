@@ -19,9 +19,11 @@
 - **14:03 — timeout causado por nós**: o `create index` (sem CONCURRENTLY) da migração do #305 segurou a tabela
   ~9 s e derrubou um update do geocoder (log: "still waiting for RowExclusiveLock"). Regra: em `imoveis_leilao`,
   índice novo **sempre** `create index concurrently` via SQL avulso (apply_migration roda em transação).
-- **Achado, não mexido**: `value too long for type character varying(8)` em `cep` — ~42/h desde 27/10 16h,
-  constante (o mesmo lote tentando de novo). Algum enriquecedor de geocode/proximidades grava CEP com máscara
-  ou lixo; o update inteiro do lote falha (lat/long/pontos_proximos também se perdem).
+- **CEP com hífen (consertado)**: `value too long for type character varying(8)` em `cep`, ~42/h desde 26/10 23h.
+  `viacepCanonico()` (api/_geo.js, entrou no 41a1c03) repassava o CEP do ViaCEP como vem — '01310-100', 9 chars —
+  e o `salvarCoords` do /api/geocodificar falhava inteiro (lat/lng junto); o lote voltava à fila a cada run. Agora a
+  função devolve só 8 dígitos. Conferir em 29/10 que o erro sumiu do postgres_logs. Detalhe de qualidade, não
+  mexido: ela usa o 1º resultado do ViaCEP ("Paulista" em SP → "Viela Paulista").
 
 ## 28/10 (tarde) — #305: O TIMEOUT DOS DESCONTOS ERA HEAP FRIO, NÃO A CONTA
 

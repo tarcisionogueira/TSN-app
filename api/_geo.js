@@ -179,7 +179,11 @@ export async function viacepCanonico(uf, cidade, via, timeoutMs = 6000) {
     const arr = await res.json();
     if (!Array.isArray(arr) || !arr.length) return null;
     const r = arr[0];
-    return { cep: r.cep || null, logradouro: r.logradouro || null, bairro: r.bairro || null };
+    // O ViaCEP devolve '01310-100' (9 caracteres) e a coluna `cep` é varchar(8): o Nível 1 repassava
+    // assim e o PATCH inteiro do geocoder falhava (lat/lng junto), com o lote voltando à fila a cada
+    // run — ~42 falhas/h desde 26/10. Só dígitos aqui, na fonte, para todo chamador.
+    const cep = String(r.cep || '').replace(/\D/g, '');
+    return { cep: cep.length === 8 ? cep : null, logradouro: r.logradouro || null, bairro: r.bairro || null };
   } catch {
     return null;
   }
