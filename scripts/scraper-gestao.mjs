@@ -69,7 +69,9 @@ import { checarQualidade, normalizarData } from './lib/scraper-core.mjs';
 import { registrarConhecimento, qualidadeColeta } from './lib/conhecimento.mjs';
 // Monitor de fontes: sem esta linha a fonte fica INVISÍVEL ao bug bounty (ver _saude-fonte.mjs).
 import { registrarSaude } from './_saude-fonte.mjs';
-import { inferirUF } from './lib/inferir-uf.mjs';
+import { inferirUF, normCidade } from './lib/inferir-uf.mjs';
+import MUNICIPIOS from '../api/_municipios.js';
+const UFS_VALIDAS = new Set(Object.keys(MUNICIPIOS).map((k) => k.split('|')[0]));
 import { fetchResidencial, fecharHeadless, estatisticaResidencial, decodificarCorpo } from './lib/fetch-residencial.mjs';
 import { viaBanco } from './lib/motor/fetch-fonte.mjs';
 import { repararLatin1Perdido } from './lib/reparar-latin1.mjs';
@@ -427,10 +429,15 @@ function parseCard(card, ctx) {
   const endereco = (txt.match(/ENDERE[ÇC]O:\s*(.+?)\s*-\s*(?:BAIRRO|DESCRI|IPTU|MATR)/i) || [])[1]?.trim() || null;
   const bairro = (txt.match(/BAIRRO:\s*([^-]+?)\s*-\s*(?:DESCRI|IPTU|MATR)/i) || [])[1]?.trim() || null;
   // Fallback venda-direta: o card usa "CIDADE (UF)" (ex.: "ID75411 CURITIBA (PR) - Portão").
+  // 28/10: só vale par que EXISTE no IBGE — "Item (NS)" (extrajustleiloes) gravou cidade "Item", UF "NS" em 52 lotes.
   if (!cidade) {
-    const m2 = txt.match(/\b([A-ZÀ-Ý][A-Za-zÀ-ÿ. ]{2,30}?)\s*\(([A-Z]{2})\)/);
-    if (m2) { cidade = tituloCase(m2[1].trim()); estado = estado || m2[2]; }
+    for (const m2 of txt.matchAll(/\b([A-ZÀ-Ý][A-Za-zÀ-ÿ. ]{2,30}?)\s*\(([A-Z]{2})\)/g)) {
+      if (!Object.prototype.hasOwnProperty.call(MUNICIPIOS, `${m2[2]}|${normCidade(m2[1].trim())}`)) continue;
+      cidade = tituloCase(m2[1].trim()); estado = estado || m2[2]; break;
+    }
   }
+  // UF que não existe ("NS", "ON", "MF") não é UF: some, e o recuperador abaixo tenta pelo texto.
+  if (estado && !UFS_VALIDAS.has(estado.toUpperCase())) estado = null;
   // Sem o bloco "ESTADO:" (28/09: 2 lotes do lancenoleilao/granado sem UF, invisíveis em
   // /leiloes, com "CEP sob nº 05449-050" no texto) — mesmo recuperador do motor, só com prova.
   if (!estado) {

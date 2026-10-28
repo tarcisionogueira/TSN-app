@@ -7,6 +7,22 @@
 
 
 
+## 28/10 (madrugada, 3) — VARREDURA "ID REAPROVEITADO" EM TODAS AS FONTES
+
+**Resultado:** nenhuma outra fonte mostra o imóvel fantasma da Globo (descrição × local divergente: só GESTAO e
+GRUPOLANCE, por OUTROS motivos; as demais 1–3%, ruído). Mas não há rastro retroativo (a URL antiga some no upsert), então:
+- **Sensor (20261028_sensor_lote_trocou_url):** `lote_trocou_url` + gatilho `trg_zzzzz_lote_trocou_url` registram toda
+  troca de URL de lote existente, em qualquer fonte. Revisar em 04/11 — fonte com muitas trocas = aplicar a checagem de
+  identidade do `scraper-globo.mjs` (aposentarReaproveitados).
+- **GESTAO "Item/NS" (20261028_local_do_texto_uf_valida):** o reserva "CIDADE (UF)" aceitava "Item (NS)" → 52 lotes numa
+  UF inexistente; mais MACHADORS "ON" e ROCHA "MF". `uf_valida()` na rede de segurança: UF inválida 54 → 0 (37
+  recuperados pela descrição do próprio lote). `scraper-gestao.mjs` só aceita par que existe no IBGE.
+- **GRUPOLANCE descrição = vitrine de outros lotes (20261028_descricao_vitrine_de_lotes):** o extrator genérico do corpo
+  pegava o bloco de destaques ("…São Paulo/SP R$ 1.387.500,00 … Timbaúba/PE R$ 5.970.000,00"). 126 lotes (61 ativos)
+  voltaram ao título (backup `_bkp_descricao_vitrine_20261028`); `api/_texto-imovel.js` recusa bloco com 2+ "Cidade/UF R$".
+- **Novas pendências:** #375 área ×100/milhar (SUPERBID 138 lotes, PICELLI, OESTE…), #376 descrição-lixo (LEILOFY, JINKINGS,
+  DEPAULA, MEGA). Testes: 151/151 (2 com `VAR=x` pelo bash).
+
 ## 28/10 (madrugada, 2) — #374: GLOBO REAPROVEITA O ID DO LOTE → IMÓVEL FANTASMA EM 245 LOTES
 
 **Causa:** a Globo REUSA o id (`globoleiloes_<id>`) para outro imóvel e hoje manda `description` VAZIA para todo

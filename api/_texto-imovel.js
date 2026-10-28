@@ -19,6 +19,12 @@ const RE_VOCAB_IMOVEL = /\b(m²|m2|metros?\s+quadrados?|área\s+(constru[íi]da|
 const RE_SINAL_FORTE = /(\d[\d.,]*\s*(m²|m2|metros?\s+quadrados?)|área\s+(constru[íi]da|privativa|total|do\s+terreno|útil)|matr[íi]cula\s*n?[º°]?\s*[\d.]|confront|edif[íi]ca|benfeitoria|lote\s+n[º°]?\s*[\d.]|quadra\s+n[º°]?\s*[\d.])/i;
 // Ruído institucional: se o bloco é sobre o LEILOEIRO e não sobre o imóvel, descarta.
 const RE_RUIDO_SITE = /(especialistas?\s+em\s+leil|cadastre-se|fale\s+conosco|pol[íi]tica\s+de\s+privacidade|todos\s+os\s+direitos\s+reservados|siga-nos|newsletter)/i;
+// Vitrine de OUTROS lotes ("destaques"/"semelhantes"): "…Perdizes, São Paulo/SP R$ 1.387.500,00 Imóvel …, Timbaúba/PE
+// R$ 5.970.000,00". Tem m² e vocabulário de imóvel, então passava no crivo e virava a descrição do lote — 51 lotes da
+// GRUPOLANCE (28/10) mostravam a mesma lista de imóveis de outras cidades, com preço. Dois ou mais "Cidade/UF R$ valor"
+// no mesmo bloco = lista de cards, não descrição.
+const RE_CARD_OUTRO_LOTE = /[A-Za-zÀ-ÿ]\s*\/\s*[A-Z]{2}\s+R\$\s*[\d.]+,\d{2}/g;
+const ehVitrineDeLotes = (b) => (b.match(RE_CARD_OUTRO_LOTE) || []).length >= 2;
 
 /**
  * Melhor bloco de texto do CORPO que descreve o imóvel, ou null.
@@ -43,7 +49,7 @@ export function extrairDescricaoDoCorpo(html) {
     // "confrontando ... a &aacute;rea verde" — o bloco entrou por outros sinais, mas um
     // texto cujo único sinal fosse a área acentuada teria sido descartado como não-imóvel.
     .map(b => decodificarEntidades(b.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim())
-    .filter(b => b.length >= 60 && b.length <= 4000 && !RE_RUIDO_SITE.test(b));
+    .filter(b => b.length >= 60 && b.length <= 4000 && !RE_RUIDO_SITE.test(b) && !ehVitrineDeLotes(b));
 
   // QUALIFICA cada bloco isoladamente (mesmo crivo de sempre: sinal forte + vocabulário).
   const vocabDe = (b) => new Set((b.match(new RegExp(RE_VOCAB_IMOVEL.source, 'gi')) || []).map(t => t.toLowerCase()));
