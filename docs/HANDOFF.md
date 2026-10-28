@@ -7,6 +7,38 @@
 
 
 
+## 28/10 (noite) — PENDÊNCIAS DO CLAUDE + BUG BOUNTY
+
+**Resolvido nesta rodada (main):**
+- **CEF (41566e4):** upsert de 500 → 100 linhas + pausa de 300 ms. A rodada inteira (~22,5 mil linhas) saturava a escrita
+  (checkpoint 26%) e derrubou 6 gravações de outros coletores às 15:37–15:45. Não dá "gravar só o que mudou": o sweep de
+  vencidos depende do `atualizado_em` andar em todo lote visto. O cron das 9h UTC na prática roda ~15h (atraso do GitHub).
+- **#369 fechada:** os 13 tenants SOLEON gravaram às 11:05. CASAMARTILLO "vazio" é real: o site diz "NENHUM LEILÃO NO MOMENTO".
+- **Preços (0bed127):** ProdutoLanding mostrava R$ 49,90 (real 89,90) e R$ 4.800 à vista (real 5.000) quando a leitura
+  falhava → agora "Valor exibido no checkout". MRR do Admin não recalculava ao chegar o planos_config (faltava `planosCtx`
+  nas dependências) e usava 49,90 → fallback 0. Consultor sem preço velho. `descricaoContratoPlano`/`DESCRICOES_PADRAO` do
+  Admin são código morto (sem uso) com valores velhos — apagar quando mexer ali.
+- **BomValor = NÃO integrar (58f627e):** os white-labels são vitrine da REDE COLABORATIVA — o mesmo evento (STARS BANK 38451)
+  em todos os sites, cada um carimbando o próprio leiloeiro. Os 42 ativos do EMILIOMATOS eram gêmeos da GLOBOLEILOES (mesmo
+  id MBV e valor) → `gemeo_entre_leiloeiros`; EMILIOMATOS saiu do agendado do firecrawl-semanal (#259 fechada). 15 domínios
+  anotados em `leiloeiro_triagem.catalogo_ok = rede_bomvalor_2810`. A Globo já cobre a rede (191 lotes via mercado.bomvalor).
+- **LEILOTECH (48e3372):** `faltou` contava leilão multi-lote sem lote de IMÓVEL novo (irmão veículo / já visto na home) →
+  spencerleiloes/amleiloeiro parciais toda rodada e FORA do sweep. Agora só página sem resposta. Conferir a rodada de 29/10.
+- **Testes:** no Windows, `node scripts/rodar-testes.mjs` dá 0/151 (spawn de `npm` sem shell). Rodar uma cópia com
+  `shell: true` → 149/151, e os 2 com `VAR=x` passam pelo bash. 151/151.
+
+**Bug bounty — pendências novas:** #371 (204 lotes sem UF/cidade, família LeilãoPro/RS de 24/10 — somem de /leiloes),
+#372 (11 leiloeiros de 25–27/10 que nunca leram lote + 8 pequenos que "falham" por estarem vazios), #373 (123 CEF à venda
+com data vencida; enriquecer-datas sem cota Bright Data).
+- Segurança: 0 vazamento. `leiloeiro_vaza_para_anon()` = 6 zeros; `buscar_por_raio_v2` como anon devolve 200 lotes com
+  leiloeiro/matrícula/edital/processo/url todos nulos. Advisors: 2 views SECURITY DEFINER (intencionais, cofre), 27 funções
+  com search_path mutável, 131 tabelas RLS sem policy (backups `_bkp_*` inclusos) — higiene, não exposição.
+- Juntas: 975 domínios ativos — coletado 362 · codigo_sem_lote 283 · agregador 61 · nao_coletado 269. Dos 269: integráveis
+  com parser existente ≈ 20 (SOLEON guariglia/leiloeironacif, LEILOAR 3, NOVASERRANA 4, TRIACCA 2, LEILO 2, LEILOESBRASIL_UF 2,
+  CODEPEN 3, SUPERBID auctio/kiel, LEILOTECH arrematebem, FRAZAO, EXTERNO, NORDESTE); DESCONHECIDA 73; DNS morto 49; sem
+  triagem 39; WordPress 21; "não é leilão?" 20; SSL inválido 17; BomValor 12 (não integrar).
+- LJUD #370 sem rodada nova até 16:40 UTC (roda ~17h) — conferir em 29/10.
+
 ## 28/10 (fim de tarde) — OS OUTROS DOIS TIMEOUTS: FOTOS ÓRFÃS CONSERTADA, SOLEON JÁ ESTAVA
 
 - **limpar-fotos-orfas (04:20)** — não era só cache frio: `fotos_orfas_para_limpeza()` fazia um NOT EXISTS
