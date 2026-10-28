@@ -16,7 +16,7 @@ on:
       fontes:
         description: 'csv: leje,mgl,emiliomatos'
         required: false
-        default: 'leje,mgl,emiliomatos'
+        default: 'leje,mgl'
       mgl_tenants:
         description: 'csv dos sites MGL (fernando,jonas,lucas,viva,jinkings) — vazio = todos'
         required: false
@@ -36,7 +36,7 @@ jobs:
     timeout-minutes: 30
     env:
       DRYRUN_PADRAO: ${{ (github.event_name == 'schedule' || github.event.inputs.gravar == '1') && '0' || '1' }}
-      FONTES: ${{ github.event.inputs.fontes || 'leje,mgl,emiliomatos' }}
+      FONTES: ${{ github.event.inputs.fontes || 'leje,mgl' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -84,6 +84,10 @@ jobs:
           VEIC_MAX_LOTES: '55'
         run: node scripts/scraper-veiculos-motor.mjs
 
+      # 28/10: FORA DO AGENDADO (só por dispatch com fontes=...,emiliomatos). Os "eventos do leiloeiro" da home são
+      # da REDE COLABORATIVA BomValor: o mesmo evento (ex. Imóveis STARS BANK 38451) aparece em todos os white-labels,
+      # cada um carimbando o próprio nome. Os 42 lotes ativos eram os MESMOS ids/valores da GLOBOLEILOES (que já lê a
+      # rede pelo mercado.bomvalor) — suprimidos como gemeo_entre_leiloeiros. ~45 créditos Firecrawl/semana por 0 lote único.
       # 18/10: religado SÓ com o acervo do leiloeiro (home → eventos de imóveis → /emilio-matos-rocha/imoveis/...).
       # O cron próprio (scraper-emiliomatos.yml) segue suspenso: ele lia o catálogo GLOBAL do Superbid.
       - name: Emílio Matos
