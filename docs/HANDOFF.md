@@ -7,6 +7,19 @@
 
 
 
+## 28/10 (tarde) — #305: O TIMEOUT DOS DESCONTOS ERA HEAP FRIO, NÃO A CONTA
+
+Abertura: 3 timeouts 57014 em 14 h no banco todo (eram 13 em 12 h no dia 26) — 01h runner SOLEON
+(`duplicata_comprei`), 04h `limpar-fotos-orfas`, **13:37 `descontos`**, depois da migração da madrugada.
+Medido: `recalcular_desconto_praca()` = 80 ms quente e 0 linha a mudar; nenhum coletor gravando às 13:37 e
+**nenhum "still waiting" no log** (log_lock_waits ligado) → não é lock. A varredura passava por todos os
+35,9 mil ativos (19.459 páginas ≈ 150 MB do heap de 195 MB) para achar 5,6 mil candidatos: no Free, heap fora
+do cache = disco = > 8 s. Migração **20261028_desconto_praca_indice_parcial** (aplicada): índice parcial
+`idx_il_desconto_praca_candidatos` com o MESMO predicado da função + colunas da conta (504 kB, index-only):
+2.173 páginas, 46 ms. Se o predicado da função mudar, mudar o índice junto. #305 segue aberta: fechar com 48 h
+sem 57014 em qualquer passo (revisar 30/10). Os outros dois (fotos-órfãs, duplicata_comprei) provavelmente
+têm a mesma assinatura — medir antes de mexer.
+
 ## 28/10 — TIMEOUT DE DESCONTOS · CI VERDE · SOLEON DESTRAVADO · SAÚDE DO LJUD
 
 **Banco (#305):** com o relistados ok (27/10), o passo `descontos` do desativar-encerrados passou a dar 57014
