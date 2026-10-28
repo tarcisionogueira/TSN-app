@@ -1694,7 +1694,13 @@ async function salvarImoveis(imoveis) {
   //
   // O ganho imediato independe do diagnóstico: uma linha problemática deixa de derrubar as
   // outras 8.199. Antes era tudo ou nada, e por 12 dias foi nada.
-  const CHUNK = 500;
+  // 100 POR COMANDO + PAUSA (28/10). Com 500, cada comando passava os 36 gatilhos BEFORE de
+  // `imoveis_leilao` em 500 linhas de uma vez, e a rodada inteira (~22,5 mil linhas em 10 min)
+  // saturava a escrita do banco (checkpoint gravando 26% do buffer): 6 statement timeouts em
+  // OUTROS coletores entre 15:37 e 15:45 de 28/10. Não dá para gravar só o que mudou — o sweep de
+  // vencidos depende do `atualizado_em` avançar em todo lote visto —, então a carga é espalhada.
+  const CHUNK = 100;
+  const PAUSA_MS = 300;
   const gravar = async (lote) => {
     const { error } = await supabase
       .from('imoveis_leilao')
@@ -1733,7 +1739,10 @@ async function salvarImoveis(imoveis) {
       else transitorias.push(`${desc} — ${erro.message.slice(0, 90)}`);
     }
   };
-  for (let i = 0; i < rows.length; i += CHUNK) await enviar(rows.slice(i, i + CHUNK));
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    await enviar(rows.slice(i, i + CHUNK));
+    if (i + CHUNK < rows.length) await new Promise((r) => setTimeout(r, PAUSA_MS));
+  }
 
   if (rejeitadas.length) {
     console.error(`    ⛔ ${rejeitadas.length} linha(s) REJEITADA(S) pelo banco:`);
