@@ -5443,6 +5443,8 @@ async function scraperLeilotechTenant(browser, tenant) {
   // O HTML server-rendered lista os lotes mas sem o lance (20 de 72 ativos têm lance < avaliação).
   const leiloes = new Map(); // leilaoId → leilão da home (imóvel)
   let parcialLt = null;
+  // Leilões cuja página RESPONDEU (leilaoEntity chegou), com ou sem lote de imóvel novo. Ver `faltou` abaixo.
+  const respondeu = new Set();
   let amostraLogada = false;
   const ehImovel = (leilao, lote) => LT_IMOVEL.test(`${leilao.title || ''} ${leilao.categoriaMascara || ''} ${lote.categoria?.nome || ''} ${lote.titulo || ''}`);
   page.on('response', async (resp) => {
@@ -5453,6 +5455,7 @@ async function scraperLeilotechTenant(browser, tenant) {
       const j = JSON.parse(t);
       const ent = j?.data?.leilaoEntity;
       if (ent && Array.isArray(ent.lotes?.items)) {
+        if (ent.id != null) respondeu.add(String(ent.id));
         const leilao = { ...(leiloes.get(String(ent.id)) || {}), ...ent, lotes: undefined };
         for (const lote of ent.lotes.items) {
           if (lote?.id && ehImovel(leilao, lote)) itens.set(`${leilao.id}|${lote.id}`, { lote, leilao });
@@ -5491,15 +5494,17 @@ async function scraperLeilotechTenant(browser, tenant) {
     const multi = [...leiloes.values()].filter((l) => Number(l.lotesAtivosCount ?? l.lotesCount) > 1).slice(0, 30);
     let faltou = 0;
     for (const l of multi) {
-      const antes = itens.size;
       try { await page.goto(`${base}leilao/${l.id}${l.slug ? `/${l.slug}` : ''}`, { waitUntil: 'networkidle2', timeout: 30000 }); } catch { /* timeout parcial: usa o que já veio */ }
       for (let s = 0; s < Math.ceil(Number(l.lotesAtivosCount ?? l.lotesCount) / 15); s++) {
         try { await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)); } catch { /* */ }
         await new Promise(r => setTimeout(r, 1500));
       }
-      if (itens.size === antes) faltou++;
+      // 28/10: falta = a página NÃO respondeu. Antes era "não trouxe lote de imóvel novo", o que também
+      // acontece quando os irmãos são veículo/máquina ou já tinham vindo na home — e aí o tenant ficava
+      // parcial em TODA rodada (spencerleiloes, amleiloeiro desde 27/10) e fora do sweep de sumidos para sempre.
+      if (!respondeu.has(String(l.id))) faltou++;
     }
-    if (multi.length) console.log(`    [${tenant.domain}] ${multi.length} leilões com 2+ lotes abertos${faltou ? ` · ${faltou} sem lote novo (página não respondeu ou lotes não são imóvel)` : ''}`);
+    if (multi.length) console.log(`    [${tenant.domain}] ${multi.length} leilões com 2+ lotes abertos${faltou ? ` · ${faltou} sem resposta da página` : ''}`);
     // 26/10: leilão de vários lotes cuja página não respondeu deixava só o primaryLote — os irmãos (O Leilões
     // 7498/7499, mesmo prédio) saíam do acervo pelo sweep. Página que não trouxe lote novo, ou leilão além do teto
     // de 30, torna o tenant PARCIAL: fica fora do sweep nesta rodada.
