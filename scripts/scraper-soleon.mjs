@@ -1065,8 +1065,21 @@ async function main() {
       if (dup) console.log(`  ${dup} lote(s) de venda direta PGFN já coletados na origem (COMPREI) → duplicata_comprei`);
     }
   }
-  const { error } = await supabase.from('imoveis_leilao').upsert(prontos, { onConflict: 'fonte_id', ignoreDuplicates: false });
-  if (error) { console.error('erro ao gravar:', error.message); process.exit(1); }
+  // EM LOTES DE 10, com 1 nova tentativa em timeout (28/10, mesmo conserto do scraper-rj de 26/10). Era UM upsert com
+  // os ~1.270 lotes: desde 22/10 ele estourava o statement timeout (57014, gatilhos BEFORE UPDATE da tabela) e o
+  // process.exit(1) levava junto a varredura de sumidos e a saúde dos 16 tenants — 13 fontes congeladas em 22/10 sem
+  // alerta próprio (runner_falha_SOLEON rc=1). Lote pequeno cabe no tempo; o que gravou fica gravado.
+  const TAM = 10;
+  for (let i = 0; i < prontos.length; i += TAM) {
+    const parte = prontos.slice(i, i + TAM);
+    let { error } = await supabase.from('imoveis_leilao').upsert(parte, { onConflict: 'fonte_id', ignoreDuplicates: false });
+    if (error && /timeout|57014/i.test(`${error.code || ''} ${error.message || ''}`)) {
+      console.warn(`  upsert ${i}-${i + parte.length} estourou o tempo; nova tentativa em 5 s`);
+      await new Promise((r) => setTimeout(r, 5000));
+      ({ error } = await supabase.from('imoveis_leilao').upsert(parte, { onConflict: 'fonte_id', ignoreDuplicates: false }));
+    }
+    if (error) { console.error(`erro ao gravar (lote ${i}-${i + parte.length} de ${prontos.length}):`, error.message); process.exit(1); }
+  }
   console.log(`✅ ${prontos.length} imóveis SOLEON gravados/atualizados.`);
   for (const tenant of TENANTS) await varrerSumidos(tenant);
   // Auto-aprendizado por tenant.
