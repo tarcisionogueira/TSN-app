@@ -7,6 +7,21 @@
 
 
 
+## 28/10 (tarde) — FRAZAO: EQUIPAMENTOS "RETORNADOS DAS LOJAS" NO ACERVO + 2 TRAVAMENTOS CAUSADOS POR MIM
+
+**Achado:** a rodada da FRAZAO das 17:29 gravou 61 lotes "APROX. N EQUIPAMENTOS RETORNADOS DAS LOJAS DE DIVERSAS MARCAS"
+como imóvel comercial (sem UF, por isso "sem UF" subiu de 118 para 206). Passavam pelo "lojas" do sinal de imóvel, e a
+FRAZAO nem passava pelo filtro de fora do acervo.
+**Conserto:** "retornad/devolvid/oriund/provenient/recolhid… da(s) loja(s)" sai do texto antes do teste, em
+`ehForaDoAcervo` (`scraper-core.mjs`) e no espelho `fora_do_acervo_imovel_veiculo()` (20261028_fora_do_acervo_loja_de_origem).
+FRAZAO entrou em `FONTES_FORA_DO_ACERVO_VALIDADAS` depois do diff contra os 88 ativos: 61 fora (todos equipamentos), 27
+imóveis dentro; nenhuma outra fonte muda. Os 61 desativados como `nao_imovel`. Sem UF: 206 → 145. Teste em `testar:vaga-garagem`
+(falha sem o conserto).
+**Travamentos que causei:** 14:03 (CREATE INDEX sem CONCURRENTLY) e 18:02–18:03 (a migração da descrição-lixo criou o
+gatilho e rodou a varredura de backup na MESMA transação → 10 timeouts no geocoder/site). Regra: em `imoveis_leilao`,
+gatilho/índice vai sozinho (índice CONCURRENTLY) e a varredura pesada em outra chamada.
+**Testes:** `testar:landing-aula` e `testar:filtros-veiculos` falham no main limpo (fora do `rodar-testes.mjs`) — não é desta mudança.
+
 ## 28/10 (madrugada, 5) — #376: DESCRIÇÃO-LIXO NÃO ENTRA
 
 **Banco (20261028_descricao_lixo):** `descricao_eh_lixo()` + gatilho `trg_zx_descricao_lixo` (pré-filtro barato no WHEN):

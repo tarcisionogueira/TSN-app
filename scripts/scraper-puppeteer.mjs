@@ -151,7 +151,9 @@ const FONTES_INTERNACIONAIS = new Set(['SUPERBID', 'SBID9', 'SBID21', 'SOLD']);
 // negativo pré-existente, mesmo risco que SUPERBID/LJUD já assumem; "Pousada com 1.570 m²..."
 // bate no "m²" — falso alarme da minha 1ª tentativa de validação em SQL, não do classificador
 // real). Zero falso-positivo (nenhum imóvel de verdade seria descartado) — só então ligado.
-const FONTES_FORA_DO_ACERVO_VALIDADAS = new Set(['SUPERBID', 'LJUD', 'VIP', 'LEILAOBRASIL', 'LEILOTECH', 'ROCHALEILOES']);
+// FRAZAO entrou em 28/10 (61 "EQUIPAMENTOS RETORNADOS DAS LOJAS" gravados como imóvel comercial): diff contra os 88
+// ativos da fonte — os 61 equipamentos fora, os 27 imóveis dentro, nenhum outro.
+const FONTES_FORA_DO_ACERVO_VALIDADAS = new Set(['SUPERBID', 'LJUD', 'VIP', 'LEILAOBRASIL', 'LEILOTECH', 'ROCHALEILOES', 'FRAZAO']);
 const baseFonte = (f) => String(f || '').trim().toUpperCase().replace(/\s+\d.*$/, ''); // "SBID9 1-500" → "SBID9"
 const ehEstrangeiroPelaCidade = (fonte, cidade) => {
   if (!FONTES_INTERNACIONAIS.has(baseFonte(fonte))) return false; // só as fontes com inventário internacional
@@ -376,7 +378,7 @@ async function salvarImoveis(imoveis, fonte) {
   // Aplicada aqui NA CAPTURA, não só via limpeza retroativa + qa_invariantes(). Escopo LIMITADO
   // às fontes de FONTES_FORA_DO_ACERVO_VALIDADAS — só entram depois de um diff completo contra
   // TODO o acervo ativo da fonte (0 falso-positivo real). As ~11 fontes que ainda passam por
-  // aqui sem validar (MEGA/GRUPOLANCE/ZUK/BIASI/PESTANA/SOLD/SODRE/FRAZAO/VENDASGOV/SUPORTE/
+  // aqui sem validar (MEGA/GRUPOLANCE/ZUK/BIASI/PESTANA/SOLD/SODRE/VENDASGOV/SUPORTE/
   // SBID9/SBID21/WEBLEILOES) tiveram, num teste rápido de 20/09, ~365 candidatos concentrados
   // nelas, quase todos falso-positivo de título mais terso. Ampliar pra elas sem validar
   // repetiria o erro que este mesmo filtro já evitou uma vez.

@@ -47,3 +47,7 @@ assert.equal(ehFracaoIdeal({ titulo: 'FRAÇÃO DE TERRAS', descricao: '' }), fal
 assert.equal(ehFracaoIdeal({ titulo: 'FRAÇÃO IDEAL DE 50% DE TERRAS', descricao: '' }), true, 'fração ideal segue barrada');
 assert.equal(ehForaDoAcervo({ titulo: 'Lote de gado nelore', descricao: '' }), true, 'gado continua fora');
 console.log('fracao-de-terras: todos os casos passaram');
+// 28/10 (FRAZAO): a loja de onde a mercadoria voltou não faz do lote um imóvel; loja à venda continua imóvel.
+assert.equal(ehForaDoAcervo({ titulo: 'APROX. 45 EQUIPAMENTOS RETORNADOS DAS LOJAS DE DIVERSAS MARCAS E MODELOS.', descricao: '' }), true, 'equipamentos devolvidos das lojas são fora');
+assert.equal(ehForaDoAcervo({ titulo: 'Loja comercial no centro de Campinas', descricao: '' }), false, 'loja à venda segue imóvel');
+console.log('loja-de-origem: todos os casos passaram');

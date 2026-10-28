@@ -438,8 +438,11 @@ const RE_SINAL_VEICULO = /\b(ve[íi]culos?|autom[óo]ve(l|is)|caminh[õo]es|cami
 // veículo" (bartmann_778, feliperotta_6, kirinus_559, dld_570). "terr+enos?" pega o "TERRRENO" digitado errado
 // (ferronato_170). Fração IDEAL continua barrada antes, em ehFracaoIdeal. Alqueires/agência bancária vieram do
 // espelho SQL, que já os tinha. Espelho: fora_do_acervo_imovel_veiculo() (20261024_fracao_de_terras_rs.sql).
+// 28/10: "APROX. 45 EQUIPAMENTOS RETORNADOS DAS LOJAS DE DIVERSAS MARCAS" (FRAZAO, 61 lotes) passava como imóvel pelo
+// "lojas" — a loja ali é de onde a MERCADORIA voltou, não o bem. Essa expressão sai do texto antes do teste.
+const RE_LOJA_DE_ORIGEM = /\b(retornad|devolvid|oriund|provenient|recolhid)\w*\s+d[ae]s?\s+lojas?\b/gi;
 export function ehForaDoAcervo(imovel) {
-  const txt = `${imovel?.titulo || ''} ${imovel?.descricao || ''}`;
+  const txt = `${imovel?.titulo || ''} ${imovel?.descricao || ''}`.replace(RE_LOJA_DE_ORIGEM, ' ');
   return !RE_SINAL_IMOVEL.test(txt) && !RE_SINAL_VEICULO.test(txt);
 }
 
