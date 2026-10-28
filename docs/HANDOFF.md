@@ -35,9 +35,14 @@ importa a de `_saude-fonte.mjs`. Simulado: link 0,496 → 1,000. A métrica é o
 reprovado caía na reserva get-bens, link 0, em 15/17/21/24/10). CI deste commit NÃO confirmado (API do GitHub
 em limite) — conferir na aba Actions.
 
-**Dono:** 2 rascunhos no Resend (tarcisio@bidprobrasil.com.br) para o Dr. José Roberto com o relato e os 7 anexos
-da Claudia (Brotas/Salvador) — 35 MB, divididos em parte 1 (resposta ao "me reenvie") e parte 2 (escritura
-163/165/167, 19,5 MB). Enviar manualmente. Uploads do Resend expiram em 7 dias.
+**Brotas → Dr. José Roberto: ENVIADO 27/10 23:46 BRT** pelo app (Admin › E-mail), as duas como resposta ao
+"me reenvie o email" (email_caixa 98f637bc): parte 1 = relato completo da Claudia + 6 anexos (15,7 MB); parte 2 =
+escritura 163/165/167 (19,5 MB). Resend status "sent" (entrega final não confirmada na hora). Um e-mail só não
+cabe: 35 MB + codificação passa do teto de 40 MB do Resend. ATENÇÃO: os rascunhos da tela do app ficam em
+`email_rascunhos` (por user_id), NÃO nos rascunhos do inbox do Resend. Para isso entrou **26fda63** + migração
+20261028_email_rascunhos_encaminhar_anexos: o rascunho passa a guardar `encaminhar_anexos` (referências a anexos
+já arquivados de mensagens da caixa, mesmo formato do Encaminhar). Pasta "Anexos Brotas - Dr Jose Roberto" na Área
+de Trabalho do dono pode ser apagada.
 
 **Abrir amanhã:** (1) #369 1ª rodada SOLEON gravou? (2) #370 LJUD ok e nenhuma fonte do puppeteer mudou de
 status de forma estranha; CI de 9091b8d; (3) #305 fecha em 30/10; (4) BomValor (12 domínios); (5) LEILOTECH
