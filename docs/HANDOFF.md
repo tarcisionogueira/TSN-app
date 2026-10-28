@@ -7,6 +7,43 @@
 
 
 
+## 28/10 (noite, 2) — INTEGRAÇÃO DOS PENDENTES DA TRIAGEM: O QUE ERA REAL
+
+**A conta de "82 pendentes com imóvel" estava inflada.** `leiloeiro_triagem.parser_existente` está desatualizado:
+- 27 desses domínios já têm lote ativo por outro nome de fonte (SCHULMANN, NASARLEILOES, TELESELIMA…);
+- os 44 LEILOESBR são plataforma de ARTE — o leitor mede e registra zero de propósito.
+
+Sondagem de home + buscador dos que sobraram:
+- **Donizette (SUPORTE):** 0 lote desde 29/08. O `.com.br/buscador` redireciona para a HOME do `.leilao.br`, perdendo o
+  path. O tenant passou para `donizetteleiloes.leilao.br` (mesmo tenantKey, mesmos fonte_id). Seco: 12 imóveis na pág. 1.
+- **Luiz Lobato:** 0 lote desde 29/08; o `/buscador` dá 404 porque o site migrou para o front "oferta". Passou para
+  `scraper-suporteoferta.mjs` (fonte LUIZLOBATO): 22 enumerados, 6 em aberto.
+  - O leitor "oferta" ganhou cidade pelo título ("… - Centro - São Paulo - SP", "Sete Lagoas/mg"); antes caía na UF do
+    leiloeiro.
+  - Conferido: 0 mudança em 114 lotes de 5 tenants existentes.
+- **Central Sul (SC, nova):** o lote mora em `/leilao/<id>/lote/<id>` e a página é Angular. Ganhou o 3º template no
+  `leiloar-parse.mjs` (`parseAngular`, lê o `ng-state`), com matrícula em PDF.
+  - Seco: 90 enumerados; de 40 lidos, 25 imóveis aproveitáveis.
+  - Conferido: os outros tenants Leiloar enumeram igual.
+- **Verificados e sem ação:**
+  - Karla Pepe e Braga (LABASOFT): só leilões encerrados.
+  - PW/Wellington: o mesmo site, já coletado, sem imóvel.
+  - Ananda: linka lotes da Saraiva.
+  - Mariano: sem catálogo.
+  - aleiloeira.leilao.br: redireciona para a Topo (LEILOTECH).
+- **Pedem leitor novo (fila):**
+  - MJ Leilões (front Suporte `/leiloes/<id>`);
+  - Miranda Carvalho (site próprio; o "degrau" da sondagem era texto);
+  - mvleiloes (WordPress, 140 menções);
+  - leilo.com.br / leilomaster (o mesmo site);
+  - formulaleiloes (LEILOADOR);
+  - megaleiloesms (Othis/Mega — conferir se a MEGA já cobre);
+  - nortedeminas (1 ativo de 21 no histórico).
+- **Conferir na próxima rodada:**
+  - SUPORTE: Donizette > 0;
+  - suporteoferta: LUIZLOBATO > 0;
+  - leiloar: CENTRALSUL > 0.
+
 ## 28/10 (noite) — LEILOTECH "PARCIAL" ERA CORRIDA, NÃO LEILÃO FALTANDO
 
 spencerleiloes (809) e amleiloeiro (363/359): reproduzido com Puppeteer local — a página RESPONDE, mas o leilaoEntity chega

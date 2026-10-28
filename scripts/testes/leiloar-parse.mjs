@@ -32,5 +32,19 @@ eq('móvel: veículo vira "Bem"', movel('LOTE 1 - Veículo FIAT/PALIO FIRE, plac
 eq('móvel: sofá vira "Bem"', movel('BEM 1: Um sofá de veludo cor azul, estrutura em madeira maciça.').split(' - ')[0], 'Bem');
 eq('sem tipo mas diz imóvel: "Imóvel"', movel('BEM: Um imóvel situado na Rua X, nº 10.').split(' - ')[0], 'Imóvel');
 
+// 28/10 — Central Sul (3º template, Angular): lote linkado dentro do leilão e lido do <script id="ng-state">.
+const CS = TENANTS.centralsul;
+const uCS = 'https://www.centralsuldeleiloes.com.br/leilao/12206/lote/243954/apartamento-no-1001-com-vaga-de-estacionamento-no-edificio-ipanema-em-balneario-camboriu-sc';
+eq('central sul: lote dentro do leilão', [...extrairUrlsDeLote(`<a href="/leilao/12206/lote/243954/apartamento-no-1001">x</a>`, CS.base).keys()], ['243954']);
+const htmlCS = fs.readFileSync(new URL('./fixtures/centralsul-lote-243954.html', import.meta.url), 'utf8');
+const dCS = parseDetalhe(htmlCS, uCS, { agora: new Date('2026-10-28T12:00:00-03:00') });
+const cs = montarRow(uCS, dCS, CS);
+eq('central sul: cidade/UF pelo título', [cs.cidade, cs.estado], ['Balneário Camboriú', 'SC']);
+eq('central sul: valores', [cs.valor_avaliacao, cs.valor_minimo], [3650000, 3650000]);
+eq('central sul: praça e aberto', [dCS.data_leilao, dCS.encerrado, !!dCS.naoImovel], ['2026-10-29T12:00:00.000Z', false, false]);
+eq('central sul: matrícula PDF e foto', [/matriculas_lotes\/243954\/.+\.pdf$/.test(dCS.link_matricula), /^https:\/\/img\.centralsuldeleiloes/.test(dCS.link_foto)], [true, true]);
+eq('central sul: depois da praça, encerrado', parseDetalhe(htmlCS, uCS, { agora: new Date('2026-11-01T12:00:00-03:00') }).encerrado, true);
+eq('central sul: categoria sem imóvel = não-imóvel', parseDetalhe(htmlCS.replace(/"label":"Imóvel"/g, '"label":"Veículos"').replace(/"full_label":"Imóvel"/g, '"full_label":"Veículos"'), uCS, { agora: new Date('2026-10-28T12:00:00-03:00') }).naoImovel, true);
+
 console.log(falhas ? `\n${falhas} falha(s), ${ok} ok` : `✓ ${ok}/${ok} asserções`);
 if (falhas) process.exit(1);

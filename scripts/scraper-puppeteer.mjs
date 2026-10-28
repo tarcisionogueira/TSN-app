@@ -5617,7 +5617,9 @@ const SUPORTE_TENANTS = [
   // 100% PGFN — e o run confirmou: DOIS deles (marcoantonio, rodrigo) trouxeram 12 imóveis
   // cada. Barrá-los por suposição teria custado 24 lotes.
   { domain: 'anandaleiloes.com.br', leiloeiro: 'Ananda Leilões' },
-  { domain: 'donizetteleiloes.com.br', leiloeiro: 'Donizette Leilões' },
+  // 28/10: era `donizetteleiloes.com.br`, que redireciona /buscador para a HOME do .leilao.br (path perdido) — 0 lote
+  // desde 29/08. O .leilao.br direto devolve 24 `lote-main` na 1ª página. Mesmo tenantKey (antes do 1º ponto) → mesmos fonte_id.
+  { domain: 'donizetteleiloes.leilao.br', leiloeiro: 'Donizette Leilões' },
   { domain: 'goldenlance.com.br', leiloeiro: 'Golden Lance Leilões' },
   { domain: 'lilianportugal.com.br', leiloeiro: 'Lilian Portugal Leilões' },
   { domain: 'marianoleiloes.com.br', leiloeiro: 'Mariano Leilões' },
@@ -5628,7 +5630,9 @@ const SUPORTE_TENANTS = [
   { domain: 'sandrasantosleiloes.com.br', leiloeiro: 'Sandra Santos Leilões' },
   { domain: 'serpaleiloes.com.br', leiloeiro: 'Serpa Leilões' },
   { domain: 'stefanellileiloes.com.br', leiloeiro: 'Stefanelli Leilões' },
-  { domain: 'luizlobatoleiloeiro.com.br', leiloeiro: 'Luiz Lobato Leilões' },          // PGFN na home
+  // luizlobatoleiloeiro.com.br SAIU daqui (28/10): /buscador dá 404, migrou para o front "oferta" — coleta em
+  // scraper-suporteoferta.mjs (fonte LUIZLOBATO). anandaleiloes/marianoleiloes/mjleiloes também dão 404 aqui: a Ananda só
+  // linka lotes da Saraiva (já tenant), a Mariano não tem catálogo, a MJ roda outro front (/leiloes/<id>) — ficam, vazios.
   // marcoantonioleiloeiro.com.br e rodrigoleiloeiro.com.br SAÍRAM daqui (24/10, pendência 296): migraram para o front
   // Next.js novo da Suporte (sem `lote-main`; 0 lote desde 13/09 e 25/09). Coleta agora em scraper-suportev2.mjs
   // (fonte MARCOANTONIO — um banco, quatro vitrines, junto com Anna Luiza e DCM).
@@ -5705,9 +5709,7 @@ const SUPORTE_TENANTS = [
   //    18/06/2025 — encerrado. O buscador de imóveis vazio é o retrato certo (0 de 0 vivos); o resto é prefeitura.
   { domain: 'kleiberleiloes.com.br', leiloeiro: 'Kleiber Leilões (Kleiber Leite Pereira)' },
   { domain: 'esleiloes.com.br', leiloeiro: 'ES Leilões (Sérgio de Paula Pereira)' },
-  // `donizetteleiloes.leilao.br` é o MESMO site do .com.br (mesmo `arrematante.` e mesmo
-  // static). Fora de propósito: o `tenantKey` deriva do domínio antes do primeiro ponto, então
-  // os dois gerariam o mesmo `fonte_id` e um sobrescreveria o outro sem nada aparecer.
+  // Donizette: só o `.leilao.br` (ver acima). O .com.br é o MESMO site; os dois juntos gerariam o mesmo `fonte_id`.
 ];
 
 // Lote de TESTE do próprio leiloeiro (SUEDPETER 21/08: "LEILÃO TESTE - LOTE 02" no evento

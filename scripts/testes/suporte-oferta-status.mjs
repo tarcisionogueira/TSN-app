@@ -36,5 +36,13 @@ const dWord = parseDetalhe(comWord, URL_LOTE)?.descricao || '';
 if (/^Área de terreno com cerca de 100\.000m²/.test(dWord) && !/<|mso|w:/.test(dWord)) ok++;
 else { falhas++; console.log(`✗ descrição com marcação do Word: ${JSON.stringify(dWord.slice(0, 120))}`); }
 
+// Luiz Lobato (28/10): "… - Centro - São Paulo - SP" no título; sem ler isso o lote caía na UF do leiloeiro (MG).
+const comTitulo = (t) => base.replace(/(var lote = \{[\s\S]*?"titulo":")[^"]*/, `$1${t}`);
+for (const [t, cid, uf] of [['Prédio Comercial - Largo do Paissandú Nº 62 - Centro - São Paulo - SP', 'São Paulo', 'SP'],
+  ['Lotes de Terrenos Nº 31 e 32 da Quadra 01, Situado na Rua Felipe de Vasconcelos, Centro, Sete Lagoas/mg. Área Total', 'Sete Lagoas', 'MG']]) {
+  const d = parseDetalhe(comTitulo(t), URL_LOTE) || {};
+  if (d.cidade === cid && d.estado === uf) ok++; else { falhas++; console.log(`✗ cidade do título "${t.slice(0, 40)}…": ${d.cidade}/${d.estado}`); }
+}
+
 console.log(`${falhas ? '✗' : '✓'} suporte-oferta-status: ${ok} ok, ${falhas} falha(s)`);
 process.exit(falhas ? 1 : 0);

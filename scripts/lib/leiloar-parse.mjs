@@ -78,6 +78,10 @@ export const TENANTS = {
   // devolve "Sua pesquisa não retornou resultados" e /externo/bens repete a home; segue fora); fkleiloes e salgueiroleiloes
   // (/externo/ 404 e a raiz é uma casca vazia, só o rodapé "Copyright Plataforma Leiloar" — não há catálogo que prove
   // onde o leilão apareceria).
+  // 28/10 — Central Sul de Leilões (SC; triagem da junta com 74 menções a imóvel): a home lista os leilões em /leilao/<id> como
+  // a Leiloar, mas o lote mora em /leilao/<id>/lote/<id>/<slug> e a página é Angular (3º template, parseAngular). Seco: 90
+  // lotes enumerados na home; de 40 lidos, 25 imóveis aproveitáveis em SC/PR/SP, veículos e máquinas saem pela categoria.
+  centralsul: { fonte: 'CENTRALSUL', leiloeiro: 'Central Sul de Leilões', base: 'https://www.centralsuldeleiloes.com.br', catalogo: '/' },
 };
 
 // Leilão/lote de TESTE da plataforma (brasilialeiloes, rodrigo, IPC, marquesbarreto, lucasignacio — 24/10) e de
@@ -90,7 +94,8 @@ const limpar = (s) => decodificarEntidades(String(s || '').replace(/<br\s*\/?>/g
 // (Lucas Ignacio e Moacira rodam na raiz) e href absoluto aceito (Moacira linka "https://www.moacira.lel.br/lote/…").
 // Slug de teste ("leilao-teste", "simulador-de-leilao", "simule-seus-lances-aqui", "lote-teste-normal") fica fora.
 const RE_EVENTO = /href=["']((?:https?:\/\/[^/"']+)?(\/externo)?\/leilao\/(\d+)(?:\/([a-z0-9-]*))?)["']/gi;
-const RE_LOTE = /href=["']((?:https?:\/\/[^/"']+)?(?:\/externo)?\/lote\/(\d+)(\/[a-z0-9-]+)?)["']/gi;
+// 28/10: Central Sul (SC) linka o lote DENTRO do leilão — "/leilao/12151/lote/243891/<slug>" — e ficava com 0 lote.
+const RE_LOTE = /href=["']((?:https?:\/\/[^/"']+)?(?:\/externo)?(?:\/leilao\/\d+)?\/lote\/(\d+)(\/[a-z0-9-]+)?)["']/gi;
 export function extrairUrlsDeEvento(html, base) {
   const urls = new Map();
   const teste = new Set();
@@ -328,11 +333,65 @@ function parseResponsivo(h, url) {
   };
 }
 
+// ── 3º TEMPLATE (Angular, estado no <script id="ng-state">) ─────────────────────────────────────────
+// Central Sul de Leilões (SC, 28/10): a página do lote é Angular SSR e traz o lote inteiro em JSON — `lot-details:<id>`
+// com title, description (HTML), value (avaliação), minimum_bid, status.label ("Em Aberto"), categories, photos, file
+// (PDF da matrícula) e auction (title "Extrajudicial - BRDE Balneário Camboriú/SC - 1º LEILÃO", next_date ISO).
+// Cada leilão é UMA praça (o 2º leilão é outro evento), então não há data_leilao_2.
+// "…, em Balneário Camboriú/SC" → a cidade só vale se o par existir no IBGE (maior sufixo de até 4 palavras).
+function cidadePorBarra(...textos) {
+  for (const t of textos) {
+    for (const m of String(t || '').matchAll(/((?:[A-Za-zÀ-ÿ'.-]+\s+){0,3}[A-Za-zÀ-ÿ'.-]+)\s*\/\s*([A-Z]{2})\b/g)) {
+      const pal = m[1].trim().split(/\s+/);
+      for (let i = 0; i < pal.length; i++) {
+        const nome = pal.slice(i).join(' ');
+        if (Object.prototype.hasOwnProperty.call(MUNICIPIOS, `${m[2]}|${normCidade(nome)}`)) return { cidade: comAcento(nome, m[2], t), estado: m[2] };
+      }
+    }
+  }
+  return { cidade: null, estado: null };
+}
+function parseAngular(h, url) {
+  let estado; try { estado = JSON.parse((h.match(/<script id="ng-state"[^>]*>([\s\S]*?)<\/script>/) || [])[1] || 'null'); } catch { return null; } // padrao-ok: estado ilegível = página que não sei ler
+  const d = estado && Object.entries(estado).find(([k]) => /^lot-details:\d+$/.test(k))?.[1];
+  if (!d?.id) return null;
+  const leilao = d.auction || {};
+  const nomeLeilao = String(leilao.title || '').trim();
+  const descricao = decodificarEntidades(String(d.description || '').replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
+  const titulo = String(d.title || '').trim();
+  const { cidade, estado: uf } = cidadePorBarra(titulo, nomeLeilao, descricao);
+  const categorias = (d.categories || []).map((c) => c?.label || '').join(' ');
+  const quando = leilao.next_date || (leilao[leilao.active_date || 'date1'] ? `${String(leilao[leilao.active_date || 'date1']).replace(' ', 'T')}-03:00` : null);
+  const foto = (d.photos || []).find((p) => p?.image_url)?.image_url || null;
+  const mat = d.file?.download_url && /matr/i.test(d.file.file_name || '') ? d.file.download_url : null;
+  return {
+    nomeLeilao,
+    status: leilao.finished ? 'ENCERRADO' : String(d.status?.label || '').toUpperCase(),
+    naoImovel: !!categorias && !/im[óo]ve/i.test(categorias),
+    titulo: titulo || tituloDe(descricao, cidade, uf), cidade, estado: uf,
+    valor_avaliacao: plaus(Number(d.value) || 0), valor_minimo: plaus(Number(d.minimum_bid) || Number(d.value) || 0),
+    valor_minimo_2: null,
+    modalidade: /venda\s+direta/i.test(nomeLeilao) ? 'venda_direta' : /extrajudicial|fiduci|banco|brde/i.test(nomeLeilao) ? 'extrajudicial' : 'judicial',
+    area_m2: extrairAreaM2(descricao) || 0,
+    descricao: descricao ? `${nomeLeilao ? `${nomeLeilao}. ` : ''}${descricao}`.slice(0, 8000) : null,
+    data_leilao: dataPlausivel(quando && new Date(quando).toISOString()),
+    data_leilao_2: null,
+    link_foto: foto,
+    link_edital: url,
+    anexos: mat ? [{ tipo: 'matricula', nome: 'Matrícula', url: mat }] : [],
+    link_matricula: mat,
+    numero_matricula: matriculaDe(descricao),
+  };
+}
+
 export function parseDetalhe(html, url, { agora = new Date() } = {}) {
   const h = String(html || '');
   const classico = /class="l-cabecalho-nome"/.test(h);
-  if (!classico && !/<b>\s*LOCAL:\s*<\/b>|class="mb-0 destaque"/i.test(h)) return null; // nenhum dos dois templates
-  const { nomeLeilao, status, ...det } = classico ? parseClassico(h, url) : parseResponsivo(h, url);
+  const angular = !classico && /<script id="ng-state"/.test(h);
+  if (!classico && !angular && !/<b>\s*LOCAL:\s*<\/b>|class="mb-0 destaque"/i.test(h)) return null; // nenhum dos três templates
+  const lido = classico ? parseClassico(h, url) : angular ? parseAngular(h, url) : parseResponsivo(h, url);
+  if (!lido) return null;
+  const { nomeLeilao, status, ...det } = lido;
   // Leilão/lote de teste da plataforma: nunca vira lote.
   if (ehTeste(nomeLeilao) || ehTeste((String(url).match(/\/lote\/\d+\/([a-z0-9-]+)/) || [])[1])) return { encerrado: true, teste: true };
   // Status do lote diferente de ABERTO (VENDIDO, ENCERRADO, SUSPENSO, RETIRADO, CANCELADO…) = fora.

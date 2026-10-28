@@ -66,6 +66,9 @@ export const TENANTS = {
   camila: { fonte: 'CAMILALEILOES', leiloeiro: 'Camila Leilões (Camila Nogueira Lima)', base: 'https://www.camilaleiloes.com.br' }, // 1 (RJ)
   // FORA: sevidanesleiloeira.com.br — catálogo com 20 imóveis, mas a página de lote responde HTTP 500 (3 de 3 testadas
   // pelo banco em 27/10, inclusive a URL exata do card): sem página lida não há lote.
+  // 28/10: Luiz Lobato estava em SUPORTE_TENANTS (front antigo) desde 29/08 com 0 lote — /buscador?categoria=2 dá 404, o
+  // site migrou para este front. Seco: 22 enumerados, 22 lidos, 6 em aberto (MG/SP), cidade de todos pelo título.
+  luizlobato: { fonte: 'LUIZLOBATO', leiloeiro: 'Luiz Lobato Leilões', base: 'https://luizlobatoleiloeiro.com.br' },
 };
 
 export function extrairUrlsDeLote(html, base) {
@@ -117,12 +120,17 @@ function cidadeAntesDaBarra(t) {
 // ("…Rio de Janeiro/RJ" virava "Janeiro"). Só vale cidade que existe no IBGE para a UF — senão cai no caminho antigo.
 // "…, Urca, Rio de Janeiro/RJ." na descrição (26/10, Edgar de Carvalho): o padrão antigo `de <X>/<UF>` pegava
 // "Janeiro". Agora: cada "<palavras>/<UF>" do texto, com o MAIOR sufixo de até 4 palavras que existe no IBGE para a UF.
-function cidadeDaDescricao(desc) {
-  for (const m of String(desc || '').replace(/<[^>]+>/g, ' ').matchAll(/((?:[A-Za-zÀ-ÿ'.-]+\s+){0,3}[A-Za-zÀ-ÿ'.-]+)\s*[-/]\s*([A-Z]{2})\b/g)) {
-    const pal = m[1].trim().split(/\s+/);
+// `ufMinuscula` só no TÍTULO: "Sete Lagoas/mg", "Ituiutaba - Mg" (Luiz Lobato, 28/10). Na descrição, UF minúscula
+// casaria palavra comum ("… se", "… es"); nos dois casos o par ainda tem de existir no IBGE.
+function cidadeDaDescricao(desc, ufMinuscula = false) {
+  const re = ufMinuscula ? /((?:[A-Za-zÀ-ÿ'.-]+\s+){0,3}[A-Za-zÀ-ÿ'.-]+)\s*[-/]\s*([A-Za-z]{2})\b/g
+    : /((?:[A-Za-zÀ-ÿ'.-]+\s+){0,3}[A-Za-zÀ-ÿ'.-]+)\s*[-/]\s*([A-Z]{2})\b/g;
+  for (const m of String(desc || '').replace(/<[^>]+>/g, ' ').matchAll(re)) {
+    // "Centro - São Paulo - SP": o "-" solto não é palavra da cidade (saía "- São Paulo").
+    const pal = m[1].trim().split(/\s+/).filter((p) => /[A-Za-zÀ-ÿ]/.test(p)), uf = m[2].toUpperCase();
     for (let i = 0; i < pal.length; i++) {
       const nome = pal.slice(i).join(' ');
-      if (Object.prototype.hasOwnProperty.call(MUNICIPIOS, `${m[2]}|${normCidade(nome)}`)) return [null, nome, m[2]];
+      if (Object.prototype.hasOwnProperty.call(MUNICIPIOS, `${uf}|${normCidade(nome)}`)) return [null, nome, uf];
     }
   }
   return null;
@@ -169,6 +177,8 @@ export function parseDetalhe(html, url) {
   // "… EM JUIZ DE FORA - MG", "PRÉDIO DO ABC HOTEL CARATINGA/MG", "… CRI TIROS/MG" — cidade/UF no fim do título.
   const cu = cidadeDoPino(html) || (titulo || '').match(/\bEM\s+([A-ZÀ-Ú][A-ZÀ-Ú ]+?)\s*[-/]\s*([A-Z]{2})\s*$/i)
     || cidadeAntesDaBarra(titulo || '')
+    // "… - Centro - São Paulo - SP" (Luiz Lobato, 28/10): sem isto o lote caía na UF do LEILOEIRO (MG), logo abaixo.
+    || cidadeDaDescricao(titulo, true)
     || cidadeDaDescricao(lote.descricao);
   // Marcação do Word ANTES do corte de 6.000 (28/10, #376): a DEPAULA cola texto do Word com <!--[if gte mso 9]><xml>…
   // — eram 6.000 caracteres de XML e o texto do imóvel ficava do outro lado do corte. Comentário e tag saem aqui.
