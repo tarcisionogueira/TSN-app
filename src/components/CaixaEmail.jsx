@@ -86,8 +86,10 @@ function separarCitacao(texto) {
   return { principal, citado: linhas.slice(corte).join('\n').trim() };
 }
 
-const CAMPOS_RASCUNHO = ['de', 'para', 'cc', 'assunto', 'texto', 'responder_a', 'chamado_id', 'anexos'];
-const temConteudo = (c) => !!(c && (String(c.para || '').trim() || String(c.assunto || '').trim() || String(c.texto || '').trim() || c.anexos?.length));
+// encaminhar_anexos (28/10): o rascunho guarda também as REFERÊNCIAS a anexos de mensagens da caixa (o mesmo
+// formato do Encaminhar). Antes sumiam ao fechar a janela, e um rascunho montado com anexos já recebidos voltava sem eles.
+const CAMPOS_RASCUNHO = ['de', 'para', 'cc', 'assunto', 'texto', 'responder_a', 'chamado_id', 'anexos', 'encaminhar_anexos'];
+const temConteudo = (c) => !!(c && (String(c.para || '').trim() || String(c.assunto || '').trim() || String(c.texto || '').trim() || c.anexos?.length || c.encaminhar_anexos?.length));
 
 // ANEXAR E COLAR IMAGEM (09/10, dono). O arquivo sobe DIRETO para o bucket, no prefixo do próprio
 // usuário (o servidor só aceita esse prefixo), e o e-mail leva o caminho. Teto do Resend: 40 MB por
@@ -404,7 +406,7 @@ export default function CaixaEmail({ soPessoal = false }) {
   // Abrir o Escrever sempre passa por aqui: zera (ou retoma) o id do rascunho.
   function abrirCompor(c) {
     rascunhoId.current = c?.rascunho_id || null;
-    if (c) c = { ...c, anexos: Array.isArray(c.anexos) ? c.anexos : [] };
+    if (c) c = { ...c, anexos: Array.isArray(c.anexos) ? c.anexos : [], encaminhar_anexos: Array.isArray(c.encaminhar_anexos) ? c.encaminhar_anexos : [] };
     chaveEnvio.current = crypto.randomUUID?.() || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
     setSalvoEm(null);
     setCompor(c);
