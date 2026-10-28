@@ -75,12 +75,29 @@ export function pracaAtual(lot) {
   return v.find((x) => Number(x.status) === 1) || v.filter((x) => Number(x.status) === 0).sort((a, b) => Date.parse(a.start) - Date.parse(b.start))[0] || null;
 }
 
+// IDENTIDADE DO IMÓVEL (28/10, #374): a Globo REAPROVEITA o id do lote para outro imóvel. Com a chave `globoleiloes_<id>`
+// o upsert trocava título/URL/valor e os gatilhos de preservação seguravam o resto do imóvel antigo (descrição, área,
+// endereço, matrícula, anexos, pino) — 245 lotes ativos com imóvel fantasma. A URL do lote é a identidade: mudou, é
+// outro imóvel. Normalizada para não confundir http×https, www, barra final e query com troca de imóvel.
+export function identidadeLoteGlobo(url) {
+  if (!url) return null;
+  return String(url).trim().toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/[?#].*$/, '').replace(/\/+$/, '');
+}
+
 const LEILOEIROS = { 'balbinoleiloes.com.br': 'Balbino Leilões', 'bomvalor.com.br': 'Bom Valor', 'comprei.pgfn.gov.br': 'PGFN — Comprei' };
 export function leiloeiroGlobo(lot) {
   if (!lot?.url) return 'Globo Leilões';
   let host = '';
   try { host = new URL(lot.url).hostname.replace(/^(www|mercado)\./, ''); } catch { return 'Globo Leilões'; }
   return LEILOEIROS[host] || host;
+}
+
+// Área total do slug BomValor: "-a-t-330-m-" = 330 m² · "-a-t-1-302-m-" = 1.302 m² (milhar) · "-a-t-45-99-m-" = 45,99 m².
+export function areaDaUrlBomValor(url) {
+  const m = String(url || '').match(/-a-t-(\d{1,3})(?:-(\d{1,3}))?-m(?:-|$)/);
+  if (!m) return 0;
+  if (!m[2]) return Number(m[1]);
+  return m[2].length === 3 ? Number(m[1] + m[2]) : Number(`${m[1]}.${m[2]}`);
 }
 
 /** Linha de imoveis_leilao. `det` = lerDetalhe() do lote (só lotes próprios), ou null. */
@@ -103,7 +120,8 @@ export function montarRowGlobo(lot, det = null) {
     // mostraria "desconto" negativo. Vale a maior entre o laudo e as praças.
     valor_avaliacao: Math.max(brl(lot.avaliation), ...(Array.isArray(lot.values) ? lot.values.map((x) => brl(x.price)) : [0])),
     valor_minimo: praca ? brl(praca.price) : 0,
-    area_m2: extrairAreaM2(titulo) || extrairAreaM2(descricao) || 0,
+    // Parceiro BomValor não manda descrição (250 de 250 em 28/10) e o título raramente tem m²: a URL tem ("-a-t-330-m-").
+    area_m2: extrairAreaM2(titulo) || areaDaUrlBomValor(lot.url) || extrairAreaM2(descricao) || 0,
     descricao,
     url_lote: lot.url || `${BASE}/leiloes/${lot.slug}/${lot.id}`,
     leiloeiro: leiloeiroGlobo(lot),

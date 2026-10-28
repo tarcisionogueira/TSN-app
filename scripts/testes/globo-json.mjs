@@ -2,7 +2,7 @@
  * scripts/testes/globo-json.mjs — 29/09. GLOBOLEILOES pelo JSON `data-page` (lib/globo-json.mjs).
  * Campos e valores no formato medido nas páginas reais (pg_net, 29/09).
  */
-import { dataPage, lerListagem, lerDetalhe, montarRowGlobo, pracaAtual, leiloeiroGlobo, tipoGlobo } from '../lib/globo-json.mjs';
+import { dataPage, lerListagem, lerDetalhe, montarRowGlobo, pracaAtual, leiloeiroGlobo, tipoGlobo, identidadeLoteGlobo, areaDaUrlBomValor } from '../lib/globo-json.mjs';
 
 let falhas = 0;
 const ok = (c, oque) => { if (c) console.log(`  ✓ ${oque}`); else { falhas++; console.log(`  ✗ ${oque}`); } };
@@ -56,6 +56,15 @@ ok(montarRowGlobo({ ...proprio, description: '&lt;h2&gt;&lt;strong&gt;INFORMAÇ�
 
 ok(montarRowGlobo({ ...proprio, avaliation: '121.000,00', values: [{ status: 1, price: '127.424,20', start: 'a', end: 'b' }] }).valor_avaliacao === 127424.2, 'avaliação atualizada: 1ª praça acima do laudo vira a avaliação (sem desconto negativo)');
 ok(leiloeiroGlobo({ url: 'https://comprei.pgfn.gov.br/x' }) === 'PGFN — Comprei', 'PGFN com nome, não o domínio');
+
+// 28/10 (#374): id reaproveitado — a URL é a identidade do imóvel; a área do parceiro BomValor vem da URL.
+const mooca = 'https://mercado.bomvalor.com.br/globoleiloes/cassia-negrete-nunes-balbino/imoveis/loja-salao-comercial-comercial/loja-a-t-330-m-mooca-sao-paulo-sp-130411';
+ok(identidadeLoteGlobo(mooca) === identidadeLoteGlobo(`${mooca.replace('https://', 'http://www.')}/?utm=x`), 'identidade ignora protocolo, www, barra final e query');
+ok(identidadeLoteGlobo(mooca) !== identidadeLoteGlobo(mooca.replace('130411', '130412')) && identidadeLoteGlobo(null) === null, 'URL de outro lote = outra identidade; sem URL = sem identidade (não aposenta)');
+ok(areaDaUrlBomValor(mooca) === 330 && areaDaUrlBomValor('…/lote-a-t-1-302-m-peninsula-escarpas-guape-mg-131094') === 1302
+  && areaDaUrlBomValor('…/apto-a-t-45-99-m-centro-x-sp-1') === 45.99 && areaDaUrlBomValor(parceiro.url) === 0, 'área da URL: 330 · 1.302 (milhar) · 45,99 (decimal) · sem padrão = 0');
+r = montarRowGlobo({ ...parceiro, url: mooca, title: 'Loja - Mooca', full_title: 'Lote 7 - SP - São Paulo | Loja - Mooca', description: '' });
+ok(r.area_m2 === 330 && r.descricao === '', `parceiro sem descrição: área ${r.area_m2} pela URL, descrição vazia (não inventa)`);
 
 if (falhas) { console.log(`\n${falhas} falha(s)`); process.exit(1); }
 console.log('\nok');

@@ -12,7 +12,7 @@
  */
 import './lib/env-runner.mjs';
 import { createClient } from '@supabase/supabase-js';
-import { FONTE, BASE, CATEGORIAS_IMOVEL, lerListagem, lerDetalhe, montarRowGlobo } from './lib/globo-json.mjs';
+import { FONTE, BASE, CATEGORIAS_IMOVEL, lerListagem, lerDetalhe, montarRowGlobo, identidadeLoteGlobo } from './lib/globo-json.mjs';
 import { idAnuncioComprei, urlVisitarComprei, fichaComprei } from './lib/comprei-pgfn.mjs';
 import { ehFracaoIdeal } from './lib/scraper-core.mjs';
 import { viaBanco } from './lib/motor/fetch-fonte.mjs';
@@ -76,9 +76,35 @@ async function varrerSumidos(vistos) {
   else console.log(`  varredura: ${sumidos.length} fora do site · ${data?.length || 0} desativados (sumiu_da_fonte)`);
 }
 
+// ID REAPROVEITADO = OUTRO IMÓVEL (28/10, #374). Se o `fonte_id` já existe com OUTRA URL de lote, a linha antiga é
+// aposentada (fonte_id renomeado, inativa, 'renumerado_pela_fonte') ANTES do upsert, que então cria a linha nova do
+// zero. Sem isto o upsert caía em cima do imóvel antigo e os gatilhos de preservação guardavam descrição, área,
+// endereço, matrícula e anexos dele no imóvel novo. Favoritos/análises seguem apontando para a linha antiga (o imóvel
+// certo). Leitura falhou → não aposenta nada e segue (o pior caso é o comportamento antigo, não perda de lote).
+async function aposentarReaproveitados(rows) {
+  const ids = rows.map((r) => r.fonte_id);
+  const atuais = new Map();
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data, error } = await supabase.from('imoveis_leilao').select('fonte_id, url_lote').eq('fonte', FONTE).in('fonte_id', ids.slice(i, i + 200));
+    if (error) { console.log(`  aviso: identidade dos lotes não lida (${error.message}) — nenhum aposentado`); return; }
+    for (const d of data || []) atuais.set(d.fonte_id, d.url_lote);
+  }
+  const sufixo = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  for (const r of rows) {
+    const antiga = identidadeLoteGlobo(atuais.get(r.fonte_id));
+    if (!antiga || antiga === identidadeLoteGlobo(r.url_lote)) continue;
+    const { error } = await supabase.from('imoveis_leilao')
+      .update({ fonte_id: `${r.fonte_id}_ate_${sufixo}_${Date.now() % 100000}`, ativo: false, suprimido_motivo: 'renumerado_pela_fonte' })
+      .eq('fonte', FONTE).eq('fonte_id', r.fonte_id);
+    if (error) console.log(`  ${r.fonte_id}: não aposentei o imóvel anterior (${error.message})`);
+    else console.log(`  ${r.fonte_id}: id reaproveitado pela Globo (${antiga.slice(0, 60)} → ${identidadeLoteGlobo(r.url_lote).slice(0, 60)}) — anterior aposentado`);
+  }
+}
+
 // Upsert em GRUPOS de mesmo conjunto de colunas: num lote misto, o PostgREST grava NULL na coluna
 // que falta — e apagaria foto/anexos de lote que não foi relido nesta rodada.
 async function gravar(rows) {
+  await aposentarReaproveitados(rows);
   const grupos = new Map();
   for (const r of rows) { const k = Object.keys(r).sort().join(','); (grupos.get(k) || grupos.set(k, []).get(k)).push(r); }
   let n = 0;

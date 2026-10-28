@@ -7,6 +7,29 @@
 
 
 
+## 28/10 (madrugada, 2) — #374: GLOBO REAPROVEITA O ID DO LOTE → IMÓVEL FANTASMA EM 245 LOTES
+
+**Causa:** a Globo REUSA o id (`globoleiloes_<id>`) para outro imóvel e hoje manda `description` VAZIA para todo
+parceiro BomValor/Balbino (250 de 250). O upsert trocava título/URL/cidade/valor, e os gatilhos de preservação
+(descrição, área, endereço, link_edital, fotos) seguravam o resto do imóvel ANTIGO: "Loja - Mooca" (URL a-t-330-m)
+exibia texto, 13.584 m², endereço, CEP, pino e MATRÍCULA de um terreno em Pindamonhangaba. Prova independente (URL do
+lote): local da descrição divergia em 123/123; área em 67. Comprei ficou de fora (descrição = ficha oficial, 81/83 ok).
+Nenhuma análise de cliente sobre esses lotes.
+
+**Dados (migração 20261028_globo_imovel_fantasma):** backup `_bkp_globo_fantasma_20261028` (383 linhas) e
+`_bkp_globo_fantasma_anexos_20261028` (349 anexos); limpos descrição, endereço, CEP, bairro, matrícula/edital/processo,
+anexos, coordenadas, proximidades, fichas e fotos que não são do parceiro — com os gatilhos de preservação desligados
+(`session_replication_role = replica`, só na transação) e 2º passo com eles ligados. Área = a da URL (131 lotes).
+
+**Código:** `scraper-globo.mjs` aposenta a linha antiga quando o `fonte_id` volta com OUTRA URL (`identidadeLoteGlobo`):
+fonte_id renomeado `_ate_<data>`, inativa, `renumerado_pela_fonte`; o upsert cria o imóvel novo do zero. Simulado contra
+o banco: aposentaria 6 hoje, os 6 reais (3523 "apto Nova Iguaçu/RJ" → "gleba Rondonópolis/MT"; 3777 casa Piracicaba →
+anúncio Comprei). `areaDaUrlBomValor` ("-a-t-1-302-m-" = 1.302 m²). Testes globo-json ok.
+**Conferir na próxima rodada da Globo:** log "id reaproveitado … anterior aposentado" (~6) e nenhum lote de parceiro
+BomValor/Balbino com descrição.
+**Lição registrada:** o gatilho de preservação ("campo novo vazio = mantém o antigo") é perigoso quando a CHAVE pode
+apontar para outro objeto. Fonte que reusa id precisa de checagem de identidade antes do upsert.
+
 ## 28/10 (madrugada) — #371: REDE DE SEGURANÇA DE LOCALIZAÇÃO NO BANCO · #374 GLOBO COM DESCRIÇÃO TROCADA
 
 **#371 (migração 20261028_local_do_texto):** `local_do_texto(titulo, descricao, url)` + gatilho `trg_zx_local_do_texto`
