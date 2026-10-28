@@ -170,7 +170,10 @@ export function parseDetalhe(html, url) {
   const cu = cidadeDoPino(html) || (titulo || '').match(/\bEM\s+([A-ZÀ-Ú][A-ZÀ-Ú ]+?)\s*[-/]\s*([A-Z]{2})\s*$/i)
     || cidadeAntesDaBarra(titulo || '')
     || cidadeDaDescricao(lote.descricao);
-  const desc = String(lote.descricao || '').replace(/\s*\n\s*/g, ' ').trim();
+  // Marcação do Word ANTES do corte de 6.000 (28/10, #376): a DEPAULA cola texto do Word com <!--[if gte mso 9]><xml>…
+  // — eram 6.000 caracteres de XML e o texto do imóvel ficava do outro lado do corte. Comentário e tag saem aqui.
+  const desc = String(lote.descricao || '').replace(/<!--[\s\S]*?(?:-->|$)/g, ' ').replace(/<[^>]+>/g, ' ')
+    .replace(/\s*\n\s*/g, ' ').replace(/\s{2,}/g, ' ').trim();
   const reMat = /matr[íi]cula\s*:?\s*(?:n[º°.o]*\s*)?:?\s*([\d.]{3,})/i;
   const mat = (desc.match(reMat) || String(titulo || '').match(reMat) || [])[1] || null;
   const foto = (String(html).match(/https:\/\/static\.suporteleiloes\.com\.br\/[^"'\s]+\/bens\/\d+\/arquivos\/[^"'\s]+\.(?:jpe?g|png|webp)/i) || [])[0] || null;

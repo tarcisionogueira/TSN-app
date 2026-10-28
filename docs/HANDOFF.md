@@ -7,6 +7,18 @@
 
 
 
+## 28/10 (madrugada, 5) — #376: DESCRIÇÃO-LIXO NÃO ENTRA
+
+**Banco (20261028_descricao_lixo):** `descricao_eh_lixo()` + gatilho `trg_zx_descricao_lixo` (pré-filtro barato no WHEN):
+recusa marcação do Word que não deixa texto (DEPAULA), só rótulos de abas (JINKINGS), bloco que COMEÇA no aviso legal
+(LEILOFY), lista de outros lotes com código X###### (MEGA) ou 2+ "Cidade/UF R$". Mantém a descrição anterior se era boa,
+senão o título. 86 linhas (36 ativas) limpas, backup `_bkp_descricao_lixo_20261028`. Medido antes de ligar: só essas 4
+fontes. A 1ª versão ("aviso legal em qualquer ponto") condenava 195 descrições BOAS do COMPREI — por isso só "começa no".
+**Coletor:** `suporte-oferta-parse.mjs` tira comentário/tag do Word ANTES do corte de 6.000 (o texto da DEPAULA ficava
+depois do corte). Teste em `testar:suporte-oferta-status` — falha sem o conserto, passa com ele.
+**Não mexido:** JINKINGS/LEILOFY ainda não acham a descrição REAL (agora ficam com o título, em vez de lixo) — recon da
+página viva de 1 lote de cada para achar o bloco certo.
+
 ## 28/10 (madrugada, 4) — #375: ÁREA 10–1000× NA ESCALA ERRADA
 
 **Causa:** leitores de área antigos no `scraper-puppeteer.mjs` usavam o leitor de R$ (`parseBRL`) ou apagavam todo ponto:

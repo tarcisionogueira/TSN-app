@@ -26,5 +26,15 @@ conferir('status 4 (fora do aberto)', comProximo(comLote(base, 4), futuro), true
 // 2º 22/10/2026; próximo leilão trocado para 10/01/2026) — praça vencida não entra como lote ativo.
 conferir('status 1 com todas as praças vencidas', comProximo(base, '2026-01-10'), true);
 
+// DEPAULA (28/10, #376): descrição colada do Word — <!--[if gte mso 9]><xml>…</xml><![endif]--> ocupava os 6.000
+// caracteres e o texto do imóvel ficava depois do corte. A marcação sai antes do corte.
+const word = '<!--[if gte mso 9]><xml> <o:OfficeDocumentSettings> <o:AllowPNG/> </o:OfficeDocumentSettings> </xml><![endif]-->'
+  + '<!--[if gte mso 9]><xml> <w:WordDocument> <w:View>Normal</w:View> </w:WordDocument> </xml><![endif]-->'.repeat(80);
+const iDesc = base.indexOf('"descricao":"Área de terreno', base.indexOf('var lote = {')); // a do `lote`, não a do leilão
+const comWord = `${base.slice(0, iDesc)}"descricao":"${word.replace(/"/g, '\\"')}<p>${base.slice(iDesc + '"descricao":"'.length)}`;
+const dWord = parseDetalhe(comWord, URL_LOTE)?.descricao || '';
+if (/^Área de terreno com cerca de 100\.000m²/.test(dWord) && !/<|mso|w:/.test(dWord)) ok++;
+else { falhas++; console.log(`✗ descrição com marcação do Word: ${JSON.stringify(dWord.slice(0, 120))}`); }
+
 console.log(`${falhas ? '✗' : '✓'} suporte-oferta-status: ${ok} ok, ${falhas} falha(s)`);
 process.exit(falhas ? 1 : 0);
