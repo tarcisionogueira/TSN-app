@@ -22,6 +22,7 @@ import { extrairDescricaoDoCorpo, decodificarEntidades, areaFichaCaixa } from '.
 // de rodapé/institucional — é a mesma defesa que já livra o extrator de matrícula do mesmo risco.
 import { extrairEnderecoMatricula } from '../api/_registro-matricula.js';
 import { ehFracaoIdeal, extrairAreaM2, ehForaDoAcervo } from './lib/scraper-core.mjs';
+import { metricasColeta } from './_saude-fonte.mjs';
 import MUNICIPIOS from '../api/_municipios.js';
 import { inferirUF } from './lib/inferir-uf.mjs';
 import { parseLeilaoHasta } from './lib/hastapublica-parse.mjs';
@@ -557,15 +558,9 @@ const CRITERIOS = {
   _default: { min: 10,  valor: 0.70, uf: 0.40, link: 0.8 },
 };
 
-function metricasColeta(imoveis) {
-  const n = imoveis.length || 0;
-  const p = (x) => (n ? Number((x / n).toFixed(3)) : 0);
-  const uf    = imoveis.filter(i => /^[A-Z]{2}$/.test(i.estado || '')).length;
-  const valor = imoveis.filter(i => Number(i.valor_minimo) > 0).length;
-  const link  = imoveis.filter(i => /^https?:\/\//.test(i.link_edital || '')).length;
-  const foto  = imoveis.filter(i => i.link_foto).length;
-  return { n, uf_pct: p(uf), valor_pct: p(valor), link_pct: p(link), foto_pct: p(foto) };
-}
+// metricasColeta vem de _saude-fonte.mjs (28/10). A cópia local contava link só por `link_edital` e foto só
+// por `link_foto`: no LJUD (link_edital = PDF do edital, nem todo lote tem; url_lote = página do lote, todos
+// têm) o portão marcava "link 0.54<0.9" e a fonte vivia degradada com 100% dos lotes com link no acervo.
 
 // Portão de qualidade: confirma que a coleta dá acesso real aos lotes com os
 // campos que importam (valor/UF/edital). Retorna {ok, metricas, motivo}.
