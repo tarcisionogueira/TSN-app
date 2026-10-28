@@ -7,6 +7,34 @@
 
 
 
+## 28/10 (noite, 3) — LEILO (GOIÂNIA/GO) ENTRA: ~75 IMÓVEIS
+
+**Fonte nova LEILO** (`scraper-leilo.mjs`, `lib/leilo-parse.mjs`, `lib/motor/fontes/leilo.mjs`; passo diário no
+`scraper-dom.yml`). leilo.com.br = leilomaster.com.br. App Vue/Quasar SSR: o estado mora em `window.__INITIAL_STATE__`,
+um literal JS com `new Date(…)`/`undefined`.
+- **Leitura sem executar:** o parser troca esses dois por texto e usa JSON.parse. Executar o script da página foi barrado
+  (e com razão) pelo modo automático.
+- **Enumeração:**
+  - catálogo = `/imoveis/venda-direta/?pagina=N`;
+  - eventos = leilões abertos do mesmo estado → `/leilao/?leilao.nome=<nome>`;
+  - só lote `tipo === "Imoveis"`, porque o leilão de imóvel nem sempre diz "Imóveis" no nome.
+- **Seco:** 75 de 75 prontos (67 venda direta + 8 em leilão), cidade em todos; DF → Brasília.
+- **Sem avaliação publicada:** `valor_avaliacao` 0, desconto nulo.
+- **Teste:** `testar:leilo`.
+
+**Fila conferida:**
+- Mega MS: já vem pela MEGA.
+- Fórmula: publica no leiloador.com.br (fonte LEILOADOR). Falta conferir se o filtro do LEILOADOR pega os pregões dela.
+- Seguem pedindo leitor:
+  - MJ Leilões;
+  - Miranda Carvalho;
+  - MV Leilões (WordPress).
+
+**Testes:** `testar:landing-aula` e `testar:filtros-veiculos` precisam de navegador (`PRECISA_NAVEGADOR` no
+`rodar-testes.mjs`) — não são regressão.
+
+**Conferir na próxima rodada:** LEILO em fonte_saude.
+
 ## 28/10 (noite, 2) — INTEGRAÇÃO DOS PENDENTES DA TRIAGEM: O QUE ERA REAL
 
 **A conta de "82 pendentes com imóvel" estava inflada.** `leiloeiro_triagem.parser_existente` está desatualizado:

@@ -127,6 +127,7 @@
     "testar:veiculos-vazio": "node scripts/testes/veiculos-vazio-nao-e-falha.mjs",
     "testar:veiculo-praca-vencida": "node scripts/testes/veiculo-praca-vencida-na-entrada.mjs",
     "testar:leiloar": "node scripts/testes/leiloar-parse.mjs",
+    "testar:leilo": "node scripts/testes/leilo-parse.mjs",
     "testar:leiloar2": "node scripts/testes/leiloar-segundo-template.mjs",
     "testar:leilovia": "node scripts/testes/leilovia-parse.mjs",
     "testar:labasoft": "node scripts/testes/labasoft-parse.mjs",

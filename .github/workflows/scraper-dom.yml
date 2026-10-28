@@ -92,11 +92,14 @@ on:
       - 'scripts/lib/astavero-json.mjs'
       - 'scripts/scraper-comprei.mjs'
       - 'scripts/lib/comprei-pgfn.mjs'
+      - 'scripts/scraper-leilo.mjs'
+      - 'scripts/lib/leilo-parse.mjs'
+      - 'scripts/lib/motor/fontes/leilo.mjs'
       - '.github/workflows/scraper-dom.yml'
   workflow_dispatch:
     inputs:
       fontes:
-        description: 'csv: softgt,nortedeminas,leilaoeletronico,suportev2,suportenext,leilovia,labasoft,baston,cassiano,arnaldo,novaserrana(recon),alfa,hasta,nordeste,nordeste_veiculos,jeleiloes,leilaoindex,rocha,albertomacedo,francoleiloes,simon,globo,leje,freitas,leiloar,lgcorretor,nakakogue,astavero,suporteoferta,comprei'
+        description: 'csv: softgt,nortedeminas,leilaoeletronico,suportev2,suportenext,leilovia,labasoft,baston,cassiano,arnaldo,novaserrana(recon),alfa,hasta,nordeste,nordeste_veiculos,jeleiloes,leilaoindex,rocha,albertomacedo,francoleiloes,simon,globo,leje,freitas,leiloar,lgcorretor,nakakogue,astavero,suporteoferta,comprei,leilo'
         required: false
         default: 'alfa,nordeste'
       gravar:
@@ -200,6 +203,16 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           SUPORTEOFERTA_DRYRUN: ${{ env.DRYRUN_PADRAO }}
         run: node scripts/scraper-suporteoferta.mjs
+
+      - name: Leilo (Goiânia/GO — venda direta + leilões de imóvel)
+        # 28/10 (triagem da junta): SSR com o estado do app embutido, fetch grátis — diário. Seco de 28/10: 75 imóveis
+        # (67 venda direta + 8 em leilão; GO/MT/DF/SP). ~2 min por rodada (2 páginas + ~15 leilões + até 80 lotes).
+        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'leilo')) }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          LEILO_DRYRUN: ${{ env.DRYRUN_PADRAO }}
+        run: node scripts/scraper-leilo.mjs
 
       - name: Comprei (PGFN) — venda direta na origem
         # 10/10: API pública do Comprei (listagem nacional + anúncio). Grátis (direto ou via banco) — diário.
