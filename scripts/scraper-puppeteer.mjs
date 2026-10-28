@@ -5503,6 +5503,9 @@ async function scraperLeilotechTenant(browser, tenant) {
         try { await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)); } catch { /* */ }
         await new Promise(r => setTimeout(r, 1500));
       }
+      // 28/10 (noite): o networkidle2 volta ANTES do leilaoEntity chegar — medido 0,6 s de folga na spencer; no CI a
+      // resposta vinha depois da checagem e o leilão contava como "sem resposta" toda rodada. Espera a resposta (até 10 s).
+      for (let w = 0; w < 20 && !respondeu.has(String(l.id)); w++) await new Promise(r => setTimeout(r, 500));
       // 28/10: falta = a página NÃO respondeu. Antes era "não trouxe lote de imóvel novo", o que também
       // acontece quando os irmãos são veículo/máquina ou já tinham vindo na home — e aí o tenant ficava
       // parcial em TODA rodada (spencerleiloes, amleiloeiro desde 27/10) e fora do sweep de sumidos para sempre.

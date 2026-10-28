@@ -7,6 +7,12 @@
 
 
 
+## 28/10 (noite) — LEILOTECH "PARCIAL" ERA CORRIDA, NÃO LEILÃO FALTANDO
+
+spencerleiloes (809) e amleiloeiro (363/359): reproduzido com Puppeteer local — a página RESPONDE, mas o leilaoEntity chega
+depois do networkidle2 (folga medida: 0,6 s). No CI chegava depois da checagem → "1 leilão multi-lote sem resposta" toda
+rodada e tenant fora do sweep. Agora espera a resposta do próprio leilão (até 10 s). Conferir na próxima rodada: status ok.
+
 ## 28/10 (tarde) — FRAZAO: EQUIPAMENTOS "RETORNADOS DAS LOJAS" NO ACERVO + 2 TRAVAMENTOS CAUSADOS POR MIM
 
 **Achado:** a rodada da FRAZAO das 17:29 gravou 61 lotes "APROX. N EQUIPAMENTOS RETORNADOS DAS LOJAS DE DIVERSAS MARCAS"
