@@ -32,7 +32,8 @@ const ler = (f) => readFileSync(new URL(`../../${f}`, import.meta.url), 'utf8');
 
 console.log('\nTODA NAVEGAÇÃO PARA /analise LEVA O ID NA URL');
 for (const [arq, n] of [
-  ['src/pages/ImovelDetalhe.jsx', 2], ['src/pages/Painel.jsx', 2],
+  // ImovelDetalhe: 1 desde 25/10 (31bc08e5) — os 2 botões (corpo e barra do celular) chamam irParaAnalise().
+  ['src/pages/ImovelDetalhe.jsx', 1], ['src/pages/Painel.jsx', 2],
   ['src/pages/MinhasAnalises.jsx', 1], ['src/components/ToastRelatorioPronto.jsx', 1],
 ]) {
   const src = ler(arq);
@@ -42,18 +43,23 @@ for (const [arq, n] of [
   const semId = (src.match(/nav\('\/analise'(?!\s*,\s*\{\s*state:\s*\{\s*manual)/g) || []).length;
   checa(`${arq}: nenhuma navegação sem id (fora a inclusão manual)`, semId === 0, { semId });
 }
+{
+  const chamadas = (ler('src/pages/ImovelDetalhe.jsx').match(/irParaAnalise\('/g) || []).length;
+  checa('ImovelDetalhe: os 2 botões de análise passam por irParaAnalise', chamadas === 2, { chamadas });
+}
 
 console.log('\nA TELA SE RECUPERA PELO ID');
 {
   const src = ler('src/pages/Analise.jsx');
   checa('lê o parâmetro `imovel` da URL', /useSearchParams/.test(src) && /params\.get\('imovel'\)/.test(src));
   // 05/10: o RECUPERADO vence — ele só existe quando o state não servia (magro, ou lote manual).
+  // 26/10 (cofre do leiloeiro): o imóvel passa por mascararLeiloeiro() e a releitura vai pela view mascarada.
   checa('o imóvel pode vir do recuperado OU do state (o recuperado vence)',
-    /const imovelInicial = imovelRecuperado \|\| location\.state\?\.imovel;/.test(src));
-  checa('relê `imoveis_leilao` pelo id quando o state não serve',
-    /from\('imoveis_leilao'\)[\s\S]{0,400}?\.eq\('id', idDaUrl\)/.test(src));
+    /const imovelInicial = mascararLeiloeiro\(imovelRecuperado \|\| location\.state\?\.imovel\);/.test(src));
+  checa('relê `imoveis_leilao_mascarado` pelo id quando o state não serve',
+    /from\('imoveis_leilao_mascarado'\)[\s\S]{0,400}?\.eq\('id', idDaUrl\)/.test(src));
   checa('a releitura passa pela renovação de sessão (falha de leitura ≠ imóvel sem endereço)',
-    /lerComRenovacao\(supabase, \(\) => supabase\s*\n?\s*\.from\('imoveis_leilao'\)/.test(src));
+    /lerComRenovacao\(supabase, \(\) => supabase\s*\n?\s*\.from\('imoveis_leilao_mascarado'\)/.test(src));
   checa('e deixa rastro quando nem assim consegue', /analise_recuperar_imovel/.test(src));
   checa('state MAGRO (só id/título/cidade) também dispara a releitura',
     /jaTem\.endereco \|\| jaTem\.cidade/.test(src));

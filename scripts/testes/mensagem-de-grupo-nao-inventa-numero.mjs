@@ -155,8 +155,9 @@ console.log('\nASSINATURA (Investidor Pro) — dado real de PLANOS.top2');
 {
   const r = montarAssinatura({ link: 'https://x/checkout?plano=top2' });
   checa('nome real do plano aparece', r?.includes('INVESTIDOR PRO'), r);
-  checa('preço mensal real (R$ 49,90) aparece', r?.includes('R$ 49,90'), r);
-  checa('preço anual real (R$ 37,49/mês) aparece', r?.includes('R$ 37,49'), r);
+  // 28/10: planos_config.top2 = R$ 89,90/mês e R$ 899/ano (R$ 74,92/mês) desde 01/10; o teste ainda esperava os de antes.
+  checa('preço mensal real (R$ 89,90) aparece', r?.includes('R$ 89,90'), r);
+  checa('preço anual real (R$ 74,92/mês) aparece', r?.includes('R$ 74,92'), r);
   checa('link aparece', r?.includes('https://x/checkout?plano=top2'), r);
   checa('nunca vira header chamativo tipo "DESTRAVE"/"ASSINE AGORA"', !/destrave|assine agora/i.test(r || ''), r);
 }

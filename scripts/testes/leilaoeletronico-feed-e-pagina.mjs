@@ -10,6 +10,7 @@ const pagina2653 = readFileSync(new URL('./fixtures/leilaoeletronico-lote-2653.h
 const URL_2653 = 'https://www.leilaoeletronico.com.br/lote/leilao-de-casa-de-alto-padrao-em-santana-de-parnaiba-sp/2653/';
 const URL_2419 = 'https://www.leilaoeletronico.com.br/lote/leilao-de-predio-de-2-andares-em-colorado-do-oeste-ro/2419/';
 const AGORA = new Date('2026-10-23T15:00:00-03:00');
+const HOJE = '2026-10-23'; // a enumeração do feed usa o mesmo dia de AGORA, senão a fixture vence com o calendário
 
 const listing = (corpo) => `<listing>${corpo}</listing>`;
 const feed = `<?xml version="1.0"?><listings>
@@ -34,7 +35,7 @@ assert.equal(valorDoFeed('169390200 BRL'), 1693902);
 assert.equal(valorDoFeed(''), 0);
 
 // (2) Enumeração: só lote aberto e imóvel (o encerrado 1500 e o veículo 2900 ficam fora).
-const urls = extrairUrlsDeLote(feed, T.base);
+const urls = extrairUrlsDeLote(feed, T.base, { hojeISO: HOJE });
 assert.deepEqual([...urls.keys()].sort(), ['2419', '2653']);
 assert.equal(idDaUrl(URL_2653), '2653');
 
@@ -94,7 +95,7 @@ const URL_2824 = 'https://www.leilaoeletronico.com.br/lote/leilao-de-apartamento
 const URL_2823 = 'https://www.leilaoeletronico.com.br/lote/leilao-de-casa-no-bairro-jardim-mar-sao-bernardo-do-campo/2823/';
 const acre = (u) => listing(`<name>EXTRAJUDICIAL</name> <address format="simples"> <component name="city">Acrelândia</component> <component name="region">Acre</component> </address>
  <price>160000,00 BRL</price> <url>${u}</url> <available_dates_price_config> <end_date>2099-01-01T14:00:00</end_date> <rate>160000,00 BRL</rate> </available_dates_price_config>`);
-extrairUrlsDeLote(`<listings>${acre(URL_2824)}${acre(URL_2823)}</listings>`, T.base);
+extrairUrlsDeLote(`<listings>${acre(URL_2824)}${acre(URL_2823)}</listings>`, T.base, { hojeISO: HOJE });
 const pg = (titulo, desc) => `<ul><li><a href="/">Home</a></li><li>${titulo}</li></ul><section id="dg-lote-descricao"><h2>Descrição</h2><p>${desc}</p></section>`;
 const d4 = parseDetalhe(pg('Leilão de Apartamento e Vaga em Brasília/DF EXTRAJUDICIAL', 'Apartamento com vaga.'), URL_2824, { agora: AGORA });
 assert.deepEqual([d4.cidade, d4.estado], ['Brasília', 'DF']);
@@ -109,7 +110,7 @@ const URL_G300 = 'https://www.gfleiloes.com.br/lote/imovel-area-de-24500m_-vila-
 const URL_G303 = 'https://www.gfleiloes.com.br/lote/imovel-area-de-35200m_-regente-feijo-sp/303/';
 const gfFeed = (u, cidade = 'Acrelândia', regiao = 'Acre') => listing(`<name>JUDICIAL</name> <address format="simples"> <component name="city">${cidade}</component> <component name="region">${regiao}</component> </address>
  <price>1746000,00 BRL</price> <url>${u}</url> <available_dates_price_config> <end_date>2099-01-01T14:00:00</end_date> <rate>873000,00 BRL</rate> </available_dates_price_config>`);
-extrairUrlsDeLote(`<listings>${gfFeed(URL_G237)}${gfFeed(URL_G300, 'Curitiba', 'Paraná')}${gfFeed(URL_G303)}</listings>`, TG.base);
+extrairUrlsDeLote(`<listings>${gfFeed(URL_G237)}${gfFeed(URL_G300, 'Curitiba', 'Paraná')}${gfFeed(URL_G303)}</listings>`, TG.base, { hojeISO: HOJE });
 const pgGF = (bc, h1, desc) => `<ul> <li><a href="/">Home</a></li> <li><a href="#">Comerciais</a></li> <li>${bc}</li> </ul>
  <h1 class="dg-lote-titulo"> ${h1} | <span class="dg-lote-titulo-codigo"><strong>x</strong></span></h1>
  <section id="dg-lote-descricao"><h2>Descrição</h2><p>${desc}</p></section>`;
@@ -127,7 +128,7 @@ assert.deepEqual([g303.cidade, g303.estado], ['Regente Feijó', 'SP'], 'municíp
 //      ("município e comarca de Guaruja-SP"); o feed manda Acrelândia. Sai Guarujá/SP, acentuada como no título.
 const TK = TENANTS.ktz;
 const URL_K1004 = 'https://www.ktzleiloes.com.br/lote/apartamento-duplex-cobertura-guaruja-33973m2/1004/';
-extrairUrlsDeLote(`<listings>${gfFeed(URL_K1004)}</listings>`, TK.base);
+extrairUrlsDeLote(`<listings>${gfFeed(URL_K1004)}</listings>`, TK.base, { hojeISO: HOJE });
 const k1004 = parseDetalhe(pgGF('APARTAMENTO DUPLEX COBERTURA - GUARUJ&#xC1;', 'APARTAMENTO DUPLEX COBERTURA - GUARUJ&#xC1;',
   'DESCRIÇÃO DO IMÓVEL – APARTAMENTO DUPLEX COBERTURA nº64, situado a Rua Maria Martha Arruda Estefno nº679, nesta cidade, municipio e comarca de Guaruja-SP, contendo a area útil de 339.73m2'), URL_K1004, { agora: AGORA });
 assert.deepEqual([k1004.cidade, k1004.estado], ['Guarujá', 'SP'], 'KTZ: cidade do fim do nome, conferida com a UF da descrição');
@@ -136,7 +137,7 @@ assert.deepEqual([k1004.cidade, k1004.estado], ['Guarujá', 'SP'], 'KTZ: cidade 
 //      "MARÍLIA- LOTE DE TERRENO DE 300M² - RESIDENCIAL VILLA FLORA" (hífen colado), conferido no IBGE com a UF do feed.
 const TPJ = TENANTS.projud;
 const URL_P1858 = 'https://www.projudleiloes.com.br/lote/marilia-lote-de-terreno-de-300m_-residencial-villa-flora/1858/';
-extrairUrlsDeLote(`<listings>${gfFeed(URL_P1858, 'São Paulo', 'São Paulo')}</listings>`, TPJ.base);
+extrairUrlsDeLote(`<listings>${gfFeed(URL_P1858, 'São Paulo', 'São Paulo')}</listings>`, TPJ.base, { hojeISO: HOJE });
 const p1858 = parseDetalhe(pgGF('MAR&#xCD;LIA- LOTE DE TERRENO DE 300M&#xB2; - RESIDENCIAL VILLA FLORA', 'MAR&#xCD;LIA- LOTE DE TERRENO DE 300M&#xB2; - RESIDENCIAL VILLA FLORA',
   'DO BEM: TERRENO DE 300 M², LOCALIZADO NA RUA ANTÔNIO BLAGITIS SOBRINHO, NO RESIDENCIAL VILLA FLORA, JARDIM COLIBRI, MARÍLIA – SP'), URL_P1858, { agora: AGORA });
 assert.deepEqual([p1858.cidade, p1858.estado], ['Marília', 'SP'], 'Projud: cidade do nome do lote vence a cidade do escritório no feed');
@@ -150,14 +151,14 @@ const URL_T35156 = 'https://www.tabaleiloes.com.br/lote/terrenos-e-apartamento-j
 // Taba primeiro (o runner roda os tenants em sequência): o 375 dela tem cidade/praça diferentes.
 const urlsTaba = extrairUrlsDeLote(`<listings>${listing(`<name>Lote 18 - Ananindeua - PA - Águas Brancas - Terreno</name> <address format="simples"> <component name="city">Ananindeua</component> <component name="region">Pará</component> </address>
  <url>${URL_X375}</url> <available_dates_price_config> <end_date>2026-11-20T10:00:00</end_date> <rate>50000,00 BRL</rate> </available_dates_price_config>`)}${listing(`<name>Ubatuba - SP</name> <url>${URL_T35156}</url>
- <available_dates_price_config> <end_date>2026-11-12T14:00:00</end_date> <rate>90905823 BRL</rate> </available_dates_price_config>`)}</listings>`, TT.base);
+ <available_dates_price_config> <end_date>2026-11-12T14:00:00</end_date> <rate>90905823 BRL</rate> </available_dates_price_config>`)}</listings>`, TT.base, { hojeISO: HOJE });
 // `\bmoveis-`: o slug "imoveis-residenciais-…" é imóvel (antes caía no filtro de mobília — 154 de 178 lotes da Taba).
 assert.deepEqual([...urlsTaba.keys()].sort(), ['35156', '375']);
 // Milhão depois — feed REAL do lote 375 (24/10), praças em centavos.
 extrairUrlsDeLote(`<listings>${listing(`<home_listing_id>375</home_listing_id> <name>Imóvel Comercial e Residencial em Lagamar/MG</name> <address format="simples"> <component name="city">Lagamar</component> <component name="region">Minas Gerais</component> </address>
  <latitude>-18.183059</latitude> <longitude> -46.803848</longitude> <price>180000,00 BRL</price> <url>${URL_M375}</url>
  <available_dates_price_config> <start_date>2026-11-30T14:00:00</start_date> <end_date>2026-12-04T13:00:00</end_date> <rate>18000000 BRL</rate> </available_dates_price_config>
- <available_dates_price_config> <start_date>2026-12-04T14:00:00</start_date> <end_date>2026-12-14T14:00:00</end_date> <rate>12600000 BRL</rate> </available_dates_price_config>`)}</listings>`, TM.base);
+ <available_dates_price_config> <start_date>2026-12-04T14:00:00</start_date> <end_date>2026-12-14T14:00:00</end_date> <rate>12600000 BRL</rate> </available_dates_price_config>`)}</listings>`, TM.base, { hojeISO: HOJE });
 // Página do 375 da Milhão no 2º tema (h1 `dg-lote-titulo` + `dg-lote-nome`; breadcrumb = leilão + lote colados).
 const pgMilhao = `<nav class="dg-breadcrumb"> <ul> <li><a href="https://www.milhaoleiloes.com.br/">Home</a></li> <li><a href="#">Comerciais</a></li> <li>Leil&#xE3;o Judicial - Im&#xF3;vel Comercial e Residencial Im&#xF3;vel Comercial e Residencial em Lagamar/MG</li> </ul> </nav>
  <h1 class="dg-lote-titulo"> <span class="dg-lote-nome">Im&#xF3;vel Comercial e Residencial em Lagamar/MG</span> | <span class="dg-lote-nome-titulo-codigo">Cód do leilão: <strong>lj00192/001</strong></span> <span class="dg-lote-titulo-categoria">Comerciais</span> </h1>

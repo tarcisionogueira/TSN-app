@@ -140,7 +140,8 @@ const HOSTS_COM_FEED = new Set();
 const hostDe = (u) => { try { return new URL(u).host.replace(/^www\./, '').toLowerCase(); } catch { return ''; } };
 const chaveFeed = (u, id) => `${hostDe(u)}|${id}`;
 
-export function extrairUrlsDeLote(html, base) {
+// hojeISO: só o teste passa (data fixa da fixture); o motor chama com 2 argumentos e vale o relógio.
+export function extrairUrlsDeLote(html, base, { hojeISO } = {}) {
   if (!ehFeedDegrau(html)) return new Map();
   for (const [id, it] of itensDoFeed(html)) {
     let abs = base;
@@ -148,7 +149,7 @@ export function extrairUrlsDeLote(html, base) {
     FEED.set(chaveFeed(abs, id), it);
   }
   HOSTS_COM_FEED.add(hostDe(base));
-  return lotesDoFeed(html, base, { descartar: naoImovelDoFeed });
+  return lotesDoFeed(html, base, { hojeISO, descartar: naoImovelDoFeed });
 }
 export const idDaUrl = (url) => (String(url).match(/\/lote\/[^/]+\/(\d+)/) || [])[1] || null;
 
