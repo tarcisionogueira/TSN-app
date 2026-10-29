@@ -7,6 +7,25 @@
 
 
 
+## 28/10 (fim do dia) — ESTADO E O QUE CONFERIR EM 29/10
+
+**Confirmado no banco às 22h50 de 28/10**: carimbo `runner_residencial_apuracao` voltou (conserto do `cancelado` em
+veículos) · radar por termo 22h16: 3.133 vistos, 82 novos · acervo 36.587 ativos.
+
+**Conferir em 29/10** (nada abaixo tinha rodado gravando ainda; todas com seco OK):
+- `monitor_runs` fonte `radar-editais-djen-leiloeiros` — 1ª fatia na rodada das 2h do runner (após o auto-pull).
+- Lotes ativos das fontes novas (agendada do scraper-dom ~12h): LEILO (~75), LUCIANLEILOES (20), ALLIANCELEIL (11, +
+  o 470 liberado pela fração v5), DHLEILOES (54 abertos; 40 novos/rodada), CENTRALSUL, LUIZLOBATO, SANTOSMORAES (1),
+  SABBAGLEIL (2), Pamela (SUPORTE); JOAOLUIZLEIL (Soleon, 3) e Magalhães (LEILOTECH) nas rodadas deles.
+- scraper-dom agendado termina sem `cancelled` (teto 180) e o job `veiculos` grava.
+- A reserva do residencial (GitHub) deve dizer "Runner em dia" (carimbo < 7 h).
+
+**Runner residencial — como liga sozinho** (PC do dono, Windows 10): Agendador de Tarefas tem `BidPro WSL` (no logon:
+`wsl -u root … service cron start; sleep infinity`), `BidPro Runner (ao ligar)` e `BidPro Runner (periodico)`
+(`C:\bidpro\runner-oculto.vbs`). No WSL: cron `0 2,8,14,20` + `runner-se-atrasado.sh` a cada 30 min (roda se a última
+completa tem > 6 h). Ou seja: PC desligado/suspenso = nada roda; ao ligar e ENTRAR no Windows, recupera sozinho em
+até ~30 min. O GitHub (scraper-dom, Soleon etc.) independe do PC.
+
 ## 28/10 (noite, 6) — LUCIAN ENTRA (20 IMÓVEIS RS/SC); ALLIANCE MEDIDA
 
 **LUCIAN** (`scraper-lucian.mjs`, `lib/lucian-parse.mjs`, `lib/motor/fontes/lucian.mjs`, passo no scraper-dom,
