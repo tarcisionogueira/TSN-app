@@ -27,8 +27,12 @@ ocasional. Amostra de 39 sem site × 60 dias: 3 com edital (8%) — Roberto Jaci
 - Teste `testar:radar-leiloeiro` (13 asserções). Pull real com banco falso: 4 nomes → 139 editais (TRT6 115, TJRN 13,
   TJMT 7, TJPR 3, TRT21 1).
 
-**Pendências**: (1) o runner residencial não roda desde 27/10 e este PC não tem `~/.bidpro-runner.env` — sem ele o
-radar (por termo e por leiloeiro) não roda; (2) edital de TRT sai com `uf` nula (regra deliberada: TRT pode cobrir 2
+**Runner residencial (corrigido na mesma noite)**: ele RODA — no WSL (Ubuntu) do PC do dono, clone `~/tsn-app`, cron
+`0 2,8,14,20` + `runner-se-atrasado.sh` a cada 30 min, última completa 28/10 16:05. O "não roda desde 27/10" era o
+carimbo `runner_residencial_apuracao`: o passo `apurar-e-datar-residencial.mjs` caía no MESMO 23514 do `cancelado` em
+veículos (consertado hoje) e não carimbava — por isso a reserva do GitHub entrava. `~/.bidpro-runner.env` existe no
+WSL, não no Windows (o Git Bash do Windows não o enxerga). O passo novo entra na rodada das 2h (auto-pull).
+**Pendência**: edital de TRT sai com `uf` nula (regra deliberada: TRT pode cobrir 2
 UFs) e o parser pega "Trabalho. RECIFE PE" como cidade (`cidadeValida` aceita) — a IA de enriquecimento refaz.
 
 ## 28/10 (noite, 4) — MEDIÇÃO DOS 338 SITES NUNCA MEDIDOS + 6 TENANTS NOVOS + scraper-dom SEM CORTE
