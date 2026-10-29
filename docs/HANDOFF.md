@@ -20,7 +20,13 @@ mais longa antes de "/UF" que existe no IBGE ("BALNEÁRIO NOVA TRAMANDAÍ/RS" �
 com data futura + vendas diretas sem data que ainda mostram "ENVIE SEU LANCE" (Vila Formosa R$ 450 mil, Higienópolis
 R$ 2,3 mi…). Site LENTO (40–60 s por página). Estrutura: card na home (onClick `leiloes/<id>-<slug>`, datas e lances)
 → evento → `lotes/<id>-<n>-<slug>`; lote com "1ª Praça/2ª Praça/Praça Única … R$", "Avaliação: R$", Judicial/Extrajudicial.
-Não integrada ainda — decisão do dono (rendimento baixo × site lento).
+**Integrada na mesma noite** (dono: "Sim, integrar"): `scraper-alliance.mjs`, `lib/alliance-parse.mjs`,
+`lib/motor/fontes/alliance.mjs`, passo diário no scraper-dom, `testar:alliance` (14 asserções, páginas reais). A
+lentidão foi momentânea (remedido: home 1,3 s, lote < 0,3 s). Evento = card com praça ≥ hoje ou venda direta sem
+data. Seco: 14 leilões, 25 lotes, **11 imóveis prontos**, 10 com cidade (subdistrito numerado → São Paulo; "R.I.
+Cotia" → Cotia; Tatuapé sem pista no texto fica nulo). O 470 (São Vicente) cai na régua de fração ideal por uma 4ª
+redação da cláusula de condomínio ("correspondendo a este apartamento a fração ideal de 0,0211") — régua espelhada em
+`fracao_ideal_barrada()` no banco; mexer pede migração.
 
 ## 28/10 (noite, 5) — RADAR DJEN POR LEILOEIRO SEM SITE
 

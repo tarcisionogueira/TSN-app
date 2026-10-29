@@ -115,7 +115,7 @@ export function parseDetalhe(html, url, { agora = new Date() } = {}) {
     anexos: [edital && { tipo: 'edital', nome: 'Edital', url: edital }, matricula && { tipo: 'matricula', nome: 'Matrícula', url: matricula }].filter(Boolean),
     // "imóvel este matriculado no CRI de Farroupilha sob nº 25.560" — forma deste leiloeiro, fora do helper comum.
     numero_matricula: numeroMatriculaDoTexto(descricao)
-      || (descricao.match(/matriculad[oa][^.;]{0,80}?sob\s+(?:o\s+)?n[º°o.]*\s*(\d{1,3}(?:\.\d{3})+|\d{3,7})/i)?.[1] || '').replace(/\./g, '') || null,
+      || descricao.match(/matriculad[oa][^.;]{0,80}?sob\s+(?:o\s+)?n[º°o.]*\s*(\d{1,3}(?:\.\d{3})+|\d{3,7})/i)?.[1] || null,
     naoImovel: !!cat && !/im[óo]ve/i.test(cat),
     encerrado: fechado || (fim ? Date.parse(fim) < agora : false),
   };

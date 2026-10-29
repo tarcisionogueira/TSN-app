@@ -98,11 +98,14 @@ on:
       - 'scripts/scraper-lucian.mjs'
       - 'scripts/lib/lucian-parse.mjs'
       - 'scripts/lib/motor/fontes/lucian.mjs'
+      - 'scripts/scraper-alliance.mjs'
+      - 'scripts/lib/alliance-parse.mjs'
+      - 'scripts/lib/motor/fontes/alliance.mjs'
       - '.github/workflows/scraper-dom.yml'
   workflow_dispatch:
     inputs:
       fontes:
-        description: 'csv: softgt,nortedeminas,leilaoeletronico,suportev2,suportenext,leilovia,labasoft,baston,cassiano,arnaldo,novaserrana(recon),alfa,hasta,nordeste,nordeste_veiculos,jeleiloes,leilaoindex,rocha,albertomacedo,francoleiloes,simon,globo,leje,freitas,leiloar,lgcorretor,nakakogue,astavero,suporteoferta,comprei,leilo,lucian'
+        description: 'csv: softgt,nortedeminas,leilaoeletronico,suportev2,suportenext,leilovia,labasoft,baston,cassiano,arnaldo,novaserrana(recon),alfa,hasta,nordeste,nordeste_veiculos,jeleiloes,leilaoindex,rocha,albertomacedo,francoleiloes,simon,globo,leje,freitas,leiloar,lgcorretor,nakakogue,astavero,suporteoferta,comprei,leilo,lucian,alliance'
         required: false
         default: 'alfa,nordeste'
       gravar:
@@ -228,6 +231,17 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           LUCIAN_DRYRUN: ${{ env.DRYRUN_PADRAO }}
         run: node scripts/scraper-lucian.mjs
+
+      - name: Alliance (São Paulo/SP — leilões e vendas diretas de imóvel)
+        # 28/10 (medição da junta): a home lista ~120 leilões, quase todos antigos (o rótulo "Futuro" não vale) — vira
+        # evento só o card com praça futura ou venda direta sem data. Seco de 28/10: 14 leilões, 25 lotes, 11 imóveis
+        # prontos (12 carretas e 1 Civic saem como não-imóvel). Fetch grátis; páginas de ~1 s (houve picos de 40–60 s).
+        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'alliance')) }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          ALLIANCE_DRYRUN: ${{ env.DRYRUN_PADRAO }}
+        run: node scripts/scraper-alliance.mjs
 
       - name: Comprei (PGFN) — venda direta na origem
         # 10/10: API pública do Comprei (listagem nacional + anúncio). Grátis (direto ou via banco) — diário.

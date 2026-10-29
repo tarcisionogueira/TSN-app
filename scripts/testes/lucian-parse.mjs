@@ -24,7 +24,7 @@ eq('804 cidade pelo título (IBGE)', [r.cidade, r.estado], ['Farroupilha', 'RS']
 eq('804 praças e valores', [r.valor_avaliacao, r.valor_minimo, r.valor_minimo_2, r.data_leilao, r.data_leilao_2],
   [120000, 120000, 60000, '2026-10-08T10:30:00-03:00', '2026-10-22T10:30:00-03:00']);
 eq('804 edital e matrícula', [/edital_\d+_5000640/.test(r.link_edital), /matricula_\d+\.pdf$/.test(r.link_matricula)], [true, true]);
-eq('804 matrícula no texto', r.numero_matricula, '25560');
+eq('804 matrícula no texto (com ponto, como o helper comum)', r.numero_matricula, '25.560');
 eq('804 judicial (processo/CPC)', r.modalidade, 'judicial');
 eq('804 botão "Encerrado" fecha mesmo antes da data', d.encerrado, true);
 eq('804 sem foto (sem-imagem.png)', r.link_foto, null);
