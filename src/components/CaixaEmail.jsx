@@ -734,7 +734,10 @@ export default function CaixaEmail({ soPessoal = false }) {
               // Versão texto que é quase só LINK (30/09, print do dono: e-mail do Mercado Pago virou
               // uma parede de "[https://…]" — cada imagem do HTML vira URL no texto). Nesse caso a
               // versão formatada abre por padrão; o botão continua alternando. Spam segue só texto.
-              const padraoHtml = !!m.html && (!m.texto || textoSoDeLinks(m.texto));
+              // HTML guardado no teto de 300k (29/10) foi CORTADO na entrada — imagem colada em base64
+              // estourava o limite e o resto do e-mail sumia. O texto está inteiro: abre nele.
+              const htmlCortado = !!m.html && m.html.length >= 300000 && !!m.texto;
+              const padraoHtml = !!m.html && !htmlCortado && (!m.texto || textoSoDeLinks(m.texto));
               const mostrarHtml = !spam && !!m.html && (v.html !== undefined ? v.html : padraoHtml);
               return (
                 <div key={m.id} ref={ultima ? ultimaRef : undefined}
@@ -770,6 +773,13 @@ export default function CaixaEmail({ soPessoal = false }) {
                     <div style={{ display: 'flex', gap: 14, marginTop: 6 }}>
                       {!mostrarHtml && citado && <button onClick={() => alternar('citado')} style={linkBtn}>{v.citado ? 'Ocultar histórico citado' : '··· Mostrar histórico citado'}</button>}
                       {m.html && m.texto && <button onClick={() => setVerMais(prev => ({ ...prev, [m.id]: { ...(prev[m.id] || {}), html: !mostrarHtml } }))} style={linkBtn}>{mostrarHtml ? 'Ver só o texto' : 'Ver formatado (original)'}</button>}
+                    </div>
+                  )}
+                  {/* No celular a barra de ações fica lá no topo, fora da vista de quem leu até o fim (29/10). */}
+                  {ultima && pasta !== 'spam' && (
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 12 }}>
+                      {ultimaEntrada && <button onClick={() => responder(ultimaEntrada)} style={btn(false)}><Reply size={13} /> Responder</button>}
+                      <button onClick={() => encaminhar([m])} style={btn(false)}><Forward size={13} /> Encaminhar</button>
                     </div>
                   )}
                 </div>

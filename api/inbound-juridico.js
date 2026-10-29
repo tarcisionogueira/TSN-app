@@ -34,6 +34,23 @@ function remetenteInterno(endereco) {
   return e === ADMIN_EMAIL || /^(no-?reply|notifications?|mailer-daemon|postmaster|donotreply)@/i.test(e);
 }
 
+// HTML do e-mail para GUARDAR (29/10). Imagem colada no corpo (print, assinatura) chega como
+// `data:image/...;base64` DENTRO do HTML — um print de 227 KB vira ~300 mil caracteres e sozinho
+// estourava o corte de 300k: a tag <img> ficava aberta e TUDO depois dela sumia (e-mail do
+// escritório Cajado de Menezes chegou na caixa cortado em "vejamos:"). A imagem já chega como
+// anexo (o botão de download aparece na mensagem), então no HTML ela vira um aviso que aponta
+// para o anexo. Se ainda passar do teto, corta antes da última tag aberta, nunca no meio dela.
+const HTML_MAX = 300000;
+function htmlParaGuardar(html) {
+  if (typeof html !== 'string' || !html.trim()) return null;
+  let h = html.replace(/<img\b[^>]*?\bsrc\s*=\s*["']?data:[^>]*>/gi, (tag) => {
+    const alt = (tag.match(/\balt\s*=\s*["']([^"']{1,120})["']/i) || [])[1] || 'imagem';
+    return `<span style="display:inline-block;padding:4px 8px;border:1px dashed #94a3b8;border-radius:6px;color:#475569;font-size:12px">[${alt.replace(/[<>&]/g, '')} — imagem colada no e-mail; abra o anexo acima]</span>`;
+  });
+  if (h.length > HTML_MAX) { h = h.slice(0, HTML_MAX); const ab = h.lastIndexOf('<'); if (ab > h.lastIndexOf('>')) h = h.slice(0, ab); }
+  return h;
+}
+
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), { status, headers: { 'Content-Type': 'application/json' } });
 }
@@ -392,7 +409,7 @@ async function registrarNaCaixa(data, headers, messageId, { pasta = 'entrada', s
       para: lista(data?.to), cc: lista(data?.cc),
       assunto: String(data?.subject || '').slice(0, 500) || null,
       texto: String(data?.text || '').slice(0, 100000) || null,
-      html: String(data?.html || '').slice(0, 300000) || null,
+      html: htmlParaGuardar(data?.html),
       message_id: messageId, in_reply_to: headers['in-reply-to'] || null, referencias: referenciasNormalizadas(headers['references']),
       resend_email_id: data?.email_id || null, anexos, autenticacao: aut, spam_motivo: spamMotivo,
       resposta_de: respostaDe,
@@ -532,7 +549,7 @@ async function encaminharParaAtendimento(data, headers, messageId, caixaId = nul
       // Versão HTML do e-mail (parágrafos, links, imagens), quando a API a devolveu. A tela
       // do Atendimento a renderiza SÓ dentro de iframe sandbox — ver o comentário da coluna.
       // `conteudo` (texto) segue sendo a fonte para IA, busca e notificação.
-      conteudo_html: (typeof data?.html === 'string' && data.html.trim()) ? data.html.slice(0, 300000) : null,
+      conteudo_html: htmlParaGuardar(data?.html),
       anexos, canal: 'email', email_message_id: messageId || null,
     },
   });
