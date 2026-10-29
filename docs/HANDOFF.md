@@ -25,6 +25,16 @@ ALFA, TORRES3, PEDROSA, SABRINA, LEILOADOR). Elisa = vitrine da família Leiload
 - **Fila de leitor próprio**: Leilões Brasil TO (leiloesbrasilto.com.br, Antônio Carlos Volpi Santana, JUCETINS 12 —
   plataforma antiga, `/imoveis` → `/leilao/<id>`; 1 imóvel aberto TRT10 Palmas R$ 400 mil em 01/12 FORA do acervo) e
   Marcus Vinícius (Brain at Work). Somam-se à fila de 28/10 (Alliance e Lucian já feitos).
+- **LJUD (26 white-labels)**: cobertos pela fonte LJUD (portal nacional, todos os imóveis); triagem marcada, #370 fechada.
+
+**#378 — Puppeteer Diário em 3 grupos paralelos.** O agendado foi CANCELADO no teto de 150 min em 25–28/10;
+SUPORTE (801 ativos) sem coleta desde 27/10, GRUPOLANCE e WEBLEILOES desde 25/10. Tempos de 28/10: Zuk 33 min,
+Pestana 36, Leilotech 22 — 142 min antes do Suporte. Agora `matrix`: a (rede Superbid + Mega/Leilofy/Zuk/Sodré/Frazão),
+b (LJUD/Pestana/Biasi/VIP), c = todo o resto POR EXCLUSÃO (fonte nova cai no c sozinha). Dispatch com `fontes` roda só
+o grupo a. LEILOFY_RECON saiu da rodada diária (rodava todo dia por engano).
+**#379 — LJUD veículos**: 1 timeout de navegação parava a paginação (28/10: 125 de ~1.000). Agora nova tentativa por
+página e, se falhar 2×, `coletaParcial` (trava sumidos e saúde) — antes, falha numa página do fim com ≥ 50% lidos
+desligaria os veículos das páginas não lidas.
 
 ## 28/10 (fim do dia) — ESTADO E O QUE CONFERIR EM 29/10
 

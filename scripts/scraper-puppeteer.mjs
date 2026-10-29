@@ -2545,15 +2545,34 @@ async function scraperLJUDVeiculos(browser) {
   // Exigir 2 páginas SEGUIDAS sem novidade absorve essa duplicidade de borda sem precisar
   // hardcodar "pule a página 1" (mais frágil se o site mudar o índice de novo).
   let semNovidadeSeguidas = 0;
+  // 29/10 (#379): o 1º timeout de navegação parava a paginação inteira e o resto seguia como se fosse
+  // tudo — em 28/10 a p4 estourou os 45 s e a rodada gravou 125 de ~1.000 (antes 721). Quem salvou o acervo
+  // foi a trava de < 50% do desligarVeiculosSemDataSumidos; com a falha numa página do FIM (≥ 50% lidos),
+  // os veículos das páginas não lidas seriam desligados como sumidos. Agora, como no MEGA (#275): a página
+  // que falha ganha nova tentativa, e a que falha 2× vira coletaParcial — trava a saúde e os sumidos.
+  let coletaParcial = null;
   try {
     for (let p = 0; p < MAX_PAGINAS; p++) {
-      try {
-        // 21/10: era `/veiculos/carros` — motos, caminhões, pesados e ônibus nunca entravam (o portal
-        // tinha 795 veículos; a listagem de carros é uma fatia). `/veiculos` é o mesmo HTML com todas as
-        // categorias (~19 páginas de 42, dentro do teto); o tipo sai do texto por classificarTipoVeiculo.
-        await page.goto(`https://www.leiloesjudiciais.com.br/veiculos?pagina=${p}`, { waitUntil: 'networkidle2', timeout: 45000 });
-        await new Promise((r) => setTimeout(r, 1500));
-      } catch (e) { console.log(`    LJUD veículos p${p}: erro de navegação (${e.message.slice(0, 50)}) — parando`); break; }
+      let erroNav = null;
+      for (let t = 0; t < 2; t++) {
+        try {
+          // 21/10: era `/veiculos/carros` — motos, caminhões, pesados e ônibus nunca entravam (o portal
+          // tinha 795 veículos; a listagem de carros é uma fatia). `/veiculos` é o mesmo HTML com todas as
+          // categorias (~19 páginas de 42, dentro do teto); o tipo sai do texto por classificarTipoVeiculo.
+          await page.goto(`https://www.leiloesjudiciais.com.br/veiculos?pagina=${p}`, { waitUntil: 'networkidle2', timeout: 45000 });
+          await new Promise((r) => setTimeout(r, 1500));
+          erroNav = null;
+          break;
+        } catch (e) {
+          erroNav = e.message.slice(0, 50);
+          if (t === 0) { console.log(`    LJUD veículos p${p}: erro de navegação (${erroNav}) — nova tentativa em 5 s`); await new Promise((r) => setTimeout(r, 5000)); }
+        }
+      }
+      if (erroNav) {
+        coletaParcial = `LJUD_VEICULOS: navegação falhou 2× na p${p} (${erroNav})`;
+        console.log(`    LJUD veículos p${p}: erro de navegação 2× — parando (coleta parcial)`);
+        break;
+      }
       const cardsPagina = await page.evaluate(() => {
         const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
         const out = [];
@@ -2583,6 +2602,7 @@ async function scraperLJUDVeiculos(browser) {
     }
   } catch (err) {
     console.log(`  Erro LJUD (veículos, listagem): ${err.message.slice(0, 100)}`);
+    coletaParcial = `LJUD_VEICULOS: listagem interrompida (${err.message.slice(0, 60)})`;
   } finally {
     await page.close().catch(() => {});
   }
@@ -2706,7 +2726,8 @@ async function scraperLJUDVeiculos(browser) {
     }
     if (herdados) console.log(`    LJUD (veículos): ${herdados} lote(s) herdaram pátio do próprio leilão`);
     console.log(`    LJUD (veículos): ${veiculos.length} mapeados`);
-    return veiculos;
+    // salvarVeiculos lê `coletaParcial` do array (mesmo contrato dos imóveis).
+    return coletaParcial ? Object.assign(veiculos, { coletaParcial }) : veiculos;
   } catch (err) {
     console.log(`  Erro LJUD (veículos, mapeamento): ${err.message.slice(0, 100)}`);
     return [];

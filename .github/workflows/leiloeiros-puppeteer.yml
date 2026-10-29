@@ -38,6 +38,32 @@ jobs:
     # ~15 paginas de catalogo + ~100 visitas de detalhe (teto 60/tenant) = ~+3 min por rodada.
     # 24/10 (triagem575): +4 tenants (Braga, Dal'Aqua, GS, Marca; ~25 imoveis) = ~+1 min por rodada.
     # 25/10 (pendencia 321, FENALEI): +2 tenants (Monteiro 12, VL 1) = ~+1 min por rodada.
+    #
+    # 29/10 (#378): TRES GRUPOS EM PARALELO. O agendado foi CANCELADO 4 dias seguidos (25-28/10) no teto de 150
+    # min, e SUPORTE (801 ativos), GRUPOLANCE e WEBLEILOES ficaram sem coletar desde 25-27/10. Medido no log de
+    # 28/10 (min): Mega 8, Leilofy 3, Zuk 33, Sodre 3, Frazao 11, LJUD 12, Pestana 36, Biasi 5, VIP 8, Leilotech 22
+    # = 142 antes do Suporte. Grupos de ~60 min cada, com o teto de 150 de folga em cada um:
+    #   a = rede Superbid (so roda no gate do residencial) + Mega, Leilofy, Zuk, Sodre, Frazao  (~60)
+    #   b = LJUD, Pestana, Biasi, VIP                                                          (~61)
+    #   c = TODO O RESTO, por EXCLUSAO (Leilotech, Suporte, GrupoLance, WebLeiloes, HastaPublica...). Fonte nova
+    #       cai aqui sozinha — lista positiva no "c" deixaria a proxima fonte fora sem ninguem perceber.
+    # Ao mover uma fonte entre a/b, mantenha-a no excluir do c (senao roda duas vezes).
+    # Disparo manual com `fontes`: so o grupo a roda (com a lista pedida); b e c pulam o passo.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - grupo: a
+            fontes: MEGA,SUPERBID,SOLD,SBID9,TOTALLEILOES,CREPALDI,KRONLEILOES,DILSONMOREIRA,JMFLEILOES,LEILOFY,ZUK,SODRE,FRAZAO
+            excluir: VENDASGOV
+          - grupo: b
+            fontes: LJUD,PESTANA,BIASI,VIP
+            excluir: VENDASGOV
+          - grupo: c
+            fontes: ''
+            # LEILOFY_RECON: modo descoberta (so com SCRAPER_FONTES=LEILOFY_RECON, ver o script) — rodava todo dia
+            # por engano porque `rodar()` com a lista vazia aceita qualquer nome fora do excluir.
+            excluir: VENDASGOV,LEILOFY_RECON,MEGA,SUPERBID,SOLD,SBID9,TOTALLEILOES,CREPALDI,KRONLEILOES,DILSONMOREIRA,JMFLEILOES,LEILOFY,ZUK,SODRE,FRAZAO,LJUD,PESTANA,BIASI,VIP
     timeout-minutes: 150
 
     steps:
@@ -60,18 +86,19 @@ jobs:
             libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64 \
             libpango-1.0-0 libcairo2 libatspi2.0-0 libgtk-3-0
 
-      - name: Run Puppeteer scraper
+      - name: Run Puppeteer scraper (grupo ${{ matrix.grupo }})
+        if: github.event.inputs.fontes == '' || github.event.inputs.fontes == null || matrix.grupo == 'a'
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          SCRAPER_FONTES: ${{ github.event.inputs.fontes }}
+          SCRAPER_FONTES: ${{ github.event.inputs.fontes || matrix.fontes }}
           # VENDASGOV saiu daqui em 29/08: o WAF do SERPRO nao deixa este runner (datacenter)
           # nem CARREGAR a pagina — as 5 rotas davam "Navigation timeout of 45000 ms" e a fonte
           # colhia ZERO desde pelo menos 15/08, queimando 22 min por dia. Esses 22 min saiam do
           # orcamento das fontes do FIM da lista, que o aviso abaixo ja dizia serem as cortadas.
           # Passou para o runner RESIDENCIAL (runner-residencial.sh), o mesmo caminho de
           # HASTA/RJ/PECINI. Rodar so ela na mao continua possivel: SCRAPER_FONTES=VENDASGOV.
-          SCRAPER_EXCLUIR: VENDASGOV
+          SCRAPER_EXCLUIR: ${{ matrix.excluir }}
           LJUD_DEBUG: ${{ github.event.inputs.ljud_debug || '0' }}
           LJUD_FOTO_MAX: ${{ github.event.inputs.ljud_foto_max }}
           SUPERBID_GALERIA: ${{ github.event.inputs.superbid_galeria || '0' }}
@@ -94,7 +121,7 @@ jobs:
           JOB_STATUS: ${{ job.status }}
           # Aspas duplas no escalar YAML sao obrigatorias: a mensagem tem ':' e sem elas o
           # arquivo inteiro deixa de fazer parse (o workflow some, que seria pior que o bug).
-          MOTIVO: "${{ job.status == 'cancelled' && 'TIMEOUT ou cancelamento - a rodada foi cortada no meio e as fontes do FIM da lista (SUPORTE, GRUPOLANCE, WEBLEILOES) podem nao ter coletado. Confira o log e o timeout-minutes.' || 'Erro na execucao.' }}"
+          MOTIVO: "${{ job.status == 'cancelled' && format('TIMEOUT ou cancelamento no grupo {0} - a rodada desse grupo foi cortada no meio e as fontes do FIM dele podem nao ter coletado. Confira o log e o timeout-minutes.', matrix.grupo) || format('Erro na execucao (grupo {0}).', matrix.grupo) }}"
         run: |
           curl -s -L --post301 --post302 --post303 -X POST "${APP_BASE_URL:-https://bidprobrasil.com.br}/api/notify-scraper" \
             -H "x-cron-secret: ${CRON_SECRET}" \
