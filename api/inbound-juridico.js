@@ -105,22 +105,40 @@ function limparResposta(texto) {
 // Falha aqui NUNCA derruba o webhook: sem corpo, o chamado nasce mesmo assim com o aviso
 // "[mensagem sem texto…]" — visível na fila, onde alguém pergunta "cadê o texto?" — e o
 // log diz o que a API respondeu. Ausência visível, nunca 200 mudo.
+//
+// 29/10: o e-mail da Goldstone de 28/10 17:44 entrou SEM TEXTO — a API deu 200 com corpo vazio
+// ("keys:" em branco) 1 s depois do recebimento, e no dia seguinte o mesmo id devolvia text e
+// html completos. É corrida: o webhook chega antes de o Resend terminar de processar a mensagem.
+// Por isso 200 sem corpo e 404 ganham nova tentativa (1,5 s e 3 s). Edge tem ~25 s até a 1ª
+// resposta: 3 × 6 s + 4,5 s de espera cabe.
+const ESPERAS_CORPO_MS = [1500, 3000];
 async function buscarCorpoNaApi(emailId) {
   const key = process.env.RESEND_API_KEY;
   if (!key || !emailId) return null;
+  for (let tentativa = 0; ; tentativa++) {
+    const ultima = tentativa >= ESPERAS_CORPO_MS.length;
+    const corpo = await buscarCorpoUmaVez(emailId, key, ultima);
+    if (corpo !== 'tentar_de_novo') return corpo;
+    await new Promise(ok => setTimeout(ok, ESPERAS_CORPO_MS[tentativa]));
+  }
+}
+
+async function buscarCorpoUmaVez(emailId, key, ultima) {
   try {
     const r = await fetch(`https://api.resend.com/emails/receiving/${encodeURIComponent(emailId)}`, {
       headers: { Authorization: `Bearer ${key}` },
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(6000),
     });
     if (!r.ok) {
+      if (r.status === 404 && !ultima) return 'tentar_de_novo';
       console.error('[inbound] corpo: API respondeu', r.status, (await r.text().catch(() => '')).slice(0, 200));
       return null;
     }
     const j = await r.json().catch(() => null);
     if (!j || (!j.text && !j.html)) {
-      // 200 sem corpo = o contrato é OUTRO. As chaves no log dizem qual.
-      console.error('[inbound] corpo: API 200 sem text/html — keys:', Object.keys(j || {}).join(','));
+      if (!ultima) return 'tentar_de_novo';
+      // 200 sem corpo mesmo depois de esperar = o contrato é OUTRO. As chaves no log dizem qual.
+      console.error('[inbound] corpo: API 200 sem text/html após 3 tentativas — keys:', Object.keys(j || {}).join(','));
       return null;
     }
     // `attachments` da API traz id/filename/size/content_type (metadados; o binário se
