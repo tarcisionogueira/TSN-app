@@ -128,6 +128,7 @@
     "testar:veiculo-praca-vencida": "node scripts/testes/veiculo-praca-vencida-na-entrada.mjs",
     "testar:leiloar": "node scripts/testes/leiloar-parse.mjs",
     "testar:leilo": "node scripts/testes/leilo-parse.mjs",
+    "testar:radar-leiloeiro": "node scripts/testes/radar-por-leiloeiro.mjs",
     "testar:leiloar2": "node scripts/testes/leiloar-segundo-template.mjs",
     "testar:leilovia": "node scripts/testes/leilovia-parse.mjs",
     "testar:labasoft": "node scripts/testes/labasoft-parse.mjs",

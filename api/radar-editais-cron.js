@@ -684,6 +684,117 @@ async function buscarDJEN(tribunal, termo, ini, fim, t0, transporte, hardMs) {
 }
 
 /**
+ * Item da API Comunica → linha de `editais_leilao` (ou null, se não é edital de verdade). Uma função só para o pull por
+ * termo e o pull por leiloeiro (28/10): o mesmo edital tem de entrar igual venha por onde vier.
+ */
+function linhaDoItem(it, { tribunal, fim, ehIntegrado }) {
+  const djenId = String(g(it, 'id', 'numeroComunicacao', 'hash', 'idComunicacao') || '');
+  const texto = String(g(it, 'texto', 'inteiroTeor', 'teor', 'conteudo') || '');
+  const tipoDoc = g(it, 'tipoDocumento', 'tipoComunicacao', 'tipo');
+  if (!ehEditalReal(texto, tipoDoc)) return null; // FILTRO DURO: fora despacho/decisão que só cita "leilão"
+  const p = parseEdital(texto);
+  const orgao = g(it, 'nomeOrgao', 'orgao', 'nomeVara');
+  const nomeLeiloeiro = p.leiloeiro_nome;
+  const sigla = g(it, 'siglaTribunal', 'tribunal') || tribunal;
+  const linha = {
+    djen_id: djenId || null,
+    fonte: 'djen',
+    tribunal: sigla,
+    numero_processo: g(it, 'numeroProcesso', 'numero_processo', 'numeroprocessocommascara'),
+    orgao, comarca: orgao, uf: ufDoTribunal(sigla),
+    classe: g(it, 'nomeClasse', 'classe'),
+    tipo_documento: tipoDoc,
+    data_disponibilizacao: (String(g(it, 'data_disponibilizacao', 'dataDisponibilizacao', 'datadisponibilizacao') || fim)).slice(0, 10),
+    data_praca_1: p.data_praca_1, data_praca_2: p.data_praca_2,
+    leiloeiro_nome: nomeLeiloeiro, leiloeiro_nome_norm: nomeLeiloeiro ? norm(nomeLeiloeiro) : null,
+    leiloeiro_jucesp: p.leiloeiro_jucesp, leilao_plataforma_url: p.leilao_plataforma_url,
+    // Nome OU domínio bastam pra valer a pena perguntar — antes só nome, e um edital
+    // sem nome extraído mas com site batendo (ex.: "leiloeiro(a)" não reconhecido, mas
+    // "www.megaleiloes.com.br" sim) saía marcado `false` por default, sem checar nada.
+    leiloeiro_integrado: (nomeLeiloeiro || p.leilao_plataforma_url)
+      ? ehIntegrado(nomeLeiloeiro, dominioDe(p.leilao_plataforma_url)) : false, // null quando o cruzamento está cego
+    valor_avaliacao: p.valor_avaliacao, lance_minimo: p.lance_minimo,
+    imovel_matricula: p.imovel_matricula, imovel_area_m2: p.imovel_area_m2,
+    // ⚠️ ERA `p.imovel_uf || 'SP'` (03/09). Com o radar só em SP o default era invisível;
+    // com `RADAR_TRIBUNAIS` aberto para o Brasil, todo edital do TJBA ou do TJMG cujo
+    // parse não achasse a UF entraria como SÃO PAULO — dado inventado com cara de dado.
+    imovel_cidade: p.imovel_cidade, imovel_uf: p.imovel_uf, imovel_endereco: p.imovel_endereco,
+    debitos: p.debitos, ocupacao: p.ocupacao, cartorio: p.cartorio,
+    texto_integral: texto.slice(0, 20000),
+    hash_dedup: djenId ? null : norm(`${sigla}|${g(it, 'numeroProcesso') || ''}|${texto.slice(0, 200)}`),
+    payload: it,
+    status: p.status,
+  };
+  return (linha.djen_id || linha.hash_dedup) ? linha : null;
+}
+
+/** Só as inéditas (evita reprocessar): confere os djen_id já existentes e faz o upsert do resto. */
+async function gravarIneditas(supabase, linhas) {
+  const ids = linhas.map((r) => r.djen_id).filter(Boolean);
+  const existentes = new Set();
+  for (let i = 0; i < ids.length; i += 200) {
+    try {
+      const { data } = await supabase.from('editais_leilao').select('djen_id').in('djen_id', ids.slice(i, i + 200));
+      for (const r of data || []) existentes.add(r.djen_id);
+    } catch { /* aditivo */ }
+  }
+  const inserir = linhas.filter((r) => !r.djen_id || !existentes.has(r.djen_id));
+  if (!inserir.length) return { novos: 0, erro: null };
+  const { error } = await supabase.from('editais_leilao').upsert(inserir, { onConflict: 'djen_id', ignoreDuplicates: true });
+  return error ? { novos: 0, erro: `upsert: ${String(error.message).slice(0, 80)}` } : { novos: inserir.length, erro: null };
+}
+
+// O texto do edital cita o leiloeiro com o nome INTEIRO? A busca `texto=` da API casa palavra solta (medido em 28/10:
+// "Juliana Pereira" devolve 10.000 comunicações; aspas não mudam nada), então quem decide é o texto, não a API.
+export function citaLeiloeiro(texto, nome) {
+  const n = norm(nome);
+  return n.length >= 8 && ` ${norm(texto)} `.includes(` ${n} `);
+}
+
+/**
+ * PULL POR LEILOEIRO (28/10) — o radar por termo só olha os tribunais de RADAR_TRIBUNAIS; o leiloeiro SEM SITE só aparece
+ * quando publica edital, e publica onde for nomeado (amostra de 39 em 28/10: Roberto Jacinto Pinho Júnior, JUCEPE, tinha
+ * 115 editais em 60 dias no TRT6, fora do radar). Busca nacional pelo NOME de cada um, guarda só a comunicação que cita
+ * o nome inteiro e passa no mesmo `linhaDoItem` (filtro duro + parser) e no mesmo `gravarIneditas` do pull por termo.
+ * `nomes`: lista de nomes (como estão na junta). Não grava monitor_runs (quem chama grava, com fonte própria).
+ */
+export async function pullDJENPorLeiloeiro({ supabase, nomes, ini, fim, ehIntegrado, t0, transporte, hardMs = HARD_MS, maxPaginas = 2, pausaMs = 800 }) {
+  let vistos = 0, citados = 0, reais = 0, novos = 0, ok = 0, falhas = 0, erroGeral = null, cortadoPorTempo = false;
+  const comEdital = [];
+  for (const nome of nomes) {
+    if (Date.now() - t0 > hardMs) { cortadoPorTempo = true; break; }
+    const items = [];
+    try {
+      for (let pagina = 1; pagina <= maxPaginas; pagina++) {
+        const url = `${DJEN_BASE}?texto=${encodeURIComponent(nome)}&dataDisponibilizacaoInicio=${ini}&dataDisponibilizacaoFim=${fim}`
+          + `&itensPorPagina=100&pagina=${pagina}`;
+        const json = await transporte(url, t0, hardMs);
+        const lote = json?.items || json?.content || json?.comunicacoes || [];
+        items.push(...lote);
+        const count = Number(json?.count ?? json?.totalElements ?? 0);
+        if (lote.length < 100 || (count && pagina * 100 >= count)) break;
+      }
+      ok++;
+    } catch (e) {
+      if (e instanceof SemCotaRadar) { erroGeral = `SEM COTA: ${String(e.message).slice(0, 90)}`; break; }
+      falhas++; continue;
+    }
+    vistos += items.length;
+    const doNome = items.filter((it) => citaLeiloeiro(g(it, 'texto', 'inteiroTeor', 'teor', 'conteudo'), nome));
+    citados += doNome.length;
+    const linhas = doNome.map((it) => linhaDoItem(it, { tribunal: null, fim, ehIntegrado })).filter(Boolean);
+    reais += linhas.length;
+    if (linhas.length) comEdital.push({ nome, editais: linhas.length });
+    const g2 = await gravarIneditas(supabase, linhas);
+    novos += g2.novos;
+    if (g2.erro) erroGeral = g2.erro;
+    if (pausaMs) await sleep(pausaMs);
+  }
+  if (!erroGeral && ok === 0 && falhas > 0) erroGeral = `nenhuma busca respondeu (${falhas})`;
+  return { buscados: ok + falhas, ok, falhas, vistos, citados, reais, novos, comEdital, erroGeral, cortadoPorTempo };
+}
+
+/**
  * O PULL DO DJEN — um só, para os dois caminhos (Vercel/Bright Data e runner residencial).
  * A única coisa que varia entre eles é o `transporte`; janela, filtro duro, parser, dedup e
  * upsert são idênticos. Manter isto numa função só é decisão consciente: em 29/08 o
@@ -749,63 +860,14 @@ export async function pullDJEN({ supabase, ini, fim, ehIntegrado, t0, transporte
       if (!items.length) continue;
 
       // Monta linhas; dedup por djen_id (só insere as inéditas).
-      const linhas = items.map((it) => {
-        const djenId = String(g(it, 'id', 'numeroComunicacao', 'hash', 'idComunicacao') || '');
-        const texto = String(g(it, 'texto', 'inteiroTeor', 'teor', 'conteudo') || '');
-        const tipoDoc = g(it, 'tipoDocumento', 'tipoComunicacao', 'tipo');
-        if (!ehEditalReal(texto, tipoDoc)) return null; // FILTRO DURO: fora despacho/decisão que só cita "leilão"
-        const p = parseEdital(texto);
-        const orgao = g(it, 'nomeOrgao', 'orgao', 'nomeVara');
-        const nomeLeiloeiro = p.leiloeiro_nome;
-        return {
-          djen_id: djenId || null,
-          fonte: 'djen',
-          tribunal: g(it, 'siglaTribunal', 'tribunal') || tribunal,
-          numero_processo: g(it, 'numeroProcesso', 'numero_processo', 'numeroprocessocommascara'),
-          orgao, comarca: orgao, uf: ufDoTribunal(g(it, 'siglaTribunal', 'tribunal') || tribunal),
-          classe: g(it, 'nomeClasse', 'classe'),
-          tipo_documento: tipoDoc,
-          data_disponibilizacao: (String(g(it, 'data_disponibilizacao', 'dataDisponibilizacao', 'datadisponibilizacao') || fim)).slice(0, 10),
-          data_praca_1: p.data_praca_1, data_praca_2: p.data_praca_2,
-          leiloeiro_nome: nomeLeiloeiro, leiloeiro_nome_norm: nomeLeiloeiro ? norm(nomeLeiloeiro) : null,
-          leiloeiro_jucesp: p.leiloeiro_jucesp, leilao_plataforma_url: p.leilao_plataforma_url,
-          // Nome OU domínio bastam pra valer a pena perguntar — antes só nome, e um edital
-          // sem nome extraído mas com site batendo (ex.: "leiloeiro(a)" não reconhecido, mas
-          // "www.megaleiloes.com.br" sim) saía marcado `false` por default, sem checar nada.
-          leiloeiro_integrado: (nomeLeiloeiro || p.leilao_plataforma_url)
-            ? ehIntegrado(nomeLeiloeiro, dominioDe(p.leilao_plataforma_url)) : false, // null quando o cruzamento está cego
-          valor_avaliacao: p.valor_avaliacao, lance_minimo: p.lance_minimo,
-          imovel_matricula: p.imovel_matricula, imovel_area_m2: p.imovel_area_m2,
-          // ⚠️ ERA `p.imovel_uf || 'SP'` (03/09). Com o radar só em SP o default era invisível;
-          // com `RADAR_TRIBUNAIS` aberto para o Brasil, todo edital do TJBA ou do TJMG cujo
-          // parse não achasse a UF entraria como SÃO PAULO — dado inventado com cara de dado.
-          imovel_cidade: p.imovel_cidade, imovel_uf: p.imovel_uf, imovel_endereco: p.imovel_endereco,
-          debitos: p.debitos, ocupacao: p.ocupacao, cartorio: p.cartorio,
-          texto_integral: texto.slice(0, 20000),
-          hash_dedup: djenId ? null : norm(`${tribunal}|${g(it, 'numeroProcesso') || ''}|${texto.slice(0, 200)}`),
-          payload: it,
-          status: p.status,
-        };
-      }).filter((r) => r && (r.djen_id || r.hash_dedup));
+      const linhas = items.map((it) => linhaDoItem(it, { tribunal, fim, ehIntegrado })).filter(Boolean);
       // ANTES do dedup: é isso que torna a razão comparável entre termos.
       comboAtual.reais = linhas.length;
       descartados += items.length - linhas.length;
 
-      // Só as inéditas (evita reprocessar): confere djen_id já existentes.
-      const ids = linhas.map((r) => r.djen_id).filter(Boolean);
-      const existentes = new Set();
-      for (let i = 0; i < ids.length; i += 200) {
-        try {
-          const { data } = await supabase.from('editais_leilao').select('djen_id').in('djen_id', ids.slice(i, i + 200));
-          for (const r of data || []) existentes.add(r.djen_id);
-        } catch { /* aditivo */ }
-      }
-      const inserir = linhas.filter((r) => !r.djen_id || !existentes.has(r.djen_id));
-      if (inserir.length) {
-        const { error } = await supabase.from('editais_leilao').upsert(inserir, { onConflict: 'djen_id', ignoreDuplicates: true });
-        if (!error) novos += inserir.length;
-        else erroGeral = `upsert: ${String(error.message).slice(0, 80)}`;
-      }
+      const g2 = await gravarIneditas(supabase, linhas);
+      novos += g2.novos;
+      if (g2.erro) erroGeral = g2.erro;
     }
   }
  } catch (e) {

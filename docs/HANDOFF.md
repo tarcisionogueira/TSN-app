@@ -7,6 +7,30 @@
 
 
 
+## 28/10 (noite, 5) — RADAR DJEN POR LEILOEIRO SEM SITE
+
+**Por quê**: dos 711 ATIVOS da junta sem site, só ~30 aparecem no acervo (cruzamento por nome no `leiloeiro`, por
+JUCExx+matrícula e por "Leiloeiro Oficial <nome>" na descrição; quase todos via EDITAL_DJEN). E-mail de domínio
+próprio não ajudou (os 10 "próprios" são globo/ig/me.com/ymail/innlei.org.br). O radar por termo só olha 5 tribunais.
+
+**Medido**: API Comunica aceita busca nacional por nome (`texto=`, sem `siglaTribunal`), ~5 s por consulta, 500
+ocasional. Amostra de 39 sem site × 60 dias: 3 com edital (8%) — Roberto Jacinto Pinho Júnior (JUCEPE) 115 editais em
+40 processos no **TRT6**, Wellington Martins Araújo (TJMT), Francisco Doege (TJRN/TRT21). A busca casa palavra solta
+("Juliana Pereira" → 10.000; aspas não mudam): o filtro é `citaLeiloeiro` (nome inteiro no texto).
+
+**O que entrou**:
+- `api/radar-editais-cron.js`: `linhaDoItem` e `gravarIneditas` extraídos de `pullDJEN` (o pull por termo usa os dois;
+  conferido ao vivo: TJPR 2 dias, 43 vistos, 30 reais, parse igual) + `pullDJENPorLeiloeiro` + `citaLeiloeiro`.
+- `scripts/radar-leiloeiros-residencial.mjs`: fatia rotativa (1/7 dos nomes por dia, janela 10 dias), `monitor_runs`
+  com fonte própria `radar-editais-djen-leiloeiros` (não mexe no freio do pago), `RADAR_LEIL_SO_LER=1` para medir.
+  Passo novo no `runner-residencial.sh` logo após o radar por termo. **Sem caminho pago** (DJEN recusa datacenter).
+- Teste `testar:radar-leiloeiro` (13 asserções). Pull real com banco falso: 4 nomes → 139 editais (TRT6 115, TJRN 13,
+  TJMT 7, TJPR 3, TRT21 1).
+
+**Pendências**: (1) o runner residencial não roda desde 27/10 e este PC não tem `~/.bidpro-runner.env` — sem ele o
+radar (por termo e por leiloeiro) não roda; (2) edital de TRT sai com `uf` nula (regra deliberada: TRT pode cobrir 2
+UFs) e o parser pega "Trabalho. RECIFE PE" como cidade (`cidadeValida` aceita) — a IA de enriquecimento refaz.
+
 ## 28/10 (noite, 4) — MEDIÇÃO DOS 338 SITES NUNCA MEDIDOS + 6 TENANTS NOVOS + scraper-dom SEM CORTE
 
 **GitHub CLI logado** (conta tarcisionogueira) — `& "C:\Program Files\GitHub CLI\gh.exe"` lê os logs das Actions.

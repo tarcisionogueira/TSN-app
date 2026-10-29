@@ -209,6 +209,14 @@ if quer VLANCE && [ -s "$VLANCE_VEIC_JSON" ]; then node scripts/vlance-veiculos.
 quer RADAR && { node scripts/radar-editais-residencial.mjs \
   || echo "  (radar: run PARCIAL ou falho — o que entrou está no 'novos=' acima; não conta como sucesso, e a rede de segurança paga entra após 7 dias sem NENHUM sucesso)"; }
 
+# ── RADAR POR LEILOEIRO SEM SITE (28/10) ────────────────────────────────────────────────────
+# O radar acima busca por TERMO em 5 tribunais; este busca, no Brasil todo, pelo NOME de 1/7 dos leiloeiros ATIVOS da
+# junta sem site (em 7 dias passa por todos; janela de 10 dias). Mesmo filtro, parser e dedup do radar por termo, e
+# `monitor_runs` próprio ('radar-editais-djen-leiloeiros') — não mexe no freio do caminho pago. Só existe aqui: o DJEN
+# recusa IP de datacenter e esta busca não tem rede de segurança paga.
+quer RADAR && { node scripts/radar-leiloeiros-residencial.mjs \
+  || echo "  (radar por leiloeiro: fatia parcial ou falha — o que entrou está no 'novos=' acima; a fatia de amanhã é outra, e esta volta em 7 dias)"; }
+
 # ── TRIAGEM RESIDENCIAL DOS BLOQUEADOS (29/08) ──────────────────────────────────────────────
 # NÃO coleta lote: descobre QUAL PLATAFORMA rodam os sites que recusaram o acesso grátis.
 #
