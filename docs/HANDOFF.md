@@ -7,6 +7,38 @@
 
 
 
+## 28/10 (noite, 4) — MEDIÇÃO DOS 338 SITES NUNCA MEDIDOS + 6 TENANTS NOVOS + scraper-dom SEM CORTE
+
+**GitHub CLI logado** (conta tarcisionogueira) — `& "C:\Program Files\GitHub CLI\gh.exe"` lê os logs das Actions.
+
+**scraper-dom estourava os 120 min todo dia** (27/10 cortou do Leiloar em diante; 28/10 cortou os veículos; Leilão
+Eletrônico ~32 min). Veículos viraram o job `veiculos` (paralelo, 60 min) e o job de imóveis foi a 180 min. O
+"failure" do Leilão Eletrônico/Baston é o alarme de tenant vazio/falhou — os lotes gravaram.
+
+**Residencial-reserva caía no 23514**: a apuração grava `resultado_leilao='cancelado'` (patchDaApuracao) e o check
+de `veiculos_leilao` não aceitava. Migração `20261028_veiculos_resultado_cancelado.sql` (aprovada pelo dono);
+rerun do run 40787645990 passou (5 veículos apurados, 1 cancelado gravado).
+
+**Medição `medicao_2810`** (triagem, coluna `catalogo_ok`): home de 338 domínios da junta que nunca tinham sido
+medidos (260 na triagem sem medição + 80 fora da triagem). Só HTML da home, nada executado: 98 com imóvel, 44 pouco,
+40 sem imóvel, 115 sem conteúdo de leilão (advocacia, Diário Oficial, arte, SPA da Superbid), 30 fora, 11 vazios.
+Dos 98: ~55 já no código (ou outro endereço de fonte nossa: zukerman/lut = ZUK, lancejudicial = GRUPOLANCE,
+e-confianca/confiancaleiloes = ELEILOES), 23 white-labels LJUD (agregador — conferir), 7 lojas Superbid (todas já
+entram por SUPERBID/SOLD; Kiel, Tripoloni e Next com 0 imóvel).
+- **Entraram**: DH Leilões (suporteoferta — 178 imóveis, 54 abertos; `maxPages` 3 → 10 porque a busca lista do id
+  mais antigo e as 3 primeiras páginas eram só encerrados), Pamela Leiloeira (SUPORTE_TENANTS), Santos Moraes
+  (leiloar, domínio leiloessantosmoraes.com.br — 35 lotes, quase todos SENAD/Receita que o `naoEhImovel` tira; 1
+  terreno aberto), Sabbag (leilaopro, 2 de 2), João Luiz (soleon, 4 em /lotes/imovel), Magalhães (Leilotech, .leilao.br).
+- **Sinal falso**: Marcus Vinícius NÃO é Leiloar (a palavra "leiloar?" no texto) — plataforma Brain at Work,
+  `leilao/<id>/<slug>`, vários imóveis em Montes Claros/MG → fila de leitor próprio.
+- **Fila de leitor próprio** (com imóvel na home): Alliance (223 menções), Lucian (63 links), D1 Lance, MV Leilões,
+  Lara Forster + Alexsandro (mesma plataforma), Marcus Vinícius, Jorge Brasil, Benedetto, Cristiano Escola, Parque
+  dos Leilões, Molgado, WR, Positivo, Erico Sobral/Tassiana (Wix), Leiloeiro Dian (Next), Luiz Campolina.
+- **Achado de passagem**: 6 lotes ativos da LEILAOBRASIL com CSS do Word na descrição ("Normal 0 false 21… Style
+  Definitions") — parser não tira o bloco mso.
+- O `seco-motor.mjs` (probe) agora aplica `naoEhImovel` como o runner — sem isso Santos Moraes contava 11 "prontos"
+  que eram carros.
+
 ## 28/10 (noite, 3) — LEILO (GOIÂNIA/GO) ENTRA: ~75 IMÓVEIS
 
 **Fonte nova LEILO** (`scraper-leilo.mjs`, `lib/leilo-parse.mjs`, `lib/motor/fontes/leilo.mjs`; passo diário no

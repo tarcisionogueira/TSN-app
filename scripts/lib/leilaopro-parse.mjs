@@ -157,6 +157,8 @@ export const TENANTS = {
   pra: { fonte: 'PRALEILOES', leiloeiro: 'Pra Leilões', base: 'https://www.praleiloes.com.br', sufixo: 'Pra Leilões' },
   rangel: { fonte: 'RANGELLEIL', leiloeiro: 'Rangel Machado Leiloeiro', base: 'https://www.rangelleiloes.com.br', sufixo: 'Rangel Machado' },
   rogerserafim: { fonte: 'ROGERSERAFIM', leiloeiro: 'Roger Serafim Leilões', base: 'https://www.rogerserafimleiloes.com.br', sufixo: 'Roger Serafim Leilões' },
+  // 28/10 (medição `medicao_2810`): seco no motor — 2 de 2 imóveis prontos (áreas de 40 mil e 13 mil m², Curitiba/PR).
+  sabbag: { fonte: 'SABBAGLEIL', leiloeiro: 'Sabbag Leilões', base: 'https://www.sabbagleiloes.com.br', sufixo: 'Sabbag Leilões' },
   sr: { fonte: 'SRLEILOES', leiloeiro: 'SR Leilões', base: 'https://www.srleiloes.com.br', sufixo: 'SR Leilões' },
   // SW: 1 venda direta aberta (pavilhão, R$ 3 mi); o parser lê preço e foto, mas a página não fecha o bloco DESCRIÇÃO
   // antes do rodapé e o lote sai SEM cidade (não aparece em /leiloes até alguém completar) — ligado assim mesmo pela regra.

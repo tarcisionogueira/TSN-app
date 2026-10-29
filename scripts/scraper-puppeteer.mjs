@@ -5377,6 +5377,9 @@ const LEILOTECH_TENANTS = [
   { domain: 'jorgemarcoleiloes.com.br',  leiloeiro: 'Jorge Marco Leilões' },
   { domain: 'ajbleiloes.com.br',         leiloeiro: 'AJB Leilões' },
   { domain: 'dsleiloes.com.br',          leiloeiro: 'DS Leilões' },
+  // 28/10 (medição `medicao_2810`): magalhaesleiloes.com.br redireciona para o .leilao.br. /agenda 200 com o
+  // `cdn.leilotech` e 3 leilões/3 lotes server-rendered (8 menções a imóvel). Só o .leilao.br — os dois dariam o mesmo lote.
+  { domain: 'magalhaesleiloes.leilao.br', leiloeiro: 'Magalhães Leilões' },
 ];
 
 // Extrai um número de campos que podem vir número OU string BR OU objeto de valores.
@@ -5710,6 +5713,8 @@ const SUPORTE_TENANTS = [
   { domain: 'kleiberleiloes.com.br', leiloeiro: 'Kleiber Leilões (Kleiber Leite Pereira)' },
   { domain: 'esleiloes.com.br', leiloeiro: 'ES Leilões (Sérgio de Paula Pereira)' },
   // Donizette: só o `.leilao.br` (ver acima). O .com.br é o MESMO site; os dois juntos gerariam o mesmo `fonte_id`.
+  // 28/10 (medição da junta `medicao_2810`): /buscador?categoria=2 responde 200 com 12 `article.lote-main` na 1ª página.
+  { domain: 'pamelaleiloeira.com.br', leiloeiro: 'Pamela Leiloeira' },
 ];
 
 // Lote de TESTE do próprio leiloeiro (SUEDPETER 21/08: "LEILÃO TESTE - LOTE 02" no evento

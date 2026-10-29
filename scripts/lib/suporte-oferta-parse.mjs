@@ -69,6 +69,10 @@ export const TENANTS = {
   // 28/10: Luiz Lobato estava em SUPORTE_TENANTS (front antigo) desde 29/08 com 0 lote — /buscador?categoria=2 dá 404, o
   // site migrou para este front. Seco: 22 enumerados, 22 lidos, 6 em aberto (MG/SP), cidade de todos pelo título.
   luizlobato: { fonte: 'LUIZLOBATO', leiloeiro: 'Luiz Lobato Leilões', base: 'https://luizlobatoleiloeiro.com.br' },
+  // 28/10 (medição da junta `medicao_2810`): DH Leilões (Daniel Hamoui, SP) — 178 imóveis em 9 páginas, 54 "Aberto para
+  // lances" pelo statusString de cada página (SP, GO, MG, PE…). Seco nos abertos: cidade, lance, data e foto; matrícula não
+  // vem na página (os PDFs ficam em suporteleiloes.com.br/dhleiloescombr/bens/<id>/arquivos). Pede o maxPages 10.
+  dh: { fonte: 'DHLEILOES', leiloeiro: 'DH Leilões (Daniel Hamoui)', base: 'https://dhleiloes.com.br' },
 };
 
 export function extrairUrlsDeLote(html, base) {

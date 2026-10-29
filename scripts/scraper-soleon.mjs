@@ -229,6 +229,8 @@ const TODOS_TENANTS = [
   { fonte: 'TKLLEILOES', leiloeiro: 'TKL Leilões (Wendell Marcel Calixto Felix)', base: 'https://www.tkl.com.br' }, // 21 de 21 (SP)
   { fonte: 'TRIBUNALEIL', leiloeiro: 'Tribuna Leilões (Eduardo da Silva Pinto)', base: 'https://www.tribunaleiloes.com.br' }, // 14 de 14 (SP)
   { fonte: 'WSPLEILOES', leiloeiro: 'WSP Leilões (Wanderley Samuel Pereira)', base: 'https://www.wspleiloes.com.br' }, // 18 de 18 (SP)
+  // 28/10 (medição `medicao_2810`): home com 16 menções a imóvel e 8 links de lote.
+  { fonte: 'JOAOLUIZLEIL', leiloeiro: 'João Luiz Leilões', base: 'https://joaoluizleiloes.com.br' },
   // FORA: guariglia.com.br (SP) — o banco recusa o certificado TLS do site ("SSL peer certificate"); sem página lida não
   // há prova de catálogo. Não confundir com GUARIGLIA (guariglialeiloes.com.br, BA), que já coleta.
 ];
