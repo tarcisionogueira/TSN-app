@@ -7,6 +7,21 @@
 
 
 
+## 28/10 (noite, 6) — LUCIAN ENTRA (20 IMÓVEIS RS/SC); ALLIANCE MEDIDA
+
+**LUCIAN** (`scraper-lucian.mjs`, `lib/lucian-parse.mjs`, `lib/motor/fontes/lucian.mjs`, passo no scraper-dom,
+`testar:lucian` 17 asserções com 2 páginas reais). Plataforma própria: home + `/agenda/leiloes/data/<data>/1`, só
+`categoria/6/` (Imóveis). DOIS templates de lote: bloco de praças ("1° Leilão: … R$") e o de pregão "Lote 01…16"
+(datas nos inputs ocultos `data_primeiro_leilao`/`data_segundo_leilao`, valores nas Observações). Cidade = a sequência
+mais longa antes de "/UF" que existe no IBGE ("BALNEÁRIO NOVA TRAMANDAÍ/RS" → Tramandaí). Seco: 27 enumerados, 20 prontos.
+
+**ALLIANCE** (allianceleiloes.com.br) — as 223 menções a imóvel da medição eram cards ANTIGOS: dos 120 leilões da home,
+113 sem data ou com data passada (rótulo "Futuro" não vale — há leilão de 2021 marcado assim). Abertos de verdade: ~6
+com data futura + vendas diretas sem data que ainda mostram "ENVIE SEU LANCE" (Vila Formosa R$ 450 mil, Higienópolis
+R$ 2,3 mi…). Site LENTO (40–60 s por página). Estrutura: card na home (onClick `leiloes/<id>-<slug>`, datas e lances)
+→ evento → `lotes/<id>-<n>-<slug>`; lote com "1ª Praça/2ª Praça/Praça Única … R$", "Avaliação: R$", Judicial/Extrajudicial.
+Não integrada ainda — decisão do dono (rendimento baixo × site lento).
+
 ## 28/10 (noite, 5) — RADAR DJEN POR LEILOEIRO SEM SITE
 
 **Por quê**: dos 711 ATIVOS da junta sem site, só ~30 aparecem no acervo (cruzamento por nome no `leiloeiro`, por

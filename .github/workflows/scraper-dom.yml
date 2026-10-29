@@ -95,11 +95,14 @@ on:
       - 'scripts/scraper-leilo.mjs'
       - 'scripts/lib/leilo-parse.mjs'
       - 'scripts/lib/motor/fontes/leilo.mjs'
+      - 'scripts/scraper-lucian.mjs'
+      - 'scripts/lib/lucian-parse.mjs'
+      - 'scripts/lib/motor/fontes/lucian.mjs'
       - '.github/workflows/scraper-dom.yml'
   workflow_dispatch:
     inputs:
       fontes:
-        description: 'csv: softgt,nortedeminas,leilaoeletronico,suportev2,suportenext,leilovia,labasoft,baston,cassiano,arnaldo,novaserrana(recon),alfa,hasta,nordeste,nordeste_veiculos,jeleiloes,leilaoindex,rocha,albertomacedo,francoleiloes,simon,globo,leje,freitas,leiloar,lgcorretor,nakakogue,astavero,suporteoferta,comprei,leilo'
+        description: 'csv: softgt,nortedeminas,leilaoeletronico,suportev2,suportenext,leilovia,labasoft,baston,cassiano,arnaldo,novaserrana(recon),alfa,hasta,nordeste,nordeste_veiculos,jeleiloes,leilaoindex,rocha,albertomacedo,francoleiloes,simon,globo,leje,freitas,leiloar,lgcorretor,nakakogue,astavero,suporteoferta,comprei,leilo,lucian'
         required: false
         default: 'alfa,nordeste'
       gravar:
@@ -215,6 +218,16 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           LEILO_DRYRUN: ${{ env.DRYRUN_PADRAO }}
         run: node scripts/scraper-leilo.mjs
+
+      - name: Lucian (Caxias do Sul/RS — imóveis RS/SC)
+        # 28/10 (medição da junta): home + agenda dos pregões, só a categoria 6 (Imóveis); fetch grátis. Seco de 28/10:
+        # 27 imóveis enumerados, 20 abertos prontos (11 cidades de RS/SC, todas no IBGE). ~1–2 min por rodada.
+        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'lucian')) }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          LUCIAN_DRYRUN: ${{ env.DRYRUN_PADRAO }}
+        run: node scripts/scraper-lucian.mjs
 
       - name: Comprei (PGFN) — venda direta na origem
         # 10/10: API pública do Comprei (listagem nacional + anúncio). Grátis (direto ou via banco) — diário.
