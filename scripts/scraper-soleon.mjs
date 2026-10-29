@@ -231,6 +231,11 @@ const TODOS_TENANTS = [
   { fonte: 'WSPLEILOES', leiloeiro: 'WSP Leilões (Wanderley Samuel Pereira)', base: 'https://www.wspleiloes.com.br' }, // 18 de 18 (SP)
   // 28/10 (medição `medicao_2810`): home com 16 menções a imóvel e 8 links de lote.
   { fonte: 'JOAOLUIZLEIL', leiloeiro: 'João Luiz Leilões', base: 'https://joaoluizleiloes.com.br' },
+  // 29/10 (JUCEB, BA): os dois Soleon da medição de 28/10 que não estavam aqui. Ligados vazios (regra do dono): o
+  // /lotes/imovel de cada um responde 200 com "NENHUM LOTE ENCONTRADO" (medido em 29/10; a home tem leilões de veículo e
+  // diversos). Mesmo sobrenome (Cerqueira) nos dois: se um dia listarem os mesmos ids, sai um dos dois.
+  { fonte: 'CCJLEIL', leiloeiro: 'CCJ Leilões (Jamile Santana Cerqueira)', base: 'https://ccjleiloes.com.br' }, // 0 (BA)
+  { fonte: 'KCLEIL', leiloeiro: 'KC Leilões (Kátia Cerqueira da Silva Casaes)', base: 'https://kcleiloes.com.br' }, // 0 (BA)
   // FORA: guariglia.com.br (SP) — o banco recusa o certificado TLS do site ("SSL peer certificate"); sem página lida não
   // há prova de catálogo. Não confundir com GUARIGLIA (guariglialeiloes.com.br, BA), que já coleta.
 ];
@@ -975,7 +980,9 @@ const VEICULOS_NAO_VALIDADOS = new Set(['PATIOROCHALEIL', 'LEILOPAR', 'WINLEILOE
   'LOUCOPORLEIL', 'UNIVERSOLEIL', 'MARAURZEDO', 'NATALIALEIL', 'CARSTENSLEIL', 'ALVESLEIL', 'TOCANTINSLEIL', 'SCHMITZLEIL',
   'ANDRADELEIL', 'BENOZZATI', 'DAMASIOLEIL', 'DESANTILEIL', 'EDITALLEIL', 'GLLEILOES', 'LANCELEILSP', 'TESSARINI', 'PAVANILEIL',
   'NOSSOLEILAO', 'AMARALLEIL', 'BIDMAX', 'CARDOSOLEIL', 'CENCIN', 'LECAPE', 'LOTTILEIL', 'OCTAVIOLEIL', 'RICOLEIL',
-  'SITELEILOES', 'TKLLEILOES', 'TRIBUNALEIL', 'WSPLEILOES']);
+  'SITELEILOES', 'TKLLEILOES', 'TRIBUNALEIL', 'WSPLEILOES',
+  // 29/10 — mesma razão.
+  'CCJLEIL', 'KCLEIL']);
 
 async function mainVeiculos() {
   const tenantsVeic = TENANTS.filter(t => !VEICULOS_NAO_VALIDADOS.has(t.fonte) || filtro.includes(t.fonte));

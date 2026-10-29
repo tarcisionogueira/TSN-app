@@ -7,6 +7,25 @@
 
 
 
+## 29/10 — STALE SEM TIMEOUT, INBOUND COM NOVA TENTATIVA, TRIAGEM DOS "50 BARATOS"
+
+**Consertos (4dc67a4, migração aplicada)**: `desativar_imoveis_leiloeiro_stale` chamava `fonte_baseline_aprendida()`
+para cada uma das 310 fontes (57014 às 02h de 29/10) — agora 1 vez, 5,4 s → 0,3 s, resultado idêntico. O
+`inbound-juridico` levou 200 SEM corpo do Resend 1 s após o recebimento (Goldstone 28/10 17:44 entrou sem texto;
+recuperado à mão em `email_caixa`) — 200 vazio e 404 ganham 2 novas tentativas. Conferir em #377.
+
+**Triagem: os "~50 baratos" eram miragem.** Candidatos com imóvel em plataforma que já lemos (Soleon, Leiloar,
+Suporte, LeilõesBR, LeilãoPro, Roisoft, Leiloador, Leilotech) — 48 de 50 JÁ estavam no código; só o
+`parser_existente` da triagem não tinha sido marcado (agora tem, com o estado de cada um). Zeros legítimos: LeilõesBR
+é plataforma de ARTE (contagem por tipo, 0 imóvel), Roisoft/Soleon declaram "nenhum lote", LeilãoPro vazio ou só
+encerrado, Leiloar vazio/veículo/teste. 10 já entravam por outra fonte (RJ, HASTA, LEILAOBRASIL, CALIL, Peterlongo,
+ALFA, TORRES3, PEDROSA, SABRINA, LEILOADOR). Elisa = vitrine da família Leiloador (sem instância própria).
+- **Entraram**: CCJLEIL e KCLEIL no Soleon (JUCEB/BA, ligados vazios — `/lotes/imovel` "NENHUM LOTE ENCONTRADO").
+  Sem seco local (precisa da chave de serviço); a 1ª rodada agendada deve gravar `vazio` em fonte_saude.
+- **Fila de leitor próprio**: Leilões Brasil TO (leiloesbrasilto.com.br, Antônio Carlos Volpi Santana, JUCETINS 12 —
+  plataforma antiga, `/imoveis` → `/leilao/<id>`; 1 imóvel aberto TRT10 Palmas R$ 400 mil em 01/12 FORA do acervo) e
+  Marcus Vinícius (Brain at Work). Somam-se à fila de 28/10 (Alliance e Lucian já feitos).
+
 ## 28/10 (fim do dia) — ESTADO E O QUE CONFERIR EM 29/10
 
 **Confirmado no banco às 22h50 de 28/10**: carimbo `runner_residencial_apuracao` voltou (conserto do `cancelado` em
