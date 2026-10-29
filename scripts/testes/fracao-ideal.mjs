@@ -67,3 +67,11 @@ for (const t of ['100% do imóvel residencial, 143m²', 'Casa com 50% de descont
 assert.equal(ehFracaoIdeal({ titulo: 'Casa em Ituiutaba', descricao: 'reservada a meação de 50% do imóvel ao cônjuge' }), false, 'na descrição não barra');
 console.log('ok — porcentagem do bem no título');
 
+// 28/10 — v5: "parte ideal de N m² nas áreas comuns/terreno" é cláusula de condomínio (ALLIANCE 470, apartamento inteiro).
+assert.equal(ehFracaoIdeal({ titulo: 'Apartamento - São Vicente - Rua Benedito Calixto, 21', descricao: 'correspondendo a este apartamento a fração ideal de 0,0211, significando medir esta unidade autônoma aproximadamente 106, 00m², correspondendo-lhe uma parte ideal de 23,525m², nas áreas de uso comum, inalienáveis e indivisíveis e no terreno sobre o qual se acha construído o edifício.' }), false, 'v5: parte ideal em m² nas áreas comuns não barra');
+// …mas parte ideal em %, fração ou hectare continua barrada (textos reais dos 80 barrados medidos em 28/10):
+for (const d of ['Parte ideal de 50% do lote urbano nº 23-B, com área total de 168,00m², sem benfeitorias.', 'Parte Ideal de 3,33% sobre Terreno 400 m² - Jardim Pérola - Birigui - SP',
+  'Parte ideal de 3,19has - Goiatuba/GO', 'Parte ideal de 50% de Terreno c/ 6.589,03m² - Serra/ES'])
+  assert.equal(ehFracaoIdeal({ titulo: 'Imóvel', descricao: d }), true, `v5: devia barrar: ${d}`);
+console.log('ok — v5 (parte ideal em m²)');
+

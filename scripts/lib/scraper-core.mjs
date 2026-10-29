@@ -322,6 +322,12 @@ export const RE_FRACAO_NUMERICA_TITULO = /(?:^|[^\d/])\d{1,3}\s*\/\s*\d{1,3}\s*(
 // barrada: "Fração ideal de 33,33% SOBRE imóvel rural", "83,48% DA fração ideal".
 const RE_FIDC = /fundos?\s+de\s+investimentos?\s+em\s+direitos\s+credit[óo]rios(\s+n[ãa]o[\s-]padronizados?)?/gi;
 const RE_RESPECTIVA = /(respectiv[ao]s?|correspondentes?)\s+fra[çc](ão|ao|ões|oes)\s+idea(l|is)/gi;
+// v5 (28/10, ALLIANCE 470 — apartamento inteiro em São Vicente barrado): "correspondendo-lhe uma PARTE IDEAL de 23,525m²,
+// nas áreas de uso comum … e no terreno" é a mesma cláusula cartorial com outra palavra. Só em METRAGEM (m²) e seguida
+// de áreas comuns/terreno/solo — fatia vendida vem em % ou fração ("Parte ideal de 50% do lote", "3,33% sobre terreno",
+// "3,19 ha"): medido no acervo, os 80 lotes barrados com "parte ideal de <número>" seguem todos barrados. Espelho em
+// fracao_ideal_barrada() (migration 20261028_fracao_parte_ideal_m2.sql).
+const RE_PARTE_IDEAL_M2 = /parte\s+ideal\s+de\s+[0-9][0-9.,]*\s*m[²2]\s*,?\s*(n[oa]s?|sobre\s+[oa]s?)\s+([áa]reas?\s+(de\s+uso\s+)?comu(m|ns)|terreno|solo|coisas\s+comuns)/gi;
 const RE_FATIA_SOBRE = /fra[çc][ãa]o\s+ideal\s+(de\s+)?[0-9][0-9.,/]*\s*%?\s*(sobre|d[oa])[\])]?\s+(o\s+|a\s+|um\s+|uma\s+)?(im[óo]ve(l|is)|casa|bem|bens|sorte|gleba|fazenda|s[íi]tio|ch[áa]cara|pr[ée]dio|terra|[áa]rea\s+rural)/i;
 const RE_PCT_DA_FRACAO = /[0-9][0-9.,]*\s*%\s+d[ao]s?\s+(cota|fra[çc][ãa]o)\s+ideal/i;
 const RE_CLAUSULAS_V4 = [
@@ -337,7 +343,7 @@ export function ehFracaoIdeal(imovel) {
   const titulo = imovel?.titulo || '';
   // Menção no TÍTULO nunca é descritiva: é o que está à venda. Barra sempre.
   if (RE_FRACAO_IDEAL.test(titulo) || RE_FRACAO_NUMERICA_TITULO.test(titulo) || RE_PCT_DO_BEM_TITULO.test(titulo)) return true;
-  const txt = `${titulo} ${imovel?.descricao || ''}`.replace(RE_FIDC, ' ').replace(RE_RESPECTIVA, ' fração ideal do terreno ')
+  const txt = `${titulo} ${imovel?.descricao || ''}`.replace(RE_PARTE_IDEAL_M2, ' fração ideal do terreno ').replace(RE_FIDC, ' ').replace(RE_RESPECTIVA, ' fração ideal do terreno ')
     .replace(/fra[çc](ões|oes)\s+ideais\s+(de\s+)?([0-9])/gi, 'fração ideal de $3'); // "com as frações ideais de 44,39m², 1,53m² … do terreno" (apto + vagas)
   // Os dois erros não custam o mesmo: deixar entrar uma fatia gera um relatório que projeta
   // a revenda do bem INTEIRO e conclui "viável"; barrar um apartamento apenas o esconde.
