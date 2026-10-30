@@ -3,6 +3,7 @@ export const config = { runtime: 'edge' };
 import { enviarEmail } from './_email.js';
 // Nome da testemunha vem do formulário público — escapar antes de entrar no HTML do e-mail.
 import { escapeHtml } from './_sanitize.js';
+import { pedidoRepetido, respostaRepetido } from './_pedido-unico.js';
 
 // Assinatura da TESTEMUNHA por link próprio (pedido do dono): a parte encaminha o link da sua
 // testemunha; ela abre, confere o contrato, preenche nome/CPF e assina — sem precisar estar
@@ -23,6 +24,7 @@ async function sha256(str) {
 }
 
 export default async function handler(req) {
+  if (await pedidoRepetido(req, 'assinar-testemunha')) return respostaRepetido(); // comando repetido pela rede/navegador (30/10)
   const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': process.env.APP_ORIGIN || 'https://bidprobrasil.com.br' };
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405, headers });
   if (!SVC) return new Response(JSON.stringify({ error: 'Configuração ausente' }), { status: 500, headers });

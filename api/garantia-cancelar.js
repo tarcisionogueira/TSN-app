@@ -23,6 +23,7 @@ import { enviarEmail } from './_email.js';
 import { hashCpf, cpfDoRegistro } from './_cpf.js';
 import { alertarErro } from './_error-alert.js';
 import { planoDaAssinaturaAsaas } from './_recorrencia-unica.js';
+import { pedidoRepetido, CORPO_REPETIDO } from './_pedido-unico.js';
 
 const SB_URL = (process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '').trim();
 const SB_KEY = (process.env.SUPABASE_SERVICE_KEY || '').trim();
@@ -186,6 +187,7 @@ async function garantiaVeiculos({ user, email, res }) {
 }
 
 export default async function handler(req, res) {
+  if (await pedidoRepetido(req, 'garantia-cancelar')) { res.status(409).json(CORPO_REPETIDO); return; } // comando repetido pela rede/navegador (30/10)
   if (req.method !== 'POST') { res.status(405).json({ error: 'Método não permitido' }); return; }
   if (!SB_URL || !SB_KEY) { res.status(500).json({ error: 'Supabase não configurado' }); return; }
 

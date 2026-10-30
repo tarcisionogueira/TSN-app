@@ -32,6 +32,7 @@ import { resumoAprendizadoTexto, recalcularArremate } from './_arremate-aprendiz
 import { contextoProcessualParaDocumental } from './_aprendizado-processual.js';
 import { docsManuaisSaneados, textosDosDocsManuais } from './_docs-manuais.js';
 import { dataLeilaoIso } from './_data-br.js';
+import { pedidoRepetido, CORPO_REPETIDO } from './_pedido-unico.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -788,6 +789,7 @@ Retorne APENAS este JSON (sem markdown). IMPORTANTE: emita os campos NA ORDEM AB
 }`;
 
 export default async function handler(req, res) {
+  if (await pedidoRepetido(req, 'gerar-documental')) { res.status(409).json(CORPO_REPETIDO); return; } // comando repetido pela rede/navegador (30/10)
   if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
 
   // RETENTATIVA AUTOMÁTICA (documental-retry-cron): reprocessa laudos que saíram

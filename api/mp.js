@@ -19,6 +19,7 @@ import { podeContratarAssessoria } from './_assessoria.js';
 import { cpfDoRegistro } from './_cpf.js';
 import { deveAncorarGarantia } from './_ancora-cdc.js';
 import { logAtividade } from './_atividade.js';
+import { pedidoRepetido, CORPO_REPETIDO } from './_pedido-unico.js';
 
 const MP_URL    = 'https://api.mercadopago.com';
 const TOKEN     = (process.env.MP_ACCESS_TOKEN || '').trim();
@@ -553,6 +554,7 @@ async function cancelarAssinatura({ assinaturaId, email, userId, trilha = 'princ
 
 // Formato Node (req, res) desde 24/09 — mesmas respostas do formato Web anterior.
 export default async function handler(req, res) {
+  if (await pedidoRepetido(req, 'mp')) { res.status(409).json(CORPO_REPETIDO); return; } // comando repetido pela rede/navegador (30/10)
   if (req.method === 'OPTIONS') return res.status(200).send('ok');
   if (req.method !== 'POST') return res.status(405).send('method not allowed');
 

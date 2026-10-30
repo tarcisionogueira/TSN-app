@@ -27,6 +27,7 @@ export const config = { runtime: 'nodejs', maxDuration: 60 };
 import { isCronAuthorized } from './_auth.js';
 import { responderSuporte } from './chat-suporte.js';
 import { enviarEmail } from './_email.js';
+import { pedidoRepetido, CORPO_REPETIDO } from './_pedido-unico.js';
 
 const SB = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SVC = process.env.SUPABASE_SERVICE_KEY;
@@ -227,6 +228,7 @@ async function atender(tel, pendentes) {
 }
 
 export default async function handler(req, res) {
+  if (await pedidoRepetido(req, 'whatsapp-responder')) { res.status(409).json(CORPO_REPETIDO); return; } // comando repetido pela rede/navegador (30/10)
   if (!isCronAuthorized(req)) { res.status(401).json({ error: 'não autorizado' }); return; }
   if (!SB || !SVC) { res.status(500).json({ error: 'Supabase não configurado' }); return; }
 

@@ -23,6 +23,7 @@ import { assinarDocumento } from './_storage.js';
 import { lerGuiaArquivo, camposDaGuia, avisosDaGuia } from './_parcela-docs.js';
 import { enviarEmail } from './_email.js';
 import { cronograma } from '../src/utils/parcelamentoArremate.js';
+import { pedidoRepetido, CORPO_REPETIDO } from './_pedido-unico.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -77,6 +78,7 @@ async function baixar(anexo) {
 }
 
 export default async function handler(req, res) {
+  if (await pedidoRepetido(req, 'guia-parcela')) { res.status(409).json(CORPO_REPETIDO); return; } // comando repetido pela rede/navegador (30/10)
   if (!SUPABASE_URL || !SERVICE_KEY || !ANON_KEY) { res.status(500).json({ error: 'Supabase não configurado' }); return; }
   // ENVIO PELO SERVIDOR (15/10): o dono aprovou a guia do Marcos na tela e nada chegou aqui. Com CRON_SECRET, o
   // envio sai em nome de quem APROVOU (aprovado_por = admin/analista), só a ação 'enviar', parâmetros na URL.

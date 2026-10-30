@@ -13,6 +13,7 @@ import { enviarEmail } from './_email.js';
 import { comExtensao } from './_anexo-nome.js';
 import { urlDocumento } from './_storage.js';
 import { addDiasUteis } from './_dias-uteis.js';
+import { pedidoRepetido, respostaRepetido } from './_pedido-unico.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -51,6 +52,7 @@ function mdToHtml(md) {
 }
 
 export default async function handler(req) {
+  if (await pedidoRepetido(req, 'enviar-juridico-email')) return respostaRepetido(); // comando repetido pela rede/navegador (30/10)
   if (req.method !== 'POST') return new Response('Method Not Allowed', { status: 405 });
 
   const user = await getAuthUser(req);

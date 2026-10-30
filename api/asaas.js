@@ -6,6 +6,7 @@ import { podeContratarAssessoria } from './_assessoria.js';
 import { honorarioComTaxa } from '../src/utils/taxaHonorario.js';
 import { logAtividade } from './_atividade.js';
 import { planoDaAssinaturaAsaas } from './_recorrencia-unica.js';
+import { pedidoRepetido, CORPO_REPETIDO } from './_pedido-unico.js';
 
 // CPF do usuário autenticado: decifra o cpf_enc do próprio perfil (não confia
 // no CPF que veio do body). Fallback ao body só durante a transição da cifra.
@@ -158,6 +159,7 @@ async function getAuthUserNode(req) {
 }
 
 export default async function handler(req, res) {
+  if (await pedidoRepetido(req, 'asaas')) { res.status(409).json(CORPO_REPETIDO); return; } // comando repetido pela rede/navegador (30/10)
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   if (!API_KEY) {

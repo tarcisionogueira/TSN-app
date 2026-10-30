@@ -13,6 +13,7 @@ import { checkRateLimit } from './_rate-limit.js';
 import { erroNome, normalizarNome } from './_nome.js';
 import { hashCpf, encryptCpf, validarCPF } from './_cpf.js';
 import { comprovanteValido, ERRO_SEM_COMPROVANTE } from './_comprovante-email.js';
+import { pedidoRepetido, CORPO_REPETIDO } from './_pedido-unico.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -25,6 +26,7 @@ function sb(path, opts = {}) {
 }
 
 export default async function handler(req, res) {
+  if (await pedidoRepetido(req, 'criar-conta-checkout')) { res.status(409).json(CORPO_REPETIDO); return; } // comando repetido pela rede/navegador (30/10)
   const origin = process.env.APP_ORIGIN || 'https://bidprobrasil.com.br';
   res.setHeader('Access-Control-Allow-Origin', origin);
   if (req.method === 'OPTIONS') {

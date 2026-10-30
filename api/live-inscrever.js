@@ -30,6 +30,7 @@ import { erroNome, normalizarNome } from './_nome.js';
 import { edicaoDe } from './_live-edicao.js';
 import { erroTelefone, limparTelefone, normalizarTelefoneBR } from './_telefone.js';
 import { enviarLeadCapi, leadEventId, capiAtivo } from './_meta-capi.js';
+import { pedidoRepetido, CORPO_REPETIDO } from './_pedido-unico.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -61,6 +62,7 @@ function senhaAleatoria() {
 }
 
 export default async function handler(req, res) {
+  if (await pedidoRepetido(req, 'live-inscrever')) { res.status(409).json(CORPO_REPETIDO); return; } // comando repetido pela rede/navegador (30/10)
   // O convite no acervo aberto (api/publico.js, /leiloes) é HTML puro — sem JS de
   // aplicação, de propósito (é página de SEO). Um <form method="POST"> comum chega aqui
   // com Content-Type x-www-form-urlencoded; a landing dedicada (LiveInscricao.jsx) chama

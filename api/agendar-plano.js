@@ -34,6 +34,7 @@ import { getUser } from './_auth.js';
 import { checkRateLimit, getIP, rateLimitedRes } from './_rate-limit.js';
 import { auditLog } from './_audit.js';
 import { planoDaAssinaturaAsaas, temAssinaturaCombo } from './_recorrencia-unica.js';
+import { pedidoRepetido, CORPO_REPETIDO } from './_pedido-unico.js';
 
 const SB_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -115,6 +116,7 @@ async function cancelarRecorrencias({ userId, email }) {
 }
 
 export default async function handler(req, res) {
+  if (await pedidoRepetido(req, 'agendar-plano')) { res.status(409).json(CORPO_REPETIDO); return; } // comando repetido pela rede/navegador (30/10)
   if (req.method !== 'POST') { res.status(405).json({ error: 'Método não permitido' }); return; }
   if (!SB_URL || !SB_KEY) { res.status(500).json({ error: 'Servidor não configurado' }); return; }
 

@@ -2,11 +2,41 @@ import { supabase, emSimulacao } from './supabase';
 import { registrarEvento } from './tracker.js';
 import { renovarSessao } from '../lib/sessao-expirada';
 
+// COMANDO UMA VEZ SÓ (30/10, dono: "deve registrar apenas 1x o comando"). Duas defesas aqui:
+//  1) Pedido IDÊNTICO em voo (mesmo método, rota e corpo) não sai de novo: quem pedir enquanto o
+//     primeiro não voltou recebe a MESMA resposta (clonada). Pega o segundo clique dado depois da
+//     trava de clique duplo (src/utils/cliqueUnico.js) e chamadas repetidas pelo próprio código.
+//  2) Todo comando leva `x-pedido-id` sorteado por chamada: se a rede/navegador reenviar o mesmo
+//     pedido (caso do e-mail de 30/10 — um clique, dois pedidos, 16 s depois), as rotas que
+//     enviam/cobram/gastam reconhecem o número e não refazem (api/_pedido-unico.js).
+//     A renovação de sessão (401) chama apiCall de novo → número novo, de propósito: o 1º pedido
+//     foi recusado na porta, não executou nada.
+const emVoo = new Map();
+const novoPedidoId = () => (globalThis.crypto?.randomUUID?.() || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 14)}-${Math.random().toString(36).slice(2, 14)}`);
+
 /**
  * Wrapper para fetch das APIs internas.
  * Injeta automaticamente o token de autenticação do usuário logado.
  */
-export async function apiCall(path, options = {}, _jaRenovou = false) {
+export function apiCall(path, options = {}, _jaRenovou = false) {
+  const metodo = String(options.method || 'GET').toUpperCase();
+  const mutacao = metodo !== 'GET' && metodo !== 'HEAD';
+  // Só dá para comparar corpo de texto (JSON); FormData/Blob seguem sem a trava 1.
+  const chave = mutacao && !_jaRenovou && (options.body == null || typeof options.body === 'string')
+    ? `${metodo} ${path} ${options.body || ''}` : null;
+  if (chave && emVoo.has(chave)) {
+    try { registrarEvento('comando_repetido', { alvo: String(path).split('?')[0].slice(0, 120), detalhe: 'pedido idêntico em voo — não reenviado' }); } catch { /* ignora */ }
+    return emVoo.get(chave).then(r => r.clone());
+  }
+  const p = apiCallUmaVez(path, options, _jaRenovou);
+  if (!chave) return p;
+  emVoo.set(chave, p);
+  const solta = () => { emVoo.delete(chave); };
+  p.then(solta, solta);
+  return p.then(r => r.clone());
+}
+
+async function apiCallUmaVez(path, options = {}, _jaRenovou = false) {
   // SIMULAÇÃO TAMBÉM É SÓ LEITURA NAS ROTAS /api (30/10, arena do painel). A trava de supabase.js
   // cobre o banco, mas aqui o pedido sai com o token REAL do admin: um "Gerar relatório" simulando
   // o Explorador gastava IA/Bright Data de verdade e gravava na conta do admin. GET passa (leitura);
@@ -28,6 +58,7 @@ export async function apiCall(path, options = {}, _jaRenovou = false) {
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
+  if (metodo !== 'GET' && metodo !== 'HEAD' && !headers['x-pedido-id']) headers['x-pedido-id'] = novoPedidoId();
 
   const rota = String(path).split('?')[0].slice(0, 120);
   let res;

@@ -14,6 +14,7 @@ import { auditLog } from './_audit.js';
 import { cpfDoRegistro, validarCPF, validarDocumento } from './_cpf.js';
 import { mpSdk } from './_mp-sdk.js';
 import { DIAS_BOLETO, vencimentoBoleto } from './_boleto-vencimento.js';
+import { pedidoRepetido, CORPO_REPETIDO } from './_pedido-unico.js';
 
 // 30 s explícitos (24/09): o SDK do MP pode fazer 1 nova tentativa (12 s cada) — a função não pode
 // morrer no meio de uma cobrança.
@@ -68,6 +69,7 @@ async function mpTokenDoCartaoSalvo(accessToken, cardId, customerId) {
 }
 
 export default async function handler(req, res) {
+  if (await pedidoRepetido(req, 'mp-checkout')) { res.status(409).json(CORPO_REPETIDO); return; } // comando repetido pela rede/navegador (30/10)
   if (req.method !== 'POST') return res.status(405).end();
 
   const ip = getIP(req);

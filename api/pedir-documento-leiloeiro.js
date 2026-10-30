@@ -38,6 +38,7 @@ import { contatosAlternativos, mensagemBloqueio } from './_contatos-alternativos
 import { getAuthUser, unauthorized } from './_auth.js';
 import { enviarEmail } from './_email.js';
 import { checkRateLimit, rateLimitedResponse } from './_rate-limit.js';
+import { pedidoRepetido, respostaRepetido } from './_pedido-unico.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -81,6 +82,7 @@ const MAX_LACUNAS = 8;
 const MAX_TEXTO_EDITADO = 6000;
 
 export default async function handler(req) {
+  if (await pedidoRepetido(req, 'pedir-documento-leiloeiro')) return respostaRepetido(); // comando repetido pela rede/navegador (30/10)
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: { 'Access-Control-Allow-Origin': APP_ORIGIN, 'Access-Control-Allow-Headers': 'Authorization, Content-Type', 'Access-Control-Allow-Methods': 'POST, OPTIONS' } });
   }

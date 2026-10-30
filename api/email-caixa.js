@@ -21,6 +21,7 @@ import { getAuthUser, unauthorized } from './_auth.js';
 import { enviarEmail } from './_email.js';
 import { referenciasNormalizadas } from './_email-referencias.js';
 import { checkRateLimit, rateLimitedResponse } from './_rate-limit.js';
+import { pedidoRepetido, CORPO_REPETIDO } from './_pedido-unico.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -196,6 +197,7 @@ export default async function handler(req) {
   }
 
   if (body?.acao !== 'enviar') return json({ error: 'acao inválida' }, 400);
+  if (await pedidoRepetido(req, 'email-caixa:enviar')) return json(CORPO_REPETIDO, 409); // comando repetido pela rede/navegador (30/10)
 
   const rl = await checkRateLimit(`email-caixa:user:${user.id}`, 80, 86_400_000);
   if (!rl.ok) return rateLimitedResponse(rl.resetAt);

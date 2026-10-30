@@ -8,6 +8,7 @@
  */
 import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
 import { getAuthUser } from './_auth.js';
+import { pedidoRepetido, respostaRepetido } from './_pedido-unico.js';
 
 // 18/10 (bug bounty): o formulário é PÚBLICO — nome/mensagem iam crus para o HTML do e-mail da equipe.
 const esc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -35,6 +36,7 @@ function json(obj, status = 200) {
 const onlyDigits = (s) => String(s || '').replace(/\D/g, '');
 
 export default async function handler(req) {
+  if (await pedidoRepetido(req, 'duvida')) return respostaRepetido(); // comando repetido pela rede/navegador (30/10)
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors() });
   if (req.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: cors() });
 

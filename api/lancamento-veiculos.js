@@ -27,6 +27,7 @@ import { escapeHtml } from './_sanitize.js';
 import { cabecalhoEmailHTML } from './_email-header.js';
 import { perfilVeiculo, selecionarVeiculos, consultaPoolVeiculos } from './_curadoria-veiculos.js';
 import { motivoCurto } from './_curadoria.js';
+import { pedidoRepetido, respostaRepetido } from './_pedido-unico.js';
 
 const SB = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -161,6 +162,7 @@ const resp = (o, status = 200) => new Response(JSON.stringify(o), { status, head
 export const GET = handler;
 export const POST = handler;
 async function handler(req) {
+  if (await pedidoRepetido(req, 'lancamento-veiculos')) return respostaRepetido(); // comando repetido pela rede/navegador (30/10)
   if (!isCronAuthorized(req)) return new Response('unauthorized', { status: 401 });
   if (!SB || !KEY) return resp({ error: 'Supabase ausente' }, 500);
   const modo = new URL(req.url, 'http://x').searchParams.get('modo') || 'seco';

@@ -9,6 +9,7 @@ import { enviarEmail } from './_email.js';
 import { cabecalhoEmailHTML } from './_email-header.js';
 import { randomUUID } from 'node:crypto';
 import { semDadosPessoais, trechosAlterados } from './_contrato-aprendizado.js';
+import { pedidoRepetido, CORPO_REPETIDO } from './_pedido-unico.js';
 
 // Dados fixos da empresa contratante
 const EMPRESA = {
@@ -104,6 +105,7 @@ REGRAS:
 }
 
 export default async function handler(req, res) {
+  if (await pedidoRepetido(req, 'gerar-contrato')) { res.status(409).json(CORPO_REPETIDO); return; } // comando repetido pela rede/navegador (30/10)
   const ip = getIP(req);
   const rl = await checkRateLimit(`gerar-contrato:${ip}`, 10, 60_000);
   if (!rl.ok) return rateLimitedRes(res, rl.resetAt);

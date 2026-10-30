@@ -48,6 +48,7 @@ import { redigirProposta } from './_redator-proposta.js';
 import { contatoVeiculoSuperbid, contatoImovelSuperbid, fonteComContatoNaPagina } from './_contato-lote.js';
 import { assinarDocumento } from './_storage.js';
 import { checkRateLimit, rateLimitedResponse } from './_rate-limit.js';
+import { pedidoRepetido, respostaRepetido } from './_pedido-unico.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -116,6 +117,7 @@ const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').re
 const norm = e => String(e || '').trim().toLowerCase();
 
 export default async function handler(req) {
+  if (await pedidoRepetido(req, 'enviar-email-caso')) return respostaRepetido(); // comando repetido pela rede/navegador (30/10)
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: { 'Access-Control-Allow-Origin': APP_ORIGIN, 'Access-Control-Allow-Headers': 'Authorization, Content-Type', 'Access-Control-Allow-Methods': 'POST, OPTIONS' } });
   }

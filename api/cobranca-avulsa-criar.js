@@ -8,11 +8,13 @@
 import { getUser, getUserRoleById } from './_auth.js';
 import { checkRateLimit, getIP } from './_rate-limit.js';
 import { auditLog } from './_audit.js';
+import { pedidoRepetido, CORPO_REPETIDO } from './_pedido-unico.js';
 
 const SB_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
 
 export default async function handler(req, res) {
+  if (await pedidoRepetido(req, 'cobranca-avulsa-criar')) { res.status(409).json(CORPO_REPETIDO); return; } // comando repetido pela rede/navegador (30/10)
   if (req.method !== 'POST') return res.status(405).end();
 
   const ip = getIP(req);

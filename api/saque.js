@@ -11,6 +11,7 @@ import { getAuthUser, unauthorized, forbidden } from './_auth.js';
 import { cpfDoRegistro } from './_cpf.js';
 import { verificarSocioQSA } from './_pj-socio.js';
 import { checkRateLimit, rateLimitedResponse } from './_rate-limit.js';
+import { pedidoRepetido, respostaRepetido } from './_pedido-unico.js';
 
 export const config = { runtime: 'edge' };
 
@@ -120,6 +121,7 @@ function proximaLiberacao(now = new Date()) {
 }
 
 export default async function handler(req) {
+  if (await pedidoRepetido(req, 'saque')) return respostaRepetido(); // comando repetido pela rede/navegador (30/10)
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
 
   const user = await getAuthUser(req);

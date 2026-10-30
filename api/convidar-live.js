@@ -18,6 +18,7 @@ export const config = { runtime: 'nodejs', maxDuration: 300 };
 import { getAuthUser, unauthorized, forbidden, getUserRoleById } from './_auth.js';
 import { enviarEmail } from './_email.js';
 import { carregarEdicao, dispararConvite, montarConvite, perfilBasico, TIPO_EMAIL } from './_convite-live.js';
+import { pedidoRepetido, respostaRepetido } from './_pedido-unico.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SVC = process.env.SUPABASE_SERVICE_KEY;
@@ -32,6 +33,7 @@ const json = (obj, status = 200) => new Response(JSON.stringify(obj), {
 // como assinatura Express (req,res) e o `Response` retornado é IGNORADO → 504.
 export const POST = handler;
 async function handler(req) {
+  if (await pedidoRepetido(req, 'convidar-live')) return respostaRepetido(); // comando repetido pela rede/navegador (30/10)
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
   if (!SUPABASE_URL || !SVC) return json({ error: 'Configuração ausente' }, 500);
 

@@ -16,6 +16,7 @@ import { getAuthUser, unauthorized, forbidden, getUserRoleById } from './_auth.j
 import { enviarEmail } from './_email.js';
 import { assinarUnsub } from './cancelar-alertas.js';
 import { corpoEmailProduto, emailsDoLote } from './_produto-email.js';
+import { pedidoRepetido, respostaRepetido } from './_pedido-unico.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SVC = process.env.SUPABASE_SERVICE_KEY;
@@ -45,6 +46,7 @@ const sbGet = async (path) => {
 // como assinatura Express (req,res) e o `Response` retornado é IGNORADO → 504.
 export const POST = handler;
 async function handler(req) {
+  if (await pedidoRepetido(req, 'anunciar-produto')) return respostaRepetido(); // comando repetido pela rede/navegador (30/10)
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
   if (!SUPABASE_URL || !SVC) return json({ error: 'Configuração ausente' }, 500);
 

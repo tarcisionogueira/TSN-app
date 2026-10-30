@@ -21,12 +21,14 @@ import { checkRateLimit, getIP } from './_rate-limit.js';
 import { ativarPlanoDireto, eventoJaProcessado, removerEventoProcessado, registrarLiberacaoPagamento } from './_webhook-core.js';
 import { auditLog } from './_audit.js';
 import { cancelarOutrasRecorrencias } from './_recorrencia-unica.js';
+import { pedidoRepetido, CORPO_REPETIDO } from './_pedido-unico.js';
 
 const MP_BASE = 'https://api.mercadopago.com';
 const SB_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SB_SVC = process.env.SUPABASE_SERVICE_KEY;
 
 export default async function handler(req, res) {
+  if (await pedidoRepetido(req, 'ativar-pro-anual')) { res.status(409).json(CORPO_REPETIDO); return; } // comando repetido pela rede/navegador (30/10)
   if (req.method !== 'POST') return res.status(405).json({ error: 'Método não permitido' });
 
   const ip = getIP(req);

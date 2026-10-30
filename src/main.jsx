@@ -10,6 +10,7 @@ import { registrarServiceWorker } from './utils/push.js'
 import { vigiarAtualizacaoDoApp } from './utils/swAtualizacao.js'
 import { reportarErroCliente, instalarCapturaErros, ehErroDeChunk, recarregarPorChunkStale, recarregarComGuarda, houveChunkRecente, mostrarAvisoPreso } from './utils/reportarErro.js'
 import { instalarTracker } from './utils/tracker.js'
+import { instalarCliqueUnico } from './utils/cliqueUnico.js'
 import { initMetaPixel, initOpenAIPixel, capturarMarketing } from './utils/marketing.js'
 import { resgatarDestinoDaCampanha } from './utils/destinoDaCampanha.js'
 import { initSentry } from './utils/sentry.js'
@@ -34,6 +35,7 @@ instalarCapturaErros();
 
 // Rastreamento de atividade (navegação + cliques) para o Cliente 360 — diagnóstico de falhas.
 instalarTracker();
+instalarCliqueUnico(); // 2º clique no mesmo botão em < 600 ms não dispara de novo (30/10)
 
 // Gravação de sessão (PostHog) — carrega DEPOIS da página, sem pesar no primeiro paint.
 if (typeof window !== 'undefined') window.addEventListener('load', () => { setTimeout(initPostHog, 1500); }, { once: true });

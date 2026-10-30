@@ -12,6 +12,7 @@ import { escapeHtml } from './_sanitize.js';
 import { acessoAssessoria } from '../src/lib/assessoria-acesso.js';
 import { logAtividade } from './_atividade.js';
 import { preencherSignatario } from './_signatario.js';
+import { pedidoRepetido, respostaRepetido } from './_pedido-unico.js';
 
 // Finalização da assinatura eletrônica de contrato (link público).
 // Feito no servidor para ter prova jurídica idônea (Lei 14.063/2020):
@@ -36,6 +37,7 @@ async function sha256(str) {
 }
 
 export default async function handler(req) {
+  if (await pedidoRepetido(req, 'assinar-contrato')) return respostaRepetido(); // comando repetido pela rede/navegador (30/10)
   const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': process.env.APP_ORIGIN || 'https://bidprobrasil.com.br' };
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405, headers });
   if (!SVC) return new Response(JSON.stringify({ error: 'Configuração ausente' }), { status: 500, headers });

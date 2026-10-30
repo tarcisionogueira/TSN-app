@@ -23,6 +23,7 @@ import { buscarComProva, EXIGE_BUSCA } from './_busca-com-prova.js';
 import { comCascataBusca } from './_busca-modelo.js';
 import { revendaPorAnuncios, extrairComissaoPct, extrairDebitosDeclarados, extrairTaxasPct, taxasPctValidas, temEncargoSemValor, consertarAcentos, marcaMobiauto, modelosMobiauto, anunciosMobiauto, filtrarVersao, modeloDoTitulo, slugsModeloMobiauto, anunciosOlx } from '../src/utils/viabilidadeVeiculo.js';
 import { paginaViaBanco } from './_contato-lote.js';
+import { pedidoRepetido, CORPO_REPETIDO } from './_pedido-unico.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -519,6 +520,7 @@ const ORIGEM_PROMPT = {
 };
 
 export default async function handler(req, res) {
+  if (await pedidoRepetido(req, 'gerar-analise-veiculo')) { res.status(409).json(CORPO_REPETIDO); return; } // comando repetido pela rede/navegador (30/10)
   if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
   // Regeração pelo servidor (30/09, `regenerar-relatorios-cron?veiculo=`): CRON_SECRET + dono da
   // análise. Só REGERA o que já existe para esse dono (conferido abaixo) e nunca mexe em cota.

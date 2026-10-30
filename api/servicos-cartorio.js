@@ -22,6 +22,7 @@ import { auditLog } from './_audit.js';
 import { enviarEmail } from './_email.js';
 import { cabecalhoEmailHTML } from './_email-header.js';
 import { escapeHtml } from './_sanitize.js';
+import { pedidoRepetido, CORPO_REPETIDO } from './_pedido-unico.js';
 
 const SB_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -174,6 +175,7 @@ async function contextoDoArrematado(arrematadoId, user, ehEquipe) {
 }
 
 export default async function handler(req, res) {
+  if (await pedidoRepetido(req, 'servicos-cartorio')) { res.status(409).json(CORPO_REPETIDO); return; } // comando repetido pela rede/navegador (30/10)
   const user = await getUser(req);
   if (!user) return res.status(401).json({ error: 'Não autorizado' });
   const role = await getUserRoleById(user.id);

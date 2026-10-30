@@ -30,6 +30,7 @@ import { enviarEmail } from './_email.js';
 import { iaTexto } from './_claude.js';
 import { lerOFX } from './_ofx.js';
 import { gerarOFX, gerarHTML, listaEmails, resumir, CONTAS_FORA_DO_RESULTADO } from './_conciliacao-pacote.js';
+import { pedidoRepetido, CORPO_REPETIDO } from './_pedido-unico.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -58,6 +59,9 @@ export default async function handler(req, res) {
   // sai daqui (importar extrato, enviar à contabilidade, fechar competência, PDF).
   const LEVES = new Set(['conciliar', 'listar', 'definir_fornecedor', 'fornecedores', 'monitor']);
   const leve = LEVES.has(acao);
+  // Comandos que mandam algo para fora ou mexem no mês inteiro: repetição da rede não refaz (30/10).
+  const UNICOS = new Set(['importar', 'importar_ofx', 'fechar_competencia', 'reabrir_competencia', 'enviar', 'ratear', 'mesclar_fornecedor', 'classificar']);
+  if (UNICOS.has(acao) && await pedidoRepetido(req, `conciliacao:${acao}`)) { res.status(409).json(CORPO_REPETIDO); return; }
   const rl = await checkRateLimit(`conciliacao${leve ? ':leve' : ''}:${user.id}`, leve ? 400 : 40, 5 * 60_000);
   if (!rl.ok) { res.status(429).json({ error: 'Muitas operações. Aguarde alguns minutos.' }); return; }
 

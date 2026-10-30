@@ -26,6 +26,7 @@ export const config = { runtime: 'edge' };
  * resposta para não virar omissão silenciosa.
  */
 import { getAuthUser, getUserRoleById } from './_auth.js';
+import { pedidoRepetido, respostaRepetido } from './_pedido-unico.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -38,6 +39,7 @@ const FORMAS = new Set(['externo', 'a_vista', 'parcelado', 'recorrente']);
 const json = (b, s = 200) => new Response(JSON.stringify(b), { status: s, headers: CORS });
 
 export default async function handler(req) {
+  if (await pedidoRepetido(req, 'registrar-assinatura')) return respostaRepetido(); // comando repetido pela rede/navegador (30/10)
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
 

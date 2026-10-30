@@ -37,6 +37,7 @@ import { anthropicFetch } from './_claude.js';
 import { carregarPDFParse } from './_pdf-safe.js';
 import { blocosDoArquivo } from './_doc-blocos.js';
 import { fetchExternoSeguro } from './_allowed-hosts.js';
+import { pedidoRepetido, CORPO_REPETIDO } from './_pedido-unico.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -247,6 +248,7 @@ async function rotaAdmin(req, res, user) {
 }
 
 export default async function handler(req, res) {
+  if (await pedidoRepetido(req, 'saque-nf')) { res.status(409).json(CORPO_REPETIDO); return; } // comando repetido pela rede/navegador (30/10)
   const user = await getUser(req);
   if (!user?.id) { res.status(401).json({ error: 'Não autenticado' }); return; }
   if (req.method === 'GET' || req.method === 'PATCH') { await rotaAdmin(req, res, user); return; }

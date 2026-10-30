@@ -35,6 +35,7 @@ import { normalizarTipo } from './_tipo.js';
 import { extrairEnderecoMatricula } from './_registro-matricula.js';
 import { docsManuaisSaneados } from './_docs-manuais.js';
 import { dataLeilaoIso } from './_data-br.js';
+import { pedidoRepetido, CORPO_REPETIDO } from './_pedido-unico.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -1990,6 +1991,7 @@ mercado, custos elevados, margem insuficiente) e recomende NÃO avançar. Não a
 }
 
 export default async function handler(req, res) {
+  if (await pedidoRepetido(req, 'gerar-analise')) { res.status(409).json(CORPO_REPETIDO); return; } // comando repetido pela rede/navegador (30/10)
   if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
   // REGERAÇÃO AUTOMÁTICA (regenerar-relatorios-cron): reprocessa relatório com vício,
   // com orçamento fresco. Autentica pelo CRON_SECRET (não passa por getUser nem cota).
