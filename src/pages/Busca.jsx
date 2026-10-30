@@ -108,6 +108,9 @@ const MODALIDADE_OPTS = [
 // 'sem_data' é opção EXPLÍCITA, não omissão — mesmo princípio de classificarPatio()/
 // modalidade de veículo: leiloeiro que ainda não marcou a praça não pode sumir da lista.
 const PRAZO_OPTS = [
+  // 7 e 15 dias (30/10, dono): janela CORRIDA a partir de hoje — "este mês" no dia 28 mostra só 3 dias.
+  ['proximos_7', 'Próximos 7 dias', 'Leilões com praça marcada de hoje até daqui a 7 dias.'],
+  ['proximos_15', 'Próximos 15 dias', 'Leilões com praça marcada de hoje até daqui a 15 dias.'],
   ['este_mes', 'Este mês', 'Leilões com praça marcada até o fim deste mês.'],
   ['proximo_mes', 'Próximo mês', 'Leilões com praça marcada até o fim do mês que vem.'],
   ['proximo_trimestre', 'Próximo trimestre', 'Leilões com praça marcada nos próximos 3 meses.'],
@@ -137,10 +140,12 @@ function calcularJanelaPrazo(opcao) {
   if (!opcao) return null;
   if (opcao === 'sem_data') return { tipo: 'sem_data' };
   const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const iso = (d) => d.toISOString().slice(0, 10);
+  const dias = opcao === 'proximos_7' ? 7 : opcao === 'proximos_15' ? 15 : null;
+  if (dias) return { tipo: 'janela', de: iso(hoje), ate: iso(new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() + dias)) };
   const meses = opcao === 'este_mes' ? 1 : opcao === 'proximo_mes' ? 2 : opcao === 'proximo_trimestre' ? 4 : null;
   if (!meses) return null;
   const fim = new Date(hoje.getFullYear(), hoje.getMonth() + meses, 0); // dia 0 = último dia do mês anterior
-  const iso = (d) => d.toISOString().slice(0, 10);
   return { tipo: 'janela', de: iso(hoje), ate: iso(fim) };
 }
 const PAGAMENTO_OPTS = [

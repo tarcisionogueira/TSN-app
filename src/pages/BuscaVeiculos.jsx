@@ -188,10 +188,12 @@ function calcularJanelaPrazo(opcao) {
   if (!opcao) return null;
   if (opcao === 'sem_data') return { tipo: 'sem_data' };
   const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const iso = (d) => d.toISOString().slice(0, 10);
+  const dias = opcao === 'proximos_7' ? 7 : opcao === 'proximos_15' ? 15 : null;
+  if (dias) return { tipo: 'janela', de: iso(hoje), ate: iso(new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() + dias)) };
   const meses = opcao === 'este_mes' ? 1 : opcao === 'proximo_mes' ? 2 : opcao === 'proximo_trimestre' ? 4 : null;
   if (!meses) return null;
   const fim = new Date(hoje.getFullYear(), hoje.getMonth() + meses, 0);
-  const iso = (d) => d.toISOString().slice(0, 10);
   return { tipo: 'janela', de: iso(hoje), ate: iso(fim) };
 }
 
@@ -701,6 +703,8 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
             <label style={lbl}>Prazo do leilão</label>
             <select style={inp} value={filtros.prazo} onChange={e => setFiltros(f => ({ ...f, prazo: e.target.value }))}>
               <option value="">Qualquer</option>
+              <option value="proximos_7">Próximos 7 dias</option>
+              <option value="proximos_15">Próximos 15 dias</option>
               <option value="este_mes">Este mês</option>
               <option value="proximo_mes">Próximo mês</option>
               <option value="proximo_trimestre">Próximo trimestre</option>

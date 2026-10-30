@@ -29,10 +29,12 @@ function janelaPrazo(opcao) {
   // "Hoje" em Brasília (QA 12/10): o servidor roda em UTC e, depois das 21h do último dia do mês,
   // "este mês" virava o mês seguinte — divergindo do caminho sem raio, que usa o fuso do navegador.
   const [a, m, d] = new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10).split('-').map(Number);
+  const iso = (dt) => dt.toISOString().slice(0, 10);
+  const dias = opcao === 'proximos_7' ? 7 : opcao === 'proximos_15' ? 15 : null;
+  if (dias) return { semData: false, dataDe: iso(new Date(Date.UTC(a, m - 1, d))), dataAte: iso(new Date(Date.UTC(a, m - 1, d + dias))) };
   const meses = opcao === 'este_mes' ? 1 : opcao === 'proximo_mes' ? 2 : opcao === 'proximo_trimestre' ? 4 : null;
   if (!meses) return { semData: false, dataDe: null, dataAte: null };
   const fim = new Date(Date.UTC(a, m - 1 + meses, 0));
-  const iso = (dt) => dt.toISOString().slice(0, 10);
   return { semData: false, dataDe: iso(new Date(Date.UTC(a, m - 1, d))), dataAte: iso(fim) };
 }
 
