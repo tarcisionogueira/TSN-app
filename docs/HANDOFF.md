@@ -6,6 +6,44 @@
 
 
 
+## 30/10 (sessão do dia, financeiro + admin + leilão) — BANCO INTER, CONCILIAÇÃO, "PRECISA DE VOCÊ", RESULTADO DO LEILÃO ELETRÔNICO, COMANDO UMA VEZ SÓ
+
+**Entregue e verificado:**
+- **Banco Inter (API PJ, conta 218211805) no ar.** `api/_inter.js` = porta única (OAuth2 client_credentials + mTLS,
+  token em cache, nunca lança). Envs `INTER_CLIENT_ID/SECRET/CONTA/CERT_BASE64/KEY_BASE64` definidas no painel pelo dono
+  (valores nunca no repo). `financeiro-extrato` lê saldo + `extrato/completo` em blocos de 89 dias, paginado. Verificado
+  pelo cron: 79 lançamentos Inter (15/09–29/10), entradas R$ 52.803,42 · saídas R$ 55.503,44.
+- **Conciliação:** importar chama o extrato com `x-cron-secret` (o redirect apex→www derrubava o Authorization → 401);
+  transferência entre contas próprias/sócio/terceiros (9.1/9.2/9.3) fora do resultado (`CONTAS_FORA_DO_RESULTADO`,
+  `resumir()`); fechar/enviar recusam com pendente em 9.9 ou lista truncada; destino fixo `CONTABILIDADE_EMAIL`;
+  tela reorganizada (card "A classificar" clicável primeiro, OFX recolhido, Enviar com confirmação). Limite de uso em
+  DOIS baldes (c8625c07): ações leves de linha 400/5 min (o dono tomou 429 classificando), pesadas 40/5 min.
+- **Envio ao contador dia 3:** com pendência sai `[PRELIMINAR]` só para o dono, sem carimbo (dias 4–5 tentam de novo).
+- **Arena do painel admin aplicada:** botões de família legíveis, Financeiro abre na Conciliação, contadores
+  "precisa de você" (`admin_precisa_de_voce()` — NULL vira "?" na tela, nunca 0; badge leva direto à tela), fila
+  "Precisa de você" no Início, registro de navegação `admin_aba:*`/`admin_fin_sub:*` em `eventos_atividade`
+  (confirmado com cliques reais do dono). **Simulação agora é só-leitura também em /api** (`apiCall` barra não-GET).
+- **Busca:** prazo do leilão ganhou "Próximos 7 dias" e "Próximos 15 dias" (imóveis, raio no servidor e veículos).
+- **Resultado do LEILÃO ELETRÔNICO (272fbdee):** a página do lote é modelo jQuery; o genérico lia o `{forelse} Sem lance`
+  do modelo em TODO lote. Conferido pela API do site (`POST /ApiEngine/GetRealTime {IDs_Leiloes_Lote:[...]}`): dos 9
+  "sem lance" gravados, **3 eram ARREMATADOS** (2626, 2634, 2681); 65 sem resultado = 21 vendidos, 43 sem lance, 1 indef.
+  Novo `api/_resultado-leilaoeletronico.js` (vários lotes por chamada; direto e, se a Cloudflare barrar — barra servidor —
+  Bright Data POST); cron e reapuração usam; o genérico agora ignora `<script type=text/x-jquery-tmpl>` e afins.
+  Dados corrigidos pelo dono no SQL Editor (`20261030_leilaoeletronico_resultado_correcao.sql`) e conferidos: 24 vendidos,
+  49 sem lance, 1 indeterminado. Casa da Alameda Japão 205 (Tamboré, lote 2653) = sem lance, de volta à vitrine.
+- **Caixa de e-mail (4a74f25b):** um clique virou dois pedidos (14:47:25 e ~:43); o 1º ENVIOU (com anexos), o 2º caiu
+  na idempotência do Resend porque o token do Reply-To era sorteado por pedido. Agora o token deriva da chave do envio
+  e o conflito de idempotência confere Enviados e responde "já tinha saído". O e-mail à Goldstone saiu certo.
+- **Comando uma vez só (56ed0e61), pedido do dono:** (1) `src/utils/cliqueUnico.js` — 2º clique no mesmo botão em
+  < 600 ms descartado (exceto botões de 1–2 caracteres e `data-repetir`); (2) `apiCall` não reenvia pedido idêntico em
+  voo e manda `x-pedido-id` em todo comando; (3) `api/_pedido-unico.js` + tabela `pedidos_unicos` — 34 rotas que
+  cobram/enviam/gastam respondem 409 ao mesmo id (falha aberta e logada). **Testado em produção:** 2º pedido = 409.
+
+**Pendente (gravado em `pendencias_projeto`):** ver `select * from public.pendencias_abertas();` — leitor do Leilão
+Eletrônico via Bright Data POST ainda não rodou de verdade; outros tenants da plataforma do Leilão Eletrônico (Casa
+Reis) podem ter "sem lance" falso no passado; travas 1 e 2 não conferidas na tela; 8 lançamentos a classificar;
+dono comparar totais do Inter com o Internet Banking; reagrupar sub-abas do Financeiro com o registro de navegação.
+
 ## 30/10 (fim de tarde) — FOTOS LEVES, PLACAR DAS JUNTAS CORRIGIDO, PARQUE DOS LEILÕES
 
 - **Fotos (122a685d, 54f3f1fa):** a galeria do veículo baixava o ORIGINAL do leiloeiro — Jetta SUPERBID: 10 × ~2,5 MB
