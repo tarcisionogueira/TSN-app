@@ -165,8 +165,11 @@ export default async function handler(req, res) {
   // ── IMPORTAR: lê o extrato e persiste (idempotente) ───────────────────────────────────────
   if (acao === 'importar') {
     const dias = Math.min(365, Math.max(7, Number(body.dias) || 120));
-    const auth = req.headers?.authorization || req.headers?.Authorization || '';
-    const r = await fetch(`${BASE}/api/financeiro-extrato?dias=${dias}&lista=completa`, { headers: { Authorization: auth } });
+    // Chamada servidor→servidor pelo CRON_SECRET, como o conciliacao-sync-cron (o admin já foi
+    // conferido acima). Repassar o `Authorization` do usuário falhava com 401 (30/10): BASE sem
+    // `www` responde com redirect para o `www`, e o fetch DESCARTA o Authorization em redirect
+    // entre origens — o botão "Atualizar agora" nunca funcionou; só o cron, por usar x-cron-secret.
+    const r = await fetch(`${BASE}/api/financeiro-extrato?dias=${dias}&lista=completa`, { headers: { 'x-cron-secret': process.env.CRON_SECRET || '' } });
     if (!r.ok) {
       const det = await r.text().catch(() => '');
       console.error('[conciliacao] extrato', r.status, det.slice(0, 200));
