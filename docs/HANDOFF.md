@@ -16,7 +16,13 @@ site NÃO é usada — tirar a chave do JS do site foi vetado como contorno de a
 /venda-direta (29 itens, 10 imóveis; veículo/máquina nem são abertos). Item: pares `<p>rótulo</p><p>valor</p>` (1ª/2ª
 praça com ano), valor por praça, "Ver edital", galeria `alt="… - Imagem N"` (o bloco "Leilões semelhantes" é de outros
 itens). **Venda direta não mostra preço no item** — vem do card da listagem (mapa CARDS, como o FEED do
-leilaoeletronico). Fração 12,5%, quotas e box saem pelas regras de sempre.
+leilaoeletronico). Fração 12,5% e box saem pelas regras de sempre.
+- Três tropeços da 1ª rodada, corrigidos no mesmo dia: (1) o DOM renderizado traz `<p class>` e `<svg><path>` —
+  `<p[^>]*>` casava com `<path` e a enumeração deu 0 → `normalizar()` (só href/src/alt) antes de ler; (2) "Quotas Parte
+  de Terrenos" entrou: a régua comum de fração não conhece "quota parte de N m²" → barrada no `checarQualidade` da
+  fonte (a linha gravada foi desativada); levar para a régua comum pede migração do espelho `fracao_ideal_barrada`;
+  (3) o site escreve a hora no fuso de quem abre — Chromium em UTC gravou as praças 3 h adiantadas → `TZ:
+  America/Sao_Paulo` no passo. Resultado: 7 ativos (4 leilões, 3 vendas diretas), horas conferidas com o site.
 
 ## 29/10 (tarde) — COBERTURA DE LEILOEIROS RECONTADA + MV LEILÕES
 
