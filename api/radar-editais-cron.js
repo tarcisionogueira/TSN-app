@@ -20,6 +20,9 @@ import { createClient } from '@supabase/supabase-js';
 import { buscarViaBrightData, ErroBrightData, brightDataDisponivel } from './_brightdata.js';
 import { iaGeminiPrimary, anthropicFetch } from './_claude.js';
 import { hostExternoSeguro, fetchExternoSeguro } from './_allowed-hosts.js';
+import { createHash } from 'node:crypto';
+import { decodificarEntidades } from './_texto-imovel.js';
+import MUNICIPIOS from './_municipios.js';
 
 const DJEN_BASE = 'https://comunicaapi.pje.jus.br/api/v1/comunicacao';
 // Tribunais monitorados — CONFIGURÁVEL por env RADAR_TRIBUNAIS.
@@ -135,8 +138,14 @@ function nomeLeiloeiroValido(s) {
   // hífen (nome composto) — qualquer outro símbolo denuncia lixo de parsing.
   if (/[^A-Za-zÀ-ÿ' .\-]/.test(nome)) return null;
   if (NOME_BLOQ.test(nome)) return null;                       // é fragmento de frase, não nome
+  // 29/10 (radar por nome, 1ª rodada): 19 de 67 editais com "leiloeiro" e quase todos CIDADES — "Ponte Nova", "Monte
+  // Azul", "Ouro Preto" ("ENDEREÇO DE VISITAÇÃO: …, Ouro Preto/MG") — e "S Oficias". Município do IBGE inteiro não é
+  // nome de leiloeiro, e nome próprio não começa por letra solta.
+  if (palavras[0].replace(/\./g, '').length < 2) return null;
+  if (NOMES_MUNICIPIOS.has(norm(nome))) return null;
   return tituloNome(nome).slice(0, 120);
 }
+const NOMES_MUNICIPIOS = new Set(Object.keys(MUNICIPIOS).map((k) => norm(k.split('|')[1])));
 /**
  * O NOME DO LEILOEIRO — preâmbulo + janela + validador, em vez de uma regex só (03/09).
  * ═══════════════════════════════════════════════════════════════════════════════════════
@@ -687,9 +696,29 @@ async function buscarDJEN(tribunal, termo, ini, fim, t0, transporte, hardMs) {
  * Item da API Comunica → linha de `editais_leilao` (ou null, se não é edital de verdade). Uma função só para o pull por
  * termo e o pull por leiloeiro (28/10): o mesmo edital tem de entrar igual venha por onde vier.
  */
+/**
+ * TEXTO LIMPO DO EDITAL (29/10). O DJEN devolve o teor em três formas: texto puro, HTML inteiro ("<html> <head> <meta>
+ * <style>… <article>", TJMG/TRF2) e texto com entidades ("Estado de Goi&aacute;s", TJGO). Nas duas últimas o filtro e o
+ * parser liam marcação: na 1ª rodada do radar por nome, 32 de 67 editais saíram `erro_parse` (11 em HTML, 19 com
+ * entidades). Tira script/style/tags, quebra linha nos blocos e decodifica as entidades.
+ */
+export function textoLimpoEdital(bruto) {
+  let t = String(bruto || '');
+  if (/<[a-z!/][^>]*>/i.test(t)) {
+    t = t.replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ')
+      .replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|li|tr|h[1-6]|section|article)>/gi, '\n')
+      .replace(/<[^>]+>/g, ' ');
+  }
+  return decodificarEntidades(t).replace(/[ \t ]+/g, ' ').replace(/\s*\n\s*/g, '\n').trim();
+}
+
+/** Mesmo edital publicado em mais de uma comunicação (outro djen_id): 67 → 39 distintos na 1ª rodada do radar por nome. */
+export const hashConteudoEdital = (sigla, processo, texto) =>
+  `c:${createHash('sha1').update(norm(`${sigla || ''}|${processo || ''}|${texto}`)).digest('hex')}`;
+
 function linhaDoItem(it, { tribunal, fim, ehIntegrado }) {
   const djenId = String(g(it, 'id', 'numeroComunicacao', 'hash', 'idComunicacao') || '');
-  const texto = String(g(it, 'texto', 'inteiroTeor', 'teor', 'conteudo') || '');
+  const texto = textoLimpoEdital(g(it, 'texto', 'inteiroTeor', 'teor', 'conteudo'));
   const tipoDoc = g(it, 'tipoDocumento', 'tipoComunicacao', 'tipo');
   if (!ehEditalReal(texto, tipoDoc)) return null; // FILTRO DURO: fora despacho/decisão que só cita "leilão"
   const p = parseEdital(texto);
@@ -721,24 +750,30 @@ function linhaDoItem(it, { tribunal, fim, ehIntegrado }) {
     imovel_cidade: p.imovel_cidade, imovel_uf: p.imovel_uf, imovel_endereco: p.imovel_endereco,
     debitos: p.debitos, ocupacao: p.ocupacao, cartorio: p.cartorio,
     texto_integral: texto.slice(0, 20000),
-    hash_dedup: djenId ? null : norm(`${sigla}|${g(it, 'numeroProcesso') || ''}|${texto.slice(0, 200)}`),
+    hash_dedup: hashConteudoEdital(sigla, g(it, 'numeroProcesso'), texto),
     payload: it,
     status: p.status,
   };
   return (linha.djen_id || linha.hash_dedup) ? linha : null;
 }
 
-/** Só as inéditas (evita reprocessar): confere os djen_id já existentes e faz o upsert do resto. */
+/** Só as inéditas (evita reprocessar): confere djen_id E conteúdo (hash_dedup) já existentes e faz o upsert do resto. */
 async function gravarIneditas(supabase, linhas) {
-  const ids = linhas.map((r) => r.djen_id).filter(Boolean);
+  // Dentro do lote: a mesma comunicação/conteúdo vem mais de uma vez (o pull por nome traz o mesmo edital por dois nomes).
+  const unicas = [...new Map(linhas.map((r) => [r.hash_dedup || r.djen_id, r])).values()];
   const existentes = new Set();
-  for (let i = 0; i < ids.length; i += 200) {
-    try {
-      const { data } = await supabase.from('editais_leilao').select('djen_id').in('djen_id', ids.slice(i, i + 200));
-      for (const r of data || []) existentes.add(r.djen_id);
-    } catch { /* aditivo */ }
-  }
-  const inserir = linhas.filter((r) => !r.djen_id || !existentes.has(r.djen_id));
+  const consulta = async (coluna, valores) => {
+    for (let i = 0; i < valores.length; i += 200) {
+      try {
+        const { data } = await supabase.from('editais_leilao').select(coluna).in(coluna, valores.slice(i, i + 200));
+        for (const r of data || []) existentes.add(`${coluna}:${r[coluna]}`);
+      } catch { /* aditivo: sem a checagem, o índice único ainda barra */ }
+    }
+  };
+  await consulta('djen_id', unicas.map((r) => r.djen_id).filter(Boolean));
+  await consulta('hash_dedup', unicas.map((r) => r.hash_dedup).filter(Boolean));
+  const inserir = unicas.filter((r) => !(r.djen_id && existentes.has(`djen_id:${r.djen_id}`))
+    && !(r.hash_dedup && existentes.has(`hash_dedup:${r.hash_dedup}`)));
   if (!inserir.length) return { novos: 0, erro: null };
   const { error } = await supabase.from('editais_leilao').upsert(inserir, { onConflict: 'djen_id', ignoreDuplicates: true });
   return error ? { novos: 0, erro: `upsert: ${String(error.message).slice(0, 80)}` } : { novos: inserir.length, erro: null };
@@ -780,9 +815,15 @@ export async function pullDJENPorLeiloeiro({ supabase, nomes, ini, fim, ehIntegr
       falhas++; continue;
     }
     vistos += items.length;
-    const doNome = items.filter((it) => citaLeiloeiro(g(it, 'texto', 'inteiroTeor', 'teor', 'conteudo'), nome));
+    const doNome = items.filter((it) => citaLeiloeiro(textoLimpoEdital(g(it, 'texto', 'inteiroTeor', 'teor', 'conteudo')), nome));
     citados += doNome.length;
-    const linhas = doNome.map((it) => linhaDoItem(it, { tribunal: null, fim, ehIntegrado })).filter(Boolean);
+    // O nome BUSCADO é o leiloeiro: o texto já o cita por inteiro (citaLeiloeiro). O extrator genérico do parser lia
+    // cidade e frase como nome (29/10: "Ponte Nova", "Monte Azul", "S Oficias") e deixava o leiloeiro de verdade de fora.
+    const nomeOficial = tituloNome(String(nome).replace(/\s*\(.*$/, '').trim());
+    const linhas = doNome.map((it) => linhaDoItem(it, { tribunal: null, fim, ehIntegrado })).filter(Boolean).map((l) => ({
+      ...l, leiloeiro_nome: nomeOficial, leiloeiro_nome_norm: norm(nomeOficial),
+      leiloeiro_integrado: ehIntegrado(nomeOficial, dominioDe(l.leilao_plataforma_url)),
+    }));
     reais += linhas.length;
     if (linhas.length) comEdital.push({ nome, editais: linhas.length });
     const g2 = await gravarIneditas(supabase, linhas);

@@ -15,7 +15,11 @@
  * termo lê o último sucesso de 'radar-editais-djen'; se esta busca gravasse lá, um dia em que só ela rodasse calaria o
  * radar principal. E não há caminho pago para ela — DJEN bloqueia IP de datacenter, então só roda de casa.
  *
- * Env: RADAR_LEIL_CICLO (7) · RADAR_LEIL_JANELA_DIAS (10 — maior que o ciclo, para não perder edital entre as voltas)
+ * 29/10 — ALVO AMPLIADO: não só os sem site, mas TODO leiloeiro ATIVO cujo site não lemos (site fora do ar, endereço
+ * errado na junta, sem imóvel, pouco imóvel, e os com imóvel ainda sem leitor — fila #380). Critério: domínio nulo OU
+ * domínio sem `parser_existente` na `leiloeiro_triagem`. ~1.190 nomes (eram 711) → ciclo 10 dias (~120/dia, ~12 min).
+ *
+ * Env: RADAR_LEIL_CICLO (10) · RADAR_LEIL_JANELA_DIAS (12 — maior que o ciclo, para não perder edital entre as voltas)
  *      RADAR_LEIL_MAX (0 = a fatia do dia; >0 limita) · RADAR_LEIL_HARD_MS (900000) · RADAR_LEIL_SO_LER=1 (não grava)
  */
 import './lib/env-runner.mjs';
@@ -28,8 +32,8 @@ if (!URL_BASE || !KEY) {
   console.error('[radar-leiloeiros] defina VITE_SUPABASE_URL e SUPABASE_SERVICE_KEY (~/.bidpro-runner.env)');
   process.exit(2);
 }
-const CICLO = Math.max(1, Number(process.env.RADAR_LEIL_CICLO || 7));
-const JANELA = Math.max(1, Number(process.env.RADAR_LEIL_JANELA_DIAS || 10));
+const CICLO = Math.max(1, Number(process.env.RADAR_LEIL_CICLO || 10));
+const JANELA = Math.max(1, Number(process.env.RADAR_LEIL_JANELA_DIAS || 12));
 const MAX = Number(process.env.RADAR_LEIL_MAX || 0);
 const HARD_MS = Number(process.env.RADAR_LEIL_HARD_MS || 900000);
 const SO_LER = process.env.RADAR_LEIL_SO_LER === '1';
@@ -45,18 +49,27 @@ if (!SO_LER) {
   if (!error && data?.length) { console.log(`[radar-leiloeiros] fatia de hoje já buscada (${data[0].ran_at}) — nada a fazer.`); process.exit(0); }
 }
 
-// Os sem site: ATIVO e sem domínio na junta. Ordem estável por id; fatia do dia = posição % CICLO.
-const { data: junta, error: eJ } = await supabase.from('leiloeiro_junta').select('id, nome, nome_norm')
-  .eq('situacao', 'ATIVO').is('dominio', null).order('id').limit(5000);
+// Alvo: ATIVO e site NÃO lido — sem domínio, ou domínio sem `parser_existente` na triagem. Ordem estável por id; fatia do
+// dia = posição % CICLO.
+const { data: junta, error: eJ } = await supabase.from('leiloeiro_junta').select('id, nome, nome_norm, dominio')
+  .eq('situacao', 'ATIVO').order('id').limit(5000);
 if (eJ) { console.error(`[radar-leiloeiros] não li a junta: ${eJ.message}`); process.exit(1); }
-const nomesUnicos = [...new Map((junta || []).filter((r) => String(r.nome_norm || '').length >= 8).map((r) => [r.nome_norm, r.nome])).values()];
+const { data: lidos, error: eT } = await supabase.from('leiloeiro_triagem').select('dominio')
+  .not('parser_existente', 'is', null).neq('parser_existente', '').limit(10000);
+if (eT) { console.error(`[radar-leiloeiros] não li a triagem: ${eT.message}`); process.exit(1); }
+const siteLido = new Set((lidos || []).map((r) => r.dominio));
+// Pela PESSOA, não pelo registro: o mesmo leiloeiro aparece em mais de uma junta, com site num cadastro e sem no outro.
+// Na 1ª rodada (29/10) 60 dos 67 editais eram de 3 leiloeiros assim — Sued Peter e Camilla Vecchi já entram pelo site.
+const pessoaComSiteLido = new Set((junta || []).filter((r) => r.dominio && siteLido.has(r.dominio)).map((r) => r.nome_norm));
+const alvo = (junta || []).filter((r) => (!r.dominio || !siteLido.has(r.dominio)) && !pessoaComSiteLido.has(r.nome_norm));
+const nomesUnicos = [...new Map(alvo.filter((r) => String(r.nome_norm || '').length >= 8).map((r) => [r.nome_norm, r.nome])).values()];
 const dia = Math.floor(Date.now() / 86400000);
 let fatia = nomesUnicos.filter((_, i) => i % CICLO === dia % CICLO);
 if (MAX > 0) fatia = fatia.slice(0, MAX);
 
 const fim = hojeUTC;
 const ini = new Date(Date.now() - JANELA * 86400000).toISOString().slice(0, 10);
-console.log(`[radar-leiloeiros] ${fatia.length} de ${nomesUnicos.length} leiloeiros sem site (fatia ${dia % CICLO}/${CICLO}) · janela ${ini} → ${fim}${SO_LER ? ' · SÓ LER' : ''}`);
+console.log(`[radar-leiloeiros] ${fatia.length} de ${nomesUnicos.length} leiloeiros com site não lido (fatia ${dia % CICLO}/${CICLO}) · janela ${ini} → ${fim}${SO_LER ? ' · SÓ LER' : ''}`);
 
 const ehIntegrado = await construirEhIntegrado(supabase);
 // SÓ LER: o mesmo pull, com um supabase que não grava — a contagem de editais reais sai igual, nada entra.

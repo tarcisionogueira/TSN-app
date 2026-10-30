@@ -129,6 +129,7 @@
     "testar:leiloar": "node scripts/testes/leiloar-parse.mjs",
     "testar:leilo": "node scripts/testes/leilo-parse.mjs",
     "testar:radar-leiloeiro": "node scripts/testes/radar-por-leiloeiro.mjs",
+    "testar:radar-assertividade": "node scripts/testes/radar-assertividade.mjs",
     "testar:lucian": "node scripts/testes/lucian-parse.mjs",
     "testar:alliance": "node scripts/testes/alliance-parse.mjs",
     "testar:mvleiloes": "node scripts/testes/mvleiloes-parse.mjs",
