@@ -27,6 +27,20 @@ export const TENANTS = {
 
 export const idDaUrl = (url) => (String(url).match(/\/item\/([0-9a-f-]{36})/i) || [])[1] || null;
 
+/**
+ * HTML RENDERIZADO → forma enxuta: sem svg/script/style/comentário e só com os atributos href/src/alt. 1º seco no runner
+ * (29/10) enumerou 0: o DOM pós-JS traz `<p class="…">` e os ícones `<path …>`, e `<p[^>]*>` casava com `<path`. Os
+ * gabaritos do teste estão nesta mesma forma — o parser só lê o que passou por aqui.
+ */
+export function normalizar(html) {
+  return String(html || '')
+    .replace(/<(svg|script|style|noscript)\b[\s\S]*?<\/\1>/gi, '').replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<([a-zA-Z][a-zA-Z0-9]*)((?:\s+[^\s=>/]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+))?)*)\s*(\/?)>/g, (_, tag, attrs, fecha) => {
+      const keep = [...attrs.matchAll(/\s(href|src|alt)\s*=\s*"([^"]*)"/gi)].map((m) => ` ${m[1].toLowerCase()}="${m[2]}"`).join('');
+      return `<${tag.toLowerCase()}${keep}${fecha}>`;
+    });
+}
+
 const limpar = (s) => decodificarEntidades(String(s || '').replace(/<!--[\s\S]*?-->/g, '').replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
 
 // Cards vistos na enumeração (uuid → card). Venda direta só tem o preço aqui.
@@ -46,7 +60,7 @@ export function lerCard(id, inner) {
 /** Listagem → Map uuid → url, só CATEGORIA Imóvel (veículo e máquina nem são abertos: cada página custa um render). */
 export function extrairUrlsDeLote(html, base) {
   const out = new Map();
-  for (const m of String(html || '').matchAll(/<a[^>]*href="\/item\/([0-9a-f-]{36})"[^>]*>([\s\S]*?)<\/a>/gi)) {
+  for (const m of normalizar(html).matchAll(/<a[^>]*href="\/item\/([0-9a-f-]{36})"[^>]*>([\s\S]*?)<\/a>/gi)) {
     const card = lerCard(m[1], m[2]);
     if (!card.titulo) continue; // link sem card (botão, destaque repetido)
     if (!CARDS.has(m[1]) || (card.valor && !CARDS.get(m[1]).valor)) CARDS.set(m[1], card);
@@ -67,7 +81,7 @@ const dataISO = (s) => {
 };
 
 export function parseDetalhe(html, url, { agora = new Date() } = {}) {
-  const h = String(html || '');
+  const h = normalizar(html);
   const titulo = limpar((h.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i) || [])[1]);
   if (!titulo) return null; // ainda "Carregando leilão…" ou página de erro
   const id = idDaUrl(url);

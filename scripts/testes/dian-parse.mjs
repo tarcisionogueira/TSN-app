@@ -44,6 +44,15 @@ eq('venda: preço do card, avaliação da descrição', [rv.valor_minimo, rv.val
 eq('venda: sem data, modalidade venda_direta, nunca encerrado', [rv.data_leilao, rv.modalidade, dv.encerrado], [null, 'venda_direta', false]);
 eq('venda: cidade, matrícula e 3 fotos', [rv.cidade, rv.numero_matricula, rv.fotos.length], ['Vacaria', '16.023', 3]);
 
+// HTML CRU do DOM renderizado (classes, style, <svg><path>): o 1º seco no runner (29/10) enumerou 0 porque `<p[^>]*>`
+// casava com `<path` e `<p>` não casava com `<p class="…">`.
+const cru = extrairUrlsDeLote(`<main>${ler('card-cru')}</main>`, T.base);
+eq('card cru (DOM renderizado) vira lote', [...cru.keys()], ['2567d6e5-873f-4180-a010-947521e2a8b1']);
+eq('item cru: pares rótulo/valor com classe e ícone antes', (({ data_leilao, cidade }) => ({ data_leilao, cidade }))(parseDetalhe(
+  '<main><svg><path d="M1 1"></path></svg><h1 class="t">CASA</h1><p class="e">Rua X, 1 — Vacaria/RS<span> · #A1</span></p>'
+  + '<div class="g"><p class="r">Categoria</p><p class="v">Imóvel</p></div><div class="g"><p class="r">1ª praça</p><p class="v">05/11/2026, 14:30</p></div></main>',
+  U('2567d6e5-873f-4180-a010-947521e2a8b1'), { agora: HOJE })), { data_leilao: '2026-11-05T14:30:00-03:00', cidade: 'Vacaria' });
+
 // Sem card e sem praça: não entra.
 eq('item sem praça e sem card → null', parseDetalhe(ler('item-sergipe2195'), U('00000000-0000-0000-0000-000000000000'), { agora: HOJE }), null);
 eq('ainda carregando (sem h1) → null', parseDetalhe('<main>Carregando leilão...</main>', U(APTO)), null);
