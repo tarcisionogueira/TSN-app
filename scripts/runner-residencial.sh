@@ -209,6 +209,14 @@ if quer VLANCE && [ -s "$VLANCE_VEIC_JSON" ]; then node scripts/vlance-veiculos.
 quer RADAR && { node scripts/radar-editais-residencial.mjs \
   || echo "  (radar: run PARCIAL ou falho — o que entrou está no 'novos=' acima; não conta como sucesso, e a rede de segurança paga entra após 7 dias sem NENHUM sucesso)"; }
 
+# ── LEILOEIROS CREDENCIADOS NOS TRIBUNAIS (29/10) ───────────────────────────────────────────
+# Uma vez por semana (o próprio script pula se importou há menos de 6 dias): TJSP, EXE-PJe dos TRTs e planilhas do
+# TRT4/TRT18 → `leiloeiro_tribunal`, cruzado com junta/triagem/acervo. Quem sai 'fora' (credenciado e sem nada nosso)
+# entra no radar por nome logo abaixo. Grava em `leiloeiro_tribunal`, não no acervo — por isso não passa pelo `rodar`.
+# TRT7/12/13/15/22/23 recusam cliente que não é navegador (403): ficam no aviso, sem marcar ninguém como sumido.
+quer TRIBUNAIS && { node scripts/importar-leiloeiros-tribunais.mjs \
+  || echo "  (tribunais: nenhuma lista lida — a de semana passada continua valendo)"; }
+
 # ── RADAR POR LEILOEIRO SEM SITE (28/10) ────────────────────────────────────────────────────
 # O radar acima busca por TERMO em 5 tribunais; este busca, no Brasil todo, pelo NOME de 1/7 dos leiloeiros ATIVOS da
 # junta sem site (em 7 dias passa por todos; janela de 10 dias). Mesmo filtro, parser e dedup do radar por termo, e

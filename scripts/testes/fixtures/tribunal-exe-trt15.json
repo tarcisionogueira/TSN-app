@@ -1,0 +1,322 @@
+{
+ "pagina": 1,
+ "qtdPaginas": 1,
+ "totalRegistros": 21,
+ "resultado": [
+  {
+   "leiloeiro": {
+    "id": 82,
+    "nome": "ALBERTO JOSÉ MARCHI MACEDO",
+    "site": "www.albertomacedoleiloes.com.br",
+    "endereco": {
+     "municipio": {
+      "nome": "SAO PAULO",
+      "estado": {
+       "sigla": "SP"
+      }
+     }
+    }
+   }
+  },
+  {
+   "leiloeiro": {
+    "id": 82,
+    "nome": "ALBERTO JOSÉ MARCHI MACEDO",
+    "site": "www.albertomacedoleiloes.com.br",
+    "endereco": {
+     "municipio": {
+      "nome": "SAO PAULO",
+      "estado": {
+       "sigla": "SP"
+      }
+     }
+    }
+   }
+  },
+  {
+   "leiloeiro": {
+    "id": 82,
+    "nome": "ALBERTO JOSÉ MARCHI MACEDO",
+    "site": "www.albertomacedoleiloes.com.br",
+    "endereco": {
+     "municipio": {
+      "nome": "SAO PAULO",
+      "estado": {
+       "sigla": "SP"
+      }
+     }
+    }
+   }
+  },
+  {
+   "leiloeiro": {
+    "id": 82,
+    "nome": "ALBERTO JOSÉ MARCHI MACEDO",
+    "site": "www.albertomacedoleiloes.com.br",
+    "endereco": {
+     "municipio": {
+      "nome": "SAO PAULO",
+      "estado": {
+       "sigla": "SP"
+      }
+     }
+    }
+   }
+  },
+  {
+   "leiloeiro": {
+    "id": 91,
+    "nome": "ALESSANDRO DE ASSIS TEIXEIRA",
+    "site": "www.alessandroteixeiraleiloes.com.br",
+    "endereco": {
+     "municipio": {
+      "nome": "POCOS DE CALDAS",
+      "estado": {
+       "sigla": "MG"
+      }
+     }
+    }
+   }
+  },
+  {
+   "leiloeiro": {
+    "id": 91,
+    "nome": "ALESSANDRO DE ASSIS TEIXEIRA",
+    "site": "www.alessandroteixeiraleiloes.com.br",
+    "endereco": {
+     "municipio": {
+      "nome": "POCOS DE CALDAS",
+      "estado": {
+       "sigla": "MG"
+      }
+     }
+    }
+   }
+  },
+  {
+   "leiloeiro": {
+    "id": 91,
+    "nome": "ALESSANDRO DE ASSIS TEIXEIRA",
+    "site": "www.alessandroteixeiraleiloes.com.br",
+    "endereco": {
+     "municipio": {
+      "nome": "POCOS DE CALDAS",
+      "estado": {
+       "sigla": "MG"
+      }
+     }
+    }
+   }
+  },
+  {
+   "leiloeiro": {
+    "id": 91,
+    "nome": "ALESSANDRO DE ASSIS TEIXEIRA",
+    "site": "www.alessandroteixeiraleiloes.com.br",
+    "endereco": {
+     "municipio": {
+      "nome": "POCOS DE CALDAS",
+      "estado": {
+       "sigla": "MG"
+      }
+     }
+    }
+   }
+  },
+  {
+   "leiloeiro": {
+    "id": 91,
+    "nome": "ALESSANDRO DE ASSIS TEIXEIRA",
+    "site": "www.alessandroteixeiraleiloes.com.br",
+    "endereco": {
+     "municipio": {
+      "nome": "POCOS DE CALDAS",
+      "estado": {
+       "sigla": "MG"
+      }
+     }
+    }
+   }
+  },
+  {
+   "leiloeiro": {
+    "id": 91,
+    "nome": "ALESSANDRO DE ASSIS TEIXEIRA",
+    "site": "www.alessandroteixeiraleiloes.com.br",
+    "endereco": {
+     "municipio": {
+      "nome": "POCOS DE CALDAS",
+      "estado": {
+       "sigla": "MG"
+      }
+     }
+    }
+   }
+  },
+  {
+   "leiloeiro": {
+    "id": 91,
+    "nome": "ALESSANDRO DE ASSIS TEIXEIRA",
+    "site": "www.alessandroteixeiraleiloes.com.br",
+    "endereco": {
+     "municipio": {
+      "nome": "POCOS DE CALDAS",
+      "estado": {
+       "sigla": "MG"
+      }
+     }
+    }
+   }
+  },
+  {
+   "leiloeiro": {
+    "id": 91,
+    "nome": "ALESSANDRO DE ASSIS TEIXEIRA",
+    "site": "www.alessandroteixeiraleiloes.com.br",
+    "endereco": {
+     "municipio": {
+      "nome": "POCOS DE CALDAS",
+      "estado": {
+       "sigla": "MG"
+      }
+     }
+    }
+   }
+  },
+  {
+   "leiloeiro": {
+    "id": 91,
+    "nome": "ALESSANDRO DE ASSIS TEIXEIRA",
+    "site": "www.alessandroteixeiraleiloes.com.br",
+    "endereco": {
+     "municipio": {
+      "nome": "POCOS DE CALDAS",
+      "estado": {
+       "sigla": "MG"
+      }
+     }
+    }
+   }
+  },
+  {
+   "leiloeiro": {
+    "id": 91,
+    "nome": "ALESSANDRO DE ASSIS TEIXEIRA",
+    "site": "www.alessandroteixeiraleiloes.com.br",
+    "endereco": {
+     "municipio": {
+      "nome": "POCOS DE CALDAS",
+      "estado": {
+       "sigla": "MG"
+      }
+     }
+    }
+   }
+  },
+  {
+   "leiloeiro": {
+    "id": 124,
+    "nome": "ALINE SOUZA FLORES",
+    "site": "www.leilaobrasil.com.br",
+    "endereco": {
+     "municipio": {
+      "nome": "SAO PAULO",
+      "estado": {
+       "sigla": "SP"
+      }
+     }
+    }
+   }
+  },
+  {
+   "leiloeiro": {
+    "id": 124,
+    "nome": "ALINE SOUZA FLORES",
+    "site": "www.leilaobrasil.com.br",
+    "endereco": {
+     "municipio": {
+      "nome": "SAO PAULO",
+      "estado": {
+       "sigla": "SP"
+      }
+     }
+    }
+   }
+  },
+  {
+   "leiloeiro": {
+    "id": 124,
+    "nome": "ALINE SOUZA FLORES",
+    "site": "www.leilaobrasil.com.br",
+    "endereco": {
+     "municipio": {
+      "nome": "SAO PAULO",
+      "estado": {
+       "sigla": "SP"
+      }
+     }
+    }
+   }
+  },
+  {
+   "leiloeiro": {
+    "id": 124,
+    "nome": "ALINE SOUZA FLORES",
+    "site": "www.leilaobrasil.com.br",
+    "endereco": {
+     "municipio": {
+      "nome": "SAO PAULO",
+      "estado": {
+       "sigla": "SP"
+      }
+     }
+    }
+   }
+  },
+  {
+   "leiloeiro": {
+    "id": 124,
+    "nome": "ALINE SOUZA FLORES",
+    "site": "www.leilaobrasil.com.br",
+    "endereco": {
+     "municipio": {
+      "nome": "SAO PAULO",
+      "estado": {
+       "sigla": "SP"
+      }
+     }
+    }
+   }
+  },
+  {
+   "leiloeiro": {
+    "id": 124,
+    "nome": "ALINE SOUZA FLORES",
+    "site": "www.leilaobrasil.com.br",
+    "endereco": {
+     "municipio": {
+      "nome": "SAO PAULO",
+      "estado": {
+       "sigla": "SP"
+      }
+     }
+    }
+   }
+  },
+  {
+   "leiloeiro": {
+    "id": 124,
+    "nome": "ALINE SOUZA FLORES",
+    "site": "www.leilaobrasil.com.br",
+    "endereco": {
+     "municipio": {
+      "nome": "SAO PAULO",
+      "estado": {
+       "sigla": "SP"
+      }
+     }
+    }
+   }
+  }
+ ]
+}

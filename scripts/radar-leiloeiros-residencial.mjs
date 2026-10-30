@@ -69,7 +69,13 @@ const siteLido = new Set((lidos || []).map((r) => r.dominio));
 // Na 1ª rodada (29/10) 60 dos 67 editais eram de 3 leiloeiros assim — Sued Peter e Camilla Vecchi já entram pelo site.
 const pessoaComSiteLido = new Set((junta || []).filter((r) => r.dominio && siteLido.has(r.dominio)).map((r) => r.nome_norm));
 const alvo = (junta || []).filter((r) => (!r.dominio || !siteLido.has(r.dominio)) && !pessoaComSiteLido.has(r.nome_norm));
-const nomesUnicos = [...new Map(alvo.filter((r) => String(r.nome_norm || '').length >= 8).map((r) => [r.nome_norm, r.nome])).values()];
+// 29/10: + os credenciados nos tribunais que não temos em lugar nenhum (`leiloeiro_tribunal`, situação 'fora' — vêm de
+// `importar-leiloeiros-tribunais.mjs`). Não estão na junta, então só o edital os revela. Falha na leitura só os deixa de
+// fora hoje.
+const { data: trib, error: eTrib } = await supabase.from('leiloeiro_tribunal').select('nome, nome_norm')
+  .eq('ativo', true).eq('situacao_cadastro', 'fora').order('id');
+if (eTrib) console.log(`[radar-leiloeiros] ⚠️ não li os credenciados dos tribunais — segue só com a junta: ${eTrib.message}`);
+const nomesUnicos = [...new Map([...alvo, ...(trib || [])].filter((r) => String(r.nome_norm || '').length >= 8).map((r) => [r.nome_norm, r.nome])).values()];
 const dia = Math.floor(Date.now() / 86400000);
 let fatia = nomesUnicos.filter((_, i) => i % CICLO === dia % CICLO);
 if (MAX > 0) fatia = fatia.slice(0, MAX);
