@@ -21,6 +21,7 @@ export const config = { runtime: 'nodejs', maxDuration: 30 };
 import { getUser } from './_auth.js';
 import { fetchLote } from './enriquecer-lote.js';
 import { apurarResultadoDoTexto, patchDaApuracao } from './_resultado-leilao.js';
+import { idLoteLeilaoEletronico, buscarRealTimeLeilaoEletronico, achadoDoRealTimeLeilaoEletronico } from './_resultado-leilaoeletronico.js';
 import { checkRateLimit, rateLimitedRes } from './_rate-limit.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -79,11 +80,21 @@ export default async function handler(req, res) {
   const alvo = imovelId ? (row.url_lote || row.link_edital) : row.link_lote;
   if (!alvo || !/^https?:\/\//.test(alvo)) return semAlteracao();
 
-  let html = '';
-  try { ({ html } = await fetchLote(alvo, { proposito: 'geral_cliente' })); } catch { html = ''; } // padrao-ok: fetchLote já loga a falha real; html='' cai no ramo abaixo, sem afirmar nada
-  if (!html) return semAlteracao(); // sem conteúdo agora: não conta tentativa, tenta de novo depois (cron ou próxima visita passado o cooldown)
-
-  const achado = apurarResultadoDoTexto(html, alvo);
+  let achado;
+  const idLE = idLoteLeilaoEletronico(alvo);
+  if (idLE) {
+    // Leilão Eletrônico: só a API diz o resultado (o HTML é modelo — ver _resultado-leilaoeletronico.js).
+    let g = null;
+    try { g = (await buscarRealTimeLeilaoEletronico([idLE], { proposito: 'geral_cliente' })).get(idLE) || null; }
+    catch (e) { console.error('[reapurar-resultado] leilaoeletronico API:', String(e?.message || e).slice(0, 200)); }
+    if (!g) return semAlteracao();
+    achado = achadoDoRealTimeLeilaoEletronico(g);
+  } else {
+    let html = '';
+    try { ({ html } = await fetchLote(alvo, { proposito: 'geral_cliente' })); } catch { html = ''; } // padrao-ok: fetchLote já loga a falha real; html='' cai no ramo abaixo, sem afirmar nada
+    if (!html) return semAlteracao(); // sem conteúdo agora: não conta tentativa, tenta de novo depois (cron ou próxima visita passado o cooldown)
+    achado = apurarResultadoDoTexto(html, alvo);
+  }
   const patch = patchDaApuracao(achado, { tabela, tentativasAntes: row.resultado_apuracao_tentativas });
 
   await sb(`${tabela}?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(patch) });

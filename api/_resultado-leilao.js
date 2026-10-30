@@ -165,7 +165,11 @@ function apurarMega(txt) {
 // `url` (opcional, 24/09): escolhe o leitor próprio da fonte quando existe (ZUK).
 export function apurarResultadoDoTexto(html, url = '') {
   if (!html) return null;
-  const txt = String(html).replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');
+  // MODELO DE PÁGINA NÃO É CONTEÚDO (30/10). `<script type="text/x-jquery-tmpl">` e afins são o
+  // esqueleto que o navegador preenche depois; tirar só as tags deixava o texto deles no `txt`, e o
+  // ramo `{forelse} Sem lance` do Leilão Eletrônico virava "sem lance" em lote ARREMATADO.
+  const semModelo = String(html).replace(/<script\b[^>]*\btype\s*=\s*["']?text\/(?:x-jquery-tmpl|x-template|template|html|x-handlebars-template)\b[^>]*>[\s\S]*?<\/script>/gi, ' ');
+  const txt = semModelo.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');
   if (/portalzuk\.com\.br/i.test(String(url))) return apurarZuk(txt);
   if (/leilaovip\.com\.br/i.test(String(url))) return apurarVip(txt);
   if (/megaleiloes\.com\.br/i.test(String(url))) {

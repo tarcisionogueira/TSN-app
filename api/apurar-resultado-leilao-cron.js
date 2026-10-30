@@ -31,6 +31,7 @@ export const config = { runtime: 'nodejs', maxDuration: 280 };
 import { isCronAuthorized } from './_auth.js';
 import { fetchLote } from './enriquecer-lote.js';
 import { apurarResultadoDoTexto, patchDaApuracao } from './_resultado-leilao.js';
+import { idLoteLeilaoEletronico, buscarRealTimeLeilaoEletronico, achadoDoRealTimeLeilaoEletronico } from './_resultado-leilaoeletronico.js';
 import { fontesCobertasPeloResidencial, FONTES_APURACAO_RESIDENCIAL, HB_APURACAO } from './_residencial.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -117,6 +118,15 @@ const PARALELO = 4;
 
 async function apurarLote(tabela, candidatos, T0, orcamentoRestante, tentarProxyIsp = false) {
   let vendidos = 0, semLance = 0, indeterminados = 0, semUrl = 0, semConteudo = 0, semCota = 0, abertos = 0, cancelados = 0, removidos = 0, cortado = false;
+  // LEILÃO ELETRÔNICO lê pela API do site, numa chamada só para o lote inteiro (30/10 — ver
+  // _resultado-leilaoeletronico.js: o HTML é modelo e o genérico lia "Sem lance" em lote arrematado).
+  // Falhou a leitura → esses lotes NÃO caem no genérico: ficam como "sem conteúdo" (rodízio).
+  let realTimeLE = new Map(), erroLE = null;
+  const idsLE = candidatos.map(c => idLoteLeilaoEletronico(c.alvo)).filter(Boolean);
+  if (idsLE.length) {
+    try { realTimeLE = await buscarRealTimeLeilaoEletronico(idsLE, { proposito: 'geral' }); }
+    catch (e) { erroLE = e; console.error('[apurar-resultado-leilao] leilaoeletronico API:', String(e?.message || e).slice(0, 200)); }
+  }
   const fila = [...candidatos];
   const trabalhador = async () => { while (fila.length) {
     const c = fila.shift();
@@ -126,6 +136,25 @@ async function apurarLote(tabela, candidatos, T0, orcamentoRestante, tentarProxy
       semUrl++;
       await sb(`${tabela}?id=eq.${encodeURIComponent(c.id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' },
         body: JSON.stringify({ resultado_leilao: 'indeterminado', resultado_apurado_em: new Date().toISOString(), resultado_apuracao_tentativas: tentativas }) }).catch(() => {});
+      continue;
+    }
+    const idLE = idLoteLeilaoEletronico(c.alvo);
+    if (idLE) {
+      const g = realTimeLE.get(idLE);
+      if (!g) {
+        if (erroLE?.semCota) semCota++; else semConteudo++;
+        await sb(`${tabela}?id=eq.${encodeURIComponent(c.id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' },
+          body: JSON.stringify({ resultado_apurado_em: new Date().toISOString() }) }).catch(() => {}); // padrao-ok: carimbo de rodízio, igual ao ramo sem conteúdo abaixo
+        continue;
+      }
+      const achadoLE = achadoDoRealTimeLeilaoEletronico(g);
+      const patchLE = patchDaApuracao(achadoLE, { tabela, tentativasAntes: c.resultado_apuracao_tentativas, religarSeNaoVendido: !!c.religarSeNaoVendido });
+      if (achadoLE?.aberto) abertos++;
+      else if (achadoLE?.resultado === 'cancelado') cancelados++;
+      else if (achadoLE?.resultado === 'vendido') vendidos++;
+      else if (achadoLE?.resultado) semLance++;
+      else indeterminados++;
+      await sb(`${tabela}?id=eq.${encodeURIComponent(c.id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(patchLE) }).catch(() => {}); // padrao-ok: mesmo padrão do PATCH final do laço; falhar só repete o lote na próxima rodada
       continue;
     }
     let html = '';
