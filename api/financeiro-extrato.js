@@ -17,9 +17,9 @@
  * 'nao_classificado' — visível de propósito: categoria inventada é pior que categoria ausente,
  * porque some do radar justamente o gasto novo que ninguém previu.
  *
- * FONTES: Asaas (recebimentos + transferências) e Mercado Pago (pagamentos, entradas e saídas).
- * Bancos (Inter, C6, Bradesco, Caixa) não entram aqui — dependem da integração de Open Finance
- * ainda não contratada. A resposta diz explicitamente quais contas foram lidas, para a tela não
+ * FONTES: Asaas (recebimentos + transferências), Mercado Pago (pagamentos, entradas e saídas) e,
+ * desde 29/10, Banco Inter pela API PJ direta (`_inter.js`). C6, Bradesco e Caixa não entram —
+ * dependem da integração de Open Finance ainda não contratada. A resposta diz explicitamente quais contas foram lidas, para a tela não
  * dar a entender que o total é a posição consolidada da empresa.
  */
 export const config = { runtime: 'nodejs', maxDuration: 60 };
@@ -27,6 +27,7 @@ export const config = { runtime: 'nodejs', maxDuration: 60 };
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { getUser, getUserRoleById, isCronAuthorized } from './_auth.js';
 import { checkRateLimit, getIP } from './_rate-limit.js';
+import { inter, interConfigurado } from './_inter.js';
 
 // HOLDING NOGUEIRA (05/10, autorizado pelo dono): o sistema financeiro PESSOAL do dono — projeto
 // separado, outro banco, outro deploy — lê ESTE extrato para enxergar o faturamento do BidPro
@@ -346,6 +347,53 @@ export default async function handler(req, res) {
     avisos.push('Token do Mercado Pago não configurado — a conta ficou de fora.');
   }
 
+  // ── BANCO INTER (29/10) ────────────────────────────────────────────────────────────────────
+  // Primeira conta BANCÁRIA direta (API PJ com mTLS, ver _inter.js) — não depende de Open Finance.
+  // O `extrato/completo` aceita no máx. 90 dias por consulta, então a janela é fatiada em blocos de
+  // 89 dias e cada bloco é paginado. Falha em qualquer bloco = banco incompleto, nunca "fim".
+  // ATENÇÃO NA CONCILIAÇÃO: saque do Mercado Pago/Asaas que cai aqui aparece como ENTRADA no Inter
+  // e já foi contado como receita no gateway — é transferência entre contas próprias, não receita nova.
+  if (interConfigurado()) {
+    marcarBanco('Banco Inter', null);
+    const saldo = await inter('GET', '/banking/v2/saldo');
+    contas.push({ banco: 'Banco Inter', tipo: 'banco', saldo: saldo.ok ? num(saldo.data?.disponivel) : null, saldo_indisponivel: !saldo.ok });
+    if (!saldo.ok) avisos.push(`Não consegui ler o saldo do Banco Inter (${saldo.status || 'rede'}).`);
+
+    const blocos = [];
+    for (let ini = new Date(`${desde}T00:00:00Z`); ini.toISOString().slice(0, 10) <= ate; ini = new Date(ini.getTime() + 89 * 86400000)) {
+      const fim = new Date(Math.min(ini.getTime() + 88 * 86400000, new Date(`${ate}T00:00:00Z`).getTime()));
+      blocos.push([ini.toISOString().slice(0, 10), fim.toISOString().slice(0, 10)]);
+    }
+    let falhou = null;
+    let truncadoInter = false;
+    const transacoes = [];
+    for (const [ini, fim] of blocos) {
+      for (let p = 0; p < MAX_PAGINAS; p++) {
+        const r = await inter('GET', `/banking/v2/extrato/completo?dataInicio=${ini}&dataFim=${fim}&pagina=${p}&tamanhoPagina=${PAGINA}`);
+        if (!r.ok) { falhou = `${r.status || 'rede'}: ${r.erro || ''}`.slice(0, 200); break; }
+        const lote = r.data?.transacoes || [];
+        transacoes.push(...lote);
+        if (lote.length === 0 || p + 1 >= Number(r.data?.totalPaginas ?? 1)) break;
+        if (p === MAX_PAGINAS - 1) truncadoInter = true;
+      }
+      if (falhou) break;
+    }
+    if (falhou) marcarBanco('Banco Inter', `a leitura do extrato FALHOU (${falhou}). O que não foi lido não está somado.`);
+    if (truncadoInter) marcarBanco('Banco Inter', `mais de ${MAX_PAGINAS * PAGINA} lançamentos num bloco de 89 dias — a leitura parou no teto.`);
+    for (const t of transacoes) {
+      const direcao = t.tipoOperacao === 'C' ? 'entrada' : 'saida';
+      const desc = [t.titulo, t.descricao].filter(Boolean).join(' — ') || t.tipoTransacao || 'Movimentação Inter';
+      const valor = num(t.valor);
+      lancamentos.push({
+        banco: 'Banco Inter', id: String(t.idTransacao), data: dia(t.dataTransacao || t.dataInclusao),
+        descricao: desc, direcao, bruto: valor, liquido: valor, taxa: null,
+        metodo: t.tipoTransacao || null, categoria: classificar(desc, direcao),
+      });
+    }
+  } else {
+    avisos.push('Banco Inter: credenciais (INTER_*) não configuradas — a conta ficou de fora.');
+  }
+
   // RUÍDO DE R$ 0,00 (08/08): o Mercado Pago registra "Recurring payment validation" — a
   // cobrança de teste que valida o cartão da assinatura — como pagamento aprovado de valor
   // zero. Não é receita nem despesa: é o gateway conversando consigo mesmo. Chegavam à fila
@@ -399,7 +447,7 @@ export default async function handler(req, res) {
     // Deixa EXPLÍCITO o que foi lido: sem isto a tela sugere que o total é a posição da empresa,
     // quando os 4 bancos (Inter, C6, Bradesco, Caixa) ainda não estão integrados.
     contas,
-    cobertura: 'Somente Asaas e Mercado Pago. Contas bancárias (Inter, C6, Bradesco, Caixa) ainda não integradas.',
+    cobertura: `Asaas, Mercado Pago${interConfigurado() ? ' e Banco Inter' : ''}. Contas bancárias C6, Bradesco e Caixa ainda não integradas.`,
     avisos,
     // `completo: false` = os totais NÃO fecham com a conta real. A tela deve dizer isso
     // ao lado do número, não escondê-lo.
