@@ -19,11 +19,17 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // CDNs que servem a foto original para um card de ~400 px: Suporte Leilões (~300 KB, até 1 MB),
 // Leilotech (~290 KB) e Alberto Macedo (~1,4 MB). Nessas, a 1ª tentativa é a MINIATURA pelo
 // nosso proxy (WebP 480 px, cacheada na CDN); o original direto fica de reserva.
-const HOSTS_PESADOS = /^https:\/\/(?:static\.suporteleiloes\.com\.br|cdn\.leilotech\.workers\.dev|api\.albertomacedoleiloes\.com\.br)\//i;
+// 30/10: + Leilão VIP (blob do Azure, PNG de ~600 KB → 33 KB em WebP 800 px). O Leilão Eletrônico
+// (PNG ~580 KB) ficou de fora: o host devolve 404 ao IP da Vercel, a miniatura seria um pedido perdido.
+const HOSTS_PESADOS = /^https:\/\/(?:static\.suporteleiloes\.com\.br|cdn\.leilotech\.workers\.dev|api\.albertomacedoleiloes\.com\.br|armazupleilaovipprd\.blob\.core\.windows\.net)\//i;
 // Hotlink protegido por Referer (mesma lista de api/_foto-hotlink.js): o acesso direto SEMPRE
 // falha (403) — ir direto ao proxy poupa uma requisição perdida por foto.
 const HOTLINK_PROTEGIDO = /^https:\/\/s3-sa-east-1\.amazonaws\.com\/cdnhp\//i;
 const proxy = (url, w) => `/api/img-proxy?url=${encodeURIComponent(url)}${w ? `&w=${w}` : ''}`;
+
+// Versão reduzida (proxy, WebP) de uma foto de host PESADO; null nos demais — ali o hotlink direto
+// é leve (35–190 KB, medido em 30/10) e mais rápido que a 1ª passada pelo proxy.
+export const fotoReduzidaSePesada = (url, w) => (HOSTS_PESADOS.test(String(url || '')) ? proxy(url, w) : null);
 
 export function fotoCandidatos({ foto, fonte, fonteId, imovelId, largura = 480 }) {
   // TRAVA DE CREDIBILIDADE (GESTAOLEILOES / "Lance no Leilão"): a foto é nomeada pelo

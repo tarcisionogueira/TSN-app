@@ -15,7 +15,7 @@ import { assinarAnexos } from '../utils/docUrl';
 import { ehUrl, ehDocArquivo, ehMatriculaValida, ehRegrasDoc, ehUrlGenerica, hrefDoc } from '../utils/documento';
 import { formatarDescricaoImovel } from '../utils/descricao';
 import DescricaoOrganizada from '../components/DescricaoOrganizada';
-import { fotoCandidatos } from '../utils/foto';
+import { fotoCandidatos, fotoReduzidaSePesada } from '../utils/foto';
 import { trackImovelVisualizado } from '../utils/gtag';
 import { lerCotaMercado } from '../utils/cotaAnalise';
 import { registrarEvento } from '../utils/tracker';
@@ -1261,6 +1261,8 @@ export default function ImovelDetalhe() {
     // Já hospedado por nós (supabase) ou caminho local: usa direto.
     if (foto && (foto.includes('supabase.co') || foto.startsWith('/'))) return [foto];
     const cands = [];
+    const reduzida = fotoReduzidaSePesada(foto, 800);
+    if (reduzida) cands.push(reduzida);                                       // 0) host pesado (~0,5 MB): WebP 800 px
     if (foto && /^https?:\/\//.test(foto)) cands.push(foto);                 // 1) hotlink direto (igual à lista)
     if (isCef) { const c = caixaFotoUrl(); if (c) cands.push(c); }           // 2) padrão de foto da Caixa por id
     else if (foto && /^https?:\/\//.test(foto)) cands.push(`/api/img-proxy?url=${encodeURIComponent(foto)}`); // 3) proxy (fontes que bloqueiam hotlink por referer)
@@ -1619,9 +1621,13 @@ export default function ImovelDetalhe() {
                       border: i === fotoAtivaIdx ? '2px solid #0D63DB' : '2px solid transparent',
                       opacity: i === fotoAtivaIdx ? 1 : 0.7, background: '#f1f5f9',
                     }}>
-                    <img src={url} alt={`Foto ${i + 1}`} loading="lazy"
+                    <img src={fotoReduzidaSePesada(url, 240) || url} alt={`Foto ${i + 1}`} loading="lazy"
                       style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                      onError={e => { e.currentTarget.style.visibility = 'hidden'; }} />
+                      onError={e => {
+                        // miniatura reduzida falhou → tenta o original antes de esconder
+                        if (!e.currentTarget.dataset.orig && e.currentTarget.getAttribute('src') !== url) { e.currentTarget.dataset.orig = '1'; e.currentTarget.src = url; }
+                        else e.currentTarget.style.visibility = 'hidden';
+                      }} />
                   </button>
                 ))}
               </div>
