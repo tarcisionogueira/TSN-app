@@ -290,6 +290,7 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
   const encerradosAtivos = [];   // fonte_id de lote ATIVO no banco que a releitura achou encerrado (#277)
   const metaAtivo = new Set();
   const recusas = [];   // #238: { fonte_id, motivo, dias } — gravadas no fim (fora do dry-run)
+  let nRecusados = 0;   // listados e pulados pela memória de recusa — entram no porquê do zero
   if (urls.length) {
     const ids = urls.map(u => idFonte(tenant, cfg.parse.idDaUrl(u)));
     const meta = new Map();
@@ -309,6 +310,7 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
       if (error) { console.log(`⚠️ [${tenant.fonte}] memória de recusa ilegível — segue relendo os recusados: ${error.message}`); break; }
       for (const r of data || []) recusados.add(r.fonte_id);
     }
+    nRecusados = recusados.size;
     // Fonte NUNCA coletada (nada no banco): `novos` são todas as urls e não há releitura —
     // o caminho antigo, intacto.
     const { novos, releitura, alvo, iReleitura } = planejarAlvo({
@@ -450,6 +452,9 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
     sem ? `${sem} sem detalhe (${[...motivosSem].sort((a, b) => b[1] - a[1]).slice(0, 2).map(([m, n]) => `${n}× ${m}`).join(' | ')})` : '',
     reprov ? `${reprov} descartados na qualidade` : '', naoImovel ? `${naoImovel} não-imóvel` : '',
     encerrados ? `${encerrados} encerrados` : '', !urls.length && foraPelaUrl ? `${foraPelaUrl} fora pela URL (não é imóvel)` : '',
+    // 29/10: 7 fontes (Pedro Castro, Karla Pepe, Casa Forte…) davam "nenhum lote lido" com o catálogo são — todos os
+    // lotes listados estavam na memória de recusa (#238), a fila saía vazia e nenhum contador subia.
+    nRecusados ? `${nRecusados} recusado(s) recentemente (memória #238), pulados` : '',
   ].filter(Boolean).join(' · ');
   return { prontos, encerrados, fonteVazia: fetchOk && enumerado.urls.length === 0, vazioDeclarado, enumerados: enumerado.urls.length, cotaNegada, eventosCount, viaCatalogo: via, naoImovelIds, idsEnumerados, listaCompleta: enumerado.completa, listaCortada: enumerado.cortada, porqueZero, encerradosAtivos };
 }

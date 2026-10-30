@@ -77,6 +77,12 @@ assert.equal(dBsp.naoImovel, undefined);
 const blocoMk = leilaoMk.slice(leilaoMk.indexOf('id="divLote2458"'));
 const { parseLote } = await import('../lib/msis-parse.mjs');
 assert.equal(parseLote(blocoMk, leilaoMk, M, { hoje: '2026-01-01' }).data_leilao, '2026-02-16');
+// Pedro Castro (29/10): "1ª Data … Data de Abertura … Data de Encerramento … Lance inicial" — valor e data da praça.
+const blocoPc = '<div id="divLote46"><div class="Letra14 CorCinzaEsc" align="justify">Casa duplex em Cabo Frio/RJ.</div>'
+  + '1ª Data Data de Abertura: 08/09/2026 às 10:00 Data de Encerramento: 31/12/2026 às 07:00 Lance inicial 8.000.000,00</div>';
+const dPc = parseLote(blocoPc, '', M, { hoje: '2026-10-29' });
+assert.equal(dPc.valor_minimo, 8000000);
+assert.equal(dPc.data_leilao, '2026-12-31');
 // Status encerrado no lote.
 assert.equal(parseLote(blocoMk.replace('ABERTO PARA LANCES', 'ARREMATADO'), leilaoMk, M).encerrado, true);
 

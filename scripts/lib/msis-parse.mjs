@@ -177,11 +177,13 @@ function cidadeUfDoTexto(txt) {
 
 /** Uma praça: "1° Leilão … Data do leilão: 08/12/2026 às 13:00 … Lance inicial 7.000.000,00". Variantes medidas em
  * 26/10: sem "Data do leilão" (Alexandre Costa: só "Fechamento: 29/10/2026") e "1° Leilão 22/05/2025 10:00 Lance inicial
- * R$ 420.000,00 … RS 210.000,00" (Gabriel, com o "RS" digitado no lugar de "R$"). */
+ * R$ 420.000,00 … RS 210.000,00" (Gabriel, com o "RS" digitado no lugar de "R$"). 29/10: Pedro Castro escreve "1ª Data …
+ * Data de Abertura: 08/09/2026 … Data de Encerramento: 31/12/2026 às 07:00 … Lance inicial 8.000.000,00" — sem casar,
+ * os 2 imóveis próprios dele saíam com valor 0 e eram descartados; a data da praça é a de ENCERRAMENTO, não a de abertura. */
 function pracasDe(txt) {
   const out = [];
-  for (const m of String(txt || '').matchAll(/(\d)\s*[°º]\s*Leil[ãa]o\s+([\s\S]{0,400}?)Lance inicial\s*(?:R\s*[$S]\s*)?([\d.]+,\d{2})/gi)) {
-    const data = dataBr((m[2].match(/Data do leil[ãa]o\s*:?\s*(\d{2}\/\d{2}\/\d{4})/i) || m[2].match(/Fechamento\s*:?\s*(\d{2}\/\d{2}\/\d{4})/i) || m[2].match(/(\d{2}\/\d{2}\/\d{4})/) || [])[1]);
+  for (const m of String(txt || '').matchAll(/(\d)\s*[°ºª]\s*(?:Leil[ãa]o|Data)\s+([\s\S]{0,400}?)Lance inicial\s*(?:R\s*[$S]\s*)?([\d.]+,\d{2})/gi)) {
+    const data = dataBr((m[2].match(/Data do leil[ãa]o\s*:?\s*(\d{2}\/\d{2}\/\d{4})/i) || m[2].match(/(?:Fechamento|Data de Encerramento)\s*:?\s*(\d{2}\/\d{2}\/\d{4})/i) || m[2].match(/(\d{2}\/\d{2}\/\d{4})/) || [])[1]);
     out.push({ n: Number(m[1]), data, lance: plaus(num(m[3])) });
   }
   return out;
