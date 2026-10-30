@@ -81,10 +81,30 @@ export default async function handler(req, res) {
   // 2) LEILOEIROS (novo): desativa o que saiu do site (não veio no último scrape da fonte). Guarda
   // anti-regressão embutida na RPC (pula fonte com remoção > 40% = scrape degradado). Best-effort:
   // uma falha aqui não derruba o resultado do CEF.
+  // 30/10: em lotes também — o UPDATE único sobre todos os sumidos (×~30 gatilhos) caiu no 57014 às 05h
+  // UTC de 29 e 30/10 com a seleção levando < 0,6 s. A RPC devolve `completo`; chamamos até vir true.
+  // 100, não 200: medido 30/10 com o banco folgado, 200 linhas = 3,2 s (~16 ms/linha); às 02h dobra.
+  const LOTE_LEILOEIRO = 100;
   let leiloeiro = null;
   try {
-    const r2 = await rpc('desativar_imoveis_leiloeiro_stale', { margem: '36 hours', teto_pct: 0.40 });
-    leiloeiro = r2.ok ? await r2.json().catch(() => null) : { erro: (await r2.text().catch(() => '')).slice(0, 200) };
+    let total = 0;
+    for (let i = 0; i < 15; i++) {
+      if (Date.now() - inicio > TETO_INICIO_MS) { leiloeiro = { erro: 'orçamento de tempo esgotou com backlog restante', parcial: total }; break; }
+      let r2 = await rpc('desativar_imoveis_leiloeiro_stale_lote', { margem: '36 hours', teto_pct: 0.40, lote: LOTE_LEILOEIRO });
+      if (!r2.ok) {
+        const txt = (await r2.text().catch(() => '')).slice(0, 200);
+        if (!/57014/.test(txt) || Date.now() - inicio > 105000) { leiloeiro = { erro: `${r2.status} ${txt}`, parcial: total }; break; }
+        await new Promise(ok => setTimeout(ok, 5000));   // mesma nova tentativa única do emLotes
+        r2 = await rpc('desativar_imoveis_leiloeiro_stale_lote', { margem: '36 hours', teto_pct: 0.40, lote: LOTE_LEILOEIRO });
+        if (!r2.ok) { leiloeiro = { erro: `${r2.status} ${(await r2.text().catch(() => '')).slice(0, 200)}`, parcial: total, tentativas: 2 }; break; }
+      }
+      const j = await r2.json().catch(() => null);
+      if (!j || !Number.isFinite(Number(j.desativados))) { leiloeiro = { erro: 'resposta sem contagem', parcial: total }; break; }
+      total += Number(j.desativados);
+      leiloeiro = { ...j, desativados: total, chamadas: i + 1 };
+      if (j.completo) break;
+    }
+    if (leiloeiro && !leiloeiro.erro && !leiloeiro.completo) leiloeiro = { ...leiloeiro, erro: 'backlog restante após 15 chamadas' };
   } catch (e) { leiloeiro = { erro: String(e?.message || e).slice(0, 200) }; }
 
   // 3) LEILÃO VENCIDO (07/08, regra do dono: lote com data passada não pode ficar aparecendo e
