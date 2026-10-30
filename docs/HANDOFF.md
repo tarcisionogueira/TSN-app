@@ -7,6 +7,35 @@
 
 
 
+## 29/10 (fim do dia) — RADAR MAIS ASSERTIVO, LEILOEIROS DOS TRIBUNAIS, 7 LEITORES "QUEBRADOS"
+
+**Feito (commits de7e602, 7635397, 044fd94, ec302d0):**
+- **Radar de editais:** teor HTML vira texto limpo antes do filtro/parser; dedup também pelo hash do conteúdo (o DJEN
+  republica o mesmo edital com outro id); na busca por nome o leiloeiro gravado é o BUSCADO; município do IBGE não passa
+  como nome. Radar por nome agora cobre TODO leiloeiro ativo de site não lido + os credenciados 'fora' dos tribunais:
+  1.043 nomes, ciclo 10 dias (~104/dia, ~10 min calado no runner). Leitura da junta/triagem paginada (PostgREST corta
+  em 1.000). `testar:radar-assertividade`. Os 28 editais duplicados de 29/10 continuam na base (FK impede marcar).
+- **Leiloeiros credenciados nos tribunais:** `importar-leiloeiros-tribunais.mjs` (runner de casa, semanal; pula se
+  importou há < 6 dias; `TRIB_FORCAR=1`) → `leiloeiro_tribunal` (sem CPF/e-mail/telefone) + `leiloeiro_tribunal_cruzar()`.
+  Fontes: TJSP (POST JSON), EXE-PJe por TRT, planilhas TRT4/TRT18. 1ª importação: 373 → 341 junta ativo, 4 junta
+  suspenso/cancelado, 11 site conhecido, **17 fora** (lista na #381). `testar:leiloeiro-tribunal`.
+  **TRT7/12/13/15/22/23 dão 403 até a Chromium headless honesto** — filtro por identificação de navegador. NÃO fingir
+  navegador de pessoa (vetado). Decisão do dono: ficam com o radar por nome.
+- **7 leitores "nenhum lote lido"** (#372): catálogo são em todos; os listados estavam na memória de recusa (#238).
+  A saúde agora diz "N recusado(s) recentemente, pulados". MSIS do Pedro Castro corrigido ("1ª Data … Data de
+  Encerramento"), recusas pedrocastro_45/46 apagadas.
+
+**Conferir na próxima sessão (30/10):**
+1. Radar por nome da madrugada: `editais_leilao` novos com `leiloeiro_nome` = nome buscado e sem duplicata (hash `c:`).
+2. Pedro Castro nlo 45/46 no acervo (valor 8 mi / 229 mil); Casa Forte id 171 (Canela/RS, R$ 21,7 mi) — cidade/tipo
+   saem errados no suporte-oferta-parse.
+3. #377 (stale 02h sem 57014 + inbound com corpo) e #378 (Puppeteer 3 grupos; Pestana parcial).
+4. `monitor_runs` fonte `leiloeiros-tribunais`: só rode de novo em 05/11.
+
+**Abertos:** fila #380 (Rossi, Parque dos Leilões, Campolina, Grupo Carvalho, Paulo Botelho…); integrar os 17 'fora'
+pela triagem (#381); TRT2/TJRJ (PDF) não importados; Damha Lote 17 Quadra R (compra por escritura — dono decide se
+entra em Meus arrematados) e data da Rua H (2018 × contrato 29/04/2020).
+
 ## 29/10 (noite) — LEILOEIRO DIAN (fonte `dom`)
 
 **DIANLEILOES** (`scraper-dian.mjs`, `lib/dian-parse.mjs`, `lib/motor/fontes/dian.mjs`, passo no scraper-dom,
