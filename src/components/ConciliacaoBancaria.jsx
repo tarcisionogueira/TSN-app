@@ -230,8 +230,8 @@ export default function ConciliacaoBancaria() {
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
               <button onClick={() => baixar('html')} disabled={!!ocupado} style={{ ...btn('#fff'), color: '#334155', border: '1px solid #cbd5e1' }}><Download size={14} /> Relatório (PDF)</button>
               <button onClick={() => baixar('ofx')} disabled={!!ocupado} style={{ ...btn('#fff'), color: '#334155', border: '1px solid #cbd5e1' }}><Download size={14} /> Extrato (OFX)</button>
-              <input value={emailContab} onChange={e => setEmailContab(e.target.value)} placeholder="e-mail da contabilidade"
-                style={{ padding: '7px 10px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 13, minWidth: 220 }} />
+              <input value={emailContab} onChange={e => setEmailContab(e.target.value)} placeholder="e-mails da contabilidade (separe por vírgula)"
+                style={{ padding: '7px 10px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 13, minWidth: 300 }} />
               <button onClick={() => acao('enviar', { email: emailContab }, 'Envio')} disabled={!!ocupado} style={btn('#059669')}>
                 {ocupado === 'enviar' ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Mail size={14} />} Enviar
               </button>

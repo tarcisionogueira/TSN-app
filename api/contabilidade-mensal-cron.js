@@ -25,7 +25,7 @@ import { isCronAuthorized } from './_auth.js';
 import { enviarEmail } from './_email.js';
 import { escapeHtml } from './_sanitize.js';
 import { alertarErro } from './_error-alert.js';
-import { gerarOFX, gerarHTML, brl, dataBR } from './_conciliacao-pacote.js';
+import { gerarOFX, gerarHTML, brl, dataBR, listaEmails } from './_conciliacao-pacote.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -123,7 +123,7 @@ export default async function handler(req, res) {
         subject: `Contabilidade: o pacote de ${mesTxt} sai dia ${DIA_ENVIO} — ${p.resumo.pendentes} lançamento(s) a classificar`,
         html: carta([
           'Tarcísio,',
-          `No dia ${DIA_ENVIO}, às 9h, o pacote de <strong>${escapeHtml(mesTxt)}</strong> vai sozinho para a contabilidade${process.env.CONTABILIDADE_EMAIL ? ` (${escapeHtml(process.env.CONTABILIDADE_EMAIL)})` : ' — <strong>mas o CONTABILIDADE_EMAIL não está configurado na Vercel, então ele vai só para você</strong>'}.`,
+          `No dia ${DIA_ENVIO}, às 9h, o pacote de <strong>${escapeHtml(mesTxt)}</strong> vai sozinho para a contabilidade${process.env.CONTABILIDADE_EMAIL ? ` (${escapeHtml(listaEmails(process.env.CONTABILIDADE_EMAIL).validos.join(", "))})` : ' — <strong>mas o CONTABILIDADE_EMAIL não está configurado na Vercel, então ele vai só para você</strong>'}.`,
           `Hoje ele tem ${p.resumo.total} lançamento(s): entradas ${brl(p.resumo.entradas)}, saídas ${brl(p.resumo.saidas)}. Por conta: ${escapeHtml(Object.entries(p.porBanco).map(([b, n]) => `${b} ${n}`).join(' · ') || 'nenhum')}.`,
           p.resumo.pendentes
             ? `<strong>${p.resumo.pendentes} lançamento(s) ainda estão em 9.9 A CLASSIFICAR.</strong> Se der, classifique na tela de Conciliação antes do dia ${DIA_ENVIO}: <a href="${telaUrl}">abrir o Admin</a>.`
@@ -138,8 +138,12 @@ export default async function handler(req, res) {
 
     // ENVIO
     if (!p.lancamentos.length) throw new Error(`competência ${comp} sem nenhum lançamento — a importação diária parou? Pacote NÃO enviado.`);
-    const contador = soDono ? '' : String(process.env.CONTABILIDADE_EMAIL || '').trim();
-    const contadorOk = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(contador);
+    // Vários e-mails: separados por vírgula na env. Um inválido no meio = nenhum envio ao contador e alerta
+    // dizendo qual (mandar só para parte da lista sem avisar seria um "enviado" pela metade).
+    const lista = listaEmails(soDono ? '' : process.env.CONTABILIDADE_EMAIL);
+    if (lista.invalidos.length) throw new Error(`CONTABILIDADE_EMAIL tem endereço inválido: ${lista.invalidos.join(', ')} — pacote NÃO enviado`);
+    const contador = lista.validos;
+    const contadorOk = contador.length > 0;
     const anexos = [{ filename: `conciliacao-${comp}.ofx`, content: Buffer.from(p.ofx, 'utf8').toString('base64') }];
     const env = await enviarEmail({
       to: contadorOk ? contador : DONO,

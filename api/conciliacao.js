@@ -29,7 +29,7 @@ import { checkRateLimit } from './_rate-limit.js';
 import { enviarEmail } from './_email.js';
 import { iaTexto } from './_claude.js';
 import { lerOFX } from './_ofx.js';
-import { gerarOFX, gerarHTML } from './_conciliacao-pacote.js';
+import { gerarOFX, gerarHTML, listaEmails } from './_conciliacao-pacote.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -437,9 +437,10 @@ REGRAS OBRIGATÓRIAS:
 
   // ── ENVIAR À CONTABILIDADE ────────────────────────────────────────────────────────────────
   if (acao === 'enviar') {
-    const destino = String(body.email || process.env.CONTABILIDADE_EMAIL || '').trim();
-    if (!destino || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(destino)) {
-      res.status(400).json({ error: 'Informe o e-mail da contabilidade (ou configure CONTABILIDADE_EMAIL).' });
+    const { validos: destino, invalidos } = listaEmails(body.email || process.env.CONTABILIDADE_EMAIL);
+    if (invalidos.length) { res.status(400).json({ error: `E-mail inválido: ${invalidos.join(', ')}` }); return; }
+    if (!destino.length) {
+      res.status(400).json({ error: 'Informe o e-mail da contabilidade (ou configure CONTABILIDADE_EMAIL). Vários: separe por vírgula.' });
       return;
     }
     if (!lancamentos.length) { res.status(400).json({ error: 'Não há lançamentos no período — importe o extrato antes de enviar.' }); return; }

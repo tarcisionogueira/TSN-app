@@ -8,6 +8,15 @@
 import { escapeHtml } from './_sanitize.js';
 
 export const brl = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+// A contabilidade tem vários e-mails (30/10): CONTABILIDADE_EMAIL e o campo da tela aceitam uma lista
+// separada por vírgula, ponto e vírgula ou espaço. Um endereço inválido no meio NÃO é descartado calado:
+// volta em `invalidos` para quem chamou recusar o envio inteiro e dizer qual está errado.
+export function listaEmails(texto) {
+  const itens = String(texto || '').split(/[\s,;]+/).map((s) => s.trim()).filter(Boolean);
+  const ok = (e) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e);
+  return { validos: [...new Set(itens.filter(ok).map((e) => e.toLowerCase()))], invalidos: itens.filter((e) => !ok(e)) };
+}
+
 export const dataBR = (d) => (d ? String(d).slice(0, 10).split('-').reverse().join('/') : '');
 
 // ── OFX 1.0 (SGML) ───────────────────────────────────────────────────────────────────────────
