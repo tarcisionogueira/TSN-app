@@ -101,11 +101,14 @@ on:
       - 'scripts/scraper-alliance.mjs'
       - 'scripts/lib/alliance-parse.mjs'
       - 'scripts/lib/motor/fontes/alliance.mjs'
+      - 'scripts/scraper-mvleiloes.mjs'
+      - 'scripts/lib/mvleiloes-parse.mjs'
+      - 'scripts/lib/motor/fontes/mvleiloes.mjs'
       - '.github/workflows/scraper-dom.yml'
   workflow_dispatch:
     inputs:
       fontes:
-        description: 'csv: softgt,nortedeminas,leilaoeletronico,suportev2,suportenext,leilovia,labasoft,baston,cassiano,arnaldo,novaserrana(recon),alfa,hasta,nordeste,nordeste_veiculos,jeleiloes,leilaoindex,rocha,albertomacedo,francoleiloes,simon,globo,leje,freitas,leiloar,lgcorretor,nakakogue,astavero,suporteoferta,comprei,leilo,lucian,alliance'
+        description: 'csv: softgt,nortedeminas,leilaoeletronico,suportev2,suportenext,leilovia,labasoft,baston,cassiano,arnaldo,novaserrana(recon),alfa,hasta,nordeste,nordeste_veiculos,jeleiloes,leilaoindex,rocha,albertomacedo,francoleiloes,simon,globo,leje,freitas,leiloar,lgcorretor,nakakogue,astavero,suporteoferta,comprei,leilo,lucian,alliance,mvleiloes'
         required: false
         default: 'alfa,nordeste'
       gravar:
@@ -242,6 +245,17 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           ALLIANCE_DRYRUN: ${{ env.DRYRUN_PADRAO }}
         run: node scripts/scraper-alliance.mjs
+
+      - name: MV Leilões (Rio de Janeiro/RJ — imóveis judiciais)
+        # 29/10 (fila dos 58 com imóvel e sem leitor, #380): WordPress, a home lista os 23 imóveis (abertos e encerrados);
+        # datas no topo do lote ou, nos encerrados, só no edital. Seco de 29/10: 6 abertos (5 no Rio, 1 hotel em
+        # Gramado/RS), 15 encerrados, 2 sem data (saem). Fetch grátis; ~1 min.
+        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'mvleiloes')) }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          MVLEILOES_DRYRUN: ${{ env.DRYRUN_PADRAO }}
+        run: node scripts/scraper-mvleiloes.mjs
 
       - name: Comprei (PGFN) — venda direta na origem
         # 10/10: API pública do Comprei (listagem nacional + anúncio). Grátis (direto ou via banco) — diário.

@@ -7,6 +7,21 @@
 
 
 
+## 29/10 (tarde) — COBERTURA DE LEILOEIROS RECONTADA + MV LEILÕES
+
+**Quadro dos 2.150 leiloeiros ATIVOS das juntas** (triagem corrigida e medida em 29/10, `medicao_2910`): 949 cobertos
+(site lido ou lotes no acervo) · 711 sem site (só editais; radar por nome rodou a 1ª fatia: 98 nomes, 67 editais novos)
+· 252 site fora do ar / não é leilão · 108 sem imóvel · 72 pouco imóvel · ~35 com imóvel e sem leitor (#380, em ordem de
+tamanho). Os 190 "nunca medidos" eram 52 fontes grandes nunca postas na triagem + 67 sites medidos ao vivo (quase todos
+fora do ar). Armadilha: `catalogo_ok not ilike …` com nulo descarta a linha — usar `coalesce`.
+
+**Entraram**: Casa do Leilão (SC) no Leiloar (9601676, 8/8 no seco) e **MV LEILÕES** (`scraper-mvleiloes.mjs`,
+`lib/mvleiloes-parse.mjs`, passo no scraper-dom, `testar:mvleiloes` 14 asserções com 3 páginas reais). WordPress +
+Elementor; o tipo `leilao_imoveis` não está na REST, lê-se o texto entre os rótulos. Datas no topo ("1ª DATA …") ou, nos
+encerrados, só no edital. Cidade: endereço → descrição → "Registro de Imóveis/Comarca da Capital – RJ" → edital (o edital
+cita a cidade das PARTES: Pechincha saía Niterói). Matrícula: nunca a do leiloeiro ("matrícula 0149"). Seco: 6 abertos
+(5 no Rio, hotel de R$ 15 mi em Gramado/RS).
+
 ## 29/10 — STALE SEM TIMEOUT, INBOUND COM NOVA TENTATIVA, TRIAGEM DOS "50 BARATOS"
 
 **Consertos (4dc67a4, migração aplicada)**: `desativar_imoveis_leiloeiro_stale` chamava `fonte_baseline_aprendida()`
