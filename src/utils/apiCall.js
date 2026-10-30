@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { supabase, emSimulacao } from './supabase';
 import { registrarEvento } from './tracker.js';
 import { renovarSessao } from '../lib/sessao-expirada';
 
@@ -7,6 +7,16 @@ import { renovarSessao } from '../lib/sessao-expirada';
  * Injeta automaticamente o token de autenticação do usuário logado.
  */
 export async function apiCall(path, options = {}, _jaRenovou = false) {
+  // SIMULAÇÃO TAMBÉM É SÓ LEITURA NAS ROTAS /api (30/10, arena do painel). A trava de supabase.js
+  // cobre o banco, mas aqui o pedido sai com o token REAL do admin: um "Gerar relatório" simulando
+  // o Explorador gastava IA/Bright Data de verdade e gravava na conta do admin. GET passa (leitura);
+  // o resto é barrado antes da rede, com o motivo dito na tela.
+  const metodo = String(options.method || 'GET').toUpperCase();
+  if (metodo !== 'GET' && metodo !== 'HEAD' && emSimulacao()) {
+    console.warn('[simulação] chamada BLOQUEADA (modo só-visualização):', metodo, String(path).split('?')[0]);
+    return new Response(JSON.stringify({ error: 'Modo simulação: esta ação fica bloqueada (só visualização). Saia da simulação para executar de verdade.', simulacao: true }),
+      { status: 403, headers: { 'Content-Type': 'application/json' } });
+  }
   const { data: { session } } = await supabase.auth.getSession();
   const token = session?.access_token;
 

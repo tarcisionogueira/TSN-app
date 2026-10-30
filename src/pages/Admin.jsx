@@ -8045,15 +8045,17 @@ function FinanceiroHub() {
     { key: 'cobranca_avulsa', label: '🔗 Cobrança avulsa' },
     { key: 'cartorio',        label: '🏛️ Cartório' },
     { key: 'saques',          label: '💸 Saques da equipe' },
-    { key: 'notas',           label: '🧾 Notas fiscais de saque' },
+    { key: 'notas',           label: '📑 Notas fiscais de saque' },
     { key: 'conferencia',     label: '⚖️ Pagamentos a conferir' },
     { key: 'chargebacks',     label: '⚠️ Chargebacks' },
   ];
   const [sub, setSub] = React.useState(() => {
-    let s = sessionStorage.getItem('admin_fin_sub') || 'mp';
+    // Abre na Conciliação (30/10, arena): é onde está o trabalho (a classificar) e não gasta as
+    // 2 chamadas ao Mercado Pago que a aba "Mercado Pago" faz a cada abertura.
+    let s = sessionStorage.getItem('admin_fin_sub') || 'conciliacao';
     if (s === 'caixa') s = 'asaas';   // chaves antigas (#249) → novas
     if (s === 'gateway') s = 'mp';
-    return SUBS.some((x) => x.key === s) ? s : 'mp';
+    return SUBS.some((x) => x.key === s) ? s : 'conciliacao';
   });
   const irSub = (k) => { setSub(k); sessionStorage.setItem('admin_fin_sub', k); };
 
@@ -11626,7 +11628,7 @@ const ROLES_SIMULAVEIS = [
   { key: 'explorador', label: '🔍 Explorador',      cor: '#64748b' },
   { key: 'top2',       label: '💎 Investidor Pro',   cor: '#0D63DB' },
   { key: 'assessorado',label: '🏠 Assessorado',      cor: '#d97706' },
-  { key: 'analista',   label: '🔍 Analista',         cor: '#f59e0b' },
+  { key: 'analista',   label: '📋 Analista',         cor: '#f59e0b' },
   { key: 'advogado',   label: '⚖️ Advogado',         cor: '#7c3aed' },
   { key: 'leiloeiro',  label: '🔨 Leiloeiro',        cor: '#ea580c' },
 ];
@@ -11717,7 +11719,7 @@ export default function Admin() {
             </button>
           )}
         </div>
-        <span style={{ fontSize: 11, color: '#475569', marginLeft: 'auto' }}>Só muda a visualização — dados reais não são alterados</span>
+        <span style={{ fontSize: 11.5, color: '#a5b4fc', marginLeft: 'auto' }}>Abre o app como uma conta nova desse plano · nada é gravado</span>
       </div>
 
       <div style={S.body}>
@@ -11730,10 +11732,12 @@ export default function Admin() {
               return (
                 <button key={g.nome} onClick={() => abrirFamilia(g)}
                   style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2, padding: '10px 16px', borderRadius: 10, cursor: 'pointer',
-                    border: `1px solid ${ativa ? '#0D63DB' : '#334155'}`, background: ativa ? '#0D63DB' : 'rgba(255,255,255,0.04)',
-                    color: ativa ? '#fff' : '#cbd5e1', minWidth: 150, textAlign: 'left', transition: 'all .15s' }}>
+                    // Inativas em BRANCO com texto escuro (30/10, arena): herdavam o estilo de fundo escuro
+                    // (texto #cbd5e1 sobre o cinza-claro da página = contraste 1,4:1, quase invisível).
+                    border: `1px solid ${ativa ? '#0D63DB' : '#cbd5e1'}`, background: ativa ? '#0D63DB' : '#fff',
+                    color: ativa ? '#fff' : '#334155', minWidth: 150, textAlign: 'left', transition: 'all .15s' }}>
                   <span style={{ fontSize: 13.5, fontWeight: 800 }}>{g.icone} {g.nome}</span>
-                  <span style={{ fontSize: 10.5, opacity: ativa ? 0.85 : 0.6 }}>{g.desc}</span>
+                  <span style={{ fontSize: 11, color: ativa ? 'rgba(255,255,255,0.85)' : '#64748b' }}>{g.desc}</span>
                 </button>
               );
             })}

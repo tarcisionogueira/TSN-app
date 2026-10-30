@@ -29,7 +29,7 @@ import { checkRateLimit } from './_rate-limit.js';
 import { enviarEmail } from './_email.js';
 import { iaTexto } from './_claude.js';
 import { lerOFX } from './_ofx.js';
-import { gerarOFX, gerarHTML, listaEmails } from './_conciliacao-pacote.js';
+import { gerarOFX, gerarHTML, listaEmails, resumir, CONTAS_FORA_DO_RESULTADO } from './_conciliacao-pacote.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -93,7 +93,10 @@ export default async function handler(req, res) {
     }
     const cl = await sb('rpc/conciliacao_classificar', { method: 'POST', body: JSON.stringify({ p_competencia: null }) });
     const classificados = cl.ok ? await cl.json().catch(() => 0) : 0;
-    res.status(200).json({ ok: true, importados: linhas.length, classificados, cobertura: ext.cobertura, avisos: ext.avisos });
+    // Diz QUAIS contas foram lidas e quais falharam — "Importação concluída" sozinho escondia uma conta fora.
+    const porBanco = (ext.por_banco || []).map(b => `${b.banco} ${b.completo === false ? '✗' : '✓'} (${b.qtd})`).join(' · ');
+    res.status(200).json({ ok: true, importados: linhas.length, classificados, cobertura: ext.cobertura, avisos: ext.avisos,
+      mensagem: `Extrato atualizado: ${linhas.length} lançamento(s) lidos${porBanco ? ` — ${porBanco}` : ''}.` });
     return;
   }
 
@@ -160,6 +163,16 @@ export default async function handler(req, res) {
   if (acao === 'fechar_competencia' || acao === 'reabrir_competencia') {
     const comp = String(body.competencia || '').slice(0, 7);
     if (!/^\d{4}-\d{2}$/.test(comp)) { res.status(400).json({ error: 'Informe a competência (AAAA-MM).' }); return; }
+    // TRAVA (30/10, arena): fechar com lançamento em 9.9 congelava a DRE com "não classificado"
+    // dentro (a RPC só avisava DEPOIS de fechar). Agora recusa ANTES, dizendo quantos faltam.
+    if (acao === 'fechar_competencia') {
+      const [a, m] = comp.split('-').map(Number);
+      const prox = new Date(Date.UTC(a, m, 1)).toISOString().slice(0, 10);
+      const pr = await sb(`conciliacao_lancamento?data=gte.${comp}-01&data=lt.${prox}&or=(conta.eq.9.9,conta.is.null)&select=id&limit=1000`);
+      if (!pr.ok) { res.status(502).json({ error: 'Não consegui conferir as pendências da competência. Nada foi fechado.' }); return; }
+      const pend = (await pr.json()).length;
+      if (pend) { res.status(422).json({ error: `Não fechado: faltam ${pend} lançamento(s) a classificar em ${comp}.` }); return; }
+    }
     const fn = acao === 'fechar_competencia' ? 'fechar_competencia' : 'reabrir_competencia';
     const args = acao === 'fechar_competencia'
       ? { p_competencia: `${comp}-01`, p_user_id: user.id, p_obs: body.observacao || null }
@@ -299,6 +312,7 @@ export default async function handler(req, res) {
 
     const serie = {}, porGrupo = {}, porCredor = {};
     for (const l of linhas) {
+      if (CONTAS_FORA_DO_RESULTADO.has(l.conta)) continue; // transferência própria/sócio/terceiros não é fluxo
       const v = Number(l.valor_liquido ?? l.valor_bruto ?? 0);
       const m = l.competencia;
       serie[m] = serie[m] || { competencia: m, entradas: 0, saidas: 0 };
@@ -333,11 +347,12 @@ export default async function handler(req, res) {
   if (acao === 'diagnostico') {
     const meses = 6;
     const d0 = new Date(); d0.setMonth(d0.getMonth() - (meses - 1));
-    const linhas = await (await sb(
+    const linhasTodas = await (await sb(
       `conciliacao_lancamento?competencia=gte.${d0.toISOString().slice(0, 7)}&select=competencia,direcao,conta,valor_bruto,valor_liquido,fornecedor&limit=5000`
     )).json().catch(() => []);
     const contas = await (await sb('plano_contas?select=codigo,nome,grupo_dre')).json().catch(() => []);
     const nomeConta = Object.fromEntries(contas.map(c => [c.codigo, c.nome]));
+    const linhas = linhasTodas.filter(l => !CONTAS_FORA_DO_RESULTADO.has(l.conta));
 
     const ent = linhas.filter(l => l.direcao === 'entrada').reduce((s, l) => s + Number(l.valor_liquido ?? l.valor_bruto ?? 0), 0);
     const sai = linhas.filter(l => l.direcao === 'saida').reduce((s, l) => s + Number(l.valor_liquido ?? l.valor_bruto ?? 0), 0);
@@ -395,16 +410,18 @@ REGRAS OBRIGATÓRIAS:
   // ── Dados comuns às leituras/exportações ──────────────────────────────────────────────────
   const banco = String(body.banco || url.searchParams.get('banco') || '').trim();
   const filtroBanco = banco && banco !== 'todos' ? `&banco=eq.${encodeURIComponent(banco)}` : '';
-  const lancamentos = await (await sb(
+  // Falha de leitura é ERRO, não lista vazia (forma nº 2): vazio aqui virava "R$ 0,00" na tela e
+  // um pacote sem lançamentos para o contador.
+  const lr = await sb(
     `conciliacao_lancamento?competencia=gte.${de}&competencia=lte.${ate}${filtroBanco}&select=*&order=data.desc&limit=2000`
-  )).json().catch(() => []);
-  const resumo = {
-    entradas: lancamentos.filter(l => l.direcao === 'entrada').reduce((s, l) => s + Number(l.valor_liquido ?? l.valor_bruto ?? 0), 0),
-    saidas:   lancamentos.filter(l => l.direcao === 'saida').reduce((s, l) => s + Number(l.valor_liquido ?? l.valor_bruto ?? 0), 0),
-    pendentes: lancamentos.filter(l => l.conta === '9.9' || l.classificado_por === 'pendente').length,
-    conciliados: lancamentos.filter(l => l.conciliado).length,
-    total: lancamentos.length,
-  };
+  );
+  if (!lr.ok) {
+    console.error('[conciliacao] lancamentos', lr.status, (await lr.text().catch(() => '')).slice(0, 200));
+    res.status(502).json({ error: 'Não consegui ler os lançamentos do período agora. Tente de novo em instantes.' });
+    return;
+  }
+  const lancamentos = await lr.json();
+  const resumo = { ...resumir(lancamentos), truncado: lancamentos.length >= 2000 };
 
   if (acao === 'listar') {
     const [contas, dreR] = await Promise.all([
@@ -413,6 +430,8 @@ REGRAS OBRIGATÓRIAS:
     ]);
     res.status(200).json({
       ok: true, periodo: { de, ate }, resumo,
+      // Destino FIXO do envio (a tela mostra em vez de pedir digitação). Rota só de admin.
+      destino_contabilidade: listaEmails(process.env.CONTABILIDADE_EMAIL).validos,
       plano_contas: contas, dre: dreR.ok ? await dreR.json().catch(() => []) : [],
       lancamentos: lancamentos.slice(0, 500),
     });
@@ -437,7 +456,15 @@ REGRAS OBRIGATÓRIAS:
 
   // ── ENVIAR À CONTABILIDADE ────────────────────────────────────────────────────────────────
   if (acao === 'enviar') {
-    const { validos: destino, invalidos } = listaEmails(body.email || process.env.CONTABILIDADE_EMAIL);
+    // TRAVA (30/10, arena): o contador só recebe competência PRONTA, a mesma regra do envio
+    // automático do dia 3. E com CONTABILIDADE_EMAIL configurado o destino é SEMPRE ele — um erro
+    // de digitação no campo mandaria nomes e CPFs de pagadores para um estranho.
+    const motivos = [];
+    if (resumo.pendentes) motivos.push(`faltam ${resumo.pendentes} lançamento(s) a classificar`);
+    if (resumo.truncado) motivos.push('o período tem mais de 2.000 lançamentos — reduza o período');
+    if (motivos.length) { res.status(422).json({ error: `Não enviado: ${motivos.join('; ')}. Baixe o PDF se quiser uma prévia.`, motivos }); return; }
+    const fixo = process.env.CONTABILIDADE_EMAIL;
+    const { validos: destino, invalidos } = listaEmails(fixo || body.email);
     if (invalidos.length) { res.status(400).json({ error: `E-mail inválido: ${invalidos.join(', ')}` }); return; }
     if (!destino.length) {
       res.status(400).json({ error: 'Informe o e-mail da contabilidade (ou configure CONTABILIDADE_EMAIL). Vários: separe por vírgula.' });
@@ -445,7 +472,14 @@ REGRAS OBRIGATÓRIAS:
     }
     if (!lancamentos.length) { res.status(400).json({ error: 'Não há lançamentos no período — importe o extrato antes de enviar.' }); return; }
     const dreR = await sb('rpc/dre_competencia', { method: 'POST', body: JSON.stringify({ p_de: de, p_ate: ate }) });
-    const html = gerarHTML({ de, ate, dre: dreR.ok ? await dreR.json().catch(() => []) : [], lancamentos, resumo });
+    const dre = dreR.ok ? await dreR.json().catch(() => null) : null;
+    // DRE ilegível ou vazia = não envia. Antes ia um relatório com o demonstrativo em branco.
+    if (!Array.isArray(dre) || !dre.length) {
+      console.error('[conciliacao] enviar: DRE indisponível', dreR.status);
+      res.status(502).json({ error: 'Não enviado: não consegui montar a DRE do período agora. Tente de novo em instantes.' });
+      return;
+    }
+    const html = gerarHTML({ de, ate, dre, lancamentos, resumo });
     const ofx = gerarOFX(lancamentos, { de, ate, banco });
     const env = await enviarEmail({
       to: destino,

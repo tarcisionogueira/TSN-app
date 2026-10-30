@@ -17,6 +17,26 @@ export function listaEmails(texto) {
   return { validos: [...new Set(itens.filter(ok).map((e) => e.toLowerCase()))], invalidos: itens.filter((e) => !ok(e)) };
 }
 
+// NÃO OPERACIONAL FORA DO RESULTADO (30/10, arena do painel): 9.1 transferência entre contas próprias,
+// 9.2 aporte/retirada de sócio e 9.3 valores de terceiros não são receita nem despesa. Somados, o saque
+// do Mercado Pago que cai no Inter contava DUAS vezes como entrada e o "Resultado" saía inflado.
+// 9.9 (a classificar) continua dentro: ainda não se sabe o que é, e escondê-lo esconderia a pendência.
+export const CONTAS_FORA_DO_RESULTADO = new Set(['9.1', '9.2', '9.3']);
+const valor = (l) => Number(l.valor_liquido ?? l.valor_bruto ?? 0);
+export function resumir(lancamentos) {
+  const operacional = lancamentos.filter((l) => !CONTAS_FORA_DO_RESULTADO.has(l.conta));
+  const fora = lancamentos.filter((l) => CONTAS_FORA_DO_RESULTADO.has(l.conta));
+  const soma = (ls, dir) => Number(ls.filter((l) => l.direcao === dir).reduce((s, l) => s + valor(l), 0).toFixed(2));
+  return {
+    entradas: soma(operacional, 'entrada'),
+    saidas: soma(operacional, 'saida'),
+    nao_operacional: { entradas: soma(fora, 'entrada'), saidas: soma(fora, 'saida'), qtd: fora.length },
+    pendentes: lancamentos.filter((l) => l.conta === '9.9' || l.classificado_por === 'pendente').length,
+    conciliados: lancamentos.filter((l) => l.conciliado).length,
+    total: lancamentos.length,
+  };
+}
+
 export const dataBR = (d) => (d ? String(d).slice(0, 10).split('-').reverse().join('/') : '');
 
 // ── OFX 1.0 (SGML) ───────────────────────────────────────────────────────────────────────────
@@ -101,6 +121,7 @@ export function gerarHTML({ de, ate, dre, lancamentos, resumo, extras = '' }) {
     <strong>Saídas:</strong> ${brl(resumo.saidas)} &nbsp;·&nbsp;
     <strong>Resultado:</strong> ${brl(resumo.entradas - resumo.saidas)} &nbsp;·&nbsp;
     ${resumo.pendentes} lançamento(s) em <strong>9.9 A CLASSIFICAR</strong>
+    ${resumo.nao_operacional?.qtd ? `<br><span style="color:#64748b">Fora do resultado (não operacional — transferências entre contas próprias, sócio, terceiros): entradas ${brl(resumo.nao_operacional.entradas)} · saídas ${brl(resumo.nao_operacional.saidas)}</span>` : ''}
   </div>
 
   <h2 style="font-size:15px;margin:0 0 8px">Demonstrativo por conta</h2>

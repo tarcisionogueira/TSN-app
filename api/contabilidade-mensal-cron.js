@@ -27,7 +27,7 @@ import { isCronAuthorized } from './_auth.js';
 import { enviarEmail } from './_email.js';
 import { escapeHtml } from './_sanitize.js';
 import { alertarErro } from './_error-alert.js';
-import { gerarOFX, gerarHTML, brl, dataBR, listaEmails } from './_conciliacao-pacote.js';
+import { gerarOFX, gerarHTML, brl, dataBR, listaEmails, resumir } from './_conciliacao-pacote.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -65,12 +65,7 @@ async function montarPacote(comp) {
   const comissoes = await ler(`comissoes?status=eq.pago&pago_em=gte.${iniMes}&pago_em=lt.${iniProx}&select=tipo,origem,valor_comissao,pago_em&order=pago_em`);
   const notas = await ler(`saque_nf?status=eq.aprovada&revisado_em=gte.${iniMes}&revisado_em=lt.${iniProx}&select=numero,emitente_cnpj,valor_nf,emitida_em,verificacao_url,verificacao_status&order=revisado_em`);
 
-  const soma = (dir) => lancamentos.filter(l => l.direcao === dir).reduce((s, l) => s + Number(l.valor_liquido ?? l.valor_bruto ?? 0), 0);
-  const resumo = {
-    entradas: soma('entrada'), saidas: soma('saida'),
-    pendentes: lancamentos.filter(l => l.conta === '9.9' || l.classificado_por === 'pendente').length,
-    conciliados: lancamentos.filter(l => l.conciliado).length, total: lancamentos.length,
-  };
+  const resumo = resumir(lancamentos);
   const porBanco = {};
   for (const l of lancamentos) porBanco[l.banco] = (porBanco[l.banco] || 0) + 1;
 

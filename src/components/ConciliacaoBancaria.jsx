@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Loader2, Download, Mail, RefreshCw, Check, AlertTriangle, FileText } from 'lucide-react';
+import { Loader2, Download, Mail, RefreshCw, Check, FileText } from 'lucide-react';
 import { apiCall } from '../utils/apiCall';
 import { supabase } from '../utils/supabase';
 
@@ -32,8 +32,10 @@ export default function ConciliacaoBancaria() {
   const [bancoOfx, setBancoOfx] = useState('Bradesco');
   const [ofxErros, setOfxErros] = useState([]);
 
+  // `carregar` NÃO limpa a mensagem (30/10): `acao()` mostrava "concluído" e o recarregamento logo
+  // em seguida apagava o aviso antes de alguém ler. Trocar o período é que zera a mensagem.
   const carregar = useCallback(async () => {
-    setCarregando(true); setMsg(null);
+    setCarregando(true);
     try {
       const r = await apiCall(`/api/conciliacao?acao=listar&de=${de}&ate=${ate}`);
       const d = await r.json().catch(() => ({}));
@@ -44,6 +46,7 @@ export default function ConciliacaoBancaria() {
   }, [de, ate]);
 
   useEffect(() => { carregar(); }, [carregar]);
+  useEffect(() => { setMsg(null); }, [de, ate]);
 
   // Atualiza o lançamento conciliado NO ESTADO, sem refazer a consulta. Mantém o contador de
   // pendentes honesto e, com o filtro "só os que faltam" ligado, a linha sai da lista sozinha
@@ -67,7 +70,12 @@ export default function ConciliacaoBancaria() {
       const r = await apiCall('/api/conciliacao', { method: 'POST', body: JSON.stringify({ acao: nome, de, ate, ...corpo }) });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) setMsg({ tipo: 'erro', txt: d?.error || `Falha em ${rotulo}.` });
-      else { setMsg({ tipo: 'ok', txt: d.mensagem || `${rotulo} concluído.` }); await carregar(); }
+      else {
+        // Os avisos por conta (Inter, MP, Asaas…) vêm do servidor e antes eram descartados aqui.
+        const avisos = Array.isArray(d.avisos) && d.avisos.length ? ` Avisos: ${d.avisos.join(' · ')}` : '';
+        setMsg({ tipo: avisos ? 'aviso' : 'ok', txt: (d.mensagem || `${rotulo} concluído.`) + avisos });
+        await carregar();
+      }
     } catch { setMsg({ tipo: 'erro', txt: `Falha de conexão em ${rotulo}.` }); }
     setOcupado('');
   }
@@ -121,6 +129,13 @@ export default function ConciliacaoBancaria() {
   const contas = dados?.plano_contas || [];
   const r = dados?.resumo || {};
 
+  const faltam = r.pendentes || 0;
+  const irParaPendentes = () => {
+    setSoPendentes(true);
+    setTimeout(() => document.getElementById('conc-lancamentos')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+  };
+  const corMsg = { erro: ['#fef2f2', '#fecaca', '#dc2626'], aviso: ['#fffbeb', '#fde68a', '#92400e'], ok: ['#f0fdf4', '#bbf7d0', '#166534'] };
+
   const btn = (cor) => ({ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 13px', borderRadius: 9, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: cor, color: '#fff' });
 
   return (
@@ -145,9 +160,10 @@ export default function ConciliacaoBancaria() {
             if (!window.confirm(`Fechar a competência ${de}?\n\nDepois disso, nenhum lançamento entra, muda ou sai desse mês — é o que garante que a DRE entregue à contabilidade não mude depois. Dá para reabrir informando o motivo.`)) return;
             acao('fechar_competencia', { competencia: de }, 'Fechamento');
           }}
-          disabled={!!ocupado}
-          style={{ ...btn('#fff'), color: '#92400e', border: '1px solid #fcd34d' }}>
-          <Check size={14} /> Fechar {de}
+          disabled={!!ocupado || faltam > 0}
+          title={faltam > 0 ? `Classifique os ${faltam} lançamento(s) pendentes antes de fechar` : undefined}
+          style={{ ...btn('#fff'), color: faltam > 0 ? '#94a3b8' : '#92400e', border: `1px solid ${faltam > 0 ? '#e2e8f0' : '#fcd34d'}`, cursor: faltam > 0 ? 'not-allowed' : 'pointer' }}>
+          <Check size={14} /> {faltam > 0 ? `Fechar ${de} · faltam ${faltam}` : `Fechar ${de}`}
         </button>
         <button
           onClick={() => {
@@ -163,17 +179,52 @@ export default function ConciliacaoBancaria() {
       </div>
 
       <div style={{ fontSize: 11.5, color: '#64748b', marginBottom: 12, lineHeight: 1.55 }}>
-        O extrato das contas conectadas entra <strong>sozinho todo dia</strong> (janela de 45 dias, para pegar estorno e recebimento retroativo). O botão acima é só para ver o movimento de hoje sem esperar.
+        Inter, Mercado Pago e Asaas entram <strong>sozinhos todo dia às 05h25</strong>. “Atualizar agora” só traz o movimento de hoje sem esperar.
       </div>
+
+      {msg && (
+        <div style={{ background: corMsg[msg.tipo][0], border: `1px solid ${corMsg[msg.tipo][1]}`, color: corMsg[msg.tipo][2], borderRadius: 9, padding: '9px 13px', fontSize: 12.5, marginBottom: 12, lineHeight: 1.5 }}>{msg.txt}</div>
+      )}
+
+      {carregando && <div style={{ padding: 30, textAlign: 'center', color: '#64748b' }}><Loader2 size={19} style={{ animation: 'spin 1s linear infinite' }} /></div>}
+
+      {!carregando && dados && (
+        <>
+          {/* "A classificar" vem PRIMEIRO e é clicável: é a fila de trabalho e o que decide se a DRE
+              fecha. Entradas/saídas/resultado já excluem 9.1–9.3 (transferência entre contas
+              próprias, sócio, terceiros) — o servidor manda o que ficou de fora para mostrar à parte. */}
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
+            <button onClick={faltam > 0 ? irParaPendentes : undefined}
+              style={{ textAlign: 'left', background: faltam > 0 ? '#fffbeb' : '#fff', border: `1px solid ${faltam > 0 ? '#fcd34d' : '#e2e8f0'}`, borderRadius: 12, padding: '12px 15px', flex: 1, minWidth: 150, cursor: faltam > 0 ? 'pointer' : 'default' }}>
+              <div style={{ fontSize: 10.5, color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>A classificar</div>
+              <div style={{ fontSize: 17, fontWeight: 900, color: faltam > 0 ? '#b45309' : '#059669', marginTop: 3 }}>
+                {faltam > 0 ? `${faltam} → classificar` : '0 · em dia'}
+              </div>
+            </button>
+            {[['Entradas', brl(r.entradas), '#059669'], ['Saídas', brl(r.saidas), '#dc2626'],
+              ['Resultado', brl((r.entradas || 0) - (r.saidas || 0)), (r.entradas || 0) >= (r.saidas || 0) ? '#059669' : '#dc2626']].map(([rot, val, cor]) => (
+              <div key={rot} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '12px 15px', flex: 1, minWidth: 130 }}>
+                <div style={{ fontSize: 10.5, color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>{rot}</div>
+                <div style={{ fontSize: 17, fontWeight: 900, color: cor, marginTop: 3 }}>{val}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize: 11.5, color: '#64748b', marginBottom: 16, lineHeight: 1.5 }}>
+            {r.total || 0} lançamento(s) · {r.conciliados || 0} conferido(s) um a um
+            {r.nao_operacional?.qtd ? <> · fora do resultado (entre contas próprias, sócio, terceiros): entradas {brl(r.nao_operacional.entradas)}, saídas {brl(r.nao_operacional.saidas)}</> : null}
+            {r.truncado ? <strong style={{ color: '#dc2626' }}> · período com mais de 2.000 lançamentos — os totais podem estar incompletos</strong> : null}
+          </div>
+        </>
+      )}
 
       {/* ── EXTRATO DE BANCO POR ARQUIVO (OFX) ──────────────────────────────────────────
           Mercado Pago, Asaas e Inter entram por API. Bradesco, C6 e Caixa não têm caminho
           automático viável hoje — mas todos exportam OFX no internet banking. O arquivo
           entra aqui e segue o MESMO fluxo: mesma tabela, mesma classificação, mesma DRE.
           Reimportar não duplica (a chave é conta + identificador do lançamento). */}
-      <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '13px 15px', marginBottom: 14 }}>
-        <div style={{ fontSize: 12.5, fontWeight: 800, color: '#334155', marginBottom: 6 }}>Extrato de banco por arquivo (OFX)</div>
-        <div style={{ fontSize: 11.5, color: '#64748b', marginBottom: 10, lineHeight: 1.55 }}>
+      <details style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '11px 15px', marginBottom: 14 }}>
+        <summary style={{ fontSize: 12.5, fontWeight: 800, color: '#334155', cursor: 'pointer' }}>Importar extrato de outro banco (OFX) — Bradesco, C6, Caixa</summary>
+        <div style={{ fontSize: 11.5, color: '#64748b', margin: '8px 0 10px', lineHeight: 1.55 }}>
           Para Bradesco, C6, Caixa e qualquer conta sem integração. No internet banking, exporte o extrato no formato <strong>OFX</strong> (às vezes aparece como “Money”, “Dinheiro” ou “OFX/QIF”). Reimportar o mesmo arquivo <strong>não duplica</strong> lançamento.
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -195,45 +246,30 @@ export default function ConciliacaoBancaria() {
             <ul style={{ margin: '4px 0 0', paddingLeft: 16 }}>{ofxErros.slice(0, 8).map((e, i) => <li key={i}>{e}</li>)}</ul>
           </div>
         )}
-      </div>
-
-      {msg && (
-        <div style={{ background: msg.tipo === 'erro' ? '#fef2f2' : '#f0fdf4', border: `1px solid ${msg.tipo === 'erro' ? '#fecaca' : '#bbf7d0'}`, color: msg.tipo === 'erro' ? '#dc2626' : '#166534', borderRadius: 9, padding: '9px 13px', fontSize: 12.5, marginBottom: 12 }}>{msg.txt}</div>
-      )}
-
-      {carregando && <div style={{ padding: 30, textAlign: 'center', color: '#64748b' }}><Loader2 size={19} style={{ animation: 'spin 1s linear infinite' }} /></div>}
+      </details>
 
       {!carregando && dados && (
         <>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
-            {[['Entradas', brl(r.entradas), '#059669'], ['Saídas', brl(r.saidas), '#dc2626'],
-              ['Resultado', brl((r.entradas || 0) - (r.saidas || 0)), (r.entradas || 0) >= (r.saidas || 0) ? '#059669' : '#dc2626'],
-              ['Conciliados', `${r.conciliados || 0} de ${r.total || 0}`, '#475569'],
-              ['A classificar', String(r.pendentes || 0), (r.pendentes || 0) > 0 ? '#b45309' : '#059669']].map(([rot, val, cor]) => (
-              <div key={rot} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '12px 15px', flex: 1, minWidth: 130 }}>
-                <div style={{ fontSize: 10.5, color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>{rot}</div>
-                <div style={{ fontSize: 17, fontWeight: 900, color: cor, marginTop: 3 }}>{val}</div>
-              </div>
-            ))}
-          </div>
-
-          {(r.pendentes || 0) > 0 && (
-            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '10px 13px', fontSize: 12.5, color: '#92400e', marginBottom: 14, lineHeight: 1.55 }}>
-              <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
-              <span><strong>{r.pendentes} lançamento(s) em 9.9 A CLASSIFICAR.</strong> A DRE não fecha certa enquanto eles não tiverem conta — classifique antes de enviar à contabilidade.</span>
-            </div>
-          )}
-
           {/* Exportação */}
           <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '14px 16px', marginBottom: 16 }}>
             <div style={{ fontSize: 13.5, fontWeight: 900, color: '#111', marginBottom: 10 }}>Entregar à contabilidade</div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
               <button onClick={() => baixar('html')} disabled={!!ocupado} style={{ ...btn('#fff'), color: '#334155', border: '1px solid #cbd5e1' }}><Download size={14} /> Relatório (PDF)</button>
               <button onClick={() => baixar('ofx')} disabled={!!ocupado} style={{ ...btn('#fff'), color: '#334155', border: '1px solid #cbd5e1' }}><Download size={14} /> Extrato (OFX)</button>
-              <input value={emailContab} onChange={e => setEmailContab(e.target.value)} placeholder="e-mails da contabilidade (separe por vírgula)"
-                style={{ padding: '7px 10px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 13, minWidth: 300 }} />
-              <button onClick={() => acao('enviar', { email: emailContab }, 'Envio')} disabled={!!ocupado} style={btn('#059669')}>
-                {ocupado === 'enviar' ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Mail size={14} />} Enviar
+              {dados.destino_contabilidade?.length
+                ? <span style={{ fontSize: 12.5, color: '#334155' }}>Para: <strong>{dados.destino_contabilidade.join(', ')}</strong></span>
+                : <input value={emailContab} onChange={e => setEmailContab(e.target.value)} placeholder="e-mails da contabilidade (separe por vírgula)"
+                    style={{ padding: '7px 10px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 13, minWidth: 300 }} />}
+              <button
+                onClick={() => {
+                  if (!window.confirm(`Enviar à contabilidade a competência ${de}${ate !== de ? ` a ${ate}` : ''}?\n\n${r.total || 0} lançamento(s) · entradas ${brl(r.entradas)} · saídas ${brl(r.saidas)}.`)) return;
+                  acao('enviar', { email: emailContab }, 'Envio');
+                }}
+                disabled={!!ocupado || faltam > 0}
+                title={faltam > 0 ? `Classifique os ${faltam} lançamento(s) pendentes antes de enviar` : undefined}
+                style={{ ...btn(faltam > 0 ? '#94a3b8' : '#059669'), cursor: faltam > 0 ? 'not-allowed' : 'pointer' }}>
+                {ocupado === 'enviar' ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Mail size={14} />}
+                {faltam > 0 ? `Enviar · faltam ${faltam}` : 'Enviar'}
               </button>
             </div>
             <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 8, lineHeight: 1.55 }}>
@@ -255,7 +291,7 @@ export default function ConciliacaoBancaria() {
           )}
 
           {/* Lançamentos */}
-          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '14px 16px' }}>
+          <div id="conc-lancamentos" style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '14px 16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
               <div style={{ fontSize: 13.5, fontWeight: 900, color: '#111' }}>Lançamentos ({lancs.length})</div>
               <label style={{ fontSize: 12, color: '#475569', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>

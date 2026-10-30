@@ -48,6 +48,10 @@ const RPC_QUE_ESCREVEM = /^(aceitar|consumir|debitar|creditar|gerar|criar|atuali
 // entrar/sair da simulação e ao restaurar na montagem, então o bloqueio vale mesmo sem storage.
 let _simRoleMem = null;
 export function marcarSimulacao(role) { _simRoleMem = role || null; }
+export function emSimulacao() {
+  if (_simRoleMem) return _simRoleMem;
+  try { return sessionStorage.getItem('tsn_sim_role'); } catch { return null; } // storage off: só a flag de memória vale
+}
 
 function bloqueadoNaSimulacao(input, init) {
   try {
