@@ -5,6 +5,7 @@ import ServicosCartorio from '../components/ServicosCartorio';
 import { usePlanos, PlanosProvider } from '../contexts/PlanosContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
+import { registrarEvento } from '../utils/tracker.js';
 import { AZUL } from '../utils/marca';
 import { apiCall } from '../utils/apiCall';
 import { extrairDadosDeArquivo, textoDeArquivo, consolidarDocsImovel } from '../utils/claude';
@@ -8057,7 +8058,10 @@ function FinanceiroHub() {
     if (s === 'gateway') s = 'mp';
     return SUBS.some((x) => x.key === s) ? s : 'conciliacao';
   });
-  const irSub = (k) => { setSub(k); sessionStorage.setItem('admin_fin_sub', k); };
+  const irSub = (k) => {
+    setSub(k); sessionStorage.setItem('admin_fin_sub', k);
+    try { registrarEvento('click', { alvo: `admin_fin_sub:${k}`, detalhe: `w=${window.innerWidth}` }); } catch { /* telemetria nunca derruba a navegação */ }
+  };
 
   return (
     <div>
@@ -10711,6 +10715,17 @@ const GRUPOS_ADMIN = [
   { nome: 'Operacional',   icone: '⚙️', desc: 'Coleta, dados e qualidade',     tabs: ['Scrapers', 'Registros', 'CNJ', 'Editais', 'Qualidade', 'Demografia'] },
 ];
 
+// Contadores "precisa de você" por família (chaves = o que admin_precisa_de_voce() devolve).
+// Só entra aqui o que normalmente fica em ZERO — contador que nunca zera vira papel de parede.
+// `ir` = para onde o clique leva (aba e, no Financeiro, a sub-aba).
+const PENDENCIAS_FAMILIA = {
+  'Início':      [{ k: 'clientes_travados', rot: 'cliente(s) travado(s)', ir: { tab: 'Dashboard' } },
+                  { k: 'chamados_sem_resposta', rot: 'chamado(s) sem resposta', ir: { tab: 'Dashboard' } }],
+  'Financeiro':  [{ k: 'a_classificar', rot: 'a classificar', ir: { tab: 'Financeiro', sub: 'conciliacao' } },
+                  { k: 'chargebacks', rot: 'chargeback(s) aberto(s)', ir: { tab: 'Financeiro', sub: 'chargebacks' } }],
+  'Operacional': [{ k: 'fontes_zeradas', rot: 'fonte(s) zerada(s)', ir: { tab: 'Scrapers' } }],
+};
+
 // Rótulos amigáveis das abas — a CHAVE interna (usada em tab===..., sessionStorage) NÃO muda,
 // só o texto do botão. "Scrapers" vira "Operação de Coleta" (reposicionamento pedido).
 const ROTULO_TAB = {
@@ -11666,7 +11681,30 @@ export default function Admin() {
   useEffect(() => {
     if (new URLSearchParams(location.search).get('aba')) setTab(abaDaUrl(location.search));
   }, [location.search]); // eslint-disable-line react-hooks/exhaustive-deps
-  const mudarTab = (t) => { setTab(t); sessionStorage.setItem('admin_tab', t); };
+  // Registro de navegação (30/10, arena): quais abas o dono abre de fato e em que largura de tela.
+  // É o dado que decide o que cortar/reagrupar sem chute. Vai pelo tracker existente (tipo `click`).
+  const mudarTab = (t) => {
+    setTab(t); sessionStorage.setItem('admin_tab', t);
+    try { registrarEvento('click', { alvo: `admin_aba:${t}`, detalhe: `w=${window.innerWidth}` }); } catch { /* telemetria nunca derruba a navegação */ }
+  };
+
+  // PRECISA DE VOCÊ (30/10, arena): contadores por família, numa RPC só. null = não consegui contar
+  // → "?" (nunca "0", que leria como "em dia"). Relê a cada 5 min enquanto a tela está aberta.
+  const [pend, setPend] = useState(null);
+  const [pendErro, setPendErro] = useState(false);
+  useEffect(() => {
+    if (role !== 'admin') return undefined;
+    let vivo = true;
+    const ler = async () => {
+      const { data, error } = await supabase.rpc('admin_precisa_de_voce');
+      if (!vivo) return;
+      if (error) { console.warn('[admin] precisa_de_voce:', error.message); setPendErro(true); return; }
+      setPend(data); setPendErro(false);
+    };
+    ler();
+    const id = setInterval(ler, 5 * 60_000);
+    return () => { vivo = false; clearInterval(id); };
+  }, [role]);
   // A família aberta é DERIVADA da aba atual — não é estado paralelo. Assim voltar de outra tela
   // (ou o F5) cai sempre na família certa, sem um segundo lugar para dessincronizar.
   const familiaDaTab = (t) => (GRUPOS_ADMIN.find(g => g.tabs.includes(t)) || GRUPOS_ADMIN[0]).nome;
@@ -11675,6 +11713,14 @@ export default function Admin() {
   // Clicar na família abre a PRIMEIRA aba dela: um clique já leva a algum lugar útil, em vez de
   // só revelar mais botões.
   const abrirFamilia = (g) => { setFamiliaAberta(g.nome); if (!g.tabs.includes(tab)) mudarTab(g.tabs[0]); };
+  // Pendências de uma família: [{k, rot, ir, v}]. v null/undefined = não lido (ou falhou).
+  const pendDaFamilia = (nome) => (PENDENCIAS_FAMILIA[nome] || []).map(p => ({ ...p, v: pend?.[nome]?.[p.k] }));
+  const irPara = ({ tab: t, sub }) => {
+    if (sub) sessionStorage.setItem('admin_fin_sub', sub);
+    if (t === tab && sub) { setTab(''); setTimeout(() => mudarTab(t), 0); } // remonta o hub para abrir a sub certa
+    else mudarTab(t);
+  };
+  const pendTodas = Object.keys(PENDENCIAS_FAMILIA).flatMap(n => pendDaFamilia(n));
 
   if (loading) {
     return <div style={{ ...S.page, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><p style={{ color: '#64748b' }}>Carregando...</p></div>;
@@ -11729,15 +11775,29 @@ export default function Admin() {
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {GRUPOS_ADMIN.map(g => {
               const ativa = g.nome === familiaAberta;
+              const itens = pendDaFamilia(g.nome);
+              const comTrabalho = itens.filter(i => i.v > 0);
+              const total = comTrabalho.reduce((s, i) => s + i.v, 0);
+              // "?" só quando a leitura terminou (ou falhou) e algum contador veio nulo — antes de ler, nada.
+              const naoSei = itens.length > 0 && (pendErro || (pend && itens.some(i => i.v == null)));
               return (
-                <button key={g.nome} onClick={() => abrirFamilia(g)}
-                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2, padding: '10px 16px', borderRadius: 10, cursor: 'pointer',
+                <button key={g.nome} onClick={() => (comTrabalho.length ? (setFamiliaAberta(g.nome), irPara(comTrabalho[0].ir)) : abrirFamilia(g))}
+                  title={comTrabalho.length ? comTrabalho.map(i => `${i.v} ${i.rot}`).join(' · ') : naoSei ? 'Não consegui contar as pendências agora' : undefined}
+                  style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2, padding: '10px 16px', borderRadius: 10, cursor: 'pointer',
                     // Inativas em BRANCO com texto escuro (30/10, arena): herdavam o estilo de fundo escuro
                     // (texto #cbd5e1 sobre o cinza-claro da página = contraste 1,4:1, quase invisível).
                     border: `1px solid ${ativa ? '#0D63DB' : '#cbd5e1'}`, background: ativa ? '#0D63DB' : '#fff',
                     color: ativa ? '#fff' : '#334155', minWidth: 150, textAlign: 'left', transition: 'all .15s' }}>
                   <span style={{ fontSize: 13.5, fontWeight: 800 }}>{g.icone} {g.nome}</span>
-                  <span style={{ fontSize: 11, color: ativa ? 'rgba(255,255,255,0.85)' : '#64748b' }}>{g.desc}</span>
+                  {comTrabalho.length
+                    ? <span style={{ fontSize: 11, fontWeight: 700, color: ativa ? '#fde68a' : '#b45309' }}>{comTrabalho.map(i => `${i.v} ${i.rot}`).join(' · ')}</span>
+                    : <span style={{ fontSize: 11, color: ativa ? 'rgba(255,255,255,0.85)' : '#64748b' }}>{g.desc}</span>}
+                  {(total > 0 || naoSei) && (
+                    <span style={{ position: 'absolute', top: -7, right: -7, minWidth: 20, height: 20, padding: '0 6px', borderRadius: 10, fontSize: 11, fontWeight: 800,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', background: total > 0 ? '#dc2626' : '#94a3b8', boxShadow: '0 0 0 2px #fff' }}>
+                      {total > 0 ? total : '?'}
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -11756,6 +11816,32 @@ export default function Admin() {
           })()}
         </div>
 
+        {/* PRECISA DE VOCÊ — a fila do dia no topo do Início (30/10, arena). Só aparece o que tem
+            trabalho; vazio mostra "em dia" com a hora da leitura, e leitura falha diz que falhou. */}
+        {tab === 'Dashboard' && (pend || pendErro) && (
+          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '12px 16px', marginBottom: 16 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 900, color: '#111', marginBottom: 8 }}>Precisa de você</div>
+            {pendErro ? (
+              <div style={{ fontSize: 12.5, color: '#b45309' }}>Não consegui ler as pendências agora — os números abaixo seguem valendo; tente recarregar em instantes.</div>
+            ) : pendTodas.some(p => p.v > 0) ? (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {pendTodas.filter(p => p.v > 0).map(p => (
+                  <button key={p.k} onClick={() => irPara(p.ir)}
+                    style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid #fcd34d', background: '#fffbeb', color: '#92400e', fontSize: 12.5, fontWeight: 800, cursor: 'pointer' }}>
+                    {p.v} {p.rot} →
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div style={{ fontSize: 12.5, color: '#059669', fontWeight: 700 }}>
+                {pendTodas.some(p => p.v == null)
+                  ? <span style={{ color: '#94a3b8' }}>Nada pendente no que consegui contar — {pendTodas.filter(p => p.v == null).map(p => p.rot).join(', ')} ficou sem leitura</span>
+                  : 'Em dia'}
+                {pend?.lido_em ? ` · conferido às ${new Date(pend.lido_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : ''}
+              </div>
+            )}
+          </div>
+        )}
         {tab === 'Dashboard'      && <DashboardTab irParaTab={mudarTab} />}
         {tab === 'Aula ao vivo'   && <LiveTab />}
         {tab === 'Cursos'         && <CursosTab />}
