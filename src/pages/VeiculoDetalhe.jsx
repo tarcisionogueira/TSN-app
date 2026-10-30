@@ -55,6 +55,18 @@ function fotosArray(v) {
   return [];
 }
 
+// 30/10 (dono: "as fotos sempre demoram"): a galeria pedia o ORIGINAL do leiloeiro — medido no Jetta
+// da SUPERBID: 10 fotos de ~2,5 MB (4–8 s cada), e as miniaturas de 56 px baixavam as mesmas 10. O
+// proxy já entrega WebP reduzido (`?w=`, larguras 240/480/800): a mesma foto em 800 px tem ~25 KB.
+// URL crua do leiloeiro (quem lê `veiculos_leilao` direto) passa pelo proxy só para reduzir; se o
+// proxy recusar o host, a tela cai no original (ver `fotoOriginal` / onError das miniaturas).
+const fotoReduzida = (u, w) => {
+  const s = String(u || '');
+  if (s.startsWith('/api/img-proxy?')) return /[?&]w=/.test(s) ? s : `${s}&w=${w}`;
+  if (/^https:\/\//i.test(s)) return `/api/img-proxy?url=${encodeURIComponent(s)}&w=${w}`;
+  return s;
+};
+
 function fmtDataLeilao(d) {
   if (!d) return 'Data não informada';
   try { return new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
@@ -135,8 +147,9 @@ export default function VeiculoDetalhe() {
   const [erro, setErro] = useState(null);
   const [fotoAtiva, setFotoAtiva] = useState(0);
   const [fotoFalhou, setFotoFalhou] = useState(null);   // índice da foto que não carregou
+  const [fotoOriginal, setFotoOriginal] = useState(null); // índice cuja versão reduzida falhou → tenta o original
   // Outro veículo na mesma rota (/veiculo/:id) reaproveita o componente: a foto escolhida não pode vazar de um para outro.
-  useEffect(() => { setFotoAtiva(0); setFotoFalhou(null); }, [id]);
+  useEffect(() => { setFotoAtiva(0); setFotoFalhou(null); setFotoOriginal(null); }, [id]);
   const [propondo, setPropondo] = useState(false);
   const [buscandoFipe, setBuscandoFipe] = useState(false);
   const [cotaEsgotada, setCotaEsgotada] = useState(false);
@@ -339,10 +352,15 @@ export default function VeiculoDetalhe() {
             {fotos.length
               ? (fotoFalhou === fotoAtiva
                 ? <span style={{ fontSize: 13, color: '#64748b', padding: 16, textAlign: 'center' }}>Não foi possível carregar a foto {fotoAtiva + 1}. Tente a próxima.</span>
-                : <img key={fotos[fotoAtiva]} src={fotos[fotoAtiva]} alt={`${v.titulo || 'Veículo'} — foto ${fotoAtiva + 1}`}
-                    onError={() => setFotoFalhou(fotoAtiva)}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }} />)
+                : (() => {
+                    const src = fotoOriginal === fotoAtiva ? fotos[fotoAtiva] : fotoReduzida(fotos[fotoAtiva], 800);
+                    return <img key={src} src={src} alt={`${v.titulo || 'Veículo'} — foto ${fotoAtiva + 1}`}
+                      onError={() => (src !== fotos[fotoAtiva] ? setFotoOriginal(fotoAtiva) : setFotoFalhou(fotoAtiva))}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }} />;
+                  })())
               : <Car size={48} color="#cbd5e1" />}
+            {/* Pré-carrega a PRÓXIMA foto (já reduzida): a seta troca sem espera. */}
+            {fotos.length > 1 && <img src={fotoReduzida(fotos[(fotoAtiva + 1) % fotos.length], 800)} alt="" aria-hidden="true" style={{ display: 'none' }} />}
             {fotos.length > 1 && (<>
               <button aria-label="Foto anterior" onClick={() => setFotoAtiva((fotoAtiva - 1 + fotos.length) % fotos.length)}
                 style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', width: 36, height: 36, borderRadius: 18, border: 'none', background: 'rgba(15,23,42,0.55)', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -362,7 +380,9 @@ export default function VeiculoDetalhe() {
               {fotos.map((f, i) => (
                 <button key={i} onClick={() => setFotoAtiva(i)}
                   style={{ flexShrink: 0, width: 56, height: 56, borderRadius: 8, overflow: 'hidden', border: i === fotoAtiva ? '2px solid #0D63DB' : '1px solid #e2e8f0', padding: 0, cursor: 'pointer', background: 'none' }}>
-                  <img src={f} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  <img src={fotoReduzida(f, 240)} alt="" loading="lazy"
+                    onError={(e) => { if (e.currentTarget.src !== f && !e.currentTarget.dataset.orig) { e.currentTarget.dataset.orig = '1'; e.currentTarget.src = f; } }}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 </button>
               ))}
             </div>
