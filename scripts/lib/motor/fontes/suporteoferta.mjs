@@ -17,7 +17,8 @@ export default {
   // 28/10: 3 → 10. A busca lista do id MAIS ANTIGO para o mais novo (20 por página): a DH Leilões tem 178 imóveis em 9
   // páginas e as 3 primeiras são só encerrados (os 54 abertos estão nas páginas 4–9). O laço para sozinho na página que
   // não traz lote novo, então tenant pequeno continua lendo 1–2 páginas.
-  maxPages: 10,
+  maxPages: 14,   // 30/10: DH tem 11 páginas de 20 (215 lotes); folga para crescer
+
   tenants: Object.values(TENANTS),
   parse: { extrairUrlsDeLote, idDaUrl, parseDetalhe, montarRow, checarQualidade },
   conhecimento: {
