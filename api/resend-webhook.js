@@ -13,6 +13,51 @@ import { timingSafeEqualStr } from './_auth.js';
 const SB = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const KEY = process.env.SUPABASE_SERVICE_KEY;
 const SECRET = process.env.RESEND_WEBHOOK_SECRET;
+const RESEND_KEY = process.env.RESEND_API_KEY;
+
+const sbHeaders = () => ({ apikey: KEY, Authorization: `Bearer ${KEY}`, 'Content-Type': 'application/json' });
+const enderecoDe = (s) => (String(s || '').match(/<([^>]+)>/)?.[1] || String(s || '')).trim().toLowerCase();
+const lista = (v) => (Array.isArray(v) ? v : v ? [v] : []).map(enderecoDe).filter(Boolean);
+
+// Espelha em `email_caixa` (Enviados) um envio que não passou pelo app. Ver o chamador.
+async function espelharEnvioNaCaixa(emailId, tipo, at) {
+  if (!RESEND_KEY) { console.error('[resend-webhook] espelho: RESEND_API_KEY ausente'); return; }
+  try {
+    const ja = await fetch(`${SB}/rest/v1/email_caixa?resend_email_id=eq.${encodeURIComponent(emailId)}&select=id&limit=1`,
+      { headers: sbHeaders(), signal: AbortSignal.timeout(4000) });
+    const linhas = ja.ok ? await ja.json().catch(() => null) : null;
+    if (!Array.isArray(linhas)) { console.error('[resend-webhook] espelho: checagem HTTP', ja.status); return; }
+    if (linhas.length) return;
+
+    const r = await fetch(`https://api.resend.com/emails/${encodeURIComponent(emailId)}`,
+      { headers: { Authorization: `Bearer ${RESEND_KEY}` }, signal: AbortSignal.timeout(4000) });
+    if (!r.ok) { console.error('[resend-webhook] espelho: Resend HTTP', r.status); return; }
+    const em = await r.json().catch(() => null);
+    if (!em?.from) { console.error('[resend-webhook] espelho: e-mail sem remetente no Resend'); return; }
+
+    const de = enderecoDe(em.from);
+    const eq = await fetch(`${SB}/rest/v1/equipe_email?endereco=eq.${encodeURIComponent(de)}&select=user_id&limit=1`,
+      { headers: sbHeaders(), signal: AbortSignal.timeout(4000) });
+    const donos = eq.ok ? await eq.json().catch(() => null) : null;
+    if (!Array.isArray(donos)) { console.error('[resend-webhook] espelho: equipe_email HTTP', eq.status); return; }
+    if (!donos.length) return; // remetente de sistema: não é caixa pessoal
+
+    const nome = String(em.from).includes('<') ? String(em.from).split('<')[0].trim().replace(/^"|"$/g, '') : null;
+    const ins = await fetch(`${SB}/rest/v1/email_caixa`, {
+      method: 'POST', headers: { ...sbHeaders(), Prefer: 'resolution=ignore-duplicates,return=minimal' },
+      body: JSON.stringify({
+        direcao: 'saida', pasta: 'enviados', caixa: de, de_email: de, de_nome: nome || null,
+        dono: donos[0].user_id, enviado_por: donos[0].user_id,
+        para: lista(em.to), cc: lista(em.cc), assunto: String(em.subject || '').slice(0, 300),
+        texto: em.text || null, html: em.html || null, message_id: em.message_id || null,
+        resend_email_id: emailId, lido: true, criado_em: em.created_at || at,
+        ...(tipo === 'email.delivered' ? { entregue_em: at, entrega_status: 'entregue' } : { entrega_status: 'bounce' }),
+      }),
+      signal: AbortSignal.timeout(4000),
+    });
+    if (!ins.ok) console.error('[resend-webhook] espelho: insert HTTP', ins.status, (await ins.text().catch(() => '')).slice(0, 200));
+  } catch (e) { console.error('[resend-webhook] espelho:', String(e?.message || e)); }
+}
 
 export default async function handler(req, res) {
   if (req.method === 'GET' || req.method === 'HEAD') {
@@ -116,7 +161,9 @@ export default async function handler(req, res) {
         : tipo === 'email.clicked' ? [{ clicado_em: at }, '&clicado_em=is.null']
         : tipo === 'email.bounced' ? [{ entrega_status: 'bounce' }, '']
         : tipo === 'email.complained' ? [{ entrega_status: 'reclamacao' }, ''] : null;
+      let caixaCasou = null; // null = não deu para saber (erro); false = nenhuma linha na caixa
       if (carimboCaixa) {
+        caixaCasou = false;
         for (const cand of cands) {
           try {
             const rc = await fetch(`${SB}/rest/v1/email_caixa?resend_email_id=eq.${encodeURIComponent(cand)}${carimboCaixa[1]}`, {
@@ -124,11 +171,24 @@ export default async function handler(req, res) {
               headers: { apikey: KEY, Authorization: `Bearer ${KEY}`, 'Content-Type': 'application/json', Prefer: 'return=representation' },
               body: JSON.stringify(carimboCaixa[0]), signal: AbortSignal.timeout(4000),
             });
-            if (!rc.ok) { console.error('[resend-webhook] caixa HTTP', rc.status); break; }
+            if (!rc.ok) { console.error('[resend-webhook] caixa HTTP', rc.status); caixaCasou = null; break; }
             const l = await rc.json().catch(() => []);
-            if (Array.isArray(l) && l.length) break;
-          } catch (e) { console.error('[resend-webhook] caixa:', String(e?.message || e)); break; }
+            if (Array.isArray(l) && l.length) { caixaCasou = true; break; }
+          } catch (e) { console.error('[resend-webhook] caixa:', String(e?.message || e)); caixaCasou = null; break; }
         }
+      }
+
+      // ENVIO FEITO FORA DO APP (30/10, dono: "as caixas devem estar sincronizadas sempre").
+      // E-mail mandado pela caixa do próprio Resend (ou pela sessão do Claude, via MCP) não passa
+      // por api/email-caixa.js, então nunca entrava em Enviados — os 4 convites a leiloeiros de
+      // 30/10 só apareciam no Resend. Na entrega (ou bounce) sem linha na caixa, buscamos o e-mail
+      // no Resend e, se o remetente é o endereço PESSOAL de alguém da equipe (`equipe_email`),
+      // registramos em Enviados dessa pessoa. Endereço de sistema (contato@, avisos de cron) fica
+      // de fora de propósito: viraria milhares de linhas que ninguém mandou à mão.
+      // O `carimboCaixa[1]` filtra `entregue_em=is.null`: um `delivered` repetido não casa e cairia
+      // aqui — por isso o espelho confere a existência pelo id antes de inserir.
+      if (caixaCasou === false && (tipo === 'email.delivered' || tipo === 'email.bounced')) {
+        await espelharEnvioNaCaixa(emailId, tipo, at);
       }
 
       // NÃO ACHOU A LINHA: registra as CHAVES do payload em vez de sumir em silêncio.
