@@ -75,3 +75,10 @@ for (const d of ['Parte ideal de 50% do lote urbano nº 23-B, com área total de
   assert.equal(ehFracaoIdeal({ titulo: 'Imóvel', descricao: d }), true, `v5: devia barrar: ${d}`);
 console.log('ok — v5 (parte ideal em m²)');
 
+
+// 30/10 — sala comercial "do edifício … e sua correspondente fração ideal de N/M do respectivo terreno" é a unidade
+// inteira (PAULOBOTELHO 15930, Av. Presidente Vargas, 590). Sem "sala … edifício" no contexto de unidade, saía como fatia.
+assert.equal(ehFracaoIdeal({ titulo: 'Avenida Presidente Vargas, 590 - Rio de Janeiro/RJ', descricao: 'Sala 201 do edifício situado na Avenida Presidente Vargas, 590 e sua correspondente fração ideal de 36/15.460 do respectivo terreno, com demais medidas e confrontações constantes na matrícula sob o n.º 15.201' }), false, 'sala do edifício com fração do terreno não barra');
+assert.equal(ehFracaoIdeal({ titulo: '50% da sala 201', descricao: '50% da Sala 201 do edifício X e sua fração ideal do terreno' }), true, 'porcentagem da sala no título continua barrando');
+assert.equal(ehFracaoIdeal({ titulo: 'Sala', descricao: 'fração ideal de 1/3 sobre o imóvel sala 201 do edifício X' }), true, 'fração SOBRE o imóvel continua barrando');
+console.log('ok — sala comercial do edifício');

@@ -136,6 +136,8 @@
     "testar:mvleiloes": "node scripts/testes/mvleiloes-parse.mjs",
     "testar:dian": "node scripts/testes/dian-parse.mjs",
     "testar:parquedosleiloes": "node scripts/testes/parquedosleiloes-parse.mjs",
+    "testar:campolina": "node scripts/testes/campolina-parse.mjs",
+    "testar:botelho": "node scripts/testes/botelho-parse.mjs",
     "testar:leiloar2": "node scripts/testes/leiloar-segundo-template.mjs",
     "testar:leilovia": "node scripts/testes/leilovia-parse.mjs",
     "testar:labasoft": "node scripts/testes/labasoft-parse.mjs",

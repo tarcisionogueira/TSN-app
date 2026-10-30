@@ -337,7 +337,9 @@ const RE_CLAUSULAS_V4 = [
   /(terreno|privativa)\s*\/?\s*\(?\s*fra[çc][ãa]o\s+ideal/i,
   /terreno\s*:?\s*[0-9][0-9.,]*\s*m[²2]\s*\(\s*fra[çc][ãa]o\s+ideal\s*\)/i,
 ];
-const RE_CONTEXTO_UNIDADE = /(condom[íi]nio|[áa]rea\s+privativa|[áa]rea\s+[úu]til|[áa]rea\s+real|unidade\s+aut[ôo]noma|coisas\s+comuns|[áa]reas\s+comuns|coisas\s+de\s+uso\s+comum|apartamento|(?<![a-zà-ú])casa(?![a-zà-ú])|sobrado|(?<![a-zà-ú])loja(?![a-zà-ú])|[áa]rea\s+(total\s+)?constru[íi]da|[áa]rea\s+edificada|vagas?\s+(de\s+|na\s+)?garagem)/i;
+// 30/10: + "sala … do edifício" (PAULOBOTELHO 15930: "Sala 201 do edifício situado na Av. Presidente Vargas, 590 e sua
+// correspondente fração ideal de 36/15.460 do respectivo terreno") — a sala comercial inteira saía como fatia.
+const RE_CONTEXTO_UNIDADE = /(condom[íi]nio|[áa]rea\s+privativa|[áa]rea\s+[úu]til|[áa]rea\s+real|unidade\s+aut[ôo]noma|coisas\s+comuns|[áa]reas\s+comuns|coisas\s+de\s+uso\s+comum|apartamento|(?<![a-zà-ú])casa(?![a-zà-ú])|sobrado|(?<![a-zà-ú])loja(?![a-zà-ú])|(?<![a-zà-ú])salas?\s+(?:comercia(?:l|is)\s+)?(?:n[º°o.]*\s*)?\d+[^.;]{0,40}?\bedif[íi]cio|[áa]rea\s+(total\s+)?constru[íi]da|[áa]rea\s+edificada|vagas?\s+(de\s+|na\s+)?garagem)/i;
 
 export function ehFracaoIdeal(imovel) {
   const titulo = imovel?.titulo || '';

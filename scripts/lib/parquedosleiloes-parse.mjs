@@ -54,7 +54,14 @@ const TIPOS = [
   [/\bsobrado\b/i, 'Sobrado'], [/\bcasa\b/i, 'Casa'], [/\bgalp[ãa]o\b/i, 'Galpão'], [/\bpr[ée]dio\b/i, 'Prédio'],
   [/\bfazenda\b|\bch[áa]cara\b|\bs[íi]tio\b|im[óo]vel rural/i, 'Imóvel rural'], [/\bterreno\b|lote de terras?\b|\blote\s+(?:n[º°o.]|urbano)/i, 'Terreno'],
 ];
-export const tipoDaDescricao = (t) => (TIPOS.find(([re]) => re.test(String(t || ''))) || [])[1] || null;
+// Vale o que aparece PRIMEIRO no texto (empate: ordem da lista). Pela ordem da lista, uma palavra no meio do texto
+// jurídico ganhava do bem descrito na abertura (PAULOBOTELHO 30/10: "Sala 201 do edifício…" saía apartamento).
+export const tipoDaDescricao = (t) => {
+  const s = String(t || '');
+  let melhor = null;
+  for (const [re, nome] of TIPOS) { const i = s.search(re); if (i >= 0 && (!melhor || i < melhor.i)) melhor = { i, nome }; }
+  return melhor?.nome || null;
+};
 
 export function parseDetalhe(html, url, { agora = new Date() } = {}) {
   const h = String(html || '');

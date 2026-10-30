@@ -29,8 +29,24 @@
   `status_name` envelhece — encerrado é `ended_at` passado. 1ª coleta GRAVADA: 5 judiciais abertos (Edéia/GO ×2, 3 salas
   no SCS/DF). Passo no scraper-dom; `testar:parquedosleiloes` (17 asserções).
 - **Rossi:** sem imóvel (categoria vazia, SSR) — leilões de máquinas/carros/sucata. Anotado em `leiloeiro_triagem`.
-- **Fila #380, próximos:** Luiz Campolina (WordPress, 21 links, TRT3), Grupo Carvalho (Next.js, 15), Paulo Botelho,
-  A Leiloeira, D1 Lance. Bom Valor/Paganini (7 white-labels) segue NÃO integrar (rede colaborativa já via Globo).
+- **LUIZ CAMPOLINA (Sete Lagoas/MG, TRT3):** WordPress + WooCommerce — o catálogo é a Store API pública
+  (`/wp-json/wc/store/v1/products?category=imoveis&per_page=100`) e já traz o detalhe (`detalhesDoCatalogo`): 1 requisição.
+  Preço do WooCommerce vem 0 — valor só no texto ("LANCE MÍNIMO … R$"). "*SUSPENSO*"/"*CANCELADO*" no nome = encerrado.
+  Gravado: 1 gleba de 10 mil m² (lance 4,5 mi); 3 suspensos, 1 fração. `testar:campolina`.
+- **PAULO BOTELHO (RJ, TRT1):** plataforma própria SSR; `/lotes/imoveis?page=N` já filtra imóvel (leilões de nome
+  enganoso, "bens-moveis-…", trazem salas e apartamentos). Cabeçalho = ENDEREÇO → tipo lido da descrição pela 1ª
+  ocorrência (`tipoDaDescricao`, agora por posição — por prioridade "Sala 201" saía apartamento). "50% RUA …" vira
+  "50% do imóvel - …" para a regra de fração do título barrar. **64 gravados** (2 frações descartadas). `testar:botelho`.
+  Gêmeos reais com LEILAOBRASIL (prédio R. José dos Reis 1973) e JUSSIARALEIL (terreno em Campos) — leilões distintos.
+- **Grupo Carvalho:** sem imóvel (1 casa em toda a história, mai/2025; hoje só sucata/Detran/DER).
+- ⚠️ **Fração ideal — sala de edifício (global):** "Sala 201 do edifício … e sua correspondente fração ideal de 36/15.460
+  do respectivo terreno" saía como FATIA (o contexto de unidade não tinha sala). JS corrigido (`RE_CONTEXTO_UNIDADE`,
+  teste em `fracao-ideal.mjs`); **migração `20261030_fracao_sala_do_edificio.sql` escrita e NÃO aplicada** (a aplicação
+  pela sessão foi barrada) — até o dono aplicar, o `trg_imovel_fracao_ideal` desativa salas comerciais inteiras
+  (hoje: paulobotelho_15930).
+- **Placar 30/10 noite:** 1.186 conectados · 282 com site a conectar.
+- **Fila #380, próximos:** A Leiloeira (páginas internas 404 sem sessão), D1 Lance. Bom Valor/Paganini (7 white-labels)
+  segue NÃO integrar (rede colaborativa já via Globo).
 
 ## 30/10 (manhã) — DEPLOY DESTRAVADO + STALE DE LEILOEIRO EM LOTES
 

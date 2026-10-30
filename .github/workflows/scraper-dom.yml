@@ -110,11 +110,17 @@ on:
       - 'scripts/scraper-parquedosleiloes.mjs'
       - 'scripts/lib/parquedosleiloes-parse.mjs'
       - 'scripts/lib/motor/fontes/parquedosleiloes.mjs'
+      - 'scripts/scraper-campolina.mjs'
+      - 'scripts/lib/campolina-parse.mjs'
+      - 'scripts/lib/motor/fontes/campolina.mjs'
+      - 'scripts/scraper-botelho.mjs'
+      - 'scripts/lib/botelho-parse.mjs'
+      - 'scripts/lib/motor/fontes/botelho.mjs'
       - '.github/workflows/scraper-dom.yml'
   workflow_dispatch:
     inputs:
       fontes:
-        description: 'csv: softgt,nortedeminas,leilaoeletronico,suportev2,suportenext,leilovia,labasoft,baston,cassiano,arnaldo,novaserrana(recon),alfa,hasta,nordeste,nordeste_veiculos,jeleiloes,leilaoindex,rocha,albertomacedo,francoleiloes,simon,globo,leje,freitas,leiloar,lgcorretor,nakakogue,astavero,suporteoferta,comprei,leilo,lucian,alliance,mvleiloes,dian,parquedosleiloes'
+        description: 'csv: softgt,nortedeminas,leilaoeletronico,suportev2,suportenext,leilovia,labasoft,baston,cassiano,arnaldo,novaserrana(recon),alfa,hasta,nordeste,nordeste_veiculos,jeleiloes,leilaoindex,rocha,albertomacedo,francoleiloes,simon,globo,leje,freitas,leiloar,lgcorretor,nakakogue,astavero,suporteoferta,comprei,leilo,lucian,alliance,mvleiloes,dian,parquedosleiloes,campolina,botelho'
         required: false
         default: 'alfa,nordeste'
       gravar:
@@ -273,6 +279,26 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           PARQUEDOSLEILOES_DRYRUN: ${{ env.DRYRUN_PADRAO }}
         run: node scripts/scraper-parquedosleiloes.mjs
+
+      - name: Luiz Campolina (Sete Lagoas/MG — imóveis do TRT3)
+        # 30/10 (fila #380): WooCommerce; o catálogo é a Store API em JSON (categoria imoveis) com o detalhe dentro — uma
+        # requisição só. Seco de 30/10: 1 aberto (gleba de 10 mil m² em Sete Lagoas), 3 suspensos, 1 fração (descartada).
+        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'campolina')) }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          CAMPOLINA_DRYRUN: ${{ env.DRYRUN_PADRAO }}
+        run: node scripts/scraper-campolina.mjs
+
+      - name: Paulo Botelho (Rio de Janeiro/RJ — imóveis do TRT1 e extrajudiciais)
+        # 30/10 (fila #380): plataforma própria server-rendered; /lotes/imoveis já filtra imóvel (66 lotes em 6 páginas,
+        # em leilões de nome enganoso como "bens-moveis-…"). Fetch grátis; ~2 min na 1ª rodada.
+        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'botelho')) }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          BOTELHO_DRYRUN: ${{ env.DRYRUN_PADRAO }}
+        run: node scripts/scraper-botelho.mjs
 
       - name: Leiloeiro Dian (Vacaria/Passo Fundo/Lagoa Vermelha — RS)
         # 29/10 (fila #380): Next.js; a página do item só tem dado depois do JS → fonte `dom` (Chromium deste job).
