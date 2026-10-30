@@ -7,6 +7,17 @@
 
 
 
+## 29/10 (noite) — LEILOEIRO DIAN (fonte `dom`)
+
+**DIANLEILOES** (`scraper-dian.mjs`, `lib/dian-parse.mjs`, `lib/motor/fontes/dian.mjs`, passo no scraper-dom,
+`testar:dian` 19 asserções com home + 2 itens RENDERIZADOS). Next.js + Supabase próprio: a página do item vem
+"Carregando leilão…" do servidor e só tem dado depois do JS → `fetch: 'dom'` (Chromium do job). A API do Supabase do
+site NÃO é usada — tirar a chave do JS do site foi vetado como contorno de acesso. Listagens home + /agenda +
+/venda-direta (29 itens, 10 imóveis; veículo/máquina nem são abertos). Item: pares `<p>rótulo</p><p>valor</p>` (1ª/2ª
+praça com ano), valor por praça, "Ver edital", galeria `alt="… - Imagem N"` (o bloco "Leilões semelhantes" é de outros
+itens). **Venda direta não mostra preço no item** — vem do card da listagem (mapa CARDS, como o FEED do
+leilaoeletronico). Fração 12,5%, quotas e box saem pelas regras de sempre.
+
 ## 29/10 (tarde) — COBERTURA DE LEILOEIROS RECONTADA + MV LEILÕES
 
 **Quadro dos 2.150 leiloeiros ATIVOS das juntas** (triagem corrigida e medida em 29/10, `medicao_2910`): 949 cobertos
