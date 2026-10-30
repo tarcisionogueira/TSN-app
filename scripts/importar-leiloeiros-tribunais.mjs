@@ -74,7 +74,11 @@ let lidos = 0;
 for (const [trib, ler] of fontes) {
   let rows;
   try { rows = await ler(); }
-  catch (e) { falhas.push(`${trib}: ${e.message}`); console.log(`   ${trib}: ✗ ${e.message} — ninguém dele é marcado como sumido`); continue; }
+  catch (e) {
+    console.log(`   ${trib}: ✗ ${e.message} — ninguém dele é marcado como sumido`);
+    falhas.push(`${trib}: ${e.message}`);
+    continue;
+  }
   if (!rows.length) continue;
   lidos += rows.length;
   console.log(`   ${trib}: ${rows.length} leiloeiro(s)`);
@@ -94,8 +98,9 @@ if (SO_LER) { console.log(`[tribunais] SÓ LER — ${lidos} linhas lidas, nada g
 const { data: cruz, error: eCruz } = await supabase.rpc('leiloeiro_tribunal_cruzar');
 if (eCruz) falhas.push(`cruzar: ${eCruz.message}`);
 const por = Object.fromEntries((cruz || []).map((r) => [r.situacao, Number(r.n)]));
-const { data: fora } = await supabase.from('leiloeiro_tribunal').select('tribunal, nome, dominio, primeiro_visto_em')
+const { data: fora, error: eFora } = await supabase.from('leiloeiro_tribunal').select('tribunal, nome, dominio, primeiro_visto_em')
   .eq('ativo', true).eq('situacao_cadastro', 'fora').order('primeiro_visto_em', { ascending: false }).limit(200);
+if (eFora) falhas.push(`fora: ${eFora.message}`);   // sem isso, falha de leitura sairia como "0 fora do cadastro"
 const novosFora = (fora || []).filter((r) => r.primeiro_visto_em >= t0.toISOString());
 console.log(`[tribunais] ${lidos} linhas · cruzamento: ${JSON.stringify(por)}`);
 console.log(`[tribunais] fora do cadastro (credenciados sem nada nosso): ${(fora || []).length}${novosFora.length ? ` — ${novosFora.length} NOVO(S) nesta importação` : ''}`);
