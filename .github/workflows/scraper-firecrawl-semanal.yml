@@ -33,7 +33,9 @@ on:
 jobs:
   firecrawl:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 30 → 60 (30/10): em 26/10 o job foi CANCELADO aos 30 min no último passo (Emílio Matos), que
+    # está "parcial" desde 19/10. Repo público = minuto de Actions sem custo.
+    timeout-minutes: 60
     env:
       DRYRUN_PADRAO: ${{ (github.event_name == 'schedule' || github.event.inputs.gravar == '1') && '0' || '1' }}
       FONTES: ${{ github.event.inputs.fontes || 'leje,mgl' }}
