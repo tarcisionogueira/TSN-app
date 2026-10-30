@@ -119,11 +119,35 @@ on:
       - 'scripts/scraper-triacca.mjs'
       - 'scripts/lib/triacca-parse.mjs'
       - 'scripts/lib/motor/fontes/triacca.mjs'
+      - 'scripts/scraper-jorgebrasil.mjs'
+      - 'scripts/lib/jorgebrasil-parse.mjs'
+      - 'scripts/lib/motor/fontes/jorgebrasil.mjs'
+      - 'scripts/scraper-flaviogarcia.mjs'
+      - 'scripts/lib/flaviogarcia-parse.mjs'
+      - 'scripts/lib/motor/fontes/flaviogarcia.mjs'
+      - 'scripts/scraper-leiloesbrasilto.mjs'
+      - 'scripts/lib/leiloesbrasilto-parse.mjs'
+      - 'scripts/lib/motor/fontes/leiloesbrasilto.mjs'
+      - 'scripts/scraper-wrleiloes.mjs'
+      - 'scripts/lib/wrleiloes-parse.mjs'
+      - 'scripts/lib/motor/fontes/wrleiloes.mjs'
+      - 'scripts/scraper-turani.mjs'
+      - 'scripts/lib/turani-parse.mjs'
+      - 'scripts/lib/motor/fontes/turani.mjs'
+      - 'scripts/scraper-benedetto.mjs'
+      - 'scripts/lib/benedetto-parse.mjs'
+      - 'scripts/lib/motor/fontes/benedetto.mjs'
+      - 'scripts/scraper-cristianoescola.mjs'
+      - 'scripts/lib/cristianoescola-parse.mjs'
+      - 'scripts/lib/motor/fontes/cristianoescola.mjs'
+      - 'scripts/scraper-d1lance.mjs'
+      - 'scripts/lib/d1lance-parse.mjs'
+      - 'scripts/lib/motor/fontes/d1lance.mjs'
       - '.github/workflows/scraper-dom.yml'
   workflow_dispatch:
     inputs:
       fontes:
-        description: 'csv: softgt,nortedeminas,leilaoeletronico,suportev2,suportenext,leilovia,labasoft,baston,cassiano,arnaldo,novaserrana(recon),alfa,hasta,nordeste,nordeste_veiculos,jeleiloes,leilaoindex,rocha,albertomacedo,francoleiloes,simon,globo,leje,freitas,leiloar,lgcorretor,nakakogue,astavero,suporteoferta,comprei,leilo,lucian,alliance,mvleiloes,dian,parquedosleiloes,campolina,botelho,triacca'
+        description: 'csv: softgt,nortedeminas,leilaoeletronico,suportev2,suportenext,leilovia,labasoft,baston,cassiano,arnaldo,novaserrana(recon),alfa,hasta,nordeste,nordeste_veiculos,jeleiloes,leilaoindex,rocha,albertomacedo,francoleiloes,simon,globo,leje,freitas,leiloar,lgcorretor,nakakogue,astavero,suporteoferta,comprei,leilo,lucian,alliance,mvleiloes,dian,parquedosleiloes,campolina,botelho,triacca,jorgebrasil,flaviogarcia,leiloesbrasilto,wrleiloes,turani,benedetto,cristianoescola,d1lance'
         required: false
         default: 'alfa,nordeste'
       gravar:
@@ -312,6 +336,72 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           TRIACCA_DRYRUN: ${{ env.DRYRUN_PADRAO }}
         run: node scripts/scraper-triacca.mjs
+
+      # 30/10 (fila #380, os 10 sites próprios com imóvel): 8 leitores novos, fetch direto grátis. Detalhes de cada
+      # plataforma no cabeçalho do respectivo scripts/lib/<chave>-parse.mjs. Seco de 30/10 entre parênteses.
+      - name: Jorge Brasil (Porto Alegre/RS — 14 imóveis judiciais)
+        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'jorgebrasil')) }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          JORGEBRASIL_DRYRUN: ${{ env.DRYRUN_PADRAO }}
+        run: node scripts/scraper-jorgebrasil.mjs
+
+      - name: Flávio Garcia (RS — 6 imóveis)
+        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'flaviogarcia')) }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          FLAVIOGARCIA_DRYRUN: ${{ env.DRYRUN_PADRAO }}
+        run: node scripts/scraper-flaviogarcia.mjs
+
+      - name: Leilões Brasil TO (Palmas/TO — TRT10)
+        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'leiloesbrasilto')) }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          LEILOESBRASILTO_DRYRUN: ${{ env.DRYRUN_PADRAO }}
+        run: node scripts/scraper-leiloesbrasilto.mjs
+
+      - name: WR Leilões (RR/AM — 12 imóveis do TRT11)
+        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'wrleiloes')) }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          WRLEILOES_DRYRUN: ${{ env.DRYRUN_PADRAO }}
+        run: node scripts/scraper-wrleiloes.mjs
+
+      - name: Turani (RS/SC — ~244 imóveis judiciais)
+        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'turani')) }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          TURANI_DRYRUN: ${{ env.DRYRUN_PADRAO }}
+        run: node scripts/scraper-turani.mjs
+
+      - name: Benedetto (Rolante/RS — 15 imóveis)
+        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'benedetto')) }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          BENEDETTO_DRYRUN: ${{ env.DRYRUN_PADRAO }}
+        run: node scripts/scraper-benedetto.mjs
+
+      - name: Cristiano Escola (Caxias do Sul/RS — 30 imóveis)
+        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'cristianoescola')) }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          CRISTIANOESCOLA_DRYRUN: ${{ env.DRYRUN_PADRAO }}
+        run: node scripts/scraper-cristianoescola.mjs
+
+      - name: D1 Lance (SP/MT — 76 imóveis judiciais e extrajudiciais)
+        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'd1lance')) }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          D1LANCE_DRYRUN: ${{ env.DRYRUN_PADRAO }}
+        run: node scripts/scraper-d1lance.mjs
 
       - name: Leiloeiro Dian (Vacaria/Passo Fundo/Lagoa Vermelha — RS)
         # 29/10 (fila #380): Next.js; a página do item só tem dado depois do JS → fonte `dom` (Chromium deste job).

@@ -44,6 +44,27 @@ Eletrônico via Bright Data POST ainda não rodou de verdade; outros tenants da 
 Reis) podem ter "sem lance" falso no passado; travas 1 e 2 não conferidas na tela; 8 lançamentos a classificar;
 dono comparar totais do Inter com o Internet Banking; reagrupar sub-abas do Financeiro com o registro de navegação.
 
+## 30/10 (noite) — OS 10 SITES DA FILA #380, LANDING CONTA CONECTADOS
+
+- **8 fontes novas (leitor próprio cada, fetch direto grátis), feitas por 5 agentes em paralelo e revisadas aqui:**
+  JORGEBRASIL (POA; home = agenda, sem página de lote → `detalhesDoCatalogo`; ano da data pelo "Atualizado em", hora
+  11h dos editais) · FLAVIOGARCIA (PHP; lance mínimo e selo vêm da página do LEILÃO, a do lote preenche por AJAX) ·
+  LEILOESBRASILTO (Palmas; url `/leilao/<id>#bem-<id>`, o bem não tem data) · WRLEILOES (RR/AM, TRT11 — não RO;
+  leilão DETRAN fora pelo nome; o card "DIVERSOS/" decide pelo "DADOS DO BEM:") · TURANI (Laravel+Vue; lista SSR
+  `/imoveis?page=N`, detalhe em JSON público `/lotes/<id>/atualiza-pagina`; valor = lance da 2ª praça, que o site já
+  aceita) · BENEDETTO (PowerWeb; JSON `<status-leilao :config>`) · CRISTIANOESCOLA (BF2/CodeIgniter; datas da outra
+  praça vêm do catálogo; avaliação só no PDF → subestimada em leilão que abre a 50%) · D1LANCE (Laravel+Livewire; JSON
+  do componente `sidebar`; `totalDoCatalogo`; `porcentagem_de_penhora` NÃO é fração — bem vai inteiro, art. 843).
+  Molgado e Alencastro: sem imóvel (anotados). 1ª coleta gravada: JORGEBRASIL 14 · FLAVIOGARCIA 6 · LEILOESBRASILTO 1 ·
+  WRLEILOES 12 · BENEDETTO 15 · CRISTIANOESCOLA 30 · D1LANCE (~76) · TURANI (~244). Testes `testar:<chave>` (150 asserções).
+- **Landing:** o número de leiloeiros passa a ser CONECTADOS (placar coletado/codigo_sem_lote/agregador + quem aparece
+  em lote ativo) com o rótulo "leiloeiros conectados" (dono). Migração `20261030_landing_leiloeiros_conectados.sql`
+  (aplicar no SQL Editor) — seco: 1.207 → "1.200+". Retrato atualizado à mão: 39 mil+ imóveis · 9 mil+ veículos (sem sucata).
+- **Pendência #398:** "pertencendo-lhe … fração ideal equivalente a X% do todo" barra apto inteiro (D1LANCE 1445/495);
+  multipropriedade (cotas 1/13 Gramado) entra como imóvel — decisão do dono.
+- **Lição de orquestração:** agentes paralelos no mesmo checkout dividem o link `node_modules` do WSL — um apagou o do
+  outro no meio do comando. Inofensivo (repetiram), mas para a próxima: um link por agente ou rodar em sequência.
+
 ## 30/10 (fim de tarde) — FOTOS LEVES, PLACAR DAS JUNTAS CORRIGIDO, PARQUE DOS LEILÕES
 
 - **Fotos (122a685d, 54f3f1fa):** a galeria do veículo baixava o ORIGINAL do leiloeiro — Jetta SUPERBID: 10 × ~2,5 MB

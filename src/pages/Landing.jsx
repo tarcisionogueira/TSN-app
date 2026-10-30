@@ -139,7 +139,8 @@ export default function Landing() {
     // de landing_numeros_atualizar(); coluna sem número lido some sozinha (nunca um valor fixo no código).
     ? [[milMais(num.imoveis), 'imóveis'], [milMais(num.veiculos), 'veículos'],
        ...(centenaMais(num.cidades) ? [[centenaMais(num.cidades), 'cidades']] : []),
-       ...(centenaMais(num.leiloeiros) ? [[centenaMais(num.leiloeiros), 'leiloeiros']] : [])]
+       // 30/10 (dono): conta os leiloeiros CONECTADOS (com ou sem lote hoje) — por isso o rótulo diz "conectados".
+       ...(centenaMais(num.leiloeiros) ? [[centenaMais(num.leiloeiros), 'leiloeiros conectados']] : [])]
     : null;
   const atualizadoLabel = numFresco
     ? (new Date(num.em).toDateString() === new Date().toDateString() ? 'atualizado hoje' : 'atualizado ontem')

@@ -1,0 +1,1129 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="shortcut icon" href="assets/img/favicon.ico">
+    <title>Benedetto Leilões</title>
+
+    <link href="https://benedettoleiloes.com.br/assets/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://benedettoleiloes.com.br/assets/css/parallax-slider.css" rel="stylesheet">
+    <link href="https://benedettoleiloes.com.br/assets/css/font-awesome.min.css" rel="stylesheet">
+    <link href="https://benedettoleiloes.com.br/assets/css/lightbox.min.css" rel="stylesheet">
+    <link href="https://benedettoleiloes.com.br/assets/css/business-plate.css" rel="stylesheet">
+    <link href="/css/app.css" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.gstatic.com">
+    <link href="https://fonts.googleapis.com/css2?family=Arimo:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&display=swap" rel="stylesheet">
+    
+    <!-- Google tag (gtag.js) -->
+    
+    
+</head>
+
+<body>
+    <div class="top">
+        <div class="container">
+            <div class="row-fluid">
+                <ul class="phone-mail">
+                    <li><i class="fa fa-whatsapp fa-lg"></i><span><a href="tel:5135471328">(51) 3547-1328</a></span></li>
+                    <li><i class="fa fa-envelope fa-lg"></i><span><a href="mailto:contato@benedettoleiloes.com.br">contato@benedettoleiloes.com.br</a></span></li>
+                </ul>
+                <ul class="redes">
+                    <li><a href="https://www.facebook.com/www.benedettoleiloes.com.br" target="_blank"><i class="fa fa-facebook fa-lg"></i></a></li>
+                    <li><a href="https://www.instagram.com/benedetto_leiloes/" target="_blank"><i class="fa fa-instagram fa-lg"></i></a></li>
+                </ul>
+                <div id="auth"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="topHeaderSection">
+        <div class="header">
+            <div class="container">
+                <div class="navbar-header">
+                    <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".navbar-collapse">
+                        <span class="sr-only">Toggle navigation</span>
+                        <span class="icon-bar"></span>
+                        <span class="icon-bar"></span>
+                        <span class="icon-bar"></span>
+                    </button>
+                    <a class="navbar-brand" href="https://benedettoleiloes.com.br"><img src="https://benedettoleiloes.com.br/assets/img/logo.png" style="max-height: 56px;" alt="Benedeto Leilões" /></a>
+                </div>
+                <div class="navbar-collapse collapse">
+                    <ul class="nav navbar-nav">
+
+                    </ul>
+                    <ul class="nav navbar-nav navbar-right">
+                        <li class="active"><a href="/">Home</a></li>
+                        <li class="dropdown">
+                            <a href="#" class="dropdown-toggle" data-toggle="dropdown">Modalidades de Leilão <b class="caret"></b></a>
+                            <ul class="dropdown-menu">
+                                <li><a href="https://benedettoleiloes.com.br/leiloes?type=VENDA_DIRETA">Venda Direta</a></li>
+                                <li><a href="https://benedettoleiloes.com.br/leiloes?type=EXTRA_JUDICIAL">Extrajudicial</a></li>
+                                <li><a href="https://benedettoleiloes.com.br/leiloes?type=JUDICIAL">Judicial</a></li>
+                                <li><a href="https://benedettoleiloes.com.br/leiloes?type=FEDERAL">Federal</a></li>
+                                <li><a href="https://benedettoleiloes.com.br/leiloes">Toda Agenda</a></li>
+                            </ul>
+                        </li>
+                        <li><a href="/#duvidas">Dúvidas/Regras</a></li>
+                        <li><a href="/#sobre">Quem Somos</a></li>
+                        <li><a href="/contato">Contato</a></li>
+                    </ul>
+                </div><!--/.nav-collapse -->
+            </div>
+        </div>
+    </div>
+
+<div class="container">
+
+    <div class="highlightSection">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-12">
+                    <form action="https://benedettoleiloes.com.br/leiloes" method="GET">
+    <div class="col-lg-2">
+        <div class="form-group">
+            <label>Tipo do Lote</label><br>
+            <select name="type" class="form-control">
+                <option value="">Todos</option>
+                <option value="VENDA_DIRETA" >Venda Direta</option>
+                <option value="EXTRA_JUDICIAL" >Extrajudicial</option>
+                <option value="JUDICIAL" > Judicial</option>
+                <option value="FEDERAL" > Federal</option>
+                <option value="HOJE" > Em andamento</option>
+            </select>
+        </div>
+    </div>
+    <div class="col-lg-2">
+        <div class="form-group">
+            <label>Categoria</label><br>
+            <select name="category_id" class="form-control">
+                <option value="">Todos</option>
+                                    <option value="1" selected>Imóveis</option>
+                                    <option value="2" >Móveis</option>
+                                    <option value="3" >Veículos</option>
+                            </select>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="form-group custom-search-form">
+            <label>Pesquisar por N° Processo / Descrição Lote</label><br>
+            <input type="text" name="proceeding" class="form-control" placeholder="O que você procura ?" value="">
+        </div>
+    </div>
+    <div class="col-lg-2">
+        <div class="form-group">
+            <label>&nbsp;</label>
+            <!--<span class="input-group-btn">-->
+            <button class="btn btn-brand form-control" type="submit">
+                <i class="glyphicon glyphicon-search"></i> Pesquisar
+            </button>
+            <!--</span>-->
+        </div>
+    </div>
+</form>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="container">
+        <div class="row">
+            <div class="col-md-12">
+                <div class="projectList">
+                    <h3 class="title">Leilões Agendados</h3>
+
+                                            <div class="leilao-item media">
+    <a class="pull-left" href="https://benedettoleiloes.com.br/lance/1800">
+                    <img src="https://benedettoleiloes.com.br/storage/lote/956/pWdW5wbf8QwS24JP8h4KASxCF2gYBWc5qk7baIaZ.jpg" class="projectImg" />
+        
+    </a>
+    <div class="media-body">
+        <h4 class="media-heading">
+            <a href="https://benedettoleiloes.com.br/lance/1800">
+                Processo: <b>5000855-58.2012.8.21.0018</b>
+                <br>
+                <span class="text-default small">26/05 09:00 a  26/08 de 2026 15:00</span>
+            </a>
+            <br>
+                                        <span class="pull-right label label-default">FINALIZADO</span>
+                                </h4>
+
+        <span>
+            <p class="ql-align-justify"><strong style="color: rgb(136, 136, 136);">O imóvel localizado na Rua José Luiz, nºs 1.140 e 1.146, Ferroviário, Montenegro/RS. Avaliação R$3.700.000,00.</strong></p>
+        </span>
+
+        <span class="clearfix"></span>
+        <span class="text-primary lance-inicial">
+            <i class="fa fa-usd" aria-hidden="true"></i>
+            Lance Inicial: <strong>R$ 1.850.000,00</strong>
+        </span>
+
+        
+
+        
+    </div>
+</div>
+                                            <div class="leilao-item media">
+    <a class="pull-left" href="https://benedettoleiloes.com.br/lance/1268">
+                    <img src="https://benedettoleiloes.com.br/storage/lote/880/zB3HjiNihlGj75RaS4MgiiC1AmfuX3CiKwpHtmvB.jpg" class="projectImg" />
+        
+    </a>
+    <div class="media-body">
+        <h4 class="media-heading">
+            <a href="https://benedettoleiloes.com.br/lance/1268">
+                Processo: <b>5003349-77.2018.8.21.0019</b>
+                <br>
+                <span class="text-default small">17/07 09:00 a  17/10 de 2024 15:00</span>
+            </a>
+            <br>
+                                        <span class="pull-right label label-default">FINALIZADO</span>
+                                </h4>
+
+        <span>
+            <p><strong style="color: rgb(136, 136, 136);">Uma área de terras com 60.112,68m², sem benfeitorias, situada na Avenida Salvador, zona urbana da cidade de Tupandi-RS. Avaliação: R$3.800.000,00</strong></p>
+        </span>
+
+        <span class="clearfix"></span>
+        <span class="text-primary lance-inicial">
+            <i class="fa fa-usd" aria-hidden="true"></i>
+            Lance Inicial: <strong>R$ 2.660.000,00</strong>
+        </span>
+
+        
+
+        
+    </div>
+</div>
+                                            <div class="leilao-item media">
+    <a class="pull-left" href="https://benedettoleiloes.com.br/lance/2157">
+                    <img src="https://benedettoleiloes.com.br/storage/lote/2157/7AtfwXNwiH0lyVJZZvI7R3QSTjpMzqY1wqicqKoE.jpg" class="projectImg" />
+        
+    </a>
+    <div class="media-body">
+        <h4 class="media-heading">
+            <a href="https://benedettoleiloes.com.br/lance/2157">
+                Processo: <b>5000032-57.2007.8.21.0019</b>
+                <br>
+                <span class="text-default small">10/07 09:00 a  8/10 de 2026 15:00</span>
+            </a>
+            <br>
+                                        <span class="pull-right label label-default">FINALIZADO</span>
+                                </h4>
+
+        <span>
+            <p class="ql-align-justify"><strong style="color: rgb(136, 136, 136);">Uma casa de madeira, sob nº 1442 da Rua Campo Bom, bairro Canudos, Novo Hamburgo/RS.</strong></p>
+        </span>
+
+        <span class="clearfix"></span>
+        <span class="text-primary lance-inicial">
+            <i class="fa fa-usd" aria-hidden="true"></i>
+            Lance Inicial: <strong>R$ 154.000,00</strong>
+        </span>
+
+        
+
+        
+    </div>
+</div>
+                                            <div class="leilao-item media">
+    <a class="pull-left" href="https://benedettoleiloes.com.br/lance/2180">
+                    <img src="https://benedettoleiloes.com.br/storage/lote/2180/Ovdr3vUU8EU4GhHUIET8oT0p4ewCurrU8RuDpP7G.jpg" class="projectImg" />
+        
+    </a>
+    <div class="media-body">
+        <h4 class="media-heading">
+            <a href="https://benedettoleiloes.com.br/lance/2180">
+                Processo: <b>5002463-88.2012.8.21.0019</b>
+                <br>
+                <span class="text-default small">16/07 15:00 a  15/10 de 2026 15:00</span>
+            </a>
+            <br>
+                                        <span class="pull-right label label-default">FINALIZADO</span>
+                                </h4>
+
+        <span>
+            <p class="ql-align-justify"><strong style="color: rgb(136, 136, 136);">Um terreno situado no Bairro Operário, com área de 472,50 metros quadrados. Avaliação: R$ 1.418.401,00.</strong></p>
+        </span>
+
+        <span class="clearfix"></span>
+        <span class="text-primary lance-inicial">
+            <i class="fa fa-usd" aria-hidden="true"></i>
+            Lance Inicial: <strong>R$ 992.880,70</strong>
+        </span>
+
+        
+
+        
+    </div>
+</div>
+                                            <div class="leilao-item media">
+    <a class="pull-left" href="https://benedettoleiloes.com.br/lance/2293">
+                    <img src="https://benedettoleiloes.com.br/storage/lote/2134/D21kOxUNp1r1BApr96aacevD7f4CHW8n78zF1OHg.jpg" class="projectImg" />
+        
+    </a>
+    <div class="media-body">
+        <h4 class="media-heading">
+            <a href="https://benedettoleiloes.com.br/lance/2293">
+                Processo: <b>5001470-69.2017.8.21.0019</b>
+                <br>
+                <span class="text-default small">18/11 09:00 a  18/11 de 2026 15:00</span>
+            </a>
+            <br>
+                                                    <span class="pull-right label label-warning">EM BREVE</span>
+                    </h4>
+
+        <span>
+            <p class="ql-align-justify"><strong style="color: rgb(136, 136, 136);">Imóvel localizado na Rua Das Araucárias, nº 181, bairro Boa Saúde, Novo Hamburgo/RS. Avaliação: R$ 250.408,00.</strong></p>
+        </span>
+
+        <span class="clearfix"></span>
+        <span class="text-primary lance-inicial">
+            <i class="fa fa-usd" aria-hidden="true"></i>
+            Lance Inicial: <strong>R$ 250.408,00</strong>
+        </span>
+
+        
+
+        
+    </div>
+</div>
+                                            <div class="leilao-item media">
+    <a class="pull-left" href="https://benedettoleiloes.com.br/lance/1528">
+                    <img src="https://benedettoleiloes.com.br/storage/lote/1528/HT3ujEdmFuhyhNxkdP6JAfKfxDAts59yxsujD6Rs.jpg" class="projectImg" />
+        
+    </a>
+    <div class="media-body">
+        <h4 class="media-heading">
+            <a href="https://benedettoleiloes.com.br/lance/1528">
+                Processo: <b>5006102-96.2017.8.21.0033</b>
+                <br>
+                <span class="text-default small">8/12 09:00 a  8/12 de 2026 15:00</span>
+            </a>
+            <br>
+                                                    <span class="pull-right label label-warning">EM BREVE</span>
+                    </h4>
+
+        <span>
+            <p class="ql-align-justify"><strong style="color: rgb(136, 136, 136);">Imóvel localizado na Rua&nbsp;Carlos Bier, nº 2018, São Leopoldo/RS. Avaliação: R$ 150.000,00.</strong></p>
+        </span>
+
+        <span class="clearfix"></span>
+        <span class="text-primary lance-inicial">
+            <i class="fa fa-usd" aria-hidden="true"></i>
+            Lance Inicial: <strong>R$ 150.000,00</strong>
+        </span>
+
+        
+
+        
+    </div>
+</div>
+                                            <div class="leilao-item media">
+    <a class="pull-left" href="https://benedettoleiloes.com.br/lance/2287">
+                    <img src="https://benedettoleiloes.com.br/storage/lote/2287/5wrwE8wVXzHrPgSvFpIqfQKBeNfiDlor6iw0Lde7.jpg" class="projectImg" />
+        
+    </a>
+    <div class="media-body">
+        <h4 class="media-heading">
+            <a href="https://benedettoleiloes.com.br/lance/2287">
+                Processo: <b>5027075-62.2023.8.21.0033 (1)</b>
+                <br>
+                <span class="text-default small">5/11 09:00 a  5/11 de 2026 15:00</span>
+            </a>
+            <br>
+                                                    <span class="pull-right label label-warning">EM BREVE</span>
+                    </h4>
+
+        <span>
+            <p class="ql-align-justify"><strong style="color: rgb(136, 136, 136);">Lote 1 - Uma área de terras, com 10.479,9461m², com frente para a Av. Mauá, São Leopoldo/RS. Avaliação: R$ 7.550.000,00.</strong></p>
+        </span>
+
+        <span class="clearfix"></span>
+        <span class="text-primary lance-inicial">
+            <i class="fa fa-usd" aria-hidden="true"></i>
+            Lance Inicial: <strong>R$ 7.550.000,00</strong>
+        </span>
+
+        
+
+        
+    </div>
+</div>
+                                            <div class="leilao-item media">
+    <a class="pull-left" href="https://benedettoleiloes.com.br/lance/2288">
+                    <img src="https://benedettoleiloes.com.br/storage/lote/2288/twAWWXUfUKbMiUfSY0xy2ebwaHoKTvrZNSRWq1ir.jpg" class="projectImg" />
+        
+    </a>
+    <div class="media-body">
+        <h4 class="media-heading">
+            <a href="https://benedettoleiloes.com.br/lance/2288">
+                Processo: <b>5027075-62.2023.8.21.0033 (2)</b>
+                <br>
+                <span class="text-default small">5/11 09:00 a  5/11 de 2026 15:00</span>
+            </a>
+            <br>
+                                                    <span class="pull-right label label-warning">EM BREVE</span>
+                    </h4>
+
+        <span>
+            <p class="ql-align-justify"><strong style="color: rgb(136, 136, 136);">Lote 2 - Uma área de terras, com 7.791,10m², com frente para a Rua Dr. Frederico Wolffenbuttel, São Leopoldo/RS. Avaliação: R$ 8.725.000,00.</strong></p>
+        </span>
+
+        <span class="clearfix"></span>
+        <span class="text-primary lance-inicial">
+            <i class="fa fa-usd" aria-hidden="true"></i>
+            Lance Inicial: <strong>R$ 8.725.000,00</strong>
+        </span>
+
+        
+
+        
+    </div>
+</div>
+                                            <div class="leilao-item media">
+    <a class="pull-left" href="https://benedettoleiloes.com.br/lance/2294">
+                    <img src="https://benedettoleiloes.com.br/storage/lote/2294/7aBqlcxu3D82RduJMMqhwgTbAn5w45WZ2Bj4Dm3S.jpg" class="projectImg" />
+        
+    </a>
+    <div class="media-body">
+        <h4 class="media-heading">
+            <a href="https://benedettoleiloes.com.br/lance/2294">
+                Processo: <b>5022072-29.2023.8.21.0033</b>
+                <br>
+                <span class="text-default small">19/11 09:00 a  19/11 de 2026 15:00</span>
+            </a>
+            <br>
+                                                    <span class="pull-right label label-warning">EM BREVE</span>
+                    </h4>
+
+        <span>
+            <p class="ql-align-justify"><strong style="color: rgb(136, 136, 136);">Apartamento nº 44 do Residencial Bela Vista, na Rua Oasis, nº 155, São Leopoldo/RS. Avaliação: R$ 175.000,00. </strong></p>
+        </span>
+
+        <span class="clearfix"></span>
+        <span class="text-primary lance-inicial">
+            <i class="fa fa-usd" aria-hidden="true"></i>
+            Lance Inicial: <strong>R$ 175.000,00</strong>
+        </span>
+
+        
+
+        
+    </div>
+</div>
+                                            <div class="leilao-item media">
+    <a class="pull-left" href="https://benedettoleiloes.com.br/lance/2331">
+                    <img src="https://benedettoleiloes.com.br/storage/lote/2331/PCSaNgxUHsgR5cgJxYja3e35V9MTOk8MhRW6ydTK.jpg" class="projectImg" />
+        
+    </a>
+    <div class="media-body">
+        <h4 class="media-heading">
+            <a href="https://benedettoleiloes.com.br/lance/2331">
+                Processo: <b>5001049-08.2015.8.21.0033</b>
+                <br>
+                <span class="text-default small">10/11 09:00 a  10/11 de 2026 15:00</span>
+            </a>
+            <br>
+                                                    <span class="pull-right label label-warning">EM BREVE</span>
+                    </h4>
+
+        <span>
+            <p class="ql-align-justify"><strong style="color: rgb(136, 136, 136);">Apartamento nº 14, do Residencial Malta, na Rua Sem Denominação, bairro São Miguel, nº 280, São Leopoldo/RS. Avaliação: R$ 60.000,00. </strong></p>
+        </span>
+
+        <span class="clearfix"></span>
+        <span class="text-primary lance-inicial">
+            <i class="fa fa-usd" aria-hidden="true"></i>
+            Lance Inicial: <strong>R$ 60.000,00</strong>
+        </span>
+
+        
+
+        
+    </div>
+</div>
+                                            <div class="leilao-item media">
+    <a class="pull-left" href="https://benedettoleiloes.com.br/lance/2328">
+                    <img src="https://benedettoleiloes.com.br/storage/lote/2328/vKixijMba4254WScbazNTIyvYHjafEN8pWN7mXKZ.jpg" class="projectImg" />
+        
+    </a>
+    <div class="media-body">
+        <h4 class="media-heading">
+            <a href="https://benedettoleiloes.com.br/lance/2328">
+                Processo: <b>5001188-57.2020.8.21.0041</b>
+                <br>
+                <span class="text-default small">11/11 09:00 a  11/11 de 2026 15:00</span>
+            </a>
+            <br>
+                                                    <span class="pull-right label label-warning">EM BREVE</span>
+                    </h4>
+
+        <span>
+            <p class="ql-align-justify"><strong style="color: rgb(136, 136, 136);">A unidade habitacional nº 155 do Conjunto Residencial Cidade Jardim Condomínio Dos Montes, Porto Alegre/RS. Avaliação: R$ 1.900.000,00.</strong></p>
+        </span>
+
+        <span class="clearfix"></span>
+        <span class="text-primary lance-inicial">
+            <i class="fa fa-usd" aria-hidden="true"></i>
+            Lance Inicial: <strong>R$ 1.900.000,00</strong>
+        </span>
+
+        
+
+        
+    </div>
+</div>
+                                            <div class="leilao-item media">
+    <a class="pull-left" href="https://benedettoleiloes.com.br/lance/2256">
+                    <img src="https://benedettoleiloes.com.br/storage/lote/1874/6nbk5XdpwddDshYMTZysJoDZtfhBrYAvoIPoDJT1.png" class="projectImg" />
+        
+    </a>
+    <div class="media-body">
+        <h4 class="media-heading">
+            <a href="https://benedettoleiloes.com.br/lance/2256">
+                Processo: <b>5000193-12.2010.8.21.0068</b>
+                <br>
+                <span class="text-default small">25/08 15:00 a  24/09 de 2026 15:00</span>
+            </a>
+            <br>
+                                        <span class="pull-right label label-default">FINALIZADO</span>
+                                </h4>
+
+        <span>
+            <p class="ql-align-justify"><strong style="color: rgb(136, 136, 136);">A fração de 17.181,50m² dentro de um todo maior, com frente para a Estrada Passo Selbach, Bom Princípio/RS. Avaliação: R$258.102,40.</strong></p>
+        </span>
+
+        <span class="clearfix"></span>
+        <span class="text-primary lance-inicial">
+            <i class="fa fa-usd" aria-hidden="true"></i>
+            Lance Inicial: <strong>R$ 129.051,20</strong>
+        </span>
+
+        
+
+        
+    </div>
+</div>
+                                            <div class="leilao-item media">
+    <a class="pull-left" href="https://benedettoleiloes.com.br/lance/916">
+                    <img src="https://benedettoleiloes.com.br/storage/lote/653/TGHKrgnYVz14GDzY97jbOobn6qnsbdMZSYGGM2o3.jpg" class="projectImg" />
+        
+    </a>
+    <div class="media-body">
+        <h4 class="media-heading">
+            <a href="https://benedettoleiloes.com.br/lance/916">
+                Processo: <b>5000816-17.2003.8.21.0070</b>
+                <br>
+                <span class="text-default small">24/03 09:00 a  24/06 de 2026 15:00</span>
+            </a>
+            <br>
+                                        <span class="pull-right label label-default">FINALIZADO</span>
+                                </h4>
+
+        <span>
+            <p class="ql-align-justify"><strong style="color: rgb(136, 136, 136);">Um prédio residencial de madeira, sob o nº 467 da Rua Padre Júlio, Campo Bom/RS. Avaliação: R$300.000,00.</strong></p>
+        </span>
+
+        <span class="clearfix"></span>
+        <span class="text-primary lance-inicial">
+            <i class="fa fa-usd" aria-hidden="true"></i>
+            Lance Inicial: <strong>R$ 262.500,00</strong>
+        </span>
+
+        
+
+        
+    </div>
+</div>
+                                            <div class="leilao-item media">
+    <a class="pull-left" href="https://benedettoleiloes.com.br/lance/2329">
+                    <img src="https://benedettoleiloes.com.br/storage/lote/2329/b95k3Vk0GRnOilPkyNO1SaUOBg4b8leQVuSufVEw.jpg" class="projectImg" />
+        
+    </a>
+    <div class="media-body">
+        <h4 class="media-heading">
+            <a href="https://benedettoleiloes.com.br/lance/2329">
+                Processo: <b>5004391-37.2020.8.21.0070</b>
+                <br>
+                <span class="text-default small">10/12 09:00 a  10/12 de 2026 15:00</span>
+            </a>
+            <br>
+                                                    <span class="pull-right label label-warning">EM BREVE</span>
+                    </h4>
+
+        <span>
+            <p class="ql-align-justify"><strong style="color: rgb(136, 136, 136);">Imóvel na Rua Ervino Bach, 2430, Taquara/RS. Avaliação: R$149.684,00.</strong></p>
+        </span>
+
+        <span class="clearfix"></span>
+        <span class="text-primary lance-inicial">
+            <i class="fa fa-usd" aria-hidden="true"></i>
+            Lance Inicial: <strong>R$ 149.684,00</strong>
+        </span>
+
+        
+
+        
+    </div>
+</div>
+                                            <div class="leilao-item media">
+    <a class="pull-left" href="https://benedettoleiloes.com.br/lance/2336">
+                    <img src="https://benedettoleiloes.com.br/storage/lote/2336/AOn38FGZ9H9czHFPCjpgA1KluzVYZsPGgg9sgj6o.jpg" class="projectImg" />
+        
+    </a>
+    <div class="media-body">
+        <h4 class="media-heading">
+            <a href="https://benedettoleiloes.com.br/lance/2336">
+                Processo: <b>5003332-77.2021.8.21.0070</b>
+                <br>
+                <span class="text-default small">27/07 15:00 a  27/10 de 2026 15:00</span>
+            </a>
+            <br>
+                                        <span class="pull-right label label-default">FINALIZADO</span>
+                                </h4>
+
+        <span>
+            <p class="ql-align-justify"><strong style="color: rgb(136, 136, 136);">Box de estacionamento nº 10 do Edifício Rafael, na Rua Eurípedes Aurélio da Silva, nº 553, Cachoeirinha-RS. Avaliação: R$ 26.842,00.</strong></p>
+        </span>
+
+        <span class="clearfix"></span>
+        <span class="text-primary lance-inicial">
+            <i class="fa fa-usd" aria-hidden="true"></i>
+            Lance Inicial: <strong>R$ 13.421,00</strong>
+        </span>
+
+        
+
+        
+    </div>
+</div>
+                                            <div class="leilao-item media">
+    <a class="pull-left" href="https://benedettoleiloes.com.br/lance/2352">
+                    <img src="https://benedettoleiloes.com.br/assets/img/sem_imagem.jpg" class="projectImg">
+        
+    </a>
+    <div class="media-body">
+        <h4 class="media-heading">
+            <a href="https://benedettoleiloes.com.br/lance/2352">
+                Processo: <b>5000183-25.2011.8.21.0070</b>
+                <br>
+                <span class="text-default small">17/11 09:00 a  17/11 de 2026 15:00</span>
+            </a>
+            <br>
+                                                    <span class="pull-right label label-warning">EM BREVE</span>
+                    </h4>
+
+        <span>
+            <p class="ql-align-justify"><strong style="color: rgb(136, 136, 136);">A terra nua de um terreno rural e 30% da plantação de eucaliptos existente sobre o imóvel, situado em Fazenda Fleck, Rolante/RS. Avaliação: R$ 763.400,00.</strong></p>
+        </span>
+
+        <span class="clearfix"></span>
+        <span class="text-primary lance-inicial">
+            <i class="fa fa-usd" aria-hidden="true"></i>
+            Lance Inicial: <strong>R$ 763.400,00</strong>
+        </span>
+
+        
+
+        
+    </div>
+</div>
+                                            <div class="leilao-item media">
+    <a class="pull-left" href="https://benedettoleiloes.com.br/lance/2354">
+                    <img src="https://benedettoleiloes.com.br/storage/lote/2354/gW6z3uwcZPYqlECO5FNTJSN7lWLziIwE4iojT269.jpg" class="projectImg" />
+        
+    </a>
+    <div class="media-body">
+        <h4 class="media-heading">
+            <a href="https://benedettoleiloes.com.br/lance/2354">
+                Processo: <b>5001116-51.2018.8.21.0070</b>
+                <br>
+                <span class="text-default small">19/11 09:00 a  19/11 de 2026 15:00</span>
+            </a>
+            <br>
+                                                    <span class="pull-right label label-warning">EM BREVE</span>
+                    </h4>
+
+        <span>
+            <p class="ql-align-justify"><strong style="color: rgb(136, 136, 136);">Imóvel, com 90,00m², sob nº 2154 na Rua José Avelino Osterman, bairro Jardim do Prado, Taquara/RS. Avaliação: R$ 680.000,00.</strong></p>
+        </span>
+
+        <span class="clearfix"></span>
+        <span class="text-primary lance-inicial">
+            <i class="fa fa-usd" aria-hidden="true"></i>
+            Lance Inicial: <strong>R$ 680.000,00</strong>
+        </span>
+
+        
+
+        
+    </div>
+</div>
+                                            <div class="leilao-item media">
+    <a class="pull-left" href="https://benedettoleiloes.com.br/lance/2365">
+                    <img src="https://benedettoleiloes.com.br/assets/img/sem_imagem.jpg" class="projectImg">
+        
+    </a>
+    <div class="media-body">
+        <h4 class="media-heading">
+            <a href="https://benedettoleiloes.com.br/lance/2365">
+                Processo: <b>5001096-07.2011.8.21.0070</b>
+                <br>
+                <span class="text-default small">10/12 09:00 a  10/12 de 2026 15:00</span>
+            </a>
+            <br>
+                                                    <span class="pull-right label label-warning">EM BREVE</span>
+                    </h4>
+
+        <span>
+            <p class="ql-align-justify"><strong style="color: rgb(136, 136, 136);">Terreno urbano, com a área de 253,00m², na Rua Carlos Kroeff, nº 2975, Taquara/RS. Avaliação: R$ 167.940,00.</strong></p>
+        </span>
+
+        <span class="clearfix"></span>
+        <span class="text-primary lance-inicial">
+            <i class="fa fa-usd" aria-hidden="true"></i>
+            Lance Inicial: <strong>R$ 167.940,00</strong>
+        </span>
+
+        
+
+        
+    </div>
+</div>
+                                            <div class="leilao-item media">
+    <a class="pull-left" href="https://benedettoleiloes.com.br/lance/2307">
+                    <img src="https://benedettoleiloes.com.br/storage/lote/2307/hDoV0I9IbA0eJUtwtx9ExdWCnFTHvoQ9gkBkp0Aw.jpg" class="projectImg" />
+        
+    </a>
+    <div class="media-body">
+        <h4 class="media-heading">
+            <a href="https://benedettoleiloes.com.br/lance/2307">
+                Processo: <b>5000990-86.2019.8.21.0095 (1)</b>
+                <br>
+                <span class="text-default small">10/11 09:00 a  10/11 de 2026 15:00</span>
+            </a>
+            <br>
+                                                    <span class="pull-right label label-warning">EM BREVE</span>
+                    </h4>
+
+        <span>
+            <p class="ql-align-justify"><strong style="color: rgb(136, 136, 136);">Lote 1 - O Box nº 44 do Edifício Residencial San Diego, sob nº 89 da rua Bento Gonçalves, Novo Hamburgo/RS. Avaliação: R$ 42.142,00. </strong></p>
+        </span>
+
+        <span class="clearfix"></span>
+        <span class="text-primary lance-inicial">
+            <i class="fa fa-usd" aria-hidden="true"></i>
+            Lance Inicial: <strong>R$ 42.142,00</strong>
+        </span>
+
+        
+
+        
+    </div>
+</div>
+                                            <div class="leilao-item media">
+    <a class="pull-left" href="https://benedettoleiloes.com.br/lance/2308">
+                    <img src="https://benedettoleiloes.com.br/storage/lote/2308/sdAl5x9aUX30BKvIZhTZbGOXUa7hygt7mmDlq1d4.jpg" class="projectImg" />
+        
+    </a>
+    <div class="media-body">
+        <h4 class="media-heading">
+            <a href="https://benedettoleiloes.com.br/lance/2308">
+                Processo: <b>5000990-86.2019.8.21.0095 (2)</b>
+                <br>
+                <span class="text-default small">10/11 09:00 a  10/11 de 2026 15:00</span>
+            </a>
+            <br>
+                                                    <span class="pull-right label label-warning">EM BREVE</span>
+                    </h4>
+
+        <span>
+            <p class="ql-align-justify"><strong style="color: rgb(136, 136, 136);">Lote 2 - O Box nº 10 do Edifício Residencial San Diego, sob nº 89 da rua Bento Gonçalves, Novo Hamburgo/RS. Avaliação: R$ 42.142,00.</strong></p>
+        </span>
+
+        <span class="clearfix"></span>
+        <span class="text-primary lance-inicial">
+            <i class="fa fa-usd" aria-hidden="true"></i>
+            Lance Inicial: <strong>R$ 42.142,00</strong>
+        </span>
+
+        
+
+        
+    </div>
+</div>
+                                            <div class="leilao-item media">
+    <a class="pull-left" href="https://benedettoleiloes.com.br/lance/2309">
+                    <img src="https://benedettoleiloes.com.br/storage/lote/2309/kh1YlGSprs5Z4NngHXjhk30B6AE6pl15eaSfUYDo.jpg" class="projectImg" />
+        
+    </a>
+    <div class="media-body">
+        <h4 class="media-heading">
+            <a href="https://benedettoleiloes.com.br/lance/2309">
+                Processo: <b>5000990-86.2019.8.21.0095 (3)</b>
+                <br>
+                <span class="text-default small">10/11 09:00 a  10/11 de 2026 15:00</span>
+            </a>
+            <br>
+                                                    <span class="pull-right label label-warning">EM BREVE</span>
+                    </h4>
+
+        <span>
+            <p class="ql-align-justify"><strong style="color: rgb(136, 136, 136);">Lote 3 - O Box nº 46 do Edifício Residencial San Diego, sob nº 89 da rua Bento Gonçalves, Novo Hamburgo/RS. Avaliação: R$ 42.142,00. </strong></p>
+        </span>
+
+        <span class="clearfix"></span>
+        <span class="text-primary lance-inicial">
+            <i class="fa fa-usd" aria-hidden="true"></i>
+            Lance Inicial: <strong>R$ 42.142,00</strong>
+        </span>
+
+        
+
+        
+    </div>
+</div>
+                                            <div class="leilao-item media">
+    <a class="pull-left" href="https://benedettoleiloes.com.br/lance/1964">
+                    <img src="https://benedettoleiloes.com.br/storage/lote/1816/FHtv2WE8ehiL5V9JJqZyfelbdShdFkoQX6FViDgf.jpg" class="projectImg" />
+        
+    </a>
+    <div class="media-body">
+        <h4 class="media-heading">
+            <a href="https://benedettoleiloes.com.br/lance/1964">
+                Processo: <b>5002889-28.2024.8.21.0101</b>
+                <br>
+                <span class="text-default small">6/04 09:00 a  6/07 de 2026 15:00</span>
+            </a>
+            <br>
+                                        <span class="pull-right label label-default">FINALIZADO</span>
+                                </h4>
+
+        <span>
+            <p class="ql-align-justify"><strong style="color: rgb(136, 136, 136);">Apartamento 111 do Bloco A, Cota 6 (1/13 avos da unidade): Prioridade Diamante no GRAMADO TERMAS RESORT SPA. Avaliação: R$118.700,00</strong></p>
+        </span>
+
+        <span class="clearfix"></span>
+        <span class="text-primary lance-inicial">
+            <i class="fa fa-usd" aria-hidden="true"></i>
+            Lance Inicial: <strong>R$ 71.220,00</strong>
+        </span>
+
+        
+
+        
+    </div>
+</div>
+                                            <div class="leilao-item media">
+    <a class="pull-left" href="https://benedettoleiloes.com.br/lance/2026">
+                    <img src="https://benedettoleiloes.com.br/storage/lote/2026/AYtR2Rip7MiHdiJea9WDvVnA2xfeuB7wlGx7YhVY.jpg" class="projectImg" />
+        
+    </a>
+    <div class="media-body">
+        <h4 class="media-heading">
+            <a href="https://benedettoleiloes.com.br/lance/2026">
+                Processo: <b>5002890-13.2024.8.21.0101</b>
+                <br>
+                <span class="text-default small">6/04 09:00 a  6/07 de 2026 15:00</span>
+            </a>
+            <br>
+                                        <span class="pull-right label label-default">FINALIZADO</span>
+                                </h4>
+
+        <span>
+            <p class="ql-align-justify"><strong style="color: rgb(136, 136, 136);">Apartamento 114 do bloco A cota 10 (1/13 avos da unidade): Prioridade 1 Diamante, do Gramado Termas Resort Spa. Avaliação: R$125.000,00.</strong></p>
+        </span>
+
+        <span class="clearfix"></span>
+        <span class="text-primary lance-inicial">
+            <i class="fa fa-usd" aria-hidden="true"></i>
+            Lance Inicial: <strong>R$ 75.000,00</strong>
+        </span>
+
+        
+
+        
+    </div>
+</div>
+                                            <div class="leilao-item media">
+    <a class="pull-left" href="https://benedettoleiloes.com.br/lance/2257">
+                    <img src="https://benedettoleiloes.com.br/storage/lote/1999/uSo4JSpTGihvfU1SVQP6pobXjmOi20WpsdxZP30x.jpg" class="projectImg" />
+        
+    </a>
+    <div class="media-body">
+        <h4 class="media-heading">
+            <a href="https://benedettoleiloes.com.br/lance/2257">
+                Processo: <b>5000319-18.2012.8.21.0157</b>
+                <br>
+                <span class="text-default small">19/11 09:00 a  19/11 de 2026 15:00</span>
+            </a>
+            <br>
+                                                    <span class="pull-right label label-warning">EM BREVE</span>
+                    </h4>
+
+        <span>
+            <p class="ql-align-justify"><strong style="color: rgb(136, 136, 136);">Terreno urbano, com a área de 296,53m², situado na cidade de Parobé-RS. Avaliação: R$ 50.000,00.</strong></p>
+        </span>
+
+        <span class="clearfix"></span>
+        <span class="text-primary lance-inicial">
+            <i class="fa fa-usd" aria-hidden="true"></i>
+            Lance Inicial: <strong>R$ 50.000,00</strong>
+        </span>
+
+        
+
+        
+    </div>
+</div>
+                                            <div class="leilao-item media">
+    <a class="pull-left" href="https://benedettoleiloes.com.br/lance/2326">
+                    <img src="https://benedettoleiloes.com.br/storage/lote/2326/Z2vi9ZRR4BmeycsemINdycl4HMHCg5OTzj3BrrAy.jpg" class="projectImg" />
+        
+    </a>
+    <div class="media-body">
+        <h4 class="media-heading">
+            <a href="https://benedettoleiloes.com.br/lance/2326">
+                Processo: <b>5004499-62.2021.8.21.0157</b>
+                <br>
+                <span class="text-default small">11/11 09:00 a  11/11 de 2026 15:00</span>
+            </a>
+            <br>
+                                                    <span class="pull-right label label-warning">EM BREVE</span>
+                    </h4>
+
+        <span>
+            <p class="ql-align-justify"><strong style="color: rgb(136, 136, 136);">Imóvel, com área de aproximadamente 80,00m², localizada na Rua Vera Cruz, n° 139, bairro Centro, Parobé/RS. Avaliação: R$ 266.829,00.</strong></p>
+        </span>
+
+        <span class="clearfix"></span>
+        <span class="text-primary lance-inicial">
+            <i class="fa fa-usd" aria-hidden="true"></i>
+            Lance Inicial: <strong>R$ 266.829,00</strong>
+        </span>
+
+        
+
+        
+    </div>
+</div>
+                                            <div class="leilao-item media">
+    <a class="pull-left" href="https://benedettoleiloes.com.br/lance/2369">
+                    <img src="https://benedettoleiloes.com.br/storage/lote/2188/1aH5qAKG1KZ8j9WQdKuDMHwt9lJzQUQjGIwz0U2u.jpg" class="projectImg" />
+        
+    </a>
+    <div class="media-body">
+        <h4 class="media-heading">
+            <a href="https://benedettoleiloes.com.br/lance/2369">
+                Processo: <b>5001871-76.2016.8.21.0157</b>
+                <br>
+                <span class="text-default small">29/10 15:00 a  26/11 de 2026 15:00</span>
+            </a>
+            <br>
+                            <span class="pull-right label label-success">ABERTO</span>
+                                            </h4>
+
+        <span>
+            <p class="ql-align-justify"><strong style="color: rgb(136, 136, 136);">Imóvel localizado próximo a rodovia RS239, na Rua Ervino Lehnen, Parobé/RS. Avaliação: R$ 144.260,00.</strong></p>
+        </span>
+
+        <span class="clearfix"></span>
+        <span class="text-primary lance-inicial">
+            <i class="fa fa-usd" aria-hidden="true"></i>
+            Lance Inicial: <strong>R$ 72.130,00</strong>
+        </span>
+
+        
+
+        
+    </div>
+</div>
+                                            <div class="leilao-item media">
+    <a class="pull-left" href="https://benedettoleiloes.com.br/lance/1704">
+                    <img src="https://benedettoleiloes.com.br/storage/lote/1395/0D83bjK8OvFEciDnkf17yaW4P8D6HnKYkrAUInGN.jpg" class="projectImg" />
+        
+    </a>
+    <div class="media-body">
+        <h4 class="media-heading">
+            <a href="https://benedettoleiloes.com.br/lance/1704">
+                Processo: <b>5000024-47.2018.8.21.0164</b>
+                <br>
+                <span class="text-default small">2/04 09:00 a  2/07 de 2025 15:00</span>
+            </a>
+            <br>
+                                        <span class="pull-right label label-default">FINALIZADO</span>
+                                </h4>
+
+        <span>
+            <p class="ql-align-justify"><strong style="color: rgb(136, 136, 136);">BOX DE ESTACIONAMENTO Nº 07, EDIFÍCIO WERNER, na Rua Eduardo Willrich, Três Coroas/RS. Avaliação: R$20.000,00 </strong></p>
+        </span>
+
+        <span class="clearfix"></span>
+        <span class="text-primary lance-inicial">
+            <i class="fa fa-usd" aria-hidden="true"></i>
+            Lance Inicial: <strong>R$ 10.000,00</strong>
+        </span>
+
+        
+
+        
+    </div>
+</div>
+                                            <div class="leilao-item media">
+    <a class="pull-left" href="https://benedettoleiloes.com.br/lance/2319">
+                    <img src="https://benedettoleiloes.com.br/storage/lote/2319/nCjPyKgkWn4QAyiNI34hz2R6LkEq2GvewVyqElen.jpg" class="projectImg" />
+        
+    </a>
+    <div class="media-body">
+        <h4 class="media-heading">
+            <a href="https://benedettoleiloes.com.br/lance/2319">
+                Processo: <b>5000426-60.2020.8.21.0164</b>
+                <br>
+                <span class="text-default small">4/11 09:00 a  4/11 de 2026 15:00</span>
+            </a>
+            <br>
+                                                    <span class="pull-right label label-warning">EM BREVE</span>
+                    </h4>
+
+        <span>
+            <p class="ql-align-justify"><strong style="color: rgb(136, 136, 136);">A fração ideal de 10% de um terreno urbano, com a área de 363,00m², na Rua Jacob Wilbert, Três Coroas/RS. Avaliação: R$ 13.533,40. </strong></p>
+        </span>
+
+        <span class="clearfix"></span>
+        <span class="text-primary lance-inicial">
+            <i class="fa fa-usd" aria-hidden="true"></i>
+            Lance Inicial: <strong>R$ 13.533,40</strong>
+        </span>
+
+        
+
+        
+    </div>
+</div>
+                                            <div class="leilao-item media">
+    <a class="pull-left" href="https://benedettoleiloes.com.br/lance/2330">
+                    <img src="https://benedettoleiloes.com.br/storage/lote/2330/cZjvy3AYMQ1CScoqhpcy167E6DaX0FrIgDz3itXv.jpg" class="projectImg" />
+        
+    </a>
+    <div class="media-body">
+        <h4 class="media-heading">
+            <a href="https://benedettoleiloes.com.br/lance/2330">
+                Processo: <b>5000606-66.2026.8.21.0164</b>
+                <br>
+                <span class="text-default small">10/11 09:00 a  10/11 de 2026 15:00</span>
+            </a>
+            <br>
+                                                    <span class="pull-right label label-warning">EM BREVE</span>
+                    </h4>
+
+        <span>
+            <p class="ql-align-justify"><strong style="color: rgb(136, 136, 136);">Imóvel, com 120,00m², situado na Rua Criciúma, nº 78, bairro Sander, Três Coroas/RS. Avaliação: R$ 340.499,00. </strong></p>
+        </span>
+
+        <span class="clearfix"></span>
+        <span class="text-primary lance-inicial">
+            <i class="fa fa-usd" aria-hidden="true"></i>
+            Lance Inicial: <strong>R$ 340.499,00</strong>
+        </span>
+
+        
+
+        
+    </div>
+</div>
+                                            <div class="leilao-item media">
+    <a class="pull-left" href="https://benedettoleiloes.com.br/lance/2364">
+                    <img src="https://benedettoleiloes.com.br/storage/lote/2364/lAifI4WH2aBynhHMIKSblzmJC0pR9jE5AiKfi6ip.jpg" class="projectImg" />
+        
+    </a>
+    <div class="media-body">
+        <h4 class="media-heading">
+            <a href="https://benedettoleiloes.com.br/lance/2364">
+                Processo: <b>5000003-18.2011.8.21.0164</b>
+                <br>
+                <span class="text-default small">9/12 09:00 a  9/12 de 2026 15:00</span>
+            </a>
+            <br>
+                                                    <span class="pull-right label label-warning">EM BREVE</span>
+                    </h4>
+
+        <span>
+            <p class="ql-align-justify"><strong style="color: rgb(136, 136, 136);">A fração ideal de 16,66% de um terreno urbano, com uma casa mista, sob o nº 549, da Rua Itália, Imbé/RS. Avaliação: R$ 24.990,00. </strong></p>
+        </span>
+
+        <span class="clearfix"></span>
+        <span class="text-primary lance-inicial">
+            <i class="fa fa-usd" aria-hidden="true"></i>
+            Lance Inicial: <strong>R$ 24.990,00</strong>
+        </span>
+
+        
+
+        
+    </div>
+</div>
+                    
+
+                </div>
+            </div>
+            <!--
+            <div class="col-md-12">
+                <div class="col-lg-12">
+                    PAGINACAO
+                </div>
+            </div>
+            -->
+        </div>
+    </div>
+
+
+</div>
+<!-- /.container -->
+
+    <!-- footerBottomSection -->
+<div class="footerBottomSection">
+    <div class="container">
+        <div class="row">
+            <div class="col-md-4" style="line-height:2.2">
+                &copy; Todos direitos reservados. <br>
+                <i class="fa fa-code fa-lg"></i> Sistema desenvolvido por <a href="https://powerweb.com.br" target="_blank" title="Sistema de leilão Online Desenvolvido por PowerWeb Criação de Sites">PowerWeb</a>
+            </div>
+            <div class="col-md-4">
+                <p style="line-height:2.2">
+                    <i class="fa fa-whatsapp fa-lg"></i> Telefone/Whats:
+                    <strong><span>
+                        <a href="tel:5135471328">(51) 3547-1328</a>
+                    </span></strong>
+                    <br>
+                    <i class="fa fa-user fa-lg"></i> Responsável: Jeferson Benedetto<br>
+                    <i class="fa fa-map-marker fa-lg"></i> Av. Tenente Pedro Von Muhlen, nº 821 - Centro<br/>Rolante / RS - CEP 95690-000
+                </p>
+
+            </div>
+            <div class="col-md-4">
+                <div class="pull-right">
+                    <a href=""><img src="https://benedettoleiloes.com.br/assets/img/logo1.png" alt="Benedetto Leilões" /></a>
+                </div>
+            </div>
+        </div>
+
+
+    </div>
+</div>
+
+
+
+
+<link rel="stylesheet" href="https://unpkg.com/swiper/swiper-bundle.min.css" />
+
+
+
+
+
+
+
+
+</body>
+</html>
