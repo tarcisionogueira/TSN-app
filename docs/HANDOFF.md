@@ -79,9 +79,9 @@ dono comparar totais do Inter com o Internet Banking; reagrupar sub-abas do Fina
 - **Grupo Carvalho:** sem imóvel (1 casa em toda a história, mai/2025; hoje só sucata/Detran/DER).
 - ⚠️ **Fração ideal — sala de edifício (global):** "Sala 201 do edifício … e sua correspondente fração ideal de 36/15.460
   do respectivo terreno" saía como FATIA (o contexto de unidade não tinha sala). JS corrigido (`RE_CONTEXTO_UNIDADE`,
-  teste em `fracao-ideal.mjs`); **migração `20261030_fracao_sala_do_edificio.sql` escrita e NÃO aplicada** (a aplicação
-  pela sessão foi barrada) — até o dono aplicar, o `trg_imovel_fracao_ideal` desativa salas comerciais inteiras
-  (hoje: paulobotelho_15930).
+  teste em `fracao-ideal.mjs`); migração `20261030_fracao_sala_do_edificio.sql` **aplicada pelo dono em 30/10**
+  (conferido: sala inteira `false`, "50% da sala" `true`). paulobotelho_15930 reativado à mão — a releitura do motor
+  nunca traz de volta lote desativado. Varredura do acervo: nenhuma outra sala futura estava escondida pela regra antiga.
 - **Placar 30/10 noite:** 1.186 conectados · 282 com site a conectar.
 - **Fila #380, próximos:** A Leiloeira (páginas internas 404 sem sessão), D1 Lance. Bom Valor/Paganini (7 white-labels)
   segue NÃO integrar (rede colaborativa já via Globo).
