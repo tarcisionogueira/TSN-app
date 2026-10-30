@@ -287,7 +287,23 @@ export default async function handler(req) {
   //   · chamado        → suporte+<token do chamado>@ (volta ao MESMO chamado)
   //   · endereço pessoal → pessoa+<token do envio>@ (volta à caixa dela, encadeada)
   //   · comunicação    → o próprio endereço (contato@/suporte@…) → cai na fila de atendimento
-  const respostaToken = (!chamado && pessoal) ? crypto.randomUUID().replace(/-/g, '').slice(0, 24) : null;
+  // Toque duplo no celular (25/09): o mesmo e-mail saiu 2× ao leiloeiro, 1,1 s de diferença, com
+  // dois ids do Resend. A tela gera uma chave por mensagem composta; com ela o Resend devolve o
+  // envio original em vez de mandar de novo, e o registro abaixo não duplica em Enviados.
+  const chaveEnvio = /^[A-Za-z0-9-]{8,64}$/.test(String(body?.chave_envio || '')) ? String(body.chave_envio) : null;
+  // O token de resposta SAI DA CHAVE, não do acaso (30/10). Sorteado a cada pedido, ele mudava o
+  // Reply-To — e uma repetição do MESMO envio (um clique, dois pedidos, 16 s depois) chegava ao
+  // Resend com corpo diferente: "idempotency key ... body was modified". O e-mail já tinha saído,
+  // e a tela mostrava erro. Mesma chave → mesmo token → mesmo corpo → o Resend devolve o original.
+  let respostaToken = null;
+  if (!chamado && pessoal) {
+    if (chaveEnvio) {
+      const dig = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${user.id}:${chaveEnvio}`));
+      respostaToken = [...new Uint8Array(dig)].map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 24);
+    } else {
+      respostaToken = crypto.randomUUID().replace(/-/g, '').slice(0, 24);
+    }
+  }
   let replyTo = respostaToken ? enderecoDe.replace('@', `+${respostaToken}@`) : enderecoDe;
   if (chamado) {
     let token = chamado.email_token;
@@ -324,10 +340,6 @@ export default async function handler(req) {
     + `<p style="font-family:Arial,Helvetica,sans-serif;color:#475569;font-size:13px;margin-top:18px">—<br>${esc(nomeRemetente)}<br>BidPro Brasil</p>`
     + (citacao ? `<blockquote style="border-left:3px solid #cbd5e1;margin:16px 0 0;padding:4px 12px;color:#64748b;white-space:pre-wrap;font-family:Arial,Helvetica,sans-serif;font-size:13px">${esc(citacao.trim())}</blockquote>` : '');
 
-  // Toque duplo no celular (25/09): o mesmo e-mail saiu 2× ao leiloeiro, 1,1 s de diferença, com
-  // dois ids do Resend. A tela gera uma chave por mensagem composta; com ela o Resend devolve o
-  // envio original em vez de mandar de novo, e o registro abaixo não duplica em Enviados.
-  const chaveEnvio = /^[A-Za-z0-9-]{8,64}$/.test(String(body?.chave_envio || '')) ? String(body.chave_envio) : null;
   const r = await enviarEmail({
     from: `${nomeRemetente} (BidPro Brasil) <${enderecoDe}>`,
     to: para, cc, replyTo, subject: assunto, html, text: textoFinal,
@@ -336,6 +348,19 @@ export default async function handler(req) {
     meta: { tipo: 'caixa_equipe', userId: user.id },
     idempotencyKey: chaveEnvio ? `caixa:${user.id}:${chaveEnvio}` : undefined,
   });
+  if (!r.ok && /idempotenc/i.test(String(r.error || ''))) {
+    // Chave já usada com OUTRO conteúdo (ex.: o envio saiu, a tela não soube, e o texto foi mexido
+    // antes de clicar de novo). Se este envio já está em Enviados, ele SAIU — dizer "não foi
+    // possível enviar" levaria a mandar de novo. Senão, explica o que fazer, sem jargão do Resend.
+    const ja = await sb(`email_caixa?enviado_por=eq.${user.id}&direcao=eq.saida&assunto=eq.${encodeURIComponent(assunto)}&criado_em=gte.${new Date(Date.now() - 24 * 3600e3).toISOString()}&select=id,criado_em&order=criado_em.desc&limit=1`);
+    const linhas = ja.ok ? await ja.json().catch(() => null) : null;
+    if (!ja.ok || !Array.isArray(linhas)) console.error('[email-caixa] checagem do envio repetido falhou HTTP', ja.status);
+    if (Array.isArray(linhas) && linhas.length) {
+      const h = new Date(linhas[0].criado_em).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
+      return json({ ok: true, repetido: true, avisos: [`este e-mail já tinha saído às ${h} (está em Enviados) — não foi mandado de novo`] });
+    }
+    return json({ error: 'Este envio já foi tentado com um conteúdo diferente. Confira em Enviados; se não estiver lá, descarte e escreva de novo.' }, 409);
+  }
   if (!r.ok) {
     const msg = r.error === 'orcamento_diario_excedido'
       ? (anexosEnvio.length
