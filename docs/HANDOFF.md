@@ -29,6 +29,14 @@
   `_conciliacao-pacote.js` (tela e cron usam o mesmo). NÃO fecha a competência sozinho — o dono fecha na tela.
   **Pendente do dono:** cadastrar `CONTABILIDADE_EMAIL` na Vercel + Redeploy antes de 03/11; sem ele, o 1º pacote
   (outubro) vai só para o dono. Teste: `?acao=envio&competencia=2026-10&so_dono=1` com x-cron-secret.
+- **Varredura das fontes fora do verde (tarde de 30/10)** — consertos: GIORDANO e SIMON (`esperarSeletor` no fetch-dom;
+  SIMON sem mídia/domcontentloaded: imóveis 52, veículos 54/17), Chromium morto com "Connection closed" relança,
+  seco não grava saúde, **zero explicado → 'vazio'** (~25 pequenos saíam 'falhou' todo dia), TOTALLEILOES piso 10→5,
+  DH lê 11 páginas (seco 0→88), HASTA espera o socket.io dos painéis (seco 26→93), Firecrawl semanal 30→60 min.
+  Legítimos (explicados em `fonte_regressao_explicada`): SAVOY, ADRILEIL, TORRES3; SCHMITZ = 50 'sem_lance' na vitrine
+  pós-leilão até ~11/11; CREPALDI desligado de propósito (#288); Alliance fora do ar (522); PESTANA transitória.
+  **Bloqueados por anti-robô** (não contornar — vetado): Fernando/Jonas/Lucas (MGL, 403 + Firecrawl 500) e LEJE
+  (lista abre pelo Firecrawl, detalhe só com Bright Data). Emílio Matos e LEJE param no teto semanal do Bright Data.
 - Abertura também viu: GIORDANOLEILOES 97 → 0 (falhou "nenhum lote lido"), DHLEILOES só 40 encerrados, Alliance
   522, Pedro Castro aguardando a 1ª rodada com o MSIS corrigido (044fd94 já estava publicado).
 
