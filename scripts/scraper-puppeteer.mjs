@@ -4857,6 +4857,15 @@ export async function scraperHastaPublica(browser) {
       try {
         const url = href.startsWith('http') ? href : `${BASE}${href}`;
         await page.goto(url, { waitUntil: 'networkidle2', timeout: 45000 });
+        // ESPERA OS LOTES (30/10): o painel chega "pronto" para o networkidle2, mas as linhas de lote vêm pelo
+        // socket.io 2–10 s depois. Lido na hora, 149 de 187 painéis saíram "sem linha de lote" (seco de 30/10;
+        // 29/10 gravou 35 imóveis contra ~134). Medido painel a painel: 18387/18408 aparecem aos 5 s, 17306 aos
+        // 10 s. Espera a linha de lote OU o próprio painel dizer "0 lotes"; sem isso em 15 s, segue para a
+        // proteção abaixo (lote não lido nunca é aposentado).
+        await page.waitForFunction(
+          () => /\d+\s*\|\s*[^\n]+\nLance Atual:/.test(document.body.innerText) || /\b0 lotes? neste leil/i.test(document.body.innerText),
+          { timeout: 15000, polling: 500 },
+        ).catch(() => { /* não renderizou em 15 s: o teste da linha de lote logo abaixo protege o leilão e registra o motivo */ });
         const texto = (await page.evaluate(() => document.body.innerText).catch(() => '')).replace(/\r/g, '');
         if (!texto) { proteger(id, 'painel sem texto'); continue; }
         // Painel aberto mas sem NENHUMA linha de lote (de qualquer tipo): os lotes não renderizaram a tempo.
