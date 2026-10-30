@@ -86,6 +86,10 @@ export const TENANTS = {
   // a Leiloar, mas o lote mora em /leilao/<id>/lote/<id>/<slug> e a página é Angular (3º template, parseAngular). Seco: 90
   // lotes enumerados na home; de 40 lidos, 25 imóveis aproveitáveis em SC/PR/SP, veículos e máquinas saem pela categoria.
   centralsul: { fonte: 'CENTRALSUL', leiloeiro: 'Central Sul de Leilões', base: 'https://www.centralsuldeleiloes.com.br', catalogo: '/' },
+  // 29/10 — Casa do Leilão (SC, Paulo Castelan Minatto; fila dos 58 com imóvel e sem leitor). /externo/ sem cards de leilão:
+  // a home lista os LOTES direto (/externo/lote/<id>/<slug>, 8 hoje). Seco com este parser: 8 de 8 lidos com cidade, valor e
+  // praça (Lages, Canoinhas, Rio do Sul, Porto União, Camocim/CE…); 2 "Bem" de R$ 5–35 mil saem no naoEhImovel.
+  casadoleilao: { fonte: 'CASADOLEILAO', leiloeiro: 'Casa do Leilão (Paulo Castelan Minatto)', base: 'https://casadoleilao.com' },
 };
 
 // Leilão/lote de TESTE da plataforma (brasilialeiloes, rodrigo, IPC, marquesbarreto, lucasignacio — 24/10) e de
