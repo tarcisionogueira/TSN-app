@@ -51,12 +51,19 @@ if (!SO_LER) {
 
 // Alvo: ATIVO e site NÃO lido — sem domínio, ou domínio sem `parser_existente` na triagem. Ordem estável por id; fatia do
 // dia = posição % CICLO.
-const { data: junta, error: eJ } = await supabase.from('leiloeiro_junta').select('id, nome, nome_norm, dominio')
-  .eq('situacao', 'ATIVO').order('id').limit(5000);
-if (eJ) { console.error(`[radar-leiloeiros] não li a junta: ${eJ.message}`); process.exit(1); }
-const { data: lidos, error: eT } = await supabase.from('leiloeiro_triagem').select('dominio')
-  .not('parser_existente', 'is', null).neq('parser_existente', '').limit(10000);
-if (eT) { console.error(`[radar-leiloeiros] não li a triagem: ${eT.message}`); process.exit(1); }
+// Paginado: o PostgREST devolve no máximo 1.000 linhas por chamada, e `.limit(5000)` não passa disso — no 1º seco do alvo
+// ampliado (29/10) a lista saiu com 356 nomes em vez de 1.026, porque só os 1.000 primeiros cadastros foram lidos.
+async function todas(consulta, rotulo) {
+  const out = [];
+  for (let de = 0; ; de += 1000) {
+    const { data, error } = await consulta().range(de, de + 999);
+    if (error) { console.error(`[radar-leiloeiros] não li ${rotulo}: ${error.message}`); process.exit(1); }
+    out.push(...(data || []));
+    if (!data || data.length < 1000) return out;
+  }
+}
+const junta = await todas(() => supabase.from('leiloeiro_junta').select('id, nome, nome_norm, dominio').eq('situacao', 'ATIVO').order('id'), 'a junta');
+const lidos = await todas(() => supabase.from('leiloeiro_triagem').select('dominio').not('parser_existente', 'is', null).neq('parser_existente', '').order('dominio'), 'a triagem');
 const siteLido = new Set((lidos || []).map((r) => r.dominio));
 // Pela PESSOA, não pelo registro: o mesmo leiloeiro aparece em mais de uma junta, com site num cadastro e sem no outro.
 // Na 1ª rodada (29/10) 60 dos 67 editais eram de 3 leiloeiros assim — Sued Peter e Camilla Vecchi já entram pelo site.
