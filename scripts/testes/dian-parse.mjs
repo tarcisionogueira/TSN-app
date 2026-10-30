@@ -3,7 +3,7 @@
 //   apto1206: leilão em 2ª praça (1ª 26/10, 2ª 09/11/2026), avaliação R$ 350 mil, matrículas no plural;
 //   sergipe2195: VENDA DIRETA — o item não mostra preço; ele vem do card da home ("Valor de venda R$ 225.000,00").
 import fs from 'fs';
-import { TENANTS, extrairUrlsDeLote, extrairUrlsDeEvento, parseDetalhe, montarRow, lerCard } from '../lib/dian-parse.mjs';
+import { TENANTS, extrairUrlsDeLote, extrairUrlsDeEvento, parseDetalhe, montarRow, lerCard, checarQualidade } from '../lib/dian-parse.mjs';
 const T = TENANTS.dian;
 const ler = (n) => fs.readFileSync(new URL(`./fixtures/dian-${n}.html`, import.meta.url), 'utf8');
 const U = (id) => `${T.base}/item/${id}`;
@@ -52,6 +52,10 @@ eq('item cru: pares rótulo/valor com classe e ícone antes', (({ data_leilao, c
   '<main><svg><path d="M1 1"></path></svg><h1 class="t">CASA</h1><p class="e">Rua X, 1 — Vacaria/RS<span> · #A1</span></p>'
   + '<div class="g"><p class="r">Categoria</p><p class="v">Imóvel</p></div><div class="g"><p class="r">1ª praça</p><p class="v">05/11/2026, 14:30</p></div></main>',
   U('2567d6e5-873f-4180-a010-947521e2a8b1'), { agora: HOJE })), { data_leilao: '2026-11-05T14:30:00-03:00', cidade: 'Vacaria' });
+
+// Quota-parte é fatia (gravada por engano na 1ª rodada, 29/10); imóvel inteiro segue para a régua comum.
+eq('quota parte → descartada como fração', checarQualidade({ titulo: 'Quotas Parte de Terrenos em Esmeralda', descricao: 'Endereço: Esmeralda/RS. QUOTA PARTE DE 45,11M² DE UM TERRENO URBANO' }).faltando, ['fracao_ideal']);
+eq('imóvel inteiro não é barrado por isso', checarQualidade(rv).faltando?.includes('fracao_ideal') || false, false);
 
 // Sem card e sem praça: não entra.
 eq('item sem praça e sem card → null', parseDetalhe(ler('item-sergipe2195'), U('00000000-0000-0000-0000-000000000000'), { agora: HOJE }), null);

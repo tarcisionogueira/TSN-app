@@ -16,7 +16,7 @@
  *     A enumeração guarda o card em CARDS (por uuid) e o parseDetalhe junta — o runner sempre enumera antes do detalhe
  *     (mesmo arranjo do FEED do leilaoeletronico-parse).
  */
-import { inferirTipo, checarQualidade } from './leilaopro-parse.mjs';
+import { inferirTipo, checarQualidade as checarQualidadeComum } from './leilaopro-parse.mjs';
 import { num, titleCase, montarRowDom } from './dom-parse-util.mjs';
 import { decodificarEntidades, extrairAreaM2, numeroMatriculaDoTexto } from '../../api/_texto-imovel.js';
 import { cidadeDoTexto } from './lucian-parse.mjs';
@@ -139,4 +139,14 @@ export const montarRow = (url, det, tenant) => ({
   valor_minimo_2: det.valor_minimo_2 || null,
   ...(det.fotos?.length ? { fotos: det.fotos } : {}),
 });
-export { checarQualidade };
+
+// "QUOTAS PARTE DE TERRENOS EM ESMERALDA" / "QUOTA PARTE DE 45,11M² DE UM TERRENO" (29/10, gravado na 1ª rodada): é fatia,
+// e a régua comum (ehFracaoIdeal, espelhada em fracao_ideal_barrada no banco) só conhece "cota parte DE N%". Barrado aqui,
+// com o mesmo motivo; levar "quota/cota parte de N m²" para a régua comum pede migração do espelho.
+const RE_QUOTA_PARTE = /\b[qc]uotas?[\s-]+partes?\b/i;
+export function checarQualidade(imovel, opts) {
+  if (RE_QUOTA_PARTE.test(`${imovel?.titulo || ''} ${String(imovel?.descricao || '').slice(0, 300)}`)) {
+    return { ok: false, faltando: ['fracao_ideal'], descartar: true, motivo: 'parte/fração ideal — fora do acervo por decisão de negócio' };
+  }
+  return checarQualidadeComum(imovel, opts);
+}
