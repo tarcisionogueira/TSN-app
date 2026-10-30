@@ -25,7 +25,12 @@ const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 // `networkidle2` — as imagens não param de carregar e o `goto` estourava os 45 s nas duas tentativas
 // ("catálogo de veículos não abriu" em 01:10 e 07:07). Para página que já vem pronta do servidor, sem
 // imagem (o `src` continua no HTML) e esperando só o DOM. Default: nada muda para as outras fontes.
-export function criarMotorDom({ esperaMs = 2500, timeoutMs = 45000, delayAntesMs = 0, isolarSessao = false, usarProxyIsp = false, bloquearMidia = false, waitUntil = 'networkidle2' } = {}) {
+// `esperarSeletor` (30/10, GIORDANO): string CSS ou `(url) => string|null`. Depois do `goto`, espera esse
+// seletor aparecer (até `esperarSeletorMs`) ANTES da espera fixa. Existe porque a home do leilao/index
+// monta a lista por JS ("Carregando leilões…"): em 29/10 os 3 s fixos leram a página ainda vazia e o
+// Giordano saiu com 0 enumerados e status falhou, com o site no ar e 94 lotes. Se o seletor não aparecer,
+// segue com o HTML que houver (e loga) — quem decide se zero é zero continua sendo o motor.
+export function criarMotorDom({ esperaMs = 2500, timeoutMs = 45000, delayAntesMs = 0, isolarSessao = false, usarProxyIsp = false, bloquearMidia = false, waitUntil = 'networkidle2', esperarSeletor = null, esperarSeletorMs = 20000 } = {}) {
   const estado = { semCota: false };   // dom não usa Bright Data; campo existe pelo contrato
   const comProxy = usarProxyIsp && proxyIspDisponivel();
   let browser = null;
@@ -88,6 +93,11 @@ export function criarMotorDom({ esperaMs = 2500, timeoutMs = 45000, delayAntesMs
         console.error(`   [dom] HTTP ${resp.status()} em ${url}`);
         return { html: null, via: `dom-${resp.status()}`, definitivo: true };
       }
+      const seletor = typeof esperarSeletor === 'function' ? esperarSeletor(url) : esperarSeletor;
+      if (seletor) {
+        await page.waitForSelector(seletor, { timeout: esperarSeletorMs })
+          .catch(() => console.error(`   [dom] "${seletor}" não apareceu em ${Math.round(esperarSeletorMs / 1000)}s em ${url} — lendo o que houver`));
+      }
       await new Promise(r => setTimeout(r, esperaMs));   // hidratação após network idle
       const html = await page.content();
       return { html: html || null, via: 'dom' };
@@ -96,7 +106,10 @@ export function criarMotorDom({ esperaMs = 2500, timeoutMs = 45000, delayAntesMs
       console.error(`   [dom] falha em ${url}: ${msg.slice(0, 120)}`);
       // Chromium morto (Target closed/Protocol error) não se recupera na mesma instância:
       // derruba a referência para o retry relançar o navegador do zero.
-      if (/Target closed|Protocol error|disconnected/i.test(msg)) {
+      // 30/10: + "Connection closed" / "Session closed" / "frame was detached" — no seco do SIMON o Chromium
+      // morreu com essas mensagens, nenhuma casava, e TODOS os lotes seguintes falharam na mesma instância
+      // morta (o catálogo de veículos "não abriu" em 29/10 tem essa cara: o navegador já vinha morto).
+      if (/Target closed|Protocol error|disconnected|Connection closed|Session closed|frame was detached/i.test(msg)) {
         await browser?.close().catch(() => {}); browser = null;
       }
       return { html: null, via: 'dom-falha' };

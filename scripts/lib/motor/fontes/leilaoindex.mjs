@@ -18,7 +18,9 @@ export const TENANTS_POR_CHAVE = TENANTS;
 export default {
   chave: 'leilaoindex',
   fetch: 'dom',
-  dom: { esperaMs: 3000 },
+  // 30/10: a home monta os cards por JS; espera o 1º link de lote (só no catálogo — a página do lote
+  // não tem esse link e esperaria à toa). Em 29/10 os 3 s fixos pegaram "Carregando…" no Giordano.
+  dom: { esperaMs: 3000, esperarSeletor: (url) => (/\/leilao\/index\/leilao_id\//.test(url) ? null : 'a[href*="/leilao/index/leilao_id/"]') },
   catalogo: '/',
   // 21/10: a home pagina por `?pg=N` (Giordano: 3 páginas, a 3ª com 34 cards) — com `pagina` e
   // teto 1 só a 1ª entrava (Giordano ~55 imóveis no site × 17 aqui; Rigolon 5; Thais 9). O laço

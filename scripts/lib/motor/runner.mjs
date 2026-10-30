@@ -456,7 +456,14 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
     // lotes listados estavam na memória de recusa (#238), a fila saía vazia e nenhum contador subia.
     nRecusados ? `${nRecusados} recusado(s) recentemente (memória #238), pulados` : '',
   ].filter(Boolean).join(' · ');
-  return { prontos, encerrados, fonteVazia: fetchOk && enumerado.urls.length === 0, vazioDeclarado, enumerados: enumerado.urls.length, cotaNegada, eventosCount, viaCatalogo: via, naoImovelIds, idsEnumerados, listaCompleta: enumerado.completa, listaCortada: enumerado.cortada, porqueZero, encerradosAtivos };
+  // ZERO EXPLICADO (30/10): o catálogo abriu, listou lotes, nenhum detalhe falhou, nada foi cortado por
+  // orçamento — e mesmo assim zero prontos, porque cada listado já tinha destino conhecido (recusado na
+  // memória #238, encerrado, não-imóvel, barrado na qualidade ou fora pela URL). Isso é "nada novo a ler",
+  // não falha: ~25 leiloeiros pequenos ficavam 'falhou' todo dia com o catálogo são (Karla Pepe, Casa
+  // Forte…), o ruído que treina a ignorar o painel. Queda real continua pega: a saúde compara a LISTA
+  // (enumerados) com a execução anterior e promove a 'degradado'.
+  const zeroExplicado = fetchOk && enumerado.urls.length > 0 && !sem && !cotaNegada && !prontos.length;
+  return { prontos, encerrados, fonteVazia: fetchOk && enumerado.urls.length === 0, vazioDeclarado, enumerados: enumerado.urls.length, cotaNegada, eventosCount, viaCatalogo: via, naoImovelIds, idsEnumerados, listaCompleta: enumerado.completa, listaCortada: enumerado.cortada, porqueZero, encerradosAtivos, zeroExplicado };
 }
 
 // Roda a coleta de uma fonte inteira (todos os tenants). opts:
@@ -484,7 +491,7 @@ export async function rodarFonte(cfg, opts) {
   console.log(`${rotulo} ${dryrun ? '(DRY-RUN — não grava)' : '(GRAVANDO)'} · tenants: ${tenants.map(t => t.fonte).join(',')} · max ${maxLotes}/tenant`);
 
   for (const tenant of tenants) {
-    const { prontos, encerrados, fonteVazia, vazioDeclarado, enumerados, cotaNegada, eventosCount, viaCatalogo, naoImovelIds = [], idsEnumerados, listaCompleta, listaCortada, porqueZero, encerradosAtivos = [] } = await coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debug, semBD, dryrun });
+    const { prontos, encerrados, fonteVazia, vazioDeclarado, enumerados, cotaNegada, eventosCount, viaCatalogo, naoImovelIds = [], idsEnumerados, listaCompleta, listaCortada, porqueZero, encerradosAtivos = [], zeroExplicado } = await coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debug, semBD, dryrun });
 
     if (!prontos.length) {
       // ⚠️ 29/08 — FONTE VAZIA PRECISA VIRAR LINHA, NÃO SILÊNCIO. Isto era um `continue` que
@@ -507,8 +514,10 @@ export async function rodarFonte(cfg, opts) {
           : eventosCount != null
           ? `respondeu 200 e enumerou 0 lote(s) (${eventosCount} evento(s) no catálogo)`
           : 'respondeu 200 e enumerou 0 lote(s)';
-        console.log(`[${tenant.fonte}] ${motivo} — registrando a medição.`);
-        await registrarSaude(supabase, tenant.fonte, [], cfg.chave, {
+        console.log(`[${tenant.fonte}] ${motivo} — ${dryrun ? 'DRY-RUN: medição NÃO gravada' : 'registrando a medição'}.`);
+        // 30/10: DRY-RUN não grava saúde — como o ramo de sucesso, que sai antes do upsert. Um seco com
+        // amostra de 3 lotes gravou "falhou" no GIORDANO com 94 enumerados; o agendado roda com gravar.
+        if (!dryrun) await registrarSaude(supabase, tenant.fonte, [], cfg.chave, {
           ok: false, vazio: true, enumerados: 0,
           metricas: { n: 0, uf_pct: 0, valor_pct: 0, link_pct: 0, foto_pct: 0 },
           motivo,
@@ -517,8 +526,10 @@ export async function rodarFonte(cfg, opts) {
         if (!dryrun) await apurarVencidos(supabase, fetchFonte, tenant, cfg);
         continue;
       }
-      await registrarSaude(supabase, tenant.fonte, [], cfg.chave, {
+      if (dryrun) console.log(`[${tenant.fonte}] DRY-RUN: saúde NÃO gravada (amostra de seco não é medição da fonte).`);
+      else await registrarSaude(supabase, tenant.fonte, [], cfg.chave, {
         ok: false, semCota: estado.semCota || cotaNegada > 0, cotaNegada, enumerados,
+        vazio: !!zeroExplicado && !estado.semCota,
         metricas: { n: 0, uf_pct: 0, valor_pct: 0, link_pct: 0, foto_pct: 0 },
         motivo: estado.semCota
           ? 'SEM COTA Bright Data — coleta não tentada (orçamento, não regressão da fonte)'
@@ -532,7 +543,7 @@ export async function rodarFonte(cfg, opts) {
               // 21/10: `firecrawl-sem-chave` (runner sem FIRECRAWL_API_KEY) caía no genérico abaixo — o LEJE gravou
               // "sem nenhum lote pronto" 4×/dia por 9 dias apontando para o parser, que estava certo.
               ? `catálogo não abriu: ${viaCatalogo} — acesso do runner, não parser`
-              : `sem lote pronto: ${porqueZero || 'nenhum lote lido'}`.slice(0, 400),
+              : `${zeroExplicado ? 'nada novo a ler' : 'sem lote pronto'}: ${porqueZero || 'nenhum lote lido'}`.slice(0, 400),
       });
       if (!dryrun) await desligarEncerrados(supabase, tenant, encerradosAtivos);
       console.error(`[${tenant.fonte}] nada a gravar.${estado.semCota ? ' (sem cota Bright Data — orçamento, não regressão.)' : ''}`);
