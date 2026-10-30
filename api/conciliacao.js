@@ -52,7 +52,13 @@ export default async function handler(req, res) {
   try { body = typeof req.body === 'object' && req.body ? req.body : JSON.parse(req.body || '{}'); } catch { body = {}; }
   const acao = String(body.acao || url.searchParams.get('acao') || 'listar');
 
-  const rl = await checkRateLimit(`conciliacao:${user.id}`, 40, 5 * 60_000);
+  // DOIS BALDES (30/10). Um teto único de 40/5 min travava a classificação linha a linha: o dono
+  // conciliou ~25 lançamentos em 3 min e passou a tomar 429 em todo clique. Ação leve de uma linha
+  // (gravação barata, só admin) tem balde próprio e largo; o teto curto fica com o que pesa ou
+  // sai daqui (importar extrato, enviar à contabilidade, fechar competência, PDF).
+  const LEVES = new Set(['conciliar', 'listar', 'definir_fornecedor', 'fornecedores', 'monitor']);
+  const leve = LEVES.has(acao);
+  const rl = await checkRateLimit(`conciliacao${leve ? ':leve' : ''}:${user.id}`, leve ? 400 : 40, 5 * 60_000);
   if (!rl.ok) { res.status(429).json({ error: 'Muitas operações. Aguarde alguns minutos.' }); return; }
 
   const hoje = new Date().toISOString().slice(0, 7);
