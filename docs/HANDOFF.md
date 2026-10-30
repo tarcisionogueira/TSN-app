@@ -93,6 +93,17 @@ dono comparar totais do Inter com o Internet Banking; reagrupar sub-abas do Fina
 - **Armadilha do placar:** o recruzar marca `coletado` por lote ATIVO no host. Lote suprimido como gêmeo some do host
   e o leiloeiro "desconecta" (sfrazao.com.br, 5 Frazão: 4 lotes gêmeos da FRAZAO) — domínio de vitrine secundária vai
   para a lista `codigo`.
+- **SUCATA E POSSE DO EXECUTADO FORA DO ACERVO (dono, 30/10):** "sucata, veículo em posse do executado não é
+  interessante. descarte… e retire dos filtros as sucatas". Migração `20261030_veiculo_sucata_fora_do_acervo.sql`:
+  gatilho `trg_zz_veiculo_fora_do_acervo` (roda depois de `trg_veiculo_sucata`) grava inativo `is_sucata` →
+  `suprimido_motivo='sucata'` e `status_patio='excluido'` → `'posse_do_executado'`; limpa os 2.130 sucatas ativos;
+  regra `oportunidade.veiculo_sucata` vira `fora_do_acervo`. Busca: sem o seletor "Sucata" e sem "Sucata — motor
+  servível" no filtro de motor; a consulta exclui `is_sucata` sempre. Executado já era 0 ativo (a coleta descarta).
+  Contagem do site cai de "11 mil+" para ~9,8 mil veículos.
+- **Veículos dos "só veículos":** Nova Serrana/Lorrana/Leonardo Veiga — a sessão foi BARRADA ao usar as credenciais de
+  cliente do bundle para tirar token da API (classificado como contorno de acesso); não insistir → convite de parceiro.
+  Os leilões deles em 30/10 eram de prefeitura/PRF/SAAE, "veículos e sucatas". Grupo Carvalho: quase tudo sucata/
+  "direito a documento" (Detran/DER) — com a regra nova, pouco sobra. Rossi: carros e máquinas — candidato a veículo.
 - **Placar 30/10 fim:** 1.188 conectados · 280 com site a conectar (dos quais ~11 sites próprios com imóvel, na #380).
 - **Fila #380, próximos:** D1 Lance, Leilões Brasil TO, Benedetto, Cristiano Escola, Jorge Brasil, Turani, Flávio Garcia,
   Alencastro, WR (RO), Molgado (SP). Bom Valor/Paganini segue NÃO integrar.
