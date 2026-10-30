@@ -7,6 +7,20 @@
 
 
 
+## 30/10 (manhã) — DEPLOY DESTRAVADO + STALE DE LEILOEIRO EM LOTES
+
+- **Produção não publicava desde ec302d0** (23h24 de 29/10): o prebuild barrou 2 padrões em
+  `importar-leiloeiros-tribunais.mjs` — `catch` cujo `${trib}` fechava o corpo para a regra antes do `console`, e
+  leitura dos 'fora' só com `data`. Corrigido em 9da7004; deploy READY. Lição: rodar `verificar:padroes` antes do
+  push também em script do runner (o prebuild olha `scripts/`).
+- **#377 NÃO fechou com o conserto de 29/10**: 57014 de novo às 02h de 30/10. A seleção leva < 0,6 s; quem estoura é
+  o UPDATE único × ~30 gatilhos. Agora `desativar_imoveis_leiloeiro_stale_lote` (lotes de 100, `completo`) e o
+  cron chama até terminar (86c66b5, migração `20261030_stale_leiloeiro_em_lotes.sql` aplicada). Seco com rollback:
+  200 linhas = 3,2 s com o banco folgado; 222 pendentes em 2 chamadas.
+- **Conferir 31/10:** e-mail "[BidPro] Erro em limpar-imoveis-stale" NÃO deve chegar; se vier limpo, fechar #377.
+- Abertura também viu: GIORDANOLEILOES 97 → 0 (falhou "nenhum lote lido"), DHLEILOES só 40 encerrados, Alliance
+  522, Pedro Castro aguardando a 1ª rodada com o MSIS corrigido (044fd94 já estava publicado).
+
 ## 29/10 (fim do dia) — RADAR MAIS ASSERTIVO, LEILOEIROS DOS TRIBUNAIS, 7 LEITORES "QUEBRADOS"
 
 **Feito (commits de7e602, 7635397, 044fd94, ec302d0):**
