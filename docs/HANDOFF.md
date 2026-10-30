@@ -82,9 +82,20 @@ dono comparar totais do Inter com o Internet Banking; reagrupar sub-abas do Fina
   teste em `fracao-ideal.mjs`); migração `20261030_fracao_sala_do_edificio.sql` **aplicada pelo dono em 30/10**
   (conferido: sala inteira `false`, "50% da sala" `true`). paulobotelho_15930 reativado à mão — a releitura do motor
   nunca traz de volta lote desativado. Varredura do acervo: nenhuma outra sala futura estava escondida pela regra antiga.
-- **Placar 30/10 noite:** 1.186 conectados · 282 com site a conectar.
-- **Fila #380, próximos:** A Leiloeira (páginas internas 404 sem sessão), D1 Lance. Bom Valor/Paganini (7 white-labels)
-  segue NÃO integrar (rede colaborativa já via Globo).
+- **TRIACCA (Lara Forster e Alexsandro, RS):** PHP server-rendered, charset MISTO (meta iso-8859-1, corpo UTF-8, bytes
+  Latin-1 soltos no `<head>` — o título vem do `<title>` depois da última "/"). Home lista todos os bens; o slug come
+  acento ("caminho-m-benz", "automvel-…") e separa veículo/máquina antes de ler. Preço: "último lance" (piso da próxima
+  oferta) ou "avaliação" sem lance; "Bem não disponível para leilão" = suspenso; "em leilão" fica na página depois da
+  praça. Gravado: 1 terreno em Getúlio Vargas (Lara); Alexsandro só tinha lote de teste. `testar:triacca`.
+- **Não coletáveis marcados (leiloeiro_triagem):** Nova Serrana/Lorrana/Leonardo Veiga (só veículos, API 401), Emídio
+  Medeiros e Londina (domínio estacionado), Posse Imóveis (imobiliária), Montenegro (Cloudflare → convite), A Leiloeira
+  (exige login).
+- **Armadilha do placar:** o recruzar marca `coletado` por lote ATIVO no host. Lote suprimido como gêmeo some do host
+  e o leiloeiro "desconecta" (sfrazao.com.br, 5 Frazão: 4 lotes gêmeos da FRAZAO) — domínio de vitrine secundária vai
+  para a lista `codigo`.
+- **Placar 30/10 fim:** 1.188 conectados · 280 com site a conectar (dos quais ~11 sites próprios com imóvel, na #380).
+- **Fila #380, próximos:** D1 Lance, Leilões Brasil TO, Benedetto, Cristiano Escola, Jorge Brasil, Turani, Flávio Garcia,
+  Alencastro, WR (RO), Molgado (SP). Bom Valor/Paganini segue NÃO integrar.
 
 ## 30/10 (manhã) — DEPLOY DESTRAVADO + STALE DE LEILOEIRO EM LOTES
 
