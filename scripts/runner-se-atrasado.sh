@@ -2,7 +2,7 @@
 # RECUPERA A RODADA PERDIDA (25/09, pedido do dono: "caso eu desligue o computador, deixe organizado
 # para no próximo momento disponível rodar").
 #
-# O cron do runner (02/08/14/20h) só dispara se a máquina estiver ligada NAQUELE minuto; computador
+# O cron do runner (08/12/16/20h desde 30/10 — o dono desliga o PC à noite) só dispara se a máquina estiver ligada NAQUELE minuto; computador
 # desligado ou WSL fechado = rodada perdida até o próximo horário (até 6 h depois). Este verificador
 # roda a cada 30 min e dispara o runner quando a última rodada COMPLETA (carimbo escrito só no fim de
 # runner-residencial.sh) tem mais de 6 h — ou seja, na primeira meia hora em que a máquina volta.

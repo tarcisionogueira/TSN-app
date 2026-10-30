@@ -18,6 +18,10 @@
   cron chama até terminar (86c66b5, migração `20261030_stale_leiloeiro_em_lotes.sql` aplicada). Seco com rollback:
   200 linhas = 3,2 s com o banco folgado; 222 pendentes em 2 chamadas.
 - **Conferir 31/10:** e-mail "[BidPro] Erro em limpar-imoveis-stale" NÃO deve chegar; se vier limpo, fechar #377.
+- **Runner residencial em horário de PC ligado** (dono: desliga o PC à noite, liga quase todo dia): crontab do WSL
+  `0 2,8,14,20` → `0 8,12,16,20` (backup `~/crontab.bak.2026-10-30`). Nada no runner depende de hora fixa (gates por
+  janela); "ao ligar" + `runner-se-atrasado.sh` recuperam ao ligar, e a reserva do GitHub (04h40/10h40/16h40/22h40,
+  só se > 7 h sem rodar) cobre a madrugada. PC configurado para nunca suspender. Hoje: ligou 07h14, rodou 07h16.
 - Abertura também viu: GIORDANOLEILOES 97 → 0 (falhou "nenhum lote lido"), DHLEILOES só 40 encerrados, Alliance
   522, Pedro Castro aguardando a 1ª rodada com o MSIS corrigido (044fd94 já estava publicado).
 
