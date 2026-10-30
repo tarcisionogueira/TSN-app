@@ -6,6 +6,31 @@
 
 
 
+## 30/10 (fim de tarde) — FOTOS LEVES, PLACAR DAS JUNTAS CORRIGIDO, PARQUE DOS LEILÕES
+
+- **Fotos (122a685d, 54f3f1fa):** a galeria do veículo baixava o ORIGINAL do leiloeiro — Jetta SUPERBID: 10 × ~2,5 MB
+  (4–8 s cada), e as miniaturas de 56 px baixavam as mesmas 10. Agora `?w=800` / `?w=240` no `/api/img-proxy` (WebP
+  ~25–65 KB / ~4–7 KB), próxima foto pré-carregada, original de reserva no onError. Imóveis medidos (17 fotos, 14 hosts):
+  quase todos 35–190 KB → hotlink direto segue; só os pesados vão reduzidos (Leilão VIP entrou em `HOSTS_PESADOS`;
+  Leilão Eletrônico ~580 KB fica de fora: 404 ao IP da Vercel).
+- **Landing "700+ leiloeiros" está certo:** é "Em leilão agora" (com lote no ar). Os 1.154 "conectados" incluem
+  `codigo_sem_lote` e `agregador` — não pôr esse número ali.
+- **Placar (leiloeiro_junta):** 24 domínios que já tinham leitor no código ou espelham fonte coletada estavam
+  `nao_coletado` porque o recruzar só conhece como `codigo` quem já foi marcado antes (regra do 26/10). Passados com a
+  lista explícita (seco antes, 23 + 1 transições exatas): Nacif, Guariglia (Soleon), FK, Prosperar (Leiloar), PB Castro
+  (SoftGT), Sevidanes (Suporte oferta), Casa Reis (Leilão Eletrônico), Olivi (loja Superbid), Eva (LeilãoPro), Itamar
+  (Astavero), Leilomaster=Leilo, Lut=Zuk, Lance Judicial=Grupo Lance, Mega MS=Mega, Miranda Carvalho, WLeilões, Alliance,
+  Zukerman, Maicon=MV, Arrematebem, Eduardo=Roisoft, Elisa, Cardoso, **Arthur Nunes = a própria Nordeste Leilões**.
+- **PARQUE DOS LEILÕES (Brasília/DF, família Braggio):** plataforma BRClick (Laravel, SSR) — única na lista (fingerprint
+  sobre 180 homes). As listas `/leiloes` e `/leiloes-judiciais` aceitam `is_lot=1&type_id=3` (LOTES de imóvel, 12/pág) →
+  DUAS fontes (`PARQUEDOSLEILOES`, `PARQUEDOSLEILOES_JUD`; `catalogo` por tenant — a varredura de sumidos é por fonte).
+  Lote: `<div data-json="auctionLot">` (ended_at, min_bid_value) + "Informações Título/Descrição"; ⚠️ "Próximos Lotes"
+  traz outro imóvel na mesma página (corte antes). Cada praça é um evento próprio; avaliação só na 1ª (= lance).
+  `status_name` envelhece — encerrado é `ended_at` passado. 1ª coleta GRAVADA: 5 judiciais abertos (Edéia/GO ×2, 3 salas
+  no SCS/DF). Passo no scraper-dom; `testar:parquedosleiloes` (17 asserções).
+- **Rossi:** sem imóvel (categoria vazia, SSR) — leilões de máquinas/carros/sucata. Anotado em `leiloeiro_triagem`.
+- **Fila #380, próximos:** Luiz Campolina (WordPress, 21 links, TRT3), Grupo Carvalho (Next.js, 15), Paulo Botelho,
+  A Leiloeira, D1 Lance. Bom Valor/Paganini (7 white-labels) segue NÃO integrar (rede colaborativa já via Globo).
 
 ## 30/10 (manhã) — DEPLOY DESTRAVADO + STALE DE LEILOEIRO EM LOTES
 

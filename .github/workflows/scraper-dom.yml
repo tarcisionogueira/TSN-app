@@ -107,11 +107,14 @@ on:
       - 'scripts/scraper-dian.mjs'
       - 'scripts/lib/dian-parse.mjs'
       - 'scripts/lib/motor/fontes/dian.mjs'
+      - 'scripts/scraper-parquedosleiloes.mjs'
+      - 'scripts/lib/parquedosleiloes-parse.mjs'
+      - 'scripts/lib/motor/fontes/parquedosleiloes.mjs'
       - '.github/workflows/scraper-dom.yml'
   workflow_dispatch:
     inputs:
       fontes:
-        description: 'csv: softgt,nortedeminas,leilaoeletronico,suportev2,suportenext,leilovia,labasoft,baston,cassiano,arnaldo,novaserrana(recon),alfa,hasta,nordeste,nordeste_veiculos,jeleiloes,leilaoindex,rocha,albertomacedo,francoleiloes,simon,globo,leje,freitas,leiloar,lgcorretor,nakakogue,astavero,suporteoferta,comprei,leilo,lucian,alliance,mvleiloes,dian'
+        description: 'csv: softgt,nortedeminas,leilaoeletronico,suportev2,suportenext,leilovia,labasoft,baston,cassiano,arnaldo,novaserrana(recon),alfa,hasta,nordeste,nordeste_veiculos,jeleiloes,leilaoindex,rocha,albertomacedo,francoleiloes,simon,globo,leje,freitas,leiloar,lgcorretor,nakakogue,astavero,suporteoferta,comprei,leilo,lucian,alliance,mvleiloes,dian,parquedosleiloes'
         required: false
         default: 'alfa,nordeste'
       gravar:
@@ -259,6 +262,17 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           MVLEILOES_DRYRUN: ${{ env.DRYRUN_PADRAO }}
         run: node scripts/scraper-mvleiloes.mjs
+
+      - name: Parque dos Leilões (Brasília/DF — imóveis judiciais e extrajudiciais)
+        # 30/10 (fila #380): plataforma BRClick; as listas judicial e extrajudicial filtram LOTES de imóvel
+        # (`is_lot=1&type_id=3`) → duas fontes do mesmo leiloeiro. Seco de 30/10: 5 judiciais abertos (Edéia/GO e 3 lotes
+        # da 2ª VETEC de Brasília), extrajudicial (BRB) só encerrados. Fetch grátis; ~1 min.
+        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'parquedosleiloes')) }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          PARQUEDOSLEILOES_DRYRUN: ${{ env.DRYRUN_PADRAO }}
+        run: node scripts/scraper-parquedosleiloes.mjs
 
       - name: Leiloeiro Dian (Vacaria/Passo Fundo/Lagoa Vermelha — RS)
         # 29/10 (fila #380): Next.js; a página do item só tem dado depois do JS → fonte `dom` (Chromium deste job).

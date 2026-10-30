@@ -135,6 +135,7 @@
     "testar:alliance": "node scripts/testes/alliance-parse.mjs",
     "testar:mvleiloes": "node scripts/testes/mvleiloes-parse.mjs",
     "testar:dian": "node scripts/testes/dian-parse.mjs",
+    "testar:parquedosleiloes": "node scripts/testes/parquedosleiloes-parse.mjs",
     "testar:leiloar2": "node scripts/testes/leiloar-segundo-template.mjs",
     "testar:leilovia": "node scripts/testes/leilovia-parse.mjs",
     "testar:labasoft": "node scripts/testes/labasoft-parse.mjs",
