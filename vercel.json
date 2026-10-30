@@ -280,6 +280,10 @@
       "schedule": "25 8 * * *"
     },
     {
+      "path": "/api/contabilidade-mensal-cron",
+      "schedule": "0 12 1-5 * *"
+    },
+    {
       "path": "/api/enriquecer-proximidades",
       "schedule": "*/15 * * * *"
     },

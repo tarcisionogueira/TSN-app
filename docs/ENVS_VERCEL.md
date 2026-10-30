@@ -216,7 +216,8 @@ Os dois também como **secret do GitHub** (o `enriquecer-fipe.yml` lê de lá).
   401. Trocado em 23/10/2026 por um fine-grained (`bidpro-vercel-actions`, só o repo TSN-app, Actions: Read and
   write) que **vence em 23/10/2027**; lembrete na `pendencias_projeto` para 23/09/2027. Ao trocar o valor na Vercel,
   é preciso fazer **Redeploy**: variável nova só vale em deploy novo.
-- `CONTABILIDADE_EMAIL` (Vercel) — **opcional**: `api/conciliacao.js` usa `body.email` primeiro; a env é só o
-  destino padrão quando a tela não manda um. Ausente = a tela pede o e-mail.
+- `CONTABILIDADE_EMAIL` (Vercel) — `api/conciliacao.js` usa `body.email` primeiro; a env é o destino padrão quando a
+  tela não manda um. **Desde 30/10 é também o destino do envio MENSAL automático** (`contabilidade-mensal-cron.js`,
+  dia 3): ausente = o pacote vai só ao dono, com alerta dizendo que o contador não recebeu.
 - `AUDITORIA_EMAIL_DESTINO` — **não é da Vercel**, é **secret do GitHub** (`auditoria-claude.yml`). Conferir em
   GitHub › Settings › Secrets and variables › Actions.

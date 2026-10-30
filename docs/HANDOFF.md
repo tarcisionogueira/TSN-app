@@ -22,6 +22,13 @@
   `0 2,8,14,20` → `0 8,12,16,20` (backup `~/crontab.bak.2026-10-30`). Nada no runner depende de hora fixa (gates por
   janela); "ao ligar" + `runner-se-atrasado.sh` recuperam ao ligar, e a reserva do GitHub (04h40/10h40/16h40/22h40,
   só se > 7 h sem rodar) cobre a madrugada. PC configurado para nunca suspender. Hoje: ligou 07h14, rodou 07h16.
+- **Contador recebe o mês sozinho** (dono, 30/10): `contabilidade-mensal-cron.js` (dias 1–5, 12h UTC). Dia 1 =
+  lembrete ao dono (resumo + quantos em 9.9); dia 3 = pacote ao `CONTABILIDADE_EMAIL` com cópia ao dono (relatório
+  da conciliação + OFX + comissões pagas + notas de parceiros aprovadas); dias 4–5 só repetem se não saiu. Dedup
+  pelo carimbo `contabilidade_envio_AAAA-MM` (sem ler o carimbo, não envia). Gerador HTML/OFX saiu para
+  `_conciliacao-pacote.js` (tela e cron usam o mesmo). NÃO fecha a competência sozinho — o dono fecha na tela.
+  **Pendente do dono:** cadastrar `CONTABILIDADE_EMAIL` na Vercel + Redeploy antes de 03/11; sem ele, o 1º pacote
+  (outubro) vai só para o dono. Teste: `?acao=envio&competencia=2026-10&so_dono=1` com x-cron-secret.
 - Abertura também viu: GIORDANOLEILOES 97 → 0 (falhou "nenhum lote lido"), DHLEILOES só 40 encerrados, Alliance
   522, Pedro Castro aguardando a 1ª rodada com o MSIS corrigido (044fd94 já estava publicado).
 
