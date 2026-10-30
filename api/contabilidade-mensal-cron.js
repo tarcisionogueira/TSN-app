@@ -10,6 +10,8 @@
  *            9.9 A CLASSIFICAR — dois dias para arrumar antes de o pacote sair.
  *   dia 3+ → ENVIO do pacote (relatório + OFX + comissões e notas de parceiros) ao CONTABILIDADE_EMAIL,
  *            com cópia ao dono. Dias 4 e 5 são só nova tentativa: um envio registrado não repete.
+ *            Competência NÃO pronta (9.9 pendente, DRE vazia, leitura no teto) → só ao dono, PRELIMINAR,
+ *            sem carimbo: o contador só recebe o pacote fechado.
  *
  * Dedup pelo carimbo `contabilidade_envio_AAAA-MM` em sistema_heartbeat. Se NÃO conseguir ler o
  * carimbo, não envia (mandar duas vezes ao contador é pior do que atrasar um dia) e alerta.
@@ -89,7 +91,7 @@ async function montarPacote(comp) {
 
   const html = gerarHTML({ de: comp, ate: comp, dre, lancamentos, resumo, extras });
   const ofx = gerarOFX(lancamentos, { de: comp, ate: comp, banco: '' });
-  return { lancamentos, resumo, porBanco, comissoes, notas, html, ofx };
+  return { lancamentos, dre, resumo, porBanco, comissoes, notas, html, ofx };
 }
 
 const carta = (paragrafos) => `<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;font-size:14px;color:#111;line-height:1.6">${paragrafos.map(p => `<p>${p}</p>`).join('')}</div>`;
@@ -126,7 +128,7 @@ export default async function handler(req, res) {
           `No dia ${DIA_ENVIO}, às 9h, o pacote de <strong>${escapeHtml(mesTxt)}</strong> vai sozinho para a contabilidade${process.env.CONTABILIDADE_EMAIL ? ` (${escapeHtml(listaEmails(process.env.CONTABILIDADE_EMAIL).validos.join(", "))})` : ' — <strong>mas o CONTABILIDADE_EMAIL não está configurado na Vercel, então ele vai só para você</strong>'}.`,
           `Hoje ele tem ${p.resumo.total} lançamento(s): entradas ${brl(p.resumo.entradas)}, saídas ${brl(p.resumo.saidas)}. Por conta: ${escapeHtml(Object.entries(p.porBanco).map(([b, n]) => `${b} ${n}`).join(' · ') || 'nenhum')}.`,
           p.resumo.pendentes
-            ? `<strong>${p.resumo.pendentes} lançamento(s) ainda estão em 9.9 A CLASSIFICAR.</strong> Se der, classifique na tela de Conciliação antes do dia ${DIA_ENVIO}: <a href="${telaUrl}">abrir o Admin</a>.`
+            ? `<strong>${p.resumo.pendentes} lançamento(s) ainda estão em 9.9 A CLASSIFICAR.</strong> Enquanto houver pendência o pacote NÃO vai ao contador — vai só para você, como PRELIMINAR. Classifique na tela de Conciliação: <a href="${telaUrl}">abrir o Admin</a>.`
             : 'Nenhum lançamento pendente de classificação. Nada a fazer.',
           'BidPro Brasil',
         ]),
@@ -142,16 +144,26 @@ export default async function handler(req, res) {
     // dizendo qual (mandar só para parte da lista sem avisar seria um "enviado" pela metade).
     const lista = listaEmails(soDono ? '' : process.env.CONTABILIDADE_EMAIL);
     if (lista.invalidos.length) throw new Error(`CONTABILIDADE_EMAIL tem endereço inválido: ${lista.invalidos.join(', ')} — pacote NÃO enviado`);
-    const contador = lista.validos;
+    // COMPETÊNCIA PRONTA? (30/10, decisão do dono após a arena): com pendência, o pacote NÃO vai ao
+    // contador — vai só ao dono, marcado PRELIMINAR, sem carimbo. Assim os dias 4 e 5 tentam de novo
+    // sozinhos: classificou, sai ao contador na rodada seguinte. Antes saía com os 9.9 "destacados".
+    const motivos = [];
+    if (p.resumo.pendentes) motivos.push(`${p.resumo.pendentes} lançamento(s) em 9.9 A CLASSIFICAR`);
+    if (!p.dre?.length) motivos.push('a DRE da competência veio vazia');
+    if (p.lancamentos.length >= 2000) motivos.push('a leitura dos lançamentos bateu no teto de 2.000 — pode estar incompleta');
+    const preliminar = motivos.length > 0;
+    const contador = preliminar ? [] : lista.validos;
     const contadorOk = contador.length > 0;
     const anexos = [{ filename: `conciliacao-${comp}.ofx`, content: Buffer.from(p.ofx, 'utf8').toString('base64') }];
     const env = await enviarEmail({
       to: contadorOk ? contador : DONO,
       cc: contadorOk ? DONO : undefined,
       replyTo: DONO,
-      subject: `Conciliação e DRE — ${mesTxt} — BidPro Brasil`,
+      subject: `${preliminar ? '[PRELIMINAR] ' : ''}Conciliação e DRE — ${mesTxt} — BidPro Brasil`,
       html: carta([
-        contadorOk ? 'Prezados,' : '<strong>Pacote NÃO enviado ao contador</strong> — CONTABILIDADE_EMAIL não configurado (ou teste só para o dono). Cópia abaixo para encaminhar à mão.',
+        preliminar
+          ? `<strong>PRELIMINAR — NÃO enviado ao contador.</strong> A competência ainda não está pronta: ${escapeHtml(motivos.join('; '))}. Resolva na tela de Conciliação (<a href="${telaUrl}">abrir o Admin</a>) e o pacote sai ao contador sozinho na próxima rodada (9h, até o dia 5). Depois do dia 5, envie pelo botão "Enviar" da tela.`
+          : contadorOk ? 'Prezados,' : '<strong>Pacote NÃO enviado ao contador</strong> — CONTABILIDADE_EMAIL não configurado (ou teste só para o dono). Cópia abaixo para encaminhar à mão.',
         `Segue a conciliação bancária classificada por plano de contas da competência <strong>${escapeHtml(mesTxt)}</strong>: ${p.resumo.total} lançamento(s), ${p.comissoes.length} comissão(ões) paga(s) a parceiros e ${p.notas.length} nota(s) fiscal(is) de parceiros. O arquivo OFX vai em anexo, com a conta contábil de cada lançamento no histórico.`,
         p.resumo.pendentes ? `${p.resumo.pendentes} lançamento(s) seguem em 9.9 A CLASSIFICAR — estão destacados no relatório.` : 'Todos os lançamentos estão classificados.',
         'Qualquer dúvida, é só responder este e-mail.',
@@ -167,10 +179,10 @@ export default async function handler(req, res) {
       }) });
       // Enviado e sem carimbo = amanhã sai de novo. Não desfaz o envio, mas precisa aparecer.
       if (!hb.ok) alertarErro({ rota: 'contabilidade-mensal-cron', erro: `pacote ${comp} ENVIADO, mas o carimbo não gravou (HTTP ${hb.status}) — pode repetir amanhã` });
-    } else if (!soDono) {
+    } else if (!soDono && !preliminar) {
       alertarErro({ rota: 'contabilidade-mensal-cron', erro: `pacote ${comp} foi só para o dono: configure CONTABILIDADE_EMAIL na Vercel` });
     }
-    res.status(200).json({ ok: true, acao, comp, para: contadorOk ? contador : DONO, ...p.resumo, comissoes: p.comissoes.length, notas: p.notas.length });
+    res.status(200).json({ ok: true, acao, comp, para: contadorOk ? contador : DONO, preliminar, motivos, ...p.resumo, comissoes: p.comissoes.length, notas: p.notas.length });
   } catch (e) {
     console.error('[contabilidade-mensal]', comp, acao, e?.message || e);
     alertarErro({ rota: 'contabilidade-mensal-cron', erro: `${acao} ${comp}: ${String(e?.message || e).slice(0, 300)}` });
