@@ -269,6 +269,9 @@ jobs:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           DIAN_DRYRUN: ${{ env.DRYRUN_PADRAO }}
+          # O site escreve as praças no fuso de QUEM ABRE a página: o Chromium do runner (UTC) mostrava "17:30" para o
+          # leilão das 14:30 de Brasília, e o parser grava com -03:00 (1ª gravação de 29/10 saiu 3 h adiantada).
+          TZ: America/Sao_Paulo
         run: node scripts/scraper-dian.mjs
 
       - name: Comprei (PGFN) — venda direta na origem
