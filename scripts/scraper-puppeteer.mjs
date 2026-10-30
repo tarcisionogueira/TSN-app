@@ -554,6 +554,9 @@ const CRITERIOS = {
   // `store` de cada oferta). Portal 9 ~72, portal 21 ~39 imóveis abertos.
   SBID9:    { min: 5,   valor: 0.80, uf: 0.40, link: 0.9 },
   SBID21:   { min: 5,   valor: 0.80, uf: 0.40, link: 0.9 },
+  // Total Leilões (loja 16091 da mesma rede): 8 imóveis estáveis de 10/10 a 30/10 e 'degradado' TODO dia só pelo
+  // piso _default de 10 (30/10). Queda real continua pega pela comparação com a execução anterior.
+  TOTALLEILOES: { min: 5, valor: 0.80, uf: 0.40, link: 0.9 },
   // WebLeilões: inventário de imóveis pequeno (poucas dezenas); cidade/UF vêm do texto
   // do card e do slug — critérios brandos para não marcar "degradado" à toa.
   WEBLEILOES:{ min: 5,  valor: 0.60, uf: 0.45, link: 0.9 },
