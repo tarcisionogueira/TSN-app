@@ -45,6 +45,26 @@
   (migração `20261031_veiculo_piso_proposta.sql`, APLICADA: 14 ativos), gravada pelo coletor via
   `pisoPropostaSuperbid` e mostrada em `VeiculoDetalhe.jsx` com o aviso "sem garantia de aceite". Só imóvel/veículo
   de leilão comum fica de fora (lá piso = lance mínimo).
+- **"Aceita proposta" completo (dono: "sim, fazer tudo").**
+  - **Imóveis Superbid tinham o mesmo erro de preço**: API (pg_net, grátis) com `auction.modalityId:5` → 261
+    ofertas, 137 no acervo, 99 com o piso como lance mínimo. Corrigidos; **79 ativos com piso** (16% abaixo, média).
+    Migração `20261031_imovel_piso_proposta.sql` (coluna + correção registrada; desconto recalculado — o gatilho
+    do imóvel só recalcula com 2ª praça). Coletor grava `valor_piso_proposta` também no imóvel.
+  - Piso < 30% do preço é descartado (`pisoPropostaSuperbid`): havia R$ 0,01 num imóvel de R$ 899 mil.
+  - **Desconto falso dos 14 veículos** sobreviveu à 1ª correção (`trg_veiculo_desconto_preenche` só preenche
+    quando nulo) — o caminhão VW seguia com 38%. Recalculado (agora 0%).
+  - **`teve_lance` falso**: `trg_veiculo_teve_lance` lia "price > valor_minimo" como lance; na Tomada de preço
+    `price` é o preço de venda → 16 marcados sem lance nenhum (`totalBids` 0). Efeito: selo "Vendido" e saída
+    imediata da vitrine após a data, matando a janela de 15 dias da proposta. Gatilho ignora a modalidade 5;
+    marcações limpas (migração `20261031_teve_lance_sem_tomada_de_preco.sql`).
+  - Filtro "Aceita proposta" + selo no card (imóveis: `Busca.jsx`; veículos: `BuscaVeiculos.jsx`) e bloco na
+    ficha do imóvel. **O raio NÃO aplica o filtro** (RPC `buscar_por_raio_v2` não conhece a coluna) — a tela avisa.
+  - ⚠️ **INCIDENTE MEU (98bcc1c2):** a ficha do veículo passou a pedir `valor_piso_proposta` e o visitante lê
+    `veiculos_vitrine` (lista explícita de colunas) — coluna inexistente = 400 = ficha quebrada para não-equipe
+    enquanto esse deploy esteve no ar. `erros_cliente` sem registro nas 3 h anteriores à correção. Corrigido com
+    `20261031_vitrine_piso_proposta.sql`; idem `imoveis_leilao_mascarado` (`20261031_mascarado_piso_proposta.sql`).
+    **Lição: coluna nova lida pelo cliente → conferir as VIEWS que ele lê (`veiculos_vitrine`,
+    `imoveis_leilao_mascarado`), não só a tabela.** É a forma nº 7 na direção da view.
 - **`mp_liberacao_atrasada` (crítico) = 1 era venda do Mercado Livre**, não cobrança do BidPro: "Cloro P/ Limpeza
   De Piscina", R$ 139, sem user_id, `dados_mp.order.type = 'mercadolibre'`, liberação em 28 dias (regra do ML após
   a entrega). A conta do MP é a mesma; `mp_pagamentos` recebe tudo dela (há também ~39 pagamentos sem usuário,

@@ -217,6 +217,7 @@ const COLUNAS_BUSCA = [
   'resultado_leilao','valor_lance_vencedor',
   'fonte','fonte_id','numero_edital','numero_matricula','numero_processo',
   'latitude','longitude','score_financeiro','score_juridico','score_localizacao',
+  'valor_piso_proposta', // 31/10: piso do vendedor (Superbid "Tomada de preço") — selo e filtro "Aceita proposta"
 ].join(',');
 // Escapa campo SCRAPED antes de ir para innerHTML do popup Leaflet (bindPopup). Sem isto,
 // um titulo de imovel malicioso ("<img onerror>") executava no app LOGADO — mesma origem,
@@ -322,6 +323,9 @@ function aplicarFiltrosImoveis(base, f, cidadesFiltro, raioAtivo) {
   if (f.valorMin) q = q.gte('valor_minimo_ref', Number(String(f.valorMin).replace(/\D/g, '')));
   if (f.valorMax) q = q.lte('valor_minimo_ref', Number(String(f.valorMax).replace(/\D/g, '')));
   if (f.descontoMin) q = q.gte('desconto_percentual', Number(f.descontoMin));
+  // "Aceita proposta" (31/10, dono): lote com piso do vendedor abaixo do preço publicado. Não existe na
+  // RPC do raio — no modo raio a tela avisa em vez de fingir que filtrou.
+  if (f.aceitaProposta) q = q.not('valor_piso_proposta', 'is', null);
   const janelaPrazo = calcularJanelaPrazo(f.prazo);
   if (janelaPrazo?.tipo === 'sem_data') q = q.is('data_leilao', null);
   else if (janelaPrazo?.tipo === 'janela') q = q.gte('data_leilao', janelaPrazo.de).lte('data_leilao', janelaPrazo.ate);
@@ -767,7 +771,7 @@ export default function Busca() {
   const analisesRestantes = mostraSelo ? Math.max(0, limiteAnalises - Number(cotaMercado.usado || 0)) : null;
   const janelaSelo = janelaLabel(cotaMercado);
 
-  const FILTROS_INICIAL = { tipos:[], estado:'', cidades:[], bairros:[], raioKm:0, valorMin:'', valorMax:'', modalidades:[], pagamento:[], descontoMin:0, intencao:'', prazo:'', resultadoLeilao:'' };
+  const FILTROS_INICIAL = { tipos:[], estado:'', cidades:[], bairros:[], raioKm:0, valorMin:'', valorMax:'', modalidades:[], pagamento:[], descontoMin:0, intencao:'', prazo:'', resultadoLeilao:'', aceitaProposta:false };
   // Se viemos de um deep-link de email, pré-popula os filtros e dispara busca
   // VOLTAR do imóvel (navegação POP) com filtros já na sessão: a URL ainda carrega os
   // parâmetros do link de e-mail por onde a pessoa ENTROU, e reaplicá-los apagava tudo o que
@@ -1381,6 +1385,7 @@ export default function Busca() {
             fracionado: im.fracionado,
             fonte: im.fonte,
             fonteId: im.fonte_id,
+            valorPisoProposta: im.valor_piso_proposta,
             numeroEdital: im.numero_edital,
             numeroMatricula: im.numero_matricula,
             numeroProcesso: im.numero_processo,
@@ -1513,6 +1518,7 @@ export default function Busca() {
         fracionado: im.fracionado,
         fonte: im.fonte,
         fonteId: im.fonte_id,
+        valorPisoProposta: im.valor_piso_proposta,
         numeroEdital: im.numero_edital,
         numeroMatricula: im.numero_matricula,
         numeroProcesso: im.numero_processo,
@@ -1735,6 +1741,17 @@ export default function Busca() {
                     );
                   })}
                 </div>
+              </div>
+              <div>
+                <label style={lbl}>Proposta</label>
+                <button title="Lotes em que o vendedor informou à plataforma um piso abaixo do preço publicado. Ele analisa cada proposta: não há garantia de aceite."
+                  onClick={() => up('aceitaProposta', !filtros.aceitaProposta)}
+                  style={{ padding: '4px 10px', borderRadius: 20, border: `1px solid ${filtros.aceitaProposta ? '#0D63DB' : '#e2e8f0'}`, background: filtros.aceitaProposta ? '#0D63DB' : '#f8fafc', color: filtros.aceitaProposta ? 'white' : '#475569', fontSize: 12, fontWeight: filtros.aceitaProposta ? 700 : 400, cursor: 'pointer' }}>
+                  Aceita proposta (piso informado)
+                </button>
+                {filtros.aceitaProposta && raioAtivo && (
+                  <div style={{ fontSize: 11, color: '#92400e', marginTop: 4 }}>Na busca por raio este filtro ainda não se aplica — busque por estado/cidade.</div>
+                )}
               </div>
               <div>
                 <label style={lbl}>Prazo do leilão</label>
@@ -2460,6 +2477,12 @@ export default function Busca() {
                       <div style={{ fontWeight:900, color:'#111111', fontSize: isMobile ? 18 : 15 }}>{fmtBRL(im.valorMinimo)}</div>
                       {im.valorAvaliacao>0 && (
                         <div style={{ fontSize:10, color:'#64748b' }}>Aval. {fmtBRL(im.valorAvaliacao)}</div>
+                      )}
+                      {im.valorPisoProposta > 0 && im.valorPisoProposta < im.valorMinimo && (
+                        <div title="Piso que o vendedor informou à plataforma (o site do leiloeiro não mostra). Ele analisa cada proposta — sem garantia de aceite; a proposta é vinculativa."
+                          style={{ display:'inline-block', fontSize:10, fontWeight:800, color:'#1e3a8a', background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:6, padding:'1px 6px', marginTop:3 }}>
+                          Aceita proposta · piso {fmtBRL(im.valorPisoProposta)} (−{Math.round(100 * (1 - im.valorPisoProposta / im.valorMinimo))}%)
+                        </div>
                       )}
                       {/* Quem buscou para ALUGAR vê aqui a régua de 1% a.m. — ALVO, não previsão.
                           A premissa vai junto no `title`, senão o número vira número mágico. */}

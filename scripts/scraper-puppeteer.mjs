@@ -1444,6 +1444,7 @@ async function scraperSuperbidNet(browser, { portalId, stores, fonte, leiloeiro,
         endereco: toTitleCase(str(loc.street)),
         valor_avaliacao: valAval,
         valor_minimo: valMin,
+        valor_piso_proposta: pisoPropostaSuperbid(of, valMin, det),
         // `extrairDaDescricao` tem o regex antigo (exige `m²` literal). `extrairAreaM2` aceita
         // "m2"/"metros quadrados" e prefere área ROTULADA — entra como rede, nunca sobrescreve
         // o que o extrator específico já achou.

@@ -42,6 +42,8 @@ const COLUNAS = [
   'patio',
   // 2ª praça (22/10): o mesmo carro publicado como 2 lotes vira 1 card — ver 20261022_veiculos_gemeos.sql.
   'valor_minimo_2', 'data_leilao_2',
+  // Piso do vendedor (31/10) — Superbid "Tomada de preço"; selo e filtro "Aceita proposta" (api/_superbid-preco.js).
+  'valor_piso_proposta',
 ].join(',');
 // PÚBLICO (20/10): a vitrine não tem o que leva ao leiloeiro — descrição, placa, nome e pátio chegam
 // por dadosRestritosVeiculos() só para quem tem o plano (ver utils/veiculosAcesso.js).
@@ -327,6 +329,7 @@ function filtrosVazios() {
   return {
     estado: [], cidade: [], tipoVeiculo: '', marca: '', modelo: '', anoMin: '', anoMax: '', valorMin: '', valorMax: '',
     valorRefMin: '', valorAvaliacaoMax: '', descontoMin: '', descontoBase: '', tipoMonta: [], origem: '', prazo: '', resultadoLeilao: '', motor: '', ordenacao: 'atualizado_desc',
+    aceitaProposta: '', // '' = desligado, '1' = ligado — `filtroAtivo` trata qualquer string não vazia como ativo
   };
 }
 
@@ -374,6 +377,8 @@ function aplicarFiltros(q, f, ign = new Set()) {
     else if (f.descontoBase === 'avaliacao') q = q.gte('desconto_percentual', n);
     else q = q.or(`desconto_fipe_percentual.gte.${n},and(valor_fipe.is.null,desconto_percentual.gte.${n})`);
   }
+  // "Aceita proposta" (31/10, dono): piso do vendedor abaixo do preço publicado.
+  if (!ign.has('aceitaProposta') && f.aceitaProposta) q = q.not('valor_piso_proposta', 'is', null);
   if (!ign.has('tipoMonta') && f.tipoMonta.length) {
     const montas = f.tipoMonta.filter(t => t !== MONTA_NAO_INFORMADA);
     const conds = [];
@@ -407,7 +412,7 @@ function aplicarFiltros(q, f, ign = new Set()) {
 }
 
 // Rótulo de cada filtro no diagnóstico do resultado vazio.
-const ROTULO_FILTRO = { estado: 'Estado', cidade: 'Cidade do pátio', tipoVeiculo: 'Tipo de veículo', marca: 'Marca', modelo: 'Modelo', anoMin: 'Ano de', anoMax: 'Ano até', valorMin: 'Lance mín.', valorMax: 'Lance máx.', valorRefMin: 'FIPE/avaliação mín.', valorAvaliacaoMax: 'FIPE/avaliação máx.', descontoMin: 'Desconto mín.', tipoMonta: 'Tipo de monta', origem: 'Origem da venda', prazo: 'Prazo do leilão', resultadoLeilao: 'Resultado do leilão', motor: 'Motor' };
+const ROTULO_FILTRO = { estado: 'Estado', cidade: 'Cidade do pátio', tipoVeiculo: 'Tipo de veículo', marca: 'Marca', modelo: 'Modelo', anoMin: 'Ano de', anoMax: 'Ano até', valorMin: 'Lance mín.', valorMax: 'Lance máx.', valorRefMin: 'FIPE/avaliação mín.', valorAvaliacaoMax: 'FIPE/avaliação máx.', descontoMin: 'Desconto mín.', tipoMonta: 'Tipo de monta', origem: 'Origem da venda', prazo: 'Prazo do leilão', resultadoLeilao: 'Resultado do leilão', motor: 'Motor', aceitaProposta: 'Aceita proposta' };
 const filtroAtivo = (f, k) => Array.isArray(f[k]) ? f[k].length > 0 : String(f[k] ?? '').trim() !== '';
 
 // `embutido` (29/09, pedido do dono): a aba Veículos do Admin mostra lotes e filtros direto, sem
@@ -676,6 +681,13 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
             {filtros.descontoMin && <small style={avisoCobertura}>{filtros.descontoBase === 'avaliacao' ? AVISO_SEM_AVALIACAO : AVISO_SEM_REFERENCIA}</small>}
           </div>
           <div>
+            <label style={lbl} title="Lotes em que o vendedor informou à plataforma um piso abaixo do preço publicado. Ele analisa cada proposta: não há garantia de aceite.">Proposta</label>
+            <select style={inp} value={filtros.aceitaProposta} onChange={e => setFiltros(f => ({ ...f, aceitaProposta: e.target.value }))}>
+              <option value="">Qualquer</option>
+              <option value="1">Aceita proposta (piso informado)</option>
+            </select>
+          </div>
+          <div>
             <label style={lbl}>Tipo de monta</label>
             <MultiEscolha valores={filtros.tipoMonta} opcoes={OPCOES_MONTA} onChange={v => setFiltros(f => ({ ...f, tipoMonta: v }))} />
           </div>
@@ -885,6 +897,12 @@ export default function BuscaVeiculos({ embutido = false } = {}) {
                     <div style={{ fontWeight: 900, color: '#111111', fontSize: isMobile ? 18 : 15 }}>{fmtBRL(v.valor_minimo)}</div>
                     {v.valor_minimo_2 > 0 && <div style={{ fontSize: 10, color: '#0f766e', fontWeight: 700 }}>2ª praça {fmtBRL(v.valor_minimo_2)}{v.data_leilao_2 ? ` · ${new Date(v.data_leilao_2).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}` : ''}</div>}
                     {v.valor_fipe > 0 && <div style={{ fontSize: 10, color: '#64748b' }}>FIPE{v.fipe_status === 'aproximado' ? ' ~' : v.fipe_status === 'leiloeiro' ? ' (leiloeiro)' : ''} {fmtBRL(v.valor_fipe)}</div>}
+                    {v.valor_piso_proposta > 0 && v.valor_piso_proposta < v.valor_minimo && (
+                      <div title="Piso que o vendedor informou à plataforma (o site do leiloeiro não mostra). Ele analisa cada proposta — sem garantia de aceite; a proposta é vinculativa."
+                        style={{ display: 'inline-block', fontSize: 10, fontWeight: 800, color: '#1e3a8a', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 6, padding: '1px 6px', marginTop: 3 }}>
+                        Aceita proposta · piso {fmtBRL(v.valor_piso_proposta)} (−{Math.round(100 * (1 - v.valor_piso_proposta / v.valor_minimo))}%)
+                      </div>
+                    )}
                     {/* Desconto na FIPE + QUEM VENDE lado a lado (25/10, pesquisa de mercado aprovada pelo dono):
                         o desconto atrai, a origem (financeira, seguradora, pátio…) diz o risco. Só origem classificada. */}
                     {(descFipe > 0 || (ORIGEM_VENDA[v.origem_venda] && v.origem_venda !== 'nao_identificado')) && (

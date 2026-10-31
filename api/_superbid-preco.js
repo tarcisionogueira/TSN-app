@@ -26,8 +26,13 @@ export function precoVendaDiretaSuperbid(of, det = of?.offerDetail || {}) {
 // qualquer visitante recebe), mas o site não o mostra — e o vendedor analisa cada proposta, então
 // a tela apresenta como referência, nunca como garantia de aceite. Fora da regra → null (coluna
 // `veiculos_leilao.valor_piso_proposta`).
+// Piso abaixo de 30% do preço é descartado: havia R$ 0,01 num imóvel de R$ 899 mil (lixo de cadastro, não
+// oportunidade). Os pisos reais medidos ficam entre 35% e 90% do preço.
+const PISO_MIN_FRACAO = 0.3;
+
 export function pisoPropostaSuperbid(of, valorPublicado, det = of?.offerDetail || {}) {
   if (!precoVendaDiretaSuperbid(of, det)) return null;
   const piso = parseFloat(det?.initialBidValue);
-  return Number.isFinite(piso) && piso > 0 && piso < Number(valorPublicado) ? piso : null;
+  const preco = Number(valorPublicado);
+  return Number.isFinite(piso) && piso >= PISO_MIN_FRACAO * preco && piso < preco ? piso : null;
 }

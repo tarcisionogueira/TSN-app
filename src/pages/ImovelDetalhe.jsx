@@ -1043,6 +1043,7 @@ export default function ImovelDetalhe() {
           fotos: Array.isArray(data.fotos) && data.fotos.length ? data.fotos : null,
           leiloeiro: data.leiloeiro, dataLeilao: data.data_leilao,
           valorMinimo2: data.valor_minimo_2 ?? null, dataLeilao2: data.data_leilao_2 ?? null,
+          valorPisoProposta: data.valor_piso_proposta ?? null, // 31/10: Superbid "Tomada de preço"
           // O `select('*')` sempre trouxe estas colunas; faltava MAPEAR. Sem elas o
           // `leilaoEncerrado` da tela decidia pelo início da 2ª praça e dava por encerrado
           // um lote em pregão (Guarulhos, 28/08). Mapear é o conserto, não consultar mais.
@@ -1775,6 +1776,18 @@ export default function ImovelDetalhe() {
                         <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Lance mínimo</div>
                         <div style={{ fontSize: 22, fontWeight: 900, color: '#111111' }}>{fmtBRL(imovel.valorMinimo)}</div>
                         {imovel.dataLeilao && !dataResidualDeVenda(imovel.dataLeilao, imovel.modalidade) && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>a partir de {fmtData(imovel.dataLeilao, imovel.modalidade)}</div>}
+                        {/* 31/10 (dono): Superbid "Tomada de preço" — piso que o vendedor informou à plataforma
+                            e o site não mostra. Referência, não garantia: o vendedor analisa cada proposta. */}
+                        {imovel.valorPisoProposta > 0 && imovel.valorPisoProposta < vMin && (
+                          <div style={{ marginTop: 10, padding: '8px 10px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8 }}>
+                            <div style={{ fontSize: 13, color: '#1e3a8a', fontWeight: 800 }}>
+                              Aceita proposta · piso informado pelo vendedor à plataforma: {fmtBRL(imovel.valorPisoProposta)} (−{Math.round(100 * (1 - imovel.valorPisoProposta / vMin))}%)
+                            </div>
+                            <div style={{ fontSize: 11.5, color: '#475569', marginTop: 2 }}>
+                              O site do leiloeiro mostra só o preço de venda. Propostas são analisadas pelo vendedor, sem garantia de aceite, e são vinculativas.
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   }
