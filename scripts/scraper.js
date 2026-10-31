@@ -7,6 +7,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { decodificarEntidades } from '../api/_texto-imovel.js';
+import { precoVendaDiretaSuperbid } from '../api/_superbid-preco.js';
 import https from 'https';
 import http from 'http';
 import { Buffer } from 'buffer';
@@ -541,8 +542,8 @@ async function scraperSuperbid(pageNumber = 1) {
         cidade: cidadeNome,
         bairro: loc.neighborhood || '',
         endereco: loc.street || '',
-        valor_avaliacao: sanitizarAval(parseFloat(det.referenceValue || det.directSaleValue || 0), parseFloat(det.initialBidValue || det.currentMinBid || 0)),
-        valor_minimo: parseFloat(det.initialBidValue || det.currentMinBid || 0),
+        valor_avaliacao: sanitizarAval(parseFloat(det.referenceValue || det.directSaleValue || 0), precoVendaDiretaSuperbid(of, det) || parseFloat(det.initialBidValue || det.currentMinBid || 0)),
+        valor_minimo: precoVendaDiretaSuperbid(of, det) || parseFloat(det.initialBidValue || det.currentMinBid || 0),
         area_m2: area,
         // 20/09 (pedido do dono: descrição completa, como o leiloeiro publica): coluna
         // `descricao` é `text` no banco, sem limite — 500 truncava no meio da frase.
@@ -771,7 +772,7 @@ async function scraperSuperbidAlt(pageNumber = 1) {
         bairro: loc.neighborhood || '',
         endereco: loc.street || '',
         valor_avaliacao: parseFloat(of.referenceValue || of.directSaleValue || 0),
-        valor_minimo: parseFloat(of.initialBidValue || of.currentMinBid || of.minBid || 0),
+        valor_minimo: precoVendaDiretaSuperbid(of, of.offerDetail || of) || parseFloat(of.initialBidValue || of.currentMinBid || of.minBid || 0),
         area_m2: 0,
         descricao: '',
         link_edital: `https://www.superbid.net/lote/${of.id || of.offerId}`,

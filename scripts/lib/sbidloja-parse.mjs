@@ -16,6 +16,7 @@
  * em 27/10: ECKERT 21 imóveis de 678 ofertas).
  */
 import { inferirTipo, checarQualidade } from './leilaopro-parse.mjs';
+import { precoVendaDiretaSuperbid } from '../../api/_superbid-preco.js';
 import { extrairAreaM2, numeroMatriculaDoTexto } from '../../api/_texto-imovel.js';
 
 export const API = 'https://offer-query.superbid.net';
@@ -106,7 +107,7 @@ export function detalheDaOferta(o, agora = Date.now()) {
   const etapas = (o.eventPipeline?.stages || au.eventPipeline?.stages || []).filter((s) => s?.endDate);
   const iAtiva = Math.max(0, etapas.findIndex((s) => s.isActive));
   const prox = etapas[iAtiva + 1] || null;
-  const minimo = plaus(num(det.initialBidValue)) || plaus(num(det.currentMinBid)) || plaus(num(o.price));
+  const minimo = plaus(precoVendaDiretaSuperbid(o, det)) || plaus(num(det.initialBidValue)) || plaus(num(det.currentMinBid)) || plaus(num(o.price));
   // Avaliação: o valor de referência quando a API traz; no judicial, a 1ª praça (100% da avaliação) — só se ≥ mínimo.
   const ref = plaus(num(det.referenceValue)) || plaus(num(etapas[0]?.initialBidValue));
   const judicial = (au.subMarketplaces || []).some((s) => /judicial/i.test(s?.subMarketplaceDesc || ''));

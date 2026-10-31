@@ -16,6 +16,7 @@ export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 import { normalizarTipo } from './_tipo.js';
 import { decodificarEntidades } from './_texto-imovel.js';
+import { precoVendaDiretaSuperbid } from './_superbid-preco.js';
 
 import { fetchViaBrightData, brightDataDisponivel } from './_brightdata.js';
 import { getUser, getUserRoleById, isCronAuthorized } from './_auth.js';
@@ -168,7 +169,7 @@ async function coletarSuperbid(paginas, deadline) {
     for (const of of offers) {
       const pr = of.product || of; const loc = pr.location || of.location || {}; const det = of.offerDetail || of;
       const id = of.id || of.offerId;
-      const vmin = parseNum(det.initialBidValue || det.currentMinBid || of.initialBidValue || of.minBid);
+      const vmin = precoVendaDiretaSuperbid(of, det) || parseNum(det.initialBidValue || det.currentMinBid || of.initialBidValue || of.minBid);
       if (!id || vmin <= 0) continue;
       const cidadeCompleta = loc.city || '';
       const estUF = (cidadeCompleta.match(/[-–]\s*([A-Z]{2})$/) || [])[1] || loc.state || '';

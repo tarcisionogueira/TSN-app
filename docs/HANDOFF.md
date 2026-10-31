@@ -24,6 +24,20 @@
   erro nosso: o card DJEN dizia "Leiloeiro não divulgou foto", o que não sabemos. `Busca.jsx`: placeholder
   por fonte (`semFotoTexto`) — DJEN mostra "Edital do Diário de Justiça · fotos com o leiloeiro".
 - ⚠️ Esta máquina não tem Node: o `npm run build` local não rodou; o portão foi o build da Vercel (prebuild).
+- **Fontes zeradas — nenhuma é parser** (explicações gravadas em `fonte_regressao_explicada`):
+  ADAIANAGARCIA_VEICULOS = os 6 foram a leilão em 29/10 (3 vendidos, 3 sem oferta), site sem lote em aberto ·
+  DANIELGARCIA = falha transitória da listagem na rodada residencial de 12:37 (o mesmo site deu 31 veículos 3 min
+  depois; pg_net abre a listagem com ~60 lotes; 85 seguem ativos) — explicação só até 02/11, se repetir é outra
+  coisa · LEJE = Cloudflare 403 também ao runner de casa desde 29/10; Firecrawl passa, mas a fatia semanal
+  recusou em 30/10. Próxima coleta: semanal de segunda 02/11 09:41 UTC (18 ativos lidos em 26/10).
+- **Preço divergente do site (dono, print do caminhão VW 5.150 da loja SOLD: R$ 74 mil aqui × R$ 120 mil lá).**
+  Superbid "Tomada de preço" (`auction.modalityId = 5`, "Mercado Balcão" no site) traz `directSaleValue` (o preço
+  que o site mostra) e `initialBidValue`/`reservedPrice` (o PISO do vendedor, que o site não mostra). Todos os
+  coletores Superbid gravavam o piso como lance mínimo. Medido: **14 de 154** veículos ativos nessa modalidade, com
+  desconto falso de 12% a 68%; nos 4.299 de leilão comum os campos nunca divergem. Conserto: `api/_superbid-preco.js`
+  (`precoVendaDiretaSuperbid`) usado nos 6 mapeadores (scraper-puppeteer ×2, scraper.js ×2, scraper-leiloeiros,
+  sbidloja-parse) + migração `20261031_superbid_tomada_de_preco_preco_publico.sql` (APLICADA, restantes = 0).
+  Imóveis Superbid não guardam o `raw` — não deu para medir lá; a regra nova vale para eles na próxima coleta.
 
 ## 30/10 (sessão do dia, financeiro + admin + leilão) — BANCO INTER, CONCILIAÇÃO, "PRECISA DE VOCÊ", RESULTADO DO LEILÃO ELETRÔNICO, COMANDO UMA VEZ SÓ
 

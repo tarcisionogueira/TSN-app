@@ -21,6 +21,7 @@ import { extrairDescricaoDoCorpo, decodificarEntidades, areaFichaCaixa, numeroAr
 // exigir a locução situacional ("situado na"/"localizado no"/"à Rua X"), não captura texto solto
 // de rodapé/institucional — é a mesma defesa que já livra o extrator de matrícula do mesmo risco.
 import { extrairEnderecoMatricula } from '../api/_registro-matricula.js';
+import { precoVendaDiretaSuperbid } from '../api/_superbid-preco.js';
 import { ehFracaoIdeal, extrairAreaM2, ehForaDoAcervo } from './lib/scraper-core.mjs';
 import { metricasColeta } from './_saude-fonte.mjs';
 import MUNICIPIOS from '../api/_municipios.js';
@@ -1338,7 +1339,7 @@ async function scraperSuperbidNet(browser, { portalId, stores, fonte, leiloeiro,
       if (stores) { const pt = str(p.productType).toLowerCase(); if (!/im[oó]ve/.test(pt)) return null; }
       const titulo = str(p.shortDesc) || str(of.title);
       const estadoMatch = (locStr || '').match(/[-–]\s*([A-Z]{2})\s*$/);
-      const valMin = parseFloat(det.initialBidValue || det.currentMinBid || of.price || 0);
+      const valMin = precoVendaDiretaSuperbid(of, det) || parseFloat(det.initialBidValue || det.currentMinBid || of.price || 0);
       const valAval = parseFloat(det.referenceValue || det.directSaleValue || 0);
       if (!valMin) return null;
 
@@ -1711,7 +1712,7 @@ async function scraperSuperbidVeiculos(browser, { portalId = '[2]', fonte, leilo
       const loc = (p.location && typeof p.location === 'object') ? p.location : {};
       const locStr = typeof p.location === 'string' ? p.location : (loc.city || '');
       const det = of.offerDetail || {};
-      const valMin = parseFloat(det.initialBidValue || det.currentMinBid || of.price || 0);
+      const valMin = precoVendaDiretaSuperbid(of, det) || parseFloat(det.initialBidValue || det.currentMinBid || of.price || 0);
       if (!valMin) continue;
       const titulo = (str(p.shortDesc) || str(of.title) || `Veículo ${leiloeiro}`).slice(0, 180);
       const partesDesc = [textoDaOferta(of.offerDescription), str(p.shortDesc)]
