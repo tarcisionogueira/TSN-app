@@ -459,7 +459,11 @@ export function parseDetalhe(html, url) {
   // literal do dono). p1/p2 (lance do 1º/2º leilão, já extraídos acima) são o sinal — achar
   // um valor de leilão numerado é a assinatura de praça formal, incompatível com venda direta.
   const temPraca = !!(p1 || p2) && !ehVendaDireta;
-  const modalidade = ehVendaDireta ? 'venda_direta' : /processo\s*n|\bju[íi]z\b|judicial/i.test(txt) && !/extrajudicial/i.test(txt) ? 'judicial'
+  // 31/10: venda direta publicada como EVENTO (/leilao/venda-direta-<slug>/lote_id/N — "Venda direta Sicoob",
+  // HASTAPUBLICALEL 59 lotes) saía 'judicial': o template traz o art. 895 do CPC ("até o início do primeiro leilão",
+  // "processo", "juiz") em TODA página, e esse teste vinha antes. Sem praça + slug do evento = venda direta.
+  const eventoVendaDireta = !temPraca && /\/leilao\/[^/]*venda-direta[^/]*\/lote_id\//i.test(String(url));
+  const modalidade = (ehVendaDireta || eventoVendaDireta) ? 'venda_direta' : /processo\s*n|\bju[íi]z\b|judicial/i.test(txt) && !/extrajudicial/i.test(txt) ? 'judicial'
     : /extrajudicial/i.test(txt) ? 'extrajudicial'
     : (!temPraca && /venda\s*direta/i.test(txt)) ? 'venda_direta' : 'extrajudicial';
   let { cidade, estado } = cidadeUF(titulo, descricao);

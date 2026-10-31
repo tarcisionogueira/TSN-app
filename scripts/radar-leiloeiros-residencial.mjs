@@ -18,8 +18,10 @@
  * 29/10 — ALVO AMPLIADO: não só os sem site, mas TODO leiloeiro ATIVO cujo site não lemos (site fora do ar, endereço
  * errado na junta, sem imóvel, pouco imóvel, e os com imóvel ainda sem leitor — fila #380). Critério: domínio nulo OU
  * domínio sem `parser_existente` na `leiloeiro_triagem`. ~1.190 nomes (eram 711) → ciclo 10 dias (~120/dia, ~12 min).
+ * 31/10 — ciclo 10 → 6 dias: a fatia de 103 nomes levou 361 s em 31/10 (~3,5 s por nome); ~200 por dia ≈ 12 min, abaixo
+ * do HARD_MS de 15 min. Cada nome volta a cada 6 dias em vez de 10, e a JANELA de 12 dias continua cobrindo duas voltas.
  *
- * Env: RADAR_LEIL_CICLO (10) · RADAR_LEIL_JANELA_DIAS (12 — maior que o ciclo, para não perder edital entre as voltas)
+ * Env: RADAR_LEIL_CICLO (6) · RADAR_LEIL_JANELA_DIAS (12 — maior que o ciclo, para não perder edital entre as voltas)
  *      RADAR_LEIL_MAX (0 = a fatia do dia; >0 limita) · RADAR_LEIL_HARD_MS (900000) · RADAR_LEIL_SO_LER=1 (não grava)
  */
 import './lib/env-runner.mjs';
@@ -32,7 +34,7 @@ if (!URL_BASE || !KEY) {
   console.error('[radar-leiloeiros] defina VITE_SUPABASE_URL e SUPABASE_SERVICE_KEY (~/.bidpro-runner.env)');
   process.exit(2);
 }
-const CICLO = Math.max(1, Number(process.env.RADAR_LEIL_CICLO || 10));
+const CICLO = Math.max(1, Number(process.env.RADAR_LEIL_CICLO || 6));
 const JANELA = Math.max(1, Number(process.env.RADAR_LEIL_JANELA_DIAS || 12));
 const MAX = Number(process.env.RADAR_LEIL_MAX || 0);
 const HARD_MS = Number(process.env.RADAR_LEIL_HARD_MS || 900000);

@@ -93,6 +93,29 @@
     dono (MGL/Montenegro Cloudflare, A Leiloeira com login, Bom Valor) ou não paga leitor (Via Leilões 2, Daux 3).
     **A frente "integrar leiloeiro de Junta" chegou ao fim do que tem imóvel**; o ganho agora está nos 926 `sem_site`
     (radar por nome nos editais) e em manter os conectados vivos.
+- **Lote sem local (`estado_fora_do_padrao` 217 → 133)**: não era sigla errada, era lote SEM cidade e SEM UF (some de
+  /leiloes). `local_do_texto` só acha com UF explícita ou "em/de X" único no país. Novos últimos recursos no
+  `trg_local_do_texto` (`20261031_local_pela_uf_da_fonte.sql`, `20261031_bairro_carioca_e_equipamento.sql`, APLICADAS):
+  (1) `local_pela_uf_da_fonte` — município solto no texto dentro das UFs onde a fonte publica (`ufs_da_fonte`, ≥ 5%,
+  máx. 4 UFs; portal nacional fora). Guardas medidas em seco, a 1ª passada errou rua/santo ("avenida Bento Gonçalves",
+  "rua Cícero Caldas", "Nossa Senhora Aparecida", "Perdizes" bairro de SP): logradouro/título de pessoa/"santa|são"
+  até 3 palavras antes, UF explícita diferente logo depois, empate e palavra comum fora. 48 de 48 conferidos (TURANI
+  Gramado 34, Hasta São Bento do Sul, Bartmann Tramandaí…). (2) `bairro_carioca` — leiloeiro da capital do RJ escreve
+  só o bairro ("Barra Olímpica", "Estácio/RJ"): bairro inconfundível + "/RJ", ou fonte só-RJ → Rio de Janeiro (29).
+  (3) `equipamento_no_titulo` no `imovel_barrar_bem_movel` — o filtro de bem móvel só conhecia veículo: piano,
+  furadeira, calandra, ar-condicionado, forno industrial, placas solares (7 ativos desligados; 13 no acervo todo, 0 falso
+  positivo). Os 133 restantes não têm local em lugar nenhum do texto ("APARTAMENTO", cotas Turani sem o hotel).
+- **`venda_direta_com_praca` 44 → 0: o INSTRUMENTO estava errado (forma nº 10).** Os 44 eram venda direta com PRAZO PARA
+  PROPOSTA — data gravada = a do site (Lance VIP 29/11, Schulmann 08/12, Benedetto 26/11). O invariante agora mede
+  venda direta com 2ª PRAÇA (o erro de verdade; 0 hoje) e perdeu a exceção fixa de 4 fontes. O erro real era o
+  OPOSTO: **86 vendas diretas gravadas como judicial** — publicadas como evento ("/leilao/venda-direta-crediplanalto…"
+  = "Venda direta Sicoob", Hasta 59, Peterlongo 12, Szortyka 5…): o template LeilãoPro traz o art. 895 do CPC
+  ("primeiro leilão", "processo", "juiz") em toda página e o teste de judicial vencia. `leilaopro-parse`
+  (`eventoVendaDireta`) + trigger `trg_venda_direta_pelo_evento` para toda fonte (sem 2ª praça + "venda direta" no slug
+  do evento/começo do título). `20261031_venda_direta_pelo_evento.sql` (APLICADA).
+- **Radar por nome** (runner residencial, DJEN recusa datacenter): 3 fatias (29–31/10) = 100 editais novos; ~70% dos
+  processados viram lote (135 desde 28/10). Os `erro_parse` de 31/10 são acórdão/ação penal que citam o leiloeiro (não
+  são edital — não viram lote, certo). Ciclo 10 → 6 dias (~200 nomes/dia, ~12 min < teto de 15).
 - **`mp_liberacao_atrasada` (crítico) = 1 era venda do Mercado Livre**, não cobrança do BidPro: "Cloro P/ Limpeza
   De Piscina", R$ 139, sem user_id, `dados_mp.order.type = 'mercadolibre'`, liberação em 28 dias (regra do ML após
   a entrega). A conta do MP é a mesma; `mp_pagamentos` recebe tudo dela (há também ~39 pagamentos sem usuário,

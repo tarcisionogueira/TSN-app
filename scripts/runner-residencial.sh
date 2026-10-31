@@ -223,7 +223,7 @@ quer TRIBUNAIS && { node scripts/importar-leiloeiros-tribunais.mjs \
 # `monitor_runs` próprio ('radar-editais-djen-leiloeiros') — não mexe no freio do caminho pago. Só existe aqui: o DJEN
 # recusa IP de datacenter e esta busca não tem rede de segurança paga.
 quer RADAR && { node scripts/radar-leiloeiros-residencial.mjs \
-  || echo "  (radar por leiloeiro: fatia parcial ou falha — o que entrou está no 'novos=' acima; a fatia de amanhã é outra, e esta volta em 7 dias)"; }
+  || echo "  (radar por leiloeiro: fatia parcial ou falha — o que entrou está no 'novos=' acima; a fatia de amanhã é outra, e esta volta em 6 dias)"; }
 
 # ── TRIAGEM RESIDENCIAL DOS BLOQUEADOS (29/08) ──────────────────────────────────────────────
 # NÃO coleta lote: descobre QUAL PLATAFORMA rodam os sites que recusaram o acesso grátis.
