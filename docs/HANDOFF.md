@@ -116,6 +116,18 @@
 - **Radar por nome** (runner residencial, DJEN recusa datacenter): 3 fatias (29–31/10) = 100 editais novos; ~70% dos
   processados viram lote (135 desde 28/10). Os `erro_parse` de 31/10 são acórdão/ação penal que citam o leiloeiro (não
   são edital — não viram lote, certo). Ciclo 10 → 6 dias (~200 nomes/dia, ~12 min < teto de 15).
+- **Convites de leiloeiro parceiro (noite de 31/10, pedido do dono "faça os convites que julgar necessário")**: 7
+  enviados pelo Resend no formato carta dos de 30/10 (remetente `tarcisio@bidprobrasil.com.br`), cada um com o seu
+  `leiloeiros_parceiros` (status pendente, link `/#/leiloeiro/<token>` conferido pela API: 200): Montenegro (CE,
+  Cloudflare), A Leiloeira (PR, login), Leilance (GO, 403), LM Leilões (PA, 403), Rui Pinto (RS, Cloudflare), Daux (SC, 3
+  imóveis, leitor não paga) e Via Leilões (MS, idem). Somam-se aos 4 de 30/10 (Fernando/Jonas/Lucas da MGL e LEJE).
+  Acompanhar resposta: `select nome_fantasia, status from leiloeiros_parceiros order by criado_em desc;`.
+- **Quedas FLAVIOCOSTA e MILAN = legítimas** (gravadas em `fonte_regressao_explicada`): Flávio Costa com imóveis estáveis
+  (11–13); caiu a lista total do site (saíram leilões COMPREI e um de veículos). Milan: rodada manual dentro da cota já
+  paga → 9 eventos, 0 sem acesso, 6 imóveis; os 69 de outubro foram praça vencida.
+- **#271 (veículos) fechada**: 9.654 ativos em 69 fontes; KRON (378), SOLD (312), TOTAL, DILSON, JMF e HASTA SP entram
+  pela fonte SUPERBID com leiloeiro = loja (a varredura de 21/10 contava por fonte e lia 0). O que sobrou → **#400**:
+  MGL ~351 (convite), Emílio Matos ~86 (só Bright Data — gasto novo, decisão do dono), Nakakogue ~22 (recon).
 - **`mp_liberacao_atrasada` (crítico) = 1 era venda do Mercado Livre**, não cobrança do BidPro: "Cloro P/ Limpeza
   De Piscina", R$ 139, sem user_id, `dados_mp.order.type = 'mercadolibre'`, liberação em 28 dias (regra do ML após
   a entrega). A conta do MP é a mesma; `mp_pagamentos` recebe tudo dela (há também ~39 pagamentos sem usuário,
