@@ -6,6 +6,25 @@
 
 
 
+## 31/10 — "RESULTADO ATRASADO" ERA PESTANA INAPURÁVEL; "SEM FOTO" É DO LEILOEIRO
+
+- **`resultado_leilao_atrasado` (crítico) 349 → 697 não era atraso.** 694 eram veículos PESTANA (leilões
+  22–29/10), 3 do JOAOEMILIO; imóveis 0. PESTANA não tem caminho de apuração nenhum: o cron a exclui, o lote
+  SOME da API depois do pregão (recon 25/09) e `registrarVendidosPestana` gravou **0** desde 25/09. Imóvel
+  PESTANA sai do invariante porque desativa na data da praça; veículo sem resultado fica ativo até 10 dias
+  (`desativar_leiloes_encerrados`), e a coleta de veículos (21/10, ~150/dia) empilhou ~8 dias de lotes.
+  Migração `20261031_resultado_atrasado_sem_pestana_veiculos.sql` (APLICADA; troca só o trecho e falha se não
+  achar): PESTANA entra na exclusão ao lado de SODRE/EDITAL_DJEN. Invariante agora = **3**. A falta de
+  apuração virou **pendência #399** (caminhos: ler o leilão a cada hora no dia do pregão; relistagem = sem lance).
+  Copiar o `registrarVendidosPestana` para veículos NÃO resolveria — ele nunca pegou um "Vendido".
+- **Imóveis "sem foto" (dono, print com 4 cards):** os 4 eram EDITAL_DJEN (sem foto por natureza — 856/861).
+  Nas outras fontes com buraco novo (RJLEILOES 466, LJUD, TURANI, GF, DH, GESTAO/lancenoleilao, GRANDESLEIL),
+  amostra lida por pg_net: a página do lote traz o **placeholder do próprio leiloeiro** (`sem-imagem-lote.jpg`,
+  `nopicture.png`, `nao-disponivel.jpg`, `semImagem2.png`) — coletores certos, não há foto a buscar. Único
+  erro nosso: o card DJEN dizia "Leiloeiro não divulgou foto", o que não sabemos. `Busca.jsx`: placeholder
+  por fonte (`semFotoTexto`) — DJEN mostra "Edital do Diário de Justiça · fotos com o leiloeiro".
+- ⚠️ Esta máquina não tem Node: o `npm run build` local não rodou; o portão foi o build da Vercel (prebuild).
+
 ## 30/10 (sessão do dia, financeiro + admin + leilão) — BANCO INTER, CONCILIAÇÃO, "PRECISA DE VOCÊ", RESULTADO DO LEILÃO ELETRÔNICO, COMANDO UMA VEZ SÓ
 
 **Entregue e verificado:**

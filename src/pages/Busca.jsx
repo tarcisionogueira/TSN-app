@@ -224,12 +224,18 @@ const COLUNAS_BUSCA = [
 const escHtml = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 const fmtBRL = (v) => v ? 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits:2, maximumFractionDigits:2 }) : '—';
 
+// Lote do Radar de Editais (DJEN) não tem foto por natureza: o que temos é a publicação do
+// Diário de Justiça, não a página do leiloeiro. "Leiloeiro não divulgou foto" afirmava algo que
+// não sabemos (31/10, dono com print de 4 cards DJEN em SP).
+const semFotoTexto = (fonte) => fonte === 'EDITAL_DJEN' ? 'Edital do Diário de Justiça · fotos com o leiloeiro' : 'Leiloeiro não divulgou foto';
+
 // Carrega imagem apenas quando o elemento entra na viewport
 // src pode ser uma string OU um array de candidatos (em ordem de preferência).
 // No onError de um candidato, avançamos para o próximo (igual ao detalhe do
 // imóvel: hotlink DIRETO primeiro, proxy só como fallback). Só mostramos o
 // placeholder "Sem foto" quando TODOS os candidatos falharem.
-function LazyImage({ src, alt, style }) {
+// `semFoto`: texto do placeholder quando não há candidato (padrão: o leiloeiro não publicou).
+function LazyImage({ src, alt, style, semFoto = 'Leiloeiro não divulgou foto' }) {
   const ref = useRef(null);
   const [visible, setVisible] = useState(false);
   const cands = Array.isArray(src) ? src.filter(Boolean) : (src ? [src] : []);
@@ -257,7 +263,7 @@ function LazyImage({ src, alt, style }) {
             {/* Sem candidato = o leiloeiro não publicou foto (26/10: RJ e LJUD mostram a imagem genérica
                 "sem imagem", que descartamos); candidatos que falharam = foto existe e não carregou. */}
             {(!cands.length || idx >= cands.length) && (
-              <span style={{ fontSize:9, color:'#94a3b8', fontWeight:600, textAlign:'center' }}>{cands.length ? 'Foto indisponível' : 'Leiloeiro não divulgou foto'}</span>
+              <span style={{ fontSize:9, color:'#94a3b8', fontWeight:600, textAlign:'center' }}>{cands.length ? 'Foto indisponível' : semFoto}</span>
             )}
           </div>
       }
@@ -2279,7 +2285,7 @@ export default function Busca() {
                         style={{ background:'white', borderRadius:10, border:'1px solid #e2e8f0', overflow:'hidden', display:'flex', cursor:'pointer', gap:0, flexShrink:0 }}
                         onMouseEnter={e=>e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,0.1)'}
                         onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
-                        <LazyImage src={imgSrc} alt={im.titulo} style={{ width:72, height:72, flexShrink:0 }} />
+                        <LazyImage src={imgSrc} alt={im.titulo} style={{ width:72, height:72, flexShrink:0 }} semFoto={semFotoTexto(im.fonte)} />
                         <div style={{ padding:'8px 10px', flex:1, minWidth:0 }}>
                           <div style={{ fontSize:11, fontWeight:700, color:'#111', marginBottom:2, lineHeight:1.3, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{im.titulo || 'Imóvel'}</div>
                           <div style={{ fontSize:10, color:'#64748b', marginBottom:4 }}>📍 {im.cidade}, {im.estado}</div>
@@ -2319,7 +2325,7 @@ export default function Busca() {
                           <div key={im.id} onClick={() => nav('/imovel/'+im.id, { state: { imovel: im, deBusca: true } })}
                             style={{ background:'white', borderRadius:10, border:'1px solid #e2e8f0', overflow:'hidden', display:'flex', cursor:'pointer', flexShrink:0 }}
                             onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'} onMouseLeave={e=>e.currentTarget.style.background='white'}>
-                            <LazyImage src={imgSrc} alt={im.titulo} style={{ width:64, height:64, flexShrink:0 }} />
+                            <LazyImage src={imgSrc} alt={im.titulo} style={{ width:64, height:64, flexShrink:0 }} semFoto={semFotoTexto(im.fonte)} />
                             <div style={{ padding:'7px 10px', flex:1, minWidth:0 }}>
                               <div style={{ fontSize:12, fontWeight:700, color:'#111', lineHeight:1.3, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{im.titulo || 'Imóvel'}</div>
                               <div style={{ fontSize:10, color:'#64748b', margin:'2px 0 4px' }}>📍 {im.cidade}, {im.estado}</div>
@@ -2371,10 +2377,10 @@ export default function Busca() {
                   {/* Foto */}
                   <div style={{ width:'100%', height: isMobile ? 180 : 150, background:'#f1f5f9', position:'relative', overflow:'hidden' }}>
                     {imgSrc.length
-                      ? <LazyImage src={imgSrc} alt={im.titulo} style={{ width:'100%', height:'100%' }}/>
+                      ? <LazyImage src={imgSrc} alt={im.titulo} style={{ width:'100%', height:'100%' }} semFoto={semFotoTexto(im.fonte)}/>
                       : <div style={{ width:'100%', height:'100%', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:4, color:'#cbd5e1' }}>
                           <svg width="28" height="28" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5M3.75 21V6.75A2.25 2.25 0 016 4.5h12A2.25 2.25 0 0120.25 6.75V21M9 21v-6h6v6"/></svg>
-                          <span style={{ fontSize:9, color:'#94a3b8', fontWeight:600, textAlign:'center' }}>Leiloeiro não divulgou foto</span>
+                          <span style={{ fontSize:9, color:'#94a3b8', fontWeight:600, textAlign:'center' }}>{semFotoTexto(im.fonte)}</span>
                         </div>
                     }
                     {desc>0 && (
