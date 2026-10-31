@@ -240,7 +240,11 @@ export function parseLote(blocoHtml, leilaoHtml, base, { hoje = new Date().toISO
     status,
     // Lote cuja venda acontece no COMPREI (PGFN) — auditório/proposta em comprei.pgfn.gov.br/anuncio/detalhe/<id>: já
     // entra pela fonte COMPREI; aqui seria o mesmo imóvel duas vezes (mesma regra do Degrau/UP Leilão 89).
-    naoImovel: /comprei\.pgfn\.gov\.br\/anuncio\/detalhe\/\d+/i.test(b) || undefined,
+    // 31/10: o Pedro Castro não põe o link — só a etiqueta "VENDA DIRETA COMPREI" no status do lote. Sem cidade nem
+    // data na página, a cópia escapava da trava de gêmeos (que exige UF/cidade) e aparecia quebrada na busca, ao lado
+    // da cópia completa (a casa de R$ 8 mi de Cabo Frio já estava no ar pela GLOBOLEILOES). Só status/card: a Vianna
+    // cita a Comprei na DESCRIÇÃO dos 26 lotes dela, com cidade e UF — esses ficam como estão.
+    naoImovel: /comprei\.pgfn\.gov\.br\/anuncio\/detalhe\/\d+/i.test(b) || /\bCOMPREI\b/i.test(`${status} ${card}`) || undefined,
   };
 }
 

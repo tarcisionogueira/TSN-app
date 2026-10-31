@@ -139,7 +139,10 @@ export function parseDetalhe(html, url, { agora = new Date() } = {}) {
 
   // Tipo pelo COMEÇO do texto do bem: o edital segue com regras gerais ("exclusivamente para Bens Imóveis e Veículos…",
   // "escritório da Casa de Leilões") que dariam tipo a um carro.
-  const inicio = descricao.slice(0, 400);
+  // 31/10: "Endereço para visitação: GALPÃO - R. Gabriel…" é ONDE ver o bem, não o bem — num "LEILÃO DE BENS DIVERSOS"
+  // (fogão industrial, ferragem de barraca, caixas de som) o tipo saía "Galpão" e o lote entrava no acervo de imóveis.
+  // Sem o endereço de visitação, o texto não nomeia imóvel nenhum e o tipo vira 'Bem' (naoImovel, abaixo).
+  const inicio = descricao.replace(/Endere[çc]o\s+(?:para|de)\s+visita[çc][ãa]o\s*:[^.]*?(?:\d{5}-?\d{3}|\.)/gi, ' ').slice(0, 400);
   const tipo = /\bplaca\b|\bchassi\b|\brenavam\b/i.test(inicio) ? 'Bem' : tipoDoTexto(inicio);
   const dataFinal = Date.parse(segunda && segunda > (encerra || '') ? segunda : encerra || '');
   return {

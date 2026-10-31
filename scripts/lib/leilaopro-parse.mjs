@@ -183,7 +183,9 @@ const titleCase = s => String(s || '').toLowerCase().replace(/(^|\s|'|-)([a-zà-
   .replace(/\b(De|Do|Da|Dos|Das|E)\b/g, m => m.toLowerCase()).replace(/^\w/, c => c.toUpperCase());
 
 export function inferirTipo(titulo = '', url = '') {
-  const t = (titulo + ' ' + url).toLowerCase();
+  // Só o CAMINHO da URL (31/10): o domínio é do leiloeiro, não do lote — "casaforteleiloes.com.br" fazia todo lote da
+  // Casa Forte sair "casa" (um complexo industrial de R$ 21,7 mi em Canela/RS).
+  const t = (titulo + ' ' + String(url || '').replace(/^[a-z]+:\/\/[^/]+/i, '')).toLowerCase();
   if (/apartament|apto|flat|kitnet|studio|cobertura/.test(t)) return 'apartamento';
   // "Fazenda Tamboré Residencial 2 - Casa" (15/10): fazenda é nome de lugar quando o texto nomeia unidade urbana.
   if (/s[íi]tio|ch[áa]cara|rural|gleba/.test(t) || (/fazenda/.test(t) && !fazendaEhNome(titulo))) return 'rural';

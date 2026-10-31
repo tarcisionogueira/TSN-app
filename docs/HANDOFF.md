@@ -65,6 +65,19 @@
     `20261031_vitrine_piso_proposta.sql`; idem `imoveis_leilao_mascarado` (`20261031_mascarado_piso_proposta.sql`).
     **Lição: coluna nova lida pelo cliente → conferir as VIEWS que ele lê (`veiculos_vitrine`,
     `imoveis_leilao_mascarado`), não só a tabela.** É a forma nº 7 na direção da view.
+- **Placar de leiloeiros (31/10):** 1.199 conectados (745 coletado · 329 codigo_sem_lote · 125 agregador); 283 com site
+  não coletados (237 domínios): 55 fora do ar · 59 não são leilão · 26 sem imóvel · 1 bloqueado · 64 sem medição útil ·
+  47 com sinal de imóvel (~35 reais; os outros são OAB, Linktree, advocacia, galerias) · 8 "com leitor".
+  - **Os 8 "com leitor" não eram ganho rápido:** 4 Bom Valor (não integrar), Zukerman = Portal Zuk (domínio gravado
+    errado → coletado), auctio = AGREGADOR (não é leiloeiro), Delano sem leilão, Via Leilões não é Pecini (só o tema
+    ASP.NET; 1 terreno aberto). Migração `20261031_placar_ganhos_rapidos_conferidos.sql`.
+  - **#372 fechada.** Ao conferir os lotes das 11: (a) PEDROCASTRO só tinha cópias "VENDA DIRETA COMPREI" sem
+    cidade/UF/data (a casa de R$ 8 mi já estava no ar pela GLOBOLEILOES) → `msis-parse` marca a etiqueta Comprei do
+    status/card como naoImovel (a Vianna cita Comprei só na descrição e fica); (b) `inferirTipo` (leilaopro-parse) lia o
+    DOMÍNIO — "casaforte…"/"casadeleiloes…" davam tipo casa a complexo industrial e terrenos → só o caminho da URL;
+    (c) `leilovia-parse`: "Endereço para visitação: GALPÃO" num "LEILÃO DE BENS DIVERSOS" virava imóvel (fogão
+    industrial, ferragem de barraca, caixas de som) → o endereço de visitação não conta para o tipo.
+  - Próximo: medir os 64 sem triagem (pg_net, grátis) e ordenar os ~35 candidatos por volume de imóvel.
 - **`mp_liberacao_atrasada` (crítico) = 1 era venda do Mercado Livre**, não cobrança do BidPro: "Cloro P/ Limpeza
   De Piscina", R$ 139, sem user_id, `dados_mp.order.type = 'mercadolibre'`, liberação em 28 dias (regra do ML após
   a entrega). A conta do MP é a mesma; `mp_pagamentos` recebe tudo dela (há também ~39 pagamentos sem usuário,
