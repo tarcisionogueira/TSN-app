@@ -38,6 +38,13 @@
   (`precoVendaDiretaSuperbid`) usado nos 6 mapeadores (scraper-puppeteer ×2, scraper.js ×2, scraper-leiloeiros,
   sbidloja-parse) + migração `20261031_superbid_tomada_de_preco_preco_publico.sql` (APLICADA, restantes = 0).
   Imóveis Superbid não guardam o `raw` — não deu para medir lá; a regra nova vale para eles na próxima coleta.
+- **Piso da proposta na ficha do veículo (dono: "sim, mostrar").** O piso (`initialBidValue`=`reservedPrice`=
+  `cutValue`) é dado PÚBLICO: vem na API e no HTML que a página da Superbid manda ao navegador (conferido ao vivo
+  na oferta 5067221) — só não aparece na tela. Não é garantia: o site diz que o vendedor analisa cada proposta e
+  decide; a proposta é vinculativa (não testamos o formulário por isso). Coluna `veiculos_leilao.valor_piso_proposta`
+  (migração `20261031_veiculo_piso_proposta.sql`, APLICADA: 14 ativos), gravada pelo coletor via
+  `pisoPropostaSuperbid` e mostrada em `VeiculoDetalhe.jsx` com o aviso "sem garantia de aceite". Só imóvel/veículo
+  de leilão comum fica de fora (lá piso = lance mínimo).
 - **`mp_liberacao_atrasada` (crítico) = 1 era venda do Mercado Livre**, não cobrança do BidPro: "Cloro P/ Limpeza
   De Piscina", R$ 139, sem user_id, `dados_mp.order.type = 'mercadolibre'`, liberação em 28 dias (regra do ML após
   a entrega). A conta do MP é a mesma; `mp_pagamentos` recebe tudo dela (há também ~39 pagamentos sem usuário,

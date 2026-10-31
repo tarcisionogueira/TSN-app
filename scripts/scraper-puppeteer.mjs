@@ -21,7 +21,7 @@ import { extrairDescricaoDoCorpo, decodificarEntidades, areaFichaCaixa, numeroAr
 // exigir a locução situacional ("situado na"/"localizado no"/"à Rua X"), não captura texto solto
 // de rodapé/institucional — é a mesma defesa que já livra o extrator de matrícula do mesmo risco.
 import { extrairEnderecoMatricula } from '../api/_registro-matricula.js';
-import { precoVendaDiretaSuperbid } from '../api/_superbid-preco.js';
+import { precoVendaDiretaSuperbid, pisoPropostaSuperbid } from '../api/_superbid-preco.js';
 import { ehFracaoIdeal, extrairAreaM2, ehForaDoAcervo } from './lib/scraper-core.mjs';
 import { metricasColeta } from './_saude-fonte.mjs';
 import MUNICIPIOS from '../api/_municipios.js';
@@ -1744,6 +1744,7 @@ async function scraperSuperbidVeiculos(browser, { portalId = '[2]', fonte, leilo
           placa: textoCompleto.match(REGEX_PLACA)?.[1]?.toUpperCase().replace(/\s/g, '') ?? null,
           km: textoCompleto.match(REGEX_KM)?.[1] ? Number(textoCompleto.match(REGEX_KM)[1].replace(/\./g, '')) : null,
           valor_minimo: valMin,
+          valor_piso_proposta: pisoPropostaSuperbid(of, valMin, det),
           valor_avaliacao: valAval,
           valor_fipe_leiloeiro: ficha.fipe,
           desconto_percentual: descontoPercentualVeiculo(valMin, valAval),

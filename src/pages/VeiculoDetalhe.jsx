@@ -81,6 +81,7 @@ const COLUNAS_PUBLICAS = [
   'ipva_situacao', 'tipo_veiculo', 'valor_fipe', 'fipe_codigo', 'fipe_mes_referencia', 'fipe_status', 'fipe_atualizado_em', 'fipe_faixa_min', 'fipe_faixa_max',
   'resultado_leilao', 'valor_lance_vencedor', 'teve_lance', 'forma_pagamento', 'opcionais', 'status_patio',
   'motor_status', // 25/10: "o que conferir" (motor declarado pelo leiloeiro)
+  'valor_piso_proposta', // 31/10: piso do vendedor na Superbid "Tomada de preço" (api/_superbid-preco.js)
 ].join(',');
 
 const COLUNAS = [
@@ -93,7 +94,7 @@ const COLUNAS = [
   'resultado_leilao', 'valor_lance_vencedor', 'teve_lance',
   // página interna completa (24/09): local do pátio, documentos e condições do leiloeiro
   'raw', 'anexos', 'forma_pagamento', 'opcionais', 'status_patio',
-  'motor_status',
+  'motor_status', 'valor_piso_proposta',
 ].join(',');
 
 // FIPE 'aproximado'/'sem_match'/'sem_dados' explicados na tela — nunca um número sem contexto
@@ -447,6 +448,18 @@ export default function VeiculoDetalhe() {
             <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4 }}>Lance Mínimo</div>
             <div style={{ fontWeight: 900, color: '#111111', fontSize: 24 }}>{fmtBRL(v.valor_minimo)}</div>
             {v.valor_avaliacao > 0 && <div style={{ fontSize: 12.5, color: '#64748b', marginTop: 2 }}>Avaliação do leiloeiro: {fmtBRL(v.valor_avaliacao)}</div>}
+            {/* 31/10 (dono): Superbid "Tomada de preço" — piso que o vendedor informou à plataforma e o site
+                não mostra. O vendedor analisa cada proposta: é referência, não garantia de aceite. */}
+            {v.valor_piso_proposta > 0 && v.valor_piso_proposta < v.valor_minimo && (
+              <div style={{ marginTop: 8, padding: '8px 10px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8 }}>
+                <div style={{ fontSize: 12.5, color: '#1e3a8a', fontWeight: 700 }}>
+                  Aceita proposta · piso informado pelo vendedor à plataforma: {fmtBRL(v.valor_piso_proposta)}
+                </div>
+                <div style={{ fontSize: 11.5, color: '#475569', marginTop: 2 }}>
+                  O site do leiloeiro mostra só o preço de venda. Propostas são analisadas pelo vendedor, sem garantia de aceite, e são vinculativas.
+                </div>
+              </div>
+            )}
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginTop: 8 }}>
               {descFipe != null && descFipe > 0 && (
                 <span title="Quanto o lance mínimo está abaixo do valor FIPE de referência" style={{ fontSize: 12, fontWeight: 900, background: descFipe >= 30 ? '#dcfce7' : '#fef3c7', color: descFipe >= 30 ? '#15803d' : '#92400e', padding: '3px 9px', borderRadius: 8 }}>

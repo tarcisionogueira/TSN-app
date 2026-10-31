@@ -20,3 +20,14 @@ export function precoVendaDiretaSuperbid(of, det = of?.offerDetail || {}) {
   const v = parseFloat(det?.directSaleValue ?? of?.directSaleValue);
   return Number.isFinite(v) && v > 0 ? v : 0;
 }
+
+// O PISO, informado à parte (31/10, dono: "é interessante informar"): na mesma modalidade, o
+// `initialBidValue` quando fica ABAIXO do preço publicado. É dado público da API (o navegador de
+// qualquer visitante recebe), mas o site não o mostra — e o vendedor analisa cada proposta, então
+// a tela apresenta como referência, nunca como garantia de aceite. Fora da regra → null (coluna
+// `veiculos_leilao.valor_piso_proposta`).
+export function pisoPropostaSuperbid(of, valorPublicado, det = of?.offerDetail || {}) {
+  if (!precoVendaDiretaSuperbid(of, det)) return null;
+  const piso = parseFloat(det?.initialBidValue);
+  return Number.isFinite(piso) && piso > 0 && piso < Number(valorPublicado) ? piso : null;
+}
