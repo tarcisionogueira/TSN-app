@@ -38,6 +38,11 @@
   (`precoVendaDiretaSuperbid`) usado nos 6 mapeadores (scraper-puppeteer ×2, scraper.js ×2, scraper-leiloeiros,
   sbidloja-parse) + migração `20261031_superbid_tomada_de_preco_preco_publico.sql` (APLICADA, restantes = 0).
   Imóveis Superbid não guardam o `raw` — não deu para medir lá; a regra nova vale para eles na próxima coleta.
+- **`mp_liberacao_atrasada` (crítico) = 1 era venda do Mercado Livre**, não cobrança do BidPro: "Cloro P/ Limpeza
+  De Piscina", R$ 139, sem user_id, `dados_mp.order.type = 'mercadolibre'`, liberação em 28 dias (regra do ML após
+  a entrega). A conta do MP é a mesma; `mp_pagamentos` recebe tudo dela (há também ~39 pagamentos sem usuário,
+  ex.: "Anthropic"). Migração `20261031_mp_liberacao_sem_venda_mercado_livre.sql` (APLICADA): o invariante ignora
+  pedido do ML. Agora = 0.
 
 ## 30/10 (sessão do dia, financeiro + admin + leilão) — BANCO INTER, CONCILIAÇÃO, "PRECISA DE VOCÊ", RESULTADO DO LEILÃO ELETRÔNICO, COMANDO UMA VEZ SÓ
 
