@@ -72,6 +72,8 @@ export const TENANTS = {
   // 27/10 — Brasília Leilões entra vazia (regra do dono: ATIVO em família que já lemos fica conectado). Pelo banco: /externo/
   // 200 com o template da Leiloar e um só leilão, o 558 de TESTE da plataforma — que o filtro de teste abaixo já descarta.
   brasilia: { fonte: 'BRASILIALEIL', leiloeiro: 'Brasília Leilões (André Gustavo Bouças Ignácio)', base: 'https://brasilialeiloes.com.br' }, // 0 (DF)
+  // 31/10 (medição `medicao_3110`): rodapé "Plataforma Leiloar", /externo/leiloes/ 200 e "Não existem leilões cadastrados".
+  vinci: { fonte: 'VINCILEIL', leiloeiro: 'Vinci Leilões (Vinicius Santos Ciriaco)', base: 'https://www.vincileiloes.com.br' }, // 0 (MT)
   // 28/10 (medição `medicao_2810`): santosmoraesleiloes.com.br redireciona para este domínio (/externo/). Seco: 35 lotes em 8
   // leilões — quase tudo SENAD/Receita (veículo e mercadoria, "Bem - Foz do Iguaçu/PR"), que o `naoEhImovel` do motor tira;
   // 1 imóvel aberto (terreno em Santo Antônio da Platina/PR, R$ 627 mil) e 4 de imóvel já encerrados.

@@ -9,7 +9,7 @@ import { ofertasNoPortal } from '../lib/motor/fetch-sbidloja.mjs';
 
 const fx = (n) => readFileSync(new URL(`./fixtures/${n}`, import.meta.url), 'utf8');
 const ts = Object.values(TENANTS);
-assert.equal(ts.length, 32, '32 lojas com storeId no siteconfig');
+assert.equal(ts.length, 34, '34 lojas com storeId no siteconfig (32 de 27/10 + 2 vazias de 31/10)');
 assert.equal(new Set(ts.map((t) => t.fonte)).size, ts.length, 'fonte duplicada');
 assert.equal(new Set(ts.map((t) => t.storeId)).size, ts.length, 'storeId duplicado');
 assert.ok(ts.every((t) => t.catalogo.includes(`stores.id:${t.storeId};`) && /requestOrigin=store/.test(t.catalogo) && /portalId=\[2,15\]/.test(t.catalogo)), 'modo loja exige portalId=[2,15] + requestOrigin=store');

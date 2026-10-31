@@ -165,6 +165,11 @@ export const TENANTS = {
   sw: { fonte: 'SWLEILOES', leiloeiro: 'SW Leilões', base: 'https://www.swleiloes.com.br', sufixo: 'SW Leilões' }, // VD 1 de 1, sem cidade
   veronica: { fonte: 'VERONICALEIL', leiloeiro: 'Veronica Telles Leiloeira', base: 'https://www.veronicaleiloes.com.br', sufixo: 'Veronica Telles' },
   zaccarias: { fonte: 'ZACCARIAS', leiloeiro: 'Zaccarias Leiloeiro Oficial', base: 'https://www.zaccariasleiloes.com.br', sufixo: 'Zaccarias Leiloeiro Oficial' },
+  // 31/10 (medição `medicao_3110`, mesma prova): Gestor e BSB com "IMÓVEIS 0 itens" (a BSB tem 397 em DIVERSOS);
+  // Rochasul sem lote de imóvel, só 2 vendas diretas (bem_id 5 e 8, apartamentos em Passo Fundo/RS).
+  rochasul: { fonte: 'ROCHASUL', leiloeiro: 'Rochasul Leilões (Douglas da Rocha)', base: 'https://www.rochasulleiloes.com.br', sufixo: 'ROCHASUL Leilões' }, // VD 2
+  gestor: { fonte: 'GESTORLEIL', leiloeiro: 'Gestor Leilões (Sérgio Ricardo de Brito Borges)', base: 'https://www.gestorleiloes.com.br', sufixo: 'Gestor Leilões' },
+  bsb: { fonte: 'BSBLEILOES', leiloeiro: 'BSB Leilões (Martha Helena Tobias da Silva)', base: 'https://www.bsbleiloes.com.br', sufixo: 'BSB Leilões' },
   // ── 26/10, com lote hoje (todos os lotes no parser em seco; contador "IMÓVEIS N itens" × enumerados).
   // Luci Vera: 11 de 11 enumerados → 10 prontos + 1 não-imóvel (silos). Santayana: 10 lotes + 3 VD (o contador diz 11 —
   // conta só os abertos) → 7 prontos, 4 box descartados, 2 encerrados. Os dois têm lote cujo título é só "APARTAMENTO"/

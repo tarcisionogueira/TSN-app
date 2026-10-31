@@ -58,6 +58,11 @@ export const TENANTS = {
   tadashi: t('SBL_TADASHI', 'TADASHI LEILÕES', 16430, 'tadashileiloes.com.br', 'PR'),
   taha: t('SBL_TAHA', 'TAHA LEILÕES', 16489, 'tahaleiloes.com.br', 'SP'),
   xisto: t('SBL_XISTO', 'XISTO LEILÕES', 16165, 'xistoleiloes.com.br', 'MT'),
+  // 31/10 (medição `medicao_3110` dos não coletados da JUCEPE) — mesma SPA, storeId do style.config.json lido pelo banco.
+  // Ligados VAZIOS (regra do dono: ATIVO em família que já lemos fica ligado): a offer-query no modo loja devolve
+  // total 0 em aberto para as duas, com e sem o filtro de imóveis.
+  taniagrimaldi: t('SBL_TANIAGRIMALDI', 'TANIA GRIMALDI LEILÕES', 16240, 'taniagrimaldileiloes.com.br', 'PE'),
+  maia: t('SBL_MAIA', 'MAIA LEILÕES', 16539, 'leiloesmaia.com.br', 'PE'),
 };
 const SITE_DA_LOJA = new Map(Object.values(TENANTS).map((x) => [x.storeId, x.site]));
 

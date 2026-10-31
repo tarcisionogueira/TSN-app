@@ -77,7 +77,22 @@
     DOMÍNIO — "casaforte…"/"casadeleiloes…" davam tipo casa a complexo industrial e terrenos → só o caminho da URL;
     (c) `leilovia-parse`: "Endereço para visitação: GALPÃO" num "LEILÃO DE BENS DIVERSOS" virava imóvel (fogão
     industrial, ferragem de barraca, caixas de som) → o endereço de visitação não conta para o tipo.
-  - Próximo: medir os 64 sem triagem (pg_net, grátis) e ordenar os ~35 candidatos por volume de imóvel.
+  - **Medição `medicao_3110` dos 63 sem medição útil (pg_net + WebFetch, custo zero): NENHUM candidato com volume.**
+    Migração `20261031_medicao_3110_nao_coletados.sql` (APLICADA): 20 fora do ar · 9 não-leilão (domínio caído virou
+    IPTV/apostas, advocacia, OAB, Linktree, agregador "Arremate") · 10 sem imóvel (arte, máquinas, veículo; Celso
+    Cunha só revende Comprei/PGFN) · 15 vazios hoje · Daux 3 imóveis pequenos · 3 bloqueados (Leilance, LM, Rui
+    Pinto/Cloudflare). **6 ligados VAZIOS** em família já lida (regra do dono): ROCHASUL, GESTORLEIL, BSBLEILOES
+    (LeilãoPro), VINCILEIL (Leiloar), SBL_TANIAGRIMALDI e SBL_MAIA (lojas Superbid, storeId do style.config.json).
+    O domínio da BSB estava gravado "ww.bsbleiloes" — corrigido.
+  - ⚠️ **SABBAG nunca rodou:** ligado no `leilaopro-parse` em 28/10 mas fora do `LEILAOPRO_TENANTS` fixo do
+    `scraper-leilaopro.yml` (0 lotes, 0 linha em fonte_saude). Incluído. **Ao ligar tenant LeilãoPro, a lista do
+    workflow é o segundo lugar a mexer** — os outros motores (soleon, msis, sbidloja, leiloesbr, astavero) rodam todos
+    os tenants do config por padrão; só o LeilãoPro tem lista fixa.
+  - **#380 fechada**: os 8 sites próprios com imóvel já coletam (TURANI 235, D1LANCE 76, CRISTIANOESCOLA 30,
+    BENEDETTO 14, JORGEBRASIL 14, WRLEILOES 12, FLAVIOGARCIA 6, LEILOESBRASILTO 1). O que sobra fora é decisão do
+    dono (MGL/Montenegro Cloudflare, A Leiloeira com login, Bom Valor) ou não paga leitor (Via Leilões 2, Daux 3).
+    **A frente "integrar leiloeiro de Junta" chegou ao fim do que tem imóvel**; o ganho agora está nos 926 `sem_site`
+    (radar por nome nos editais) e em manter os conectados vivos.
 - **`mp_liberacao_atrasada` (crítico) = 1 era venda do Mercado Livre**, não cobrança do BidPro: "Cloro P/ Limpeza
   De Piscina", R$ 139, sem user_id, `dados_mp.order.type = 'mercadolibre'`, liberação em 28 dias (regra do ML após
   a entrega). A conta do MP é a mesma; `mp_pagamentos` recebe tudo dela (há também ~39 pagamentos sem usuário,
