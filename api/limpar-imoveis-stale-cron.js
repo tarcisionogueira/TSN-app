@@ -84,7 +84,11 @@ export default async function handler(req, res) {
   // 30/10: em lotes também — o UPDATE único sobre todos os sumidos (×~30 gatilhos) caiu no 57014 às 05h
   // UTC de 29 e 30/10 com a seleção levando < 0,6 s. A RPC devolve `completo`; chamamos até vir true.
   // 100, não 200: medido 30/10 com o banco folgado, 200 linhas = 3,2 s (~16 ms/linha); às 02h dobra.
-  const LOTE_LEILOEIRO = 100;
+  // 01/11 (#305): 100 → 50. Medido: cada chamada tem ~0,85 s fixos (baseline aprendida + agrupamento por fonte) e
+  // cada desativação dispara a cadeia de ~25 gatilhos de UPDATE do imoveis_leilao (~30 ms/linha). 100 linhas
+  // encostavam nos 8 s do statement_timeout no horário de coleta (57014 em 30/10 e 01/11 às 05:01).
+  // Na nova tentativa após 57014 o lote cai pela metade: repetir o MESMO tamanho é repetir o mesmo estouro.
+  const LOTE_LEILOEIRO = 50;
   let leiloeiro = null;
   try {
     let total = 0;
@@ -95,7 +99,7 @@ export default async function handler(req, res) {
         const txt = (await r2.text().catch(() => '')).slice(0, 200);
         if (!/57014/.test(txt) || Date.now() - inicio > 105000) { leiloeiro = { erro: `${r2.status} ${txt}`, parcial: total }; break; }
         await new Promise(ok => setTimeout(ok, 5000));   // mesma nova tentativa única do emLotes
-        r2 = await rpc('desativar_imoveis_leiloeiro_stale_lote', { margem: '36 hours', teto_pct: 0.40, lote: LOTE_LEILOEIRO });
+        r2 = await rpc('desativar_imoveis_leiloeiro_stale_lote', { margem: '36 hours', teto_pct: 0.40, lote: Math.ceil(LOTE_LEILOEIRO / 2) });
         if (!r2.ok) { leiloeiro = { erro: `${r2.status} ${(await r2.text().catch(() => '')).slice(0, 200)}`, parcial: total, tentativas: 2 }; break; }
       }
       const j = await r2.json().catch(() => null);

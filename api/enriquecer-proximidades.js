@@ -71,7 +71,18 @@ export default async function handler(req, res) {
   // 16/10: com o banco em timeout, o PostgREST devolve {code:'57014',...} e esse OBJETO virava a
   // "fila" — o `fila.push` da revalidação estourava ("fila.push is not a function"). Erro de
   // leitura não é fila vazia: registra o motivo e segue só com a revalidação.
-  const rFila = await sb(`imoveis_leilao?select=${COLS}&proximidades_em=is.null&proximidades_tentativas=lt.${MAX_TENT}&latitude=not.is.null&latitude=neq.0&ativo=eq.true&geocod_nivel=in.(${NIVEIS_ATENDIDOS})&order=proximidades_tentativas.asc,atualizado_em.desc&limit=${LOTE}`);
+  // 01/11 (#305): a leitura mede 0,4 s com o banco folgado; os 57014 (30–31/10, 11:15 e 17:15) caem em pico de
+  // escrita da coleta. Uma nova tentativa após 3 s, só para 57014 — o resto do erro segue o caminho de antes.
+  const urlFila = `imoveis_leilao?select=${COLS}&proximidades_em=is.null&proximidades_tentativas=lt.${MAX_TENT}&latitude=not.is.null&latitude=neq.0&ativo=eq.true&geocod_nivel=in.(${NIVEIS_ATENDIDOS})&order=proximidades_tentativas.asc,atualizado_em.desc&limit=${LOTE}`;
+  let rFila = await sb(urlFila);
+  if (!rFila.ok) {
+    const txt = await rFila.clone().text().catch(() => '');
+    if (/57014/.test(txt)) {
+      console.warn('[proximidades] fila: statement timeout, nova tentativa em 3 s');
+      await new Promise(ok => setTimeout(ok, 3000));
+      rFila = await sb(urlFila);
+    }
+  }
   const filaBruta = await rFila.json().catch(() => null);
   const erroFila = !rFila.ok || !Array.isArray(filaBruta) ? `HTTP ${rFila.status} ${JSON.stringify(filaBruta)?.slice(0, 160)}` : null;
   if (erroFila) console.error('[proximidades] fila não lida:', erroFila);
