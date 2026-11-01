@@ -332,7 +332,7 @@ const RE_FATIA_SOBRE = /fra[çc][ãa]o\s+ideal\s+(de\s+)?[0-9][0-9.,/]*\s*%?\s*(
 const RE_PCT_DA_FRACAO = /[0-9][0-9.,]*\s*%\s+d[ao]s?\s+(cota|fra[çc][ãa]o)\s+ideal/i;
 const RE_CLAUSULAS_V4 = [
   /fra[çc][ãa]o\s+ideal[^.;]{0,60}?(?<![a-zà-ú])(terreno|solo|[áa]rea\s+comum|dom[íi]nio\s+[úu]til)/i,
-  /fra[çc][ãa]o\s+ideal\s*(\([^)]{0,20}\))?\s*:?\s*(de\s+)?[0-9]/i,
+  /fra[çc][ãa]o\s+ideal\s*(\([^)]{0,20}\))?\s*:?\s*(de\s+|equivalente\s+a\s+)?[0-9]/i,   // 01/11 (#398): "fração ideal equivalente a 2,55% do todo" (VIP 22321, SODRE 2779089) é a mesma cláusula de condomínio
   /[0-9][0-9.,]*\s*%\s+de\s+fra[çc][ãa]o\s+ideal/i,
   /(terreno|privativa)\s*\/?\s*\(?\s*fra[çc][ãa]o\s+ideal/i,
   /terreno\s*:?\s*[0-9][0-9.,]*\s*m[²2]\s*\(\s*fra[çc][ãa]o\s+ideal\s*\)/i,
@@ -463,7 +463,10 @@ export function ehForaDoAcervo(imovel) {
 // GRUPOLANCE); apto "2 Vagas | 166m²" segue protegido. Medido no acervo ativo: só esses 2 mudam.
 const RE_VAGA_INICIO = /^((uma?|01|02|03|04|duas|tr[eê]s|\d{1,2})\s*(\([^)]*\)\s*)?)?(vagas?|box(es)?|garage(m|ns)|estacionamentos?)(?![a-zà-ú])/;
 const VAGA_AREA_MAX = 70;
-const RE_VAGA_PREFIXO = /^\s*(\(?\s*lote\s*\d+\s*\)?\s*[-:]?\s*|oportunidade\s*:\s*|im[oó]vel\s*:\s*|[-–:.\s]+|\d+\s*[-–.)]\s+)*/;
+// 01/11 (#322): + "(CANOAS/RS) " e "DIREITOS E AÇÕES SOBRE O " antes do box (RAUPP 6597 escapava).
+const RE_VAGA_PREFIXO = /^\s*(\(?\s*lote\s*\d+\s*\)?\s*[-:]?\s*|oportunidade\s*:\s*|im[oó]vel\s*:\s*|\(\s*[a-zà-ú' .-]{2,40}\s*\/\s*[a-z]{2}\s*\)\s*|(os\s+)?direitos(\s+e\s+a[çc][õo]es)?\s+(aquisitivos\s+)?(sobre|do|da|de)\s+(o|a)?\s*|[-–:.\s]+|\d+\s*[-–.)]\s+)*/;
+// Título que não diz nada ("Imóvel", "Lote 3", "Mat. 2.636"): o que está à venda está no começo da descrição (ALEMAO 14685: "BOX 02 do edifício…").
+const RE_VAGA_TITULO_GENERICO = /^\s*(im[oó]vel|lote\s*\d*|mat(r[ií]cula)?\.?\s*(n[º°o.]*\s*)?[\d.]+)\s*$/i;
 const RE_VAGA_UNIDADE_TITULO = /(apartament|(?<![a-zà-ú])apto(?![a-zà-ú])|(?<![a-zà-ú])casa(?![a-zà-ú])|sobrado|(?<![a-zà-ú])sala(?![a-zà-ú])|(?<![a-zà-ú])loja(?![a-zà-ú])|terreno|pr[eé]dio|galp[aã]o|cobertura|kitnet|(?<![a-zà-ú])studio(?![a-zà-ú])|(?<![a-zà-ú])flat(?![a-zà-ú])|conjunto\s+comercial)/i;
 const RE_VAGA_DESC_PREFIXO = /^\s*(matr[ií]cula\s*:?\s*|bem\s*:?\s*|im[oó]vel\s*:?\s*|descri[cç][aã]o\s*:?\s*|(os\s+)?direitos\s+(aquisitivos\s+)?(sobre|do|da|de)\s+(o|a)?\s*|\d+[.)]\s*|\(?\d+\)?\s*(um|uma)?\s*\)?\s*)*/;
 const RE_VAGA_DESC_UNIDADE = /^(o\s+|a\s+|um\s+|uma\s+)?(apartament|casa(?![a-zà-ú])|sobrado|sala(?![a-zà-ú])|loja(?![a-zà-ú])|terreno|pr[eé]dio|galp[aã]o|cobertura|unidade\s+aut[oô]noma\s+residencial)/;
@@ -472,6 +475,10 @@ export function ehVagaGaragem(imovel) {
   const tit = String(imovel?.titulo || '');
   const t = tit.toLowerCase().replace(RE_VAGA_PREFIXO, '');
   const seg = /^[A-Z]{2}\s+-\s/.test(tit) && tit.includes('|') ? tit.split('|')[1].trim().toLowerCase() : '';
+  if (RE_VAGA_TITULO_GENERICO.test(tit)) {
+    const dg = String(imovel?.descricao || '').slice(0, 260).toLowerCase().replace(RE_VAGA_DESC_PREFIXO, '');
+    return RE_VAGA_INICIO.test(dg) && !RE_VAGA_UNIDADE_TITULO.test(dg.slice(0, 120));
+  }
   if (!(RE_VAGA_INICIO.test(t) || RE_VAGA_INICIO.test(seg))) return false;
   if (RE_VAGA_UNIDADE_TITULO.test(tit)) return false;
   for (const m of tit.matchAll(/(\d{1,3}(?:\.\d{3})+(?:,\d+)?|\d+(?:[.,]\d+)?)\s*m(?:²|2)/gi)) {

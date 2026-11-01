@@ -82,3 +82,10 @@ assert.equal(ehFracaoIdeal({ titulo: 'Avenida Presidente Vargas, 590 - Rio de Ja
 assert.equal(ehFracaoIdeal({ titulo: '50% da sala 201', descricao: '50% da Sala 201 do edifício X e sua fração ideal do terreno' }), true, 'porcentagem da sala no título continua barrando');
 assert.equal(ehFracaoIdeal({ titulo: 'Sala', descricao: 'fração ideal de 1/3 sobre o imóvel sala 201 do edifício X' }), true, 'fração SOBRE o imóvel continua barrando');
 console.log('ok — sala comercial do edifício');
+
+// 01/11 (#398) — "fração ideal EQUIVALENTE A N% do todo" é a cláusula de condomínio (textos reais: VIP 22321, SODRE 2779089).
+for (const d of ['tendo cada uma dessas unidades autônomas uma área útil de 50,90m², área comum de 44,342m², no total de 95,242m², pertencendo-lhes tanto no terreno como nas demais partes de uso comum, uma fração ideal equivalente a 2,55% ou 15,272m² do todo.',
+  'área comum de 30,2400 m², área total construída de 91,2800 m², área total real de 102,9360 m², pertencendo-lhe tanto no terreno como nas demais coisas e uso comum, uma fração ideal equivalente a 3,0046% do todo, cabendo-lhe'])
+  assert.equal(ehFracaoIdeal({ titulo: 'Apartamento com 50,90m²', descricao: d }), false, `#398: não devia barrar: ${d.slice(0, 50)}`);
+assert.equal(ehFracaoIdeal({ titulo: 'Terreno', descricao: 'fração ideal equivalente a 50% do imóvel rural' }), true, '#398: fatia sem contexto de condomínio continua barrando');
+console.log('ok — #398 fração ideal equivalente a');

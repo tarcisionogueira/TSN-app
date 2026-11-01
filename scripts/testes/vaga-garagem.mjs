@@ -51,3 +51,12 @@ console.log('fracao-de-terras: todos os casos passaram');
 assert.equal(ehForaDoAcervo({ titulo: 'APROX. 45 EQUIPAMENTOS RETORNADOS DAS LOJAS DE DIVERSAS MARCAS E MODELOS.', descricao: '' }), true, 'equipamentos devolvidos das lojas são fora');
 assert.equal(ehForaDoAcervo({ titulo: 'Loja comercial no centro de Campinas', descricao: '' }), false, 'loja à venda segue imóvel');
 console.log('loja-de-origem: todos os casos passaram');
+
+// 01/11 (#322) — textos reais que escapavam.
+import { ehVagaGaragem as vg322 } from '../lib/scraper-core.mjs';
+assert.equal(vg322({ titulo: '(CANOAS/RS) DIREITOS E AÇÕES SOBRE O BOX N.º 239 DO CONDOMÍNIO AGORA CANOAS, C/ 12,00M², N', descricao: '(CANOAS/RS) DIREITOS E AÇÕES sobre o box n.º 239 do Condomínio AGORA Canoas, c/ 12,00m²' }), true, 'RAUPP 6597: box com (cidade/UF) e "direitos e ações sobre o"');
+assert.equal(vg322({ titulo: 'Imovel', descricao: 'Descrição: BOX 02 do edifício “CRISA”, situado nesta cidade, na rua Daltro Filho, 601' }), true, 'ALEMAO 14685: título genérico, box na descrição');
+assert.equal(vg322({ titulo: 'Imóvel', descricao: 'Descrição: Apartamento 302 com box de garagem nº 5, edifício X' }), false, 'título genérico com apartamento continua imóvel');
+assert.equal(vg322({ titulo: '(PORTO ALEGRE/RS) APARTAMENTO 301 COM BOX', descricao: '' }), false, 'apartamento com box no título continua imóvel');
+assert.equal(vg322({ titulo: 'Mat. 2.636', descricao: 'Casa de alvenaria com garagem para 2 carros' }), false, 'casa com garagem continua imóvel');
+console.log('vaga #322: todos os casos passaram');
