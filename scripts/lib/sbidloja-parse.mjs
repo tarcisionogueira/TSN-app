@@ -63,6 +63,15 @@ export const TENANTS = {
   // total 0 em aberto para as duas, com e sem o filtro de imóveis.
   taniagrimaldi: t('SBL_TANIAGRIMALDI', 'TANIA GRIMALDI LEILÕES', 16240, 'taniagrimaldileiloes.com.br', 'PE'),
   maia: t('SBL_MAIA', 'MAIA LEILÕES', 16539, 'leiloesmaia.com.br', 'PE'),
+  // 01/11 — leiloeiros que a Junta dava SEM site e que declaram o site na lista de credenciados do TJSP; mesma SPA,
+  // storeId do style.config.json lido pelo banco. Medido na offer-query (modo loja, imóveis, abertos) em 01/11:
+  // ARGO 26 (20 já pelo portal) · BALBO 16 (14) · BN 3 (3) · NOGUEIRA 3 (3) · CIA NACIONAL 0 · FERRARI 0 (ligados vazios).
+  argo: t('SBL_ARGONETWORK', 'ARGO NETWORK LEILÕES', 16125, 'argonetworkleiloes.com.br', 'MT'),
+  balbo: t('SBL_BALBO', 'BALBO LEILÕES', 804, 'balboleiloes.com.br', 'SP'),
+  bn: t('SBL_BN', 'BN LEILÕES', 16171, 'bnleiloes.com.br', 'SP'),
+  nogueira: t('SBL_NOGUEIRA', 'NOGUEIRA LEILÕES', 16137, 'nogueiraleiloes.com.br', 'SP'),
+  cianacional: t('SBL_CIANACIONAL', 'CIA NACIONAL LEILÕES', 16225, 'cianacionalleiloes.com.br', 'SP'),
+  ferrari: t('SBL_FERRARI', 'FERRARI LEILÕES', 16066, 'ferrarileiloes.com.br', 'SP'),
 };
 const SITE_DA_LOJA = new Map(Object.values(TENANTS).map((x) => [x.storeId, x.site]));
 
