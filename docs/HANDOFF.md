@@ -6,6 +6,27 @@
 
 
 
+## 01/11 (tarde) — #305: POR QUE O BANCO ESTOURA OS 8 s, E AS DUAS PRIMEIRAS ETAPAS
+
+- **Causa medida (não suposta):** a coleta grava por upsert e regrava o acervo todo dia. Em lote que já existe o Postgres
+  roda a cadeia BEFORE INSERT inteira (vira EXCLUDED) **e** a BEFORE UPDATE; `UPDATE OF col` não filtra nada no upsert
+  (todas as colunas do payload vão no SET). 42 gatilhos em `imoveis_leilao`. Bench (200 upserts de existentes, transação
+  desfeita): **8,0 s só em gatilhos = 40 ms/linha**; `preservar_e_derivar_endereco` 57%. Realtime publica só chat
+  (descartado); índices sem uso somam 7 MB (descartado). `authenticator` tem statement_timeout=8s e o service_role herda.
+- **Etapa 1 (04c53a9):** limpeza diária com lote 50 (e metade na nova tentativa após 57014); proximidades com 1 nova
+  tentativa após 3 s.
+- **Etapa 2 (`20261101_gatilhos_imovel_pulam_o_que_nao_mudou.sql`, APLICADA):** retorno antecipado nas funções — no
+  INSERT de lote existente (mesmo `fonte_id`) e no UPDATE quando o que a função lê não mudou; barreiras sempre rodam na
+  REATIVAÇÃO. **Prova de equivalência** num bloco único desfeito (funções velhas × novas, mesmo upsert, 280 linhas com 80
+  inativas reativadas): 1ª versão 15,6 → 3,1 s mas **8 divergências** — o upsert diário vinha CURANDO linhas antigas
+  (endereço sem número ganhava o número; cidade com lixo era normalizada), porque as regras melhoraram depois. Corrigido:
+  `cidade_pelo_ibge` fica como era; endereço só pula se o gravado já tem número e o texto é o mesmo. 2ª versão:
+  **12,9 → 6,8 s (−47%)**, 1 divergência (só acento: mantém o "Édson" já gravado).
+  ⚠️ **Regra de barreira nova (bem móvel, vaga, consórcio, fração, fração ideal, limpar_html, anexo_lixo, foto_placeholder)
+  não reaplica mais sozinha em lote ativo com texto igual — regra nova = migração com backfill.**
+- **Como fechar a #305:** 3 dias sem `statement timeout` em `postgres_logs` e sem 57014 nos erros da Vercel. Se ainda
+  aparecer, o próximo passo (etapa 3) é a coleta não reenviar lote idêntico — e só depois pensar em máquina maior.
+
 ## 01/11 — SEGURANÇA ZERADA, 11 LEILOEIROS LIGADOS PELA LISTA DOS TRIBUNAIS, "SEM SITE" MEDIDO
 
 - **Segurança (`rpc_definer_anon`, 2 itens) → 0/0.** Não entraram na allowlist: nenhuma precisa ser pública.
