@@ -70,6 +70,8 @@ async function upsertAnaliseVeiculo(row) {
 // em PARALELO e as amostras SOMADAS (dono, 30/09: "buscar uma quantidade satisfatória para calcular
 // o preço médio"). Só cai na busca web paga se o conjunto não tiver 3 comparáveis. Nunca lança.
 async function anunciosDoMobiauto(v, deadline) {
+  // 01/11: a rota é /comprar/carros/ — caminhão, ônibus e moto não estão lá (gastava a consulta e o prazo à toa).
+  if (['caminhao', 'onibus', 'moto', 'reboque', 'maquina', 'embarcacao'].includes(String(v.tipo_veiculo || ''))) return { anuncios: [], motivo: `Mobiauto: só carros (${v.tipo_veiculo})` };
   const marca = marcaMobiauto(v.marca);
   const ano = Number(v.ano_modelo || v.ano_fabricacao) || null;
   const modeloTxt = v.modelo || modeloDoTitulo(v.titulo, v.marca);
@@ -111,7 +113,10 @@ async function anunciosDaOlx(v, deadline) {
   // (a versão é filtrada depois — pô-la na busca zera o resultado quando o anunciante abrevia).
   const termos = [marca, ...String(modeloTxt || '').split(/\s+/).filter((t) => !/^nov[oa]$/i.test(t)).slice(0, 2), ano].filter(Boolean).join(' ');
   if (!ano || !modeloTxt) return { anuncios: [], motivo: 'OLX: sem modelo/ano' };
-  const url = `https://www.olx.com.br/autos-e-pecas/carros-vans-e-utilitarios?q=${encodeURIComponent(termos.toLowerCase())}`;
+  // 01/11: categoria pelo TIPO — a busca era sempre em carros, e caminhão/moto nunca achavam anúncio (caía na busca
+  // web paga). Conferido pelo banco: /caminhoes e /motos têm o mesmo cartão (olx-adcard__title) que o leitor entende.
+  const categoria = { caminhao: 'caminhoes', onibus: 'caminhoes', moto: 'motos' }[String(v.tipo_veiculo || '')] || 'carros-vans-e-utilitarios';
+  const url = `https://www.olx.com.br/autos-e-pecas/${categoria}?q=${encodeURIComponent(termos.toLowerCase())}`;
   const b = await paginaViaBanco(url, deadline);
   if (!b.html) return { anuncios: [], motivo: `OLX: ${b.motivo}` };
   const a = anunciosOlx(b.html, { ano, modelo: modeloTxt });
