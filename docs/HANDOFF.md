@@ -6,6 +6,27 @@
 
 
 
+## 01/11 (noite) — PENDÊNCIAS DO CLAUDE + LEILOEIROS RESTANTES
+
+- **Fechadas com prova:** #358 (JE/Sublime fora dos fantasmas), #387 (1ª rodada DH/Giordano/Simon/CasaForte ok), #383,
+  #377 (absorvida pela #305), #280 (veículos de 21/10 gravando), #299 (comunicado de veículos 107/107 — cron
+  `lancamento-veiculos?modo=enviar` REMOVIDO do vercel.json), #398 (fração ideal "equivalente a").
+- **#398** `RE_CLAUSULAS_V4` + `fracao_ideal_barrada` (`20261101_fracao_ideal_equivalente_a.sql`, trava de âncora): "fração
+  ideal equivalente a N% do todo" é condomínio. Os barrados (VIP 22321, SODRE 2779089) voltam na próxima coleta.
+- **#322 item 1** `ehVagaGaragem` + `vaga_garagem_barrada` (`20261101_vaga_garagem_prefixo_e_titulo_generico.sql`): prefixos
+  "(CANOAS/RS)" e "DIREITOS E AÇÕES SOBRE O", e título genérico ("Imóvel", "Mat. N") decidido pela descrição. Em seco: 12
+  lotes novos barrados, todos box/vaga, 0 que deixam de barrar — **desligados na própria migração** (primeira aplicação da
+  regra "regra nova de barreira = backfill junto", consequência da etapa 2 da #305). Itens 2–5 da #322 seguem abertos.
+- **Leiloeiros restantes (252 domínios `nao_coletado`):** quase tudo já medido (DNS morto, não-leilão, sem imóvel, Bom
+  Valor). Ganhos de hoje: **6 lojas Superbid** da lista do TJSP (SBL_ARGONETWORK, SBL_BALBO, SBL_BN, SBL_NOGUEIRA,
+  SBL_CIANACIONAL, SBL_FERRARI — 48 imóveis abertos, 8 novos fora do portal), somadas aos 11 da tarde (#402).
+  lancenow.com.br = white-label Hasta Pública da família Valland, lotes já vêm pela HASTAPUBLICA ("Marcelo Valland", 26).
+  Sem leitor novo possível: innvest/ruipinto (Cloudflare), leiloesanapolis (403), mrleiloes (522), Montenegro (veto).
+- **#373 sem saída grátis:** a página do imóvel da Caixa responde 403 (Azion) ao pg_net, com e sem cabeçalho. Continua
+  dependendo da cota Bright Data ou do runner residencial.
+- **#371/#310 (141 sem UF/cidade):** cauda longa — maior grupo TURANI 33 = cotas de MULTIPROPRIEDADE ("Cota 8 do Apto 310,
+  1/13 avos") sem cidade; se multipropriedade sai do acervo é decisão do dono (ver #398 antiga).
+
 ## 01/11 (tarde) — #305: POR QUE O BANCO ESTOURA OS 8 s, E AS DUAS PRIMEIRAS ETAPAS
 
 - **Causa medida (não suposta):** a coleta grava por upsert e regrava o acervo todo dia. Em lote que já existe o Postgres
