@@ -92,6 +92,18 @@ export const TENANTS = {
   tradicao: { fonte: 'TRADICAOLEIL', leiloeiro: 'Tradição Leilões', base: 'https://www.tradicaoleiloes.com.br', catalogo: '/sitemap.xml' }, // 5 no feed, todos encerrados
   vendasjudiciais: { fonte: 'VENDASJUDICIAIS', leiloeiro: 'Vendas Judiciais (Fernando Semerdjian)', base: 'https://www.vendasjudiciais.com.br', catalogo: '/sitemap.xml' }, // 28 no feed
   viana: { fonte: 'VIANALEIL', leiloeiro: 'Viana Leilões (José Carlos Chagas)', base: 'https://www.vianaleiloes.com.br', catalogo: '/sitemap.xml' }, // 2 no feed
+  // 01/11 — leiloeiros ATIVOS que a Junta lista SEM site, mas que declaram site na lista de credenciados do TJSP
+  // (`leiloeiro_tribunal`). Triagem pelo banco (tarefa 'tri0111'): Degrau, feed /sitemap.xml "pelado" HTTP 200 com o
+  // <title> do próprio site (nenhum repete outro tenant). Nenhum lote destes domínios estava no acervo (cruzado por
+  // host do url_lote e pelo nome do leiloeiro). Entre parênteses: <listing> no feed em 01/11, antes do filtro.
+  trustbid: { fonte: 'TRUSTBID', leiloeiro: 'TrustBid Leilões (Fernando Domingues de Oliveira Junior)', base: 'https://www.trustbid.com.br', catalogo: '/sitemap.xml' }, // 353 no feed
+  alienajud: { fonte: 'ALIENAJUD', leiloeiro: 'Alienajud (Mauro da Cruz)', base: 'https://www.alienajud.com.br', catalogo: '/sitemap.xml' }, // 40 no feed
+  l123: { fonte: 'LEILOES123', leiloeiro: '123 Leilões (Thais Spagolla Fernandes)', base: 'https://www.123leiloes.com.br', catalogo: '/sitemap.xml' }, // 22 no feed
+  franklin: { fonte: 'FRANKLINLEIL', leiloeiro: 'Franklin Leilões (Renata Franklin Simões)', base: 'https://www.franklinleiloes.com.br', catalogo: '/sitemap.xml' }, // 19 no feed
+  verona: { fonte: 'VERONALEIL', leiloeiro: 'Verona Leilões (Odilson Alves de Oliveira)', base: 'https://www.veronaleiloes.com.br', catalogo: '/sitemap.xml' }, // 14 no feed
+  cris: { fonte: 'CRISLEILOES', leiloeiro: 'Cris Leilões (Cristiane Franklin Simões)', base: 'https://www.crisleiloes.com.br', catalogo: '/sitemap.xml' }, // 13 no feed
+  insigne: { fonte: 'INSIGNELEIL', leiloeiro: 'Insigne Leilões (Cesar Augusto de Souza Santos)', base: 'https://www.insigneleiloes.com.br', catalogo: '/sitemap.xml' }, // 8 no feed
+  conecta: { fonte: 'CONECTALEIL', leiloeiro: 'Conecta Leilões (João Victor de Abreu Morbi Galvão Frota)', base: 'https://www.conectaleiloes.com.br', catalogo: '/sitemap.xml' }, // 5 no feed
 };
 
 const limpo = (s) => decodificarEntidades(String(s || '').replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, ' '))

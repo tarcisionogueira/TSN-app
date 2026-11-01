@@ -6,6 +6,30 @@
 
 
 
+## 01/11 — SEGURANÇA ZERADA, 11 LEILOEIROS LIGADOS PELA LISTA DOS TRIBUNAIS, "SEM SITE" MEDIDO
+
+- **Segurança (`rpc_definer_anon`, 2 itens) → 0/0.** Não entraram na allowlist: nenhuma precisa ser pública.
+  `admin_precisa_de_voce` só serve ao /admin (já barrava não-admin); `landing_leiloeiros_oficiais` é CARA (varre os dois
+  acervos) e só `landing_numeros_atualizar()` a chama — exposta, era alvo fácil de martelo pelo PostgREST. EXECUTE
+  revogado de PUBLIC/anon (`20261101_revogar_anon_admin_precisa_e_landing_oficiais.sql`, APLICADA via apply_migration —
+  o REVOKE passou). Lição repetida: allowlist é registro de "público de propósito", não atalho para zerar o auditor.
+- **Leiloeiros "sem site" que TÊM site:** a lista de credenciados dos tribunais (`leiloeiro_tribunal`, 29/10) traz o site
+  de 43 inscrições que a Junta dava como sem site (37 domínios). 11 domínios já tinham lote (o leiloeiro era coberto e a
+  Junta não sabia); 26 triados pelo banco (`tri0111`). **Ligados:** Degrau — TRUSTBID (353 no feed), ALIENAJUD 40,
+  LEILOES123 22, FRANKLINLEIL 19, VERONALEIL 14, CRISLEILOES 13, INSIGNELEIL 8, CONECTALEIL 5; ARES — FAROONLINE 190 vivos,
+  FVLEILOES 45 (chave publishable do `assets/index-*.js`); Soleon — ARENALEILAO 5 imóveis. Fora: 6 lojas Superbid (já vêm
+  pelo portal), Viva Goiás (LJUD), OneBid (Bom Valor), DNS morto/Cloudflare/404/522 nos demais. Junta atualizada
+  (`20261101_junta_site_pela_lista_do_tribunal.sql`, APLICADA, `site_origem='tribunal'`). 1ª coleta: pendência **#402**.
+- **Restam 668 inscrições ATIVAS sem site** (646 sem_site + 20 agregador + 2; 497 com e-mail, 506 com telefone, 28 com
+  edital DJEN no acervo). Planilha para o dono gerada FORA do repo (tem e-mail/telefone — o repo é público).
+  Caminhos grátis já esgotados: e-mail de domínio próprio, tribunais, radar DJEN por nome (segue rodando 1/7 por dia).
+- **"Louco por Leilões"** (Gladiston Azevedo; a leiloaria é Soleon de Matheus Werneck, JUCEMG 1373, catálogo vazio hoje)
+  vende a "Lista 1.200 leilões" (R$ 97, Hotmart) e o "Mapa dos Leilões" (R$ 547/semestre). Conteúdo pago — não contornar.
+  Decisão do dono: pendência **#401** (se comprar, a sessão cruza domínio × junta × triagem e tria os novos pelo banco).
+- **Pendências:** #378 e #390 fechadas com prova. #305 segue aberta: novos 57014 em `enriquecer-proximidades` (30–31/10)
+  e no passo `leiloeiro` do `limpar-imoveis-stale` (30/10). A fila de proximidades mede 0,4 s fora de pico — é
+  concorrência no horário, não índice faltando. O painel `qa_invariantes()` leva 20–48 s quando chamado pelas sessões.
+
 ## 31/10 — "RESULTADO ATRASADO" ERA PESTANA INAPURÁVEL; "SEM FOTO" É DO LEILOEIRO
 
 - **`resultado_leilao_atrasado` (crítico) 349 → 697 não era atraso.** 694 eram veículos PESTANA (leilões

@@ -236,6 +236,9 @@ const TODOS_TENANTS = [
   // diversos). Mesmo sobrenome (Cerqueira) nos dois: se um dia listarem os mesmos ids, sai um dos dois.
   { fonte: 'CCJLEIL', leiloeiro: 'CCJ Leilões (Jamile Santana Cerqueira)', base: 'https://ccjleiloes.com.br' }, // 0 (BA)
   { fonte: 'KCLEIL', leiloeiro: 'KC Leilões (Kátia Cerqueira da Silva Casaes)', base: 'https://kcleiloes.com.br' }, // 0 (BA)
+  // 01/11 (lista de credenciados do TJSP × Junta sem site): Arena Leilão — home Soleon (cloudfront da plataforma), HTTP
+  // 200 "pelado" pelo banco (triagem 'tri0111'). Nenhum lote do domínio no acervo.
+  { fonte: 'ARENALEILAO', leiloeiro: 'Arena Leilão (Danilo Cardoso da Silva)', base: 'https://www.arenaleilao.com.br' },
   // FORA: guariglia.com.br (SP) — o banco recusa o certificado TLS do site ("SSL peer certificate"); sem página lida não
   // há prova de catálogo. Não confundir com GUARIGLIA (guariglialeiloes.com.br, BA), que já coleta.
 ];

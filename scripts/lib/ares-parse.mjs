@@ -83,6 +83,18 @@ export const TENANTS = {
     fonte: 'STILOLEILOES', leiloeiro: 'Stilo Leilões', site: 'https://www.stiloleiloes.com.br',
     base: 'https://api.stiloleiloes.com.br', headers: { apikey: 'sb_publishable_e-EH2SJsZybcDpTB63ciUw_m_Ym4r-z' },
   },
+  // 01/11 — leiloeiros que a Junta lista SEM site e que declaram site na lista de credenciados do TJSP
+  // (`leiloeiro_tribunal`). Triagem pelo banco ('tri0111'): home "Carregando..." + "Plataforma de Leilões"; API e chave
+  // publishable tiradas do `assets/index-*.js` de cada site (pública por desenho). Catálogo medido pelo banco
+  // (pg_net + ?apikey=, mesmo filtro do CATALOGO) em 01/11: FARO 190 vivos (loteamento, quadras/lotes) · FV 45.
+  faro: {
+    fonte: 'FAROONLINE', leiloeiro: 'Faro Online (Ronaldo Sergio Montenegro Rodrigues Faro)', site: 'https://www.faroonline.com.br',
+    base: 'https://api.faroonline.com.br', headers: { apikey: 'sb_publishable_9sg1Z7wZjcVjrdmMuYdJGg_d9c1G65_' },
+  },
+  fv: {
+    fonte: 'FVLEILOES', leiloeiro: 'FV Leilões (Gelsi Regina de Oliveira)', site: 'https://fvleiloes.com.br',
+    base: 'https://api.fvleiloes.com.br', headers: { apikey: 'sb_publishable_wBM11MC9yNr0l2OiXMLkww_C62CM1wF' },
+  },
 };
 const SITE_POR_API = new Map(Object.values(TENANTS).map(t => [t.base, t.site]));
 
