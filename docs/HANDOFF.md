@@ -6,6 +6,29 @@
 
 
 
+## 01/11 (noite 2) — CLASSIFICAÇÃO DE VEÍCULOS E IMÓVEIS + FILTROS + QUALIDADE DA COLETA
+
+Pedido do dono: "carros no filtro de caminhão, casas no filtro de apartamento". Tudo medido em seco antes de aplicar.
+- **Veículos** (`20261101_classificacao_veiculo_titulo_decide.sql` + `…_ajuste_frota.sql`): coletores gravavam
+  `tipo_veiculo='carro'` como padrão e o gatilho só classificava NULO; o classificador testava palavras ambíguas de moto
+  ("elite", "classic", "fan", "titan") antes dos modelos de carro, dava à descrição o peso do título e "88.763 km"
+  casava o padrão de caminhão. Agora `classificar_tipo_veiculo_titulo` decide; o valor do coletor só vale sem resposta
+  do título; `classificar_tipo_veiculo_descricao` é o último recurso. ~530 reclassificados. Armadilhas pegas na prova:
+  "Frota: 11065" (Gol virava caminhão), Volvo XC90, Dafra NH 190/CityClass, Honda HR-V, Iveco Daily, VW 15.190 EOD (ônibus).
+- **Imóveis — filtro:** a Busca, `buscar_por_raio_v2`/`_sem_geocode_count`, `SugestaoImovel` e `enviar-alertas-cron`
+  somavam o balde 'imovel' a TODO filtro de tipo. Agora é botão próprio "Tipo não informado" (`20261101_raio_sem_balde_imovel.sql`).
+  As listas por INTENÇÃO (revenda/locação) seguem incluindo 'imovel' — não são filtro de tipo.
+- **Imóveis — tipo** (`20261101_tipo_imovel_pelo_titulo.sql` + `…_tipo_titulo_artigo_e_hasta_titulos.sql`): gatilho
+  `trg_tipo_aa_pelo_titulo` — título que COMEÇA nomeando o tipo vence o coletor, com exceções (terreno com casa/galpão
+  segue casa/comercial; "Gleba" não tira de rural; misto res/com não troca). Bug meu corrigido no mesmo dia: o prefixo
+  "(o|a)" comia o "A" de "Apartamento".
+- **Não-imóveis no acervo:** `titulo_comeca_com_veiculo` entrou em `imovel_barrar_bem_movel` (a barreira antiga desistia
+  quando a descrição tinha "lote"). Saíram 2 da VIP (moto, trator) e 156 sucatas de carro da HASTA.
+- **Coleta:** PESTANA — "Gas/Alc" lido como MARCA/MODELO (912/1.334 com modelo "Alc"; `veiculo-do-lote.mjs` + teste +
+  907 corrigidos). HASTA — título genérico em 670; agora da 1ª frase da descrição (`hasta-parse.mjs` + acervo).
+- **Lacunas que ficaram:** pendência registrada (SUPERBID veículos foto 68%, FIPE 34%, RJLEILOES foto/área, SUPORTE
+  data/descrição, ZUK/MEGA foto).
+
 ## 01/11 (noite) — PENDÊNCIAS DO CLAUDE + LEILOEIROS RESTANTES
 
 - **Fechadas com prova:** #358 (JE/Sublime fora dos fantasmas), #387 (1ª rodada DH/Giordano/Simon/CasaForte ok), #383,
