@@ -158,4 +158,17 @@ const gol = await buscarFipe(async (path) => ({
 ok(gol.status === 'faixa_modelo' && gol.valor === null && gol.faixa?.join() === '9100,31500', `VW/GOL sem ano → faixa ${gol.faixa?.join(' a ')} (valor nulo; zero km fora)`);
 
 console.log(falhas ? `\n✗ ${falhas} falha(s)\n` : '\n✓ todos os casos passaram\n');
+// 01/11 — caminhão de modelo NUMÉRICO (caso do dono: VW 5.150 DRC 4X2 2013 sem FIPE).
+{
+  const { candidatosNumericos: cn } = await import('../../api/_fipe.js');
+  const vwTrucks = [{ code: 3875, name: '5-140 E Delivery 2p (diesel)' }, { code: 5959, name: '5-150 E Delivery 2p (diesel)(E5)' },
+    { code: 3876, name: '8-150 E Delivery 2p (diesel)' }, { code: 3725, name: '8-150/8-150 E Worker 2p (diesel)' }, { code: 4001, name: '15-190 Worker 2p (diesel)' }];
+  ok(acharCandidatosModelo('5.150 DRC 4X2', vwTrucks).map((m) => m.code).join() === '5959', '"5.150 DRC 4X2" → 5-150 E Delivery');
+  ok(acharCandidatosModelo('8.150', vwTrucks).length === 2, '"8.150" → as duas versões 8-150 (aproximado)');
+  ok(acharCandidatosModelo('15190 EOD', vwTrucks).map((m) => m.code).join() === '4001', '"15190" colado → 15-190');
+  const mb = [{ code: 1, name: 'L-1113 2p (diesel)' }, { code: 2, name: 'L-1313 2p (diesel)' }];
+  ok(cn('L 1113', mb).map((m) => m.code).join() === '1', '"L 1113" → L-1113');
+  ok(cn('SPRINTER 2013', mb).length === 0, 'ano solto não vira número de modelo');
+}
+
 process.exit(falhas ? 1 : 0);

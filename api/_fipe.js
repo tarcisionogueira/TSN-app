@@ -16,7 +16,9 @@
  */
 const BASE = 'https://fipe.parallelum.com.br/api/v2';
 const CATEGORIAS = ['cars', 'motorcycles', 'trucks'];
-const TIPO_PARA_CATEGORIA = { carro: 'cars', moto: 'motorcycles', motocicleta: 'motorcycles', caminhao: 'trucks' };
+// 01/11: ônibus (chassi OF-1722, 17-230 OD) está na tabela de CAMINHÕES da FIPE; van/utilitário (Sprinter, Master,
+// Ducato) na de carros. Sem o mapa, os 192 ônibus começavam pelos carros e saíam sem FIPE.
+const TIPO_PARA_CATEGORIA = { carro: 'cars', moto: 'motorcycles', motocicleta: 'motorcycles', caminhao: 'trucks', onibus: 'trucks', van_utilitario: 'cars' };
 
 // 'sem_match' custa 1-3 chamadas de marca sem achar nada — não vale repetir todo dia; 'ok'/
 // 'aproximado' a FIPE só muda 1x/mês, 25 dias é folga suficiente. Usado tanto pelo cron em
@@ -101,12 +103,38 @@ export function acharMarca(nossaMarca, marcas, indice) {
 // — era isso que queimava as 450/dia em ~45 veículos. Quando o nosso modelo tem mais palavras
 // ("CG 160 FAN"), ficam só os candidatos com MAIS palavras em comum; empate mantém todos.
 // Se a 1ª palavra não casa e é letra+número colados ("YBR150", "CG150"), tenta a parte em letras.
+// CAMINHÃO DE MODELO NUMÉRICO (01/11, dono: relatório do "CAMINHÃO BAÚ VW 5.150 DRC 4X2 2013" saiu sem FIPE). A FIPE
+// escreve "5-150 E Delivery 2p (diesel)(E5)", "L-1113 2p", "15-190 Worker"; o lote escreve "5.150", "L 1113", "15190".
+// Normalizado, "5.150" vira "5 150": a 1ª palavra ("5") tem 1 caractere e era descartada, e a triangulação exige
+// palavra de 3+ letras ("DRC" não existe na FIPE) — sem_match em 649 de 688 caminhões. Aqui o NÚMERO do modelo
+// casa com o nome FIPE: o par "d{1,2} ddd" (5.150, 24-280) ou o número de 4–5 dígitos (1113, 15190 → também "15 190").
+// Ano solto (19xx/20xx) não conta. Só roda quando a busca pela 1ª palavra não achou nada.
+const RE_ANO_SOLTO = /^(19[5-9]\d|20[0-4]\d)$/;
+export function candidatosNumericos(nossoModelo, modelos) {
+  const n = normalizar(nossoModelo);
+  const alvos = new Set();
+  const par = n.match(/(?:^|\s)(\d{1,2}) (\d{3})(?=\s|$)/);
+  if (par) alvos.add(`${par[1]} ${par[2]}`);
+  for (const t of n.split(' ')) {
+    const d = (t.match(/^[a-z]{0,3}(\d{4,5})[a-z]{0,3}$/) || [])[1];
+    if (!d || RE_ANO_SOLTO.test(d)) continue;
+    alvos.add(d);
+    if (d.length === 5) alvos.add(`${d.slice(0, 2)} ${d.slice(2)}`);
+  }
+  if (!alvos.size) return [];
+  return modelos.filter((m) => { const nm = ` ${normalizar(m.name || m.nome || '')} `; return [...alvos].some((a) => nm.includes(` ${a} `)); });
+}
+
 export function acharCandidatosModelo(nossoModelo, modelos) {
   let alvo = primeiraPalavra(nossoModelo);
   if (!alvo) return [];
   // 1ª palavra de 1 letra ("C-100 BIZ") não decide sozinha — vai direto ao fallback de versão
   let cands = alvo.length < 2 ? [] : modelos.filter(m => primeiraPalavra(m.name || m.nome || '') === alvo);
   let palavras = normalizar(nossoModelo).split(' ').slice(1, 4);
+  if (!cands.length) {
+    const num = candidatosNumericos(nossoModelo, modelos);
+    if (num.length) { cands = num; palavras = normalizar(nossoModelo).split(' ').filter((w) => /^[a-z]{2,}/.test(w)).slice(0, 3); }
+  }
   // "F4000"/"D10" (20/10): 1 letra basta aqui — a FIPE escreve "F-1000", "D-10", que normaliza em "f 1000".
   const colado = alvo.match(/^([a-z]{1,})(\d{2,4})[a-z]?$/);
   if (!cands.length && colado) {
