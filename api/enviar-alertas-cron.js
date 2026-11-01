@@ -516,7 +516,7 @@ async function handler(req) {
     // A interseção é feita pela PRÓPRIA `ajustarFiltrosPorIntencao` — até 28/08 este arquivo
     // importava as constantes e reescrevia a lógica, que é a mesma cópia com outra roupa: ao
     // ganhar piso de desconto, a locação teria valido na tela e não no e-mail.
-    const aj = ajustarFiltrosPorIntencao(f.intencao, tipos.length ? [...tipos, 'imovel'] : [], 0);
+    const aj = ajustarFiltrosPorIntencao(f.intencao, tipos.length ? tipos : []   /* 01/11: sem o balde 'imovel' (ver Busca.jsx) */, 0);
     if (aj.tipos.length) p.push(`tipo=in.(${aj.tipos.map(encodeURIComponent).join(',')})`);
     const mods = Array.isArray(f.modalidades) ? f.modalidades.filter(Boolean) : [];
     if (mods.length) p.push(`modalidade=in.(${mods.map(encodeURIComponent).join(',')})`);

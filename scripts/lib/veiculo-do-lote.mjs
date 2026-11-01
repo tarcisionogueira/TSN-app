@@ -58,16 +58,23 @@ function dataParaTimestamp(v) {
 
 // marcaModeloAno (NORDESTE) espera "MARCA/MODELO" e o par "AAAA/AAAA". Nas outras plataformas vem
 // "AUTOMÓVEL CHEVROLET PRISMA 10MT JOYE, ANO 2018" — marca no meio, ano único. Completa o que faltou.
-function marcaAnoDoTitulo(titulo) {
+// 01/11: PESTANA escreve o combustível com barra ("Nissan March 10S FLEX 2012 2013 Gas/Alc"). O "Gas/Alc" casava com a
+// convenção "MARCA/MODELO" de marcaModeloAno — marca "… Gas" (descartada) e modelo "Alc" em 912 de 1.334 veículos.
+const RE_COMBUSTIVEL_PAR = /\b(?:gas(?:olina)?|alc(?:ool)?|álcool|etanol|diesel|flex|gnv|el[eé]trico)\s*\/\s*(?:gas(?:olina)?|alc(?:ool)?|álcool|etanol|diesel|flex|gnv|el[eé]trico)\b/gi;
+const RE_FIM_COMBUSTIVEL_ANOS = /(?:\s+(?:gasolina|diesel|flex|[aá]lcool|etanol|gnv|el[eé]trico|h[ií]brido|(?:19|20)\d\d))+\s*$/i;
+function marcaAnoDoTitulo(tituloBruto) {
+  const titulo = String(tituloBruto || '').replace(RE_COMBUSTIVEL_PAR, ' ').replace(/\s{2,}/g, ' ').trim();
   const r = marcaModeloAno(titulo);
   if (!r.marca) {
     const palavras = titulo.replace(/[^A-Za-zÀ-ÿ0-9./ -]/g, ' ').split(/[\s/]+/).slice(0, 6);
     const i = palavras.findIndex((p) => RE_MARCA.test(p));
     if (i >= 0) {
       r.marca = palavras[i].toUpperCase().replace(/^M\.?\s*BENZ$/, 'MERCEDES-BENZ').replace(/^VW$/, 'VOLKSWAGEN').replace(/^GM$/, 'CHEVROLET');
-      r.modelo = palavras.slice(i + 1).join(' ').split(/,/)[0].replace(/^modelo\s+/i, '').replace(/\s+(?:19|20)\d\d$/, '').trim().slice(0, 80) || r.modelo;
+      r.modelo = palavras.slice(i + 1).join(' ').split(/,/)[0].replace(/^modelo\s+/i, '').replace(RE_FIM_COMBUSTIVEL_ANOS, '').trim().slice(0, 80) || r.modelo;
     }
   }
+  // Combustível e o par de anos colados no fim do modelo ("A4 2.0T 180HP 2011 2012 Gasolina", PESTANA) não são modelo.
+  if (r.modelo) r.modelo = String(r.modelo).replace(RE_FIM_COMBUSTIVEL_ANOS, '').trim() || r.modelo;
   if (!r.ano_modelo) {
     const a = titulo.match(/\bano\s*:?\s*((?:19[5-9]|20[0-4])\d)\b/i);
     if (a) r.ano_modelo = r.ano_fabricacao = Number(a[1]);

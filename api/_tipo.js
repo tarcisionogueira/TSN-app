@@ -3,18 +3,17 @@
 // REGRA ABSOLUTA: todo caminho de ingestão (scrapers Caixa/leiloeiros, webhook e
 // feed de parceiros, scripts de coleta) DEVE passar o tipo por aqui antes de
 // gravar em `imoveis_leilao.tipo`. O filtro da Busca casa por IGUALDADE EXATA
-// (`.in('tipo', [...selecionados, 'imovel'])`), então qualquer string fora do
+// (`.in('tipo', selecionados)` — desde 01/11 SEM somar 'imovel'), então qualquer string fora do
 // conjunto canônico — ou com caixa/acionamento diferente ("Fazenda", "Galpão
 // Industrial", "APTO") — some da busca assim que o usuário liga um filtro de tipo.
 //
-// Conjunto canônico (todos têm botão de filtro OU caem no balde de segurança
-// 'imovel', que é SEMPRE incluído na busca):
+// Conjunto canônico (todos têm botão de filtro; 'imovel' = botão "Tipo não informado", que até 01/11 entrava
+// em todo filtro e misturava lote sem tipo com o tipo pedido):
 //   apartamento | casa | terreno | comercial | rural | imovel
 //
 // 'comercial' abrange deliberadamente indústria/galpão/barracão/armazém (ativos
-// comerciais para o investidor). 'imovel' é o balde genérico de segurança:
-// nunca some da busca porque o filtro sempre o inclui. Assim NENHUM lote fica
-// invisível — atende "não pode haver falhas" para tipologias atípicas.
+// comerciais para o investidor). 'imovel' é o balde genérico: aparece na busca sem
+// filtro e no botão "Tipo não informado" (desde 01/11 não entra mais nos outros filtros).
 const RE_UNIDADE_URBANA = /\b(terreno|apart|apto|cobertura|flat|kitnet|sobrado|loja|sala comercial|loteamento|residencial|condominio|cond\.)|\bcasas?\b(?!\s+(sede|de caseiro|do caseiro|de colono|de colonos))/;
 const RE_TERRA_RURAL = /hectare|\d\s*ha\b|alqueire|gleba|pasto|pastagem|lavoura|curral|agricol|agropecu|pecuari|haras|zona rural|area rural|imovel rural/;
 export function fazendaEhNome(s) {

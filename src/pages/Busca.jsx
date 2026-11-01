@@ -91,6 +91,7 @@ const TIPO_OPTS = [
   ['terreno',     'Terreno',              'Lotes e glebas sem construção.'],
   ['comercial',   'Comercial/Industrial', 'Salas, lojas, galpões, barracões e prédios comerciais.'],
   ['rural',       'Rural/Fazenda',        'Áreas rurais: sítios, chácaras e fazendas.'],
+  ['imovel',      'Tipo não informado',   'Lotes em que o leiloeiro não diz o tipo (comum em editais). Não entram nos outros filtros de tipo.'],
 ];
 const MODALIDADE_OPTS = [
   ['extrajudicial', 'Extrajudicial', 'Leilão do próprio credor, fora do Judiciário (alienação fiduciária). Costuma ser mais rápido e com regras no edital do banco.'],
@@ -318,7 +319,10 @@ function aplicarFiltrosImoveis(base, f, cidadesFiltro, raioAtivo) {
   // buscar_por_raio_v2 (migração edital_djen_sem_valor_fora_da_busca.sql).
   q = q.or('fonte.neq.EDITAL_DJEN,valor_minimo.gt.0');
   if (f.estado && !raioAtivo) q = q.eq('estado', f.estado);
-  if (f.tipos?.length) q = q.in('tipo', [...f.tipos, 'imovel']);
+  // 01/11 (dono: "casas no filtro de apartamento"): o balde genérico 'imovel' entrava em TODO filtro de tipo — quem pedia
+  // "Apartamento" recebia também os lotes sem tipo. Agora ele é um botão próprio ("Tipo não informado"), e o tipo vem do
+  // título quando ele o nomeia (gatilho trg_tipo_aa_pelo_titulo). Mesma regra nas RPCs de raio.
+  if (f.tipos?.length) q = q.in('tipo', f.tipos);
   if (f.modalidades?.length) q = q.in('modalidade', f.modalidades);
   if (f.valorMin) q = q.gte('valor_minimo_ref', Number(String(f.valorMin).replace(/\D/g, '')));
   if (f.valorMax) q = q.lte('valor_minimo_ref', Number(String(f.valorMax).replace(/\D/g, '')));

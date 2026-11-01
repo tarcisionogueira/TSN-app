@@ -46,3 +46,12 @@ ok(globo.row?.status_patio === 'nao_confirmado', 'GLOBO: "Localização:" é loc
 
 if (falhas) { console.error(`\n${falhas} falha(s)`); process.exit(1); }
 console.log('\nveiculo-do-lote: todos os casos passaram');
+
+// 01/11 — PESTANA: "Gas/Alc" não é "MARCA/MODELO" (912 de 1.334 saíam com modelo "Alc").
+{
+  const r1 = veiculoDoLote({ ...base, titulo: 'Nissan March 10S FLEX 2012 2013 Gas/Alc', descricao: '' }, { id: 'p1', fonte: 'PESTANA' });
+  ok(/^March 10S( FLEX)?$/.test(r1.row?.modelo || '') && /nissan/i.test(r1.row?.marca || ''), `PESTANA Gas/Alc → ${r1.row?.marca} | ${r1.row?.modelo} (${r1.motivo || ''})`);
+  const r2 = veiculoDoLote({ ...base, titulo: 'AUDI A4 2.0T 180HP 2011 2012 Gasolina', descricao: '' }, { id: 'p2', fonte: 'PESTANA' });
+  ok(r2.row?.modelo === 'A4 2.0T 180HP', `PESTANA Gasolina no fim → ${r2.row?.modelo} (${r2.motivo || ''})`);
+}
+if (falhas) process.exit(1);

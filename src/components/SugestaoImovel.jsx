@@ -91,7 +91,7 @@ export default function SugestaoImovel() {
             // em diante (dia de Brasília) ou sem data (venda direta).
             .or(`data_fim.gte.${new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })},data_fim.is.null,modalidade.eq.venda_direta`);
           if (uf) q = q.eq('estado', uf);                       // trava geográfica: nunca sai do estado
-          if (tipos.length) q = q.in('tipo', [...tipos, 'imovel']);
+          if (tipos.length) q = q.in('tipo', tipos);   // 01/11: sem o balde 'imovel' (ver Busca.jsx)
           return q;
         };
         // Prefere a(s) cidade(s) de referência; se render pouco, completa DENTRO do estado.

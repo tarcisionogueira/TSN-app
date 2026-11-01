@@ -117,7 +117,16 @@ export function parseDetalhe(html, url) {
   const titulo = (() => {
     const cond = (descricao || '').match(/^([A-ZÀ-Ú0-9][^-]{4,70}?)\s*-\s*IMOVEL/);
     const nome = cond ? titleCase(cond[1].trim()) : null;
-    return (nome ? `${nome}${cidade ? ` — ${cidade}/${estado}` : ''}` : null);
+    if (nome) return `${nome}${cidade ? ` — ${cidade}/${estado}` : ''}`;
+    // 01/11: fora do formato CEF ("… - IMOVEL"), a descrição da Hasta COMEÇA pelo bem ("Casa, 69,68 m2 de área total,
+    // …", "Terreno, 312,5m2 de área do terreno. IPTU …"). Sem isto os 670 ativos saíam "Imóvel Hasta Leilões <id>",
+    // tipo "outros" (o tipo é inferido do título) e até "Diversos materiais hospitalares" passava como imóvel.
+    const primeira = (descricao || '').split(/\s*(?:\||\.\s|IPTU:|Matr[íi]cula:|Empreendimento:|Endere[çc]o:)/)[0].replace(/\s+/g, ' ').trim();
+    if (primeira.length >= 4 && /^[A-Za-zÀ-ÿ]/.test(primeira)) {
+      const t = primeira.replace(/(\d)\s*m2\b/gi, '$1 m²').replace(/[,;:\s]+$/, '').slice(0, 80);
+      return `${t.charAt(0).toUpperCase()}${t.slice(1)}${cidade ? ` — ${cidade}/${estado}` : ''}`;
+    }
+    return null;
   })();
 
   const area = extrairArea(descricao || '', '') || extrairArea(txt.slice(0, 3000));
