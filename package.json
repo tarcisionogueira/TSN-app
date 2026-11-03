@@ -85,6 +85,7 @@
     "testar:niveis": "node scripts/testes/mercadologico-tres-niveis.mjs",
     "testar:valor-mercado": "node scripts/testes/valor-mercado-nivel3.mjs",
     "testar:mercadologico-4": "node scripts/testes/mercadologico-quatro-casos.mjs",
+    "testar:valor-sem-area": "node scripts/testes/valor-sem-area-nao-e-valor.mjs",
     "testar:indice": "node scripts/testes/indice-de-estado-nao-precifica-lote.mjs",
     "testar:busca-modelo": "node scripts/testes/busca-cai-no-haiku-com-a-ferramenta-certa.mjs",
     "testar:doc-teto": "node scripts/testes/matricula-grande-nao-pode-ser-recusada-por-nos.mjs",

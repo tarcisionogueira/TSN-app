@@ -6,6 +6,17 @@
 
 
 
+## 03/11 — VALOR DE MERCADO SEM ÁREA NÃO É VALOR (análise a3ce7044, sala comercial em BH)
+
+- **Causa:** `gerar-analise.js` aceitava `mercado.consolidado.valorEstimadoImovel` da IA sem conferir a área. Sala sem
+  metragem: 1ª e 2ª gerações saíram vazias (certo); na regeneração automática a IA chutou R$ 451.000 (R$ 4.521/m² × ~100 m²
+  inexistentes) contra avaliação de R$ 100.000 → relatório deixou de ser "vazio", cota não estornada, viabilidade sobre 4,5×.
+- **Conserto:** `src/lib/valor-sem-area.js` (`valorDaIaUtilizavel`): nas bases por m² (residencial, comercial, industrial),
+  sem área o número da IA vira 0 e fica em `mercado.valorIaDescartado` com `motivo: 'area_desconhecida'` (+ log
+  `[valor-sem-area]`). Terreno, rural e unidade/vaga não mudam. Teste: `npm run testar:valor-sem-area`.
+- **Afetados (leitura):** a3ce7044 (Vini, BH, leilão 31/07/2027 — R$ 451k salvo; regerar gasta cota, só com o dono) e
+  1002e6c5 (admin, Guarulhos, 1,02× a avaliação, leilão passado).
+
 ## 03/11 — MERCADOLÓGICO + VIABILIDADE: 4 INCONSISTÊNCIAS DO DONO (Peruíbe 57573ba9, Pirituba abd7ffd9, Itu 9ba1ce0c)
 
 - **Edital ignorado (Peruíbe):** a tela só trocava sinal/prazo quando estavam no default bancário (5%/360); lote judicial

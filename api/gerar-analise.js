@@ -31,6 +31,7 @@ import { NIVEIS, vendasDe, locacoesDe, totalAmostrasDe, MIN_AMOSTRAS_ANTES_DO_NI
 import { aplicarCondicoesEdital } from '../src/lib/condicoes-pagamento.js';
 import { MIN_COMPARAVEIS_LOCAIS, cidadeEscritaDaAmostra } from '../src/lib/origem-amostras.js';
 import { avaliarTerrenoExcedente, fraseTerrenoExcedente } from '../src/lib/terreno-excedente.js';
+import { valorDaIaUtilizavel } from '../src/lib/valor-sem-area.js';
 import { indicePrecifica, indiceApenasContexto, rotuloNivelIndice } from '../src/lib/indice-precifica.js';
 import { comCascataBusca } from './_busca-modelo.js';
 import { somaAreasMultiBem, avaliacaoAtualizadaDoTexto } from './_texto-imovel.js';
@@ -3580,7 +3581,15 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
       }
     }
 
-    const vEstIA = Number(mercado?.consolidado?.valorEstimadoImovel) || 0;
+    // Sem área, o valor da IA numa base por m² é palpite (03/11, sala em BH: R$ 451 mil × avaliação de
+    // R$ 100 mil). Regra em src/lib/valor-sem-area.js; o número recusado fica no result para diagnóstico.
+    const iaUso = valorDaIaUtilizavel({ valorIa: mercado?.consolidado?.valorEstimadoImovel, areaM2, baseTipo });
+    if (iaUso.descartado && mercado) {
+      mercado.valorIaDescartado = iaUso.descartado;
+      mercado.consolidado = { ...(mercado.consolidado || {}), valorEstimadoImovel: 0 };
+      console.log('[valor-sem-area]', JSON.stringify({ imovel: String(imovelId), ...iaUso.descartado }));
+    }
+    const vEstIA = iaUso.valor;
     let valorMercado = null;
     if (vEstIA > 0) valorMercado = Math.round(vEstIA);
     else if (precoM2 && areaM2 && ['residencial', 'comercial', 'industrial'].includes(baseTipo)) valorMercado = Math.round(precoM2 * areaM2 * 0.9);
