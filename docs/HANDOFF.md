@@ -35,6 +35,17 @@
   leilões com lote ativo): 84 lidos pela estática; 6 protegidos (leilões "Propostas/Venda Única" só mostram a
   avaliação, sem valor mínimo). Em 16 lotes comparados com o banco, valor e data bateram em todos os que a
   estática lê. Conferir na próxima rodada do `leiloeiros-puppeteer.yml` a linha "N pela página estática".
+- **CALIL e HAMMERLEIL `zerou` (03/11 14:54) = falha passageira de acesso, não site.** Rodada do runner residencial
+  (`SOLEON_NO_BD=1`, 80 tenants): os dois gravaram `falhou` com 0 listados — nenhuma página da listagem voltou HTML.
+  O banco trouxe a listagem do HAMMERLEIL às 14h27 (200, 30 lotes) fora da janela de 30 s do `viaBanco`; o direto
+  abriu as duas em 3–4,5 s logo depois (30 lotes cada). Mesma assinatura do DANIELGARCIA em 31/10. Conserto em
+  `scraper-soleon.mjs`: a página 1 ganha 2ª tentativa após 15 s, e o motivo passa a dizer "listagem não abriu…
+  falha de acesso" em vez de "tenant sem lote" (forma nº 10). Não gravei explicação: a próxima rodada decide.
+- **Levantamento de leiloeiros (03/11):** 358 fontes de imóvel (39.896 lotes) e 71 de veículo (8.921). Juntas: 285
+  ativos `nao_coletado`, dos quais ~210 já descartados na triagem com motivo. Sobram para olhar: 18 domínios de
+  leiloeiro credenciado em tribunal nunca triados (13 TJSP: bigleilao, leilaonet, kwara, coimbra, cruzeiro,
+  doulhetres, tenleilao, valle, startup, resolve.leiloes, neteditais, marchioro, leilaoinvestment, arremax; TRT4
+  lunelli, innlei; TRT18 alvaro; TRT6 icarotenorio) e 15 sem veredito na triagem (5 white-labels Superbid).
 
 ## 01/11 (noite 2) — CLASSIFICAÇÃO DE VEÍCULOS E IMÓVEIS + FILTROS + QUALIDADE DA COLETA
 

@@ -631,6 +631,11 @@ const FREIO_FRESCOR = new Set();
 const MOTIVO_SEM_COTA = (fonte) => FREIO_FRESCOR.has(fonte)
   ? `freio de frescor próprio: ${fonte} só é coletado a cada ${TORRES3_FRESCOR_DIAS} dias (decisão de custo, não regressão da fonte)`
   : 'SEM COTA Bright Data — coleta não tentada (decisão de orçamento, não regressão da fonte)';
+// "Tenant sem lote" dizia o contrário do que tinha acontecido (03/11): a listagem nem abriu, então não se sabe se há
+// lote. Forma nº 10 — o motivo tem que nomear a falha de ACESSO, que pede outra ação que um parser quebrado.
+const MOTIVO_SEM_LISTAGEM = (fonte) => VIA_TENANT.has(fonte) && !VIA_TENANT.get(fonte)
+  ? 'listagem /lotes/imovel não abriu nesta execução (direto e via banco, 2 tentativas) — falha de acesso, não lote zerado'
+  : null;
 
 async function enumerarLotes(tenant) {
   const setUrls = new Set();
@@ -638,7 +643,15 @@ async function enumerarLotes(tenant) {
   for (let p = 1; p <= (via === 'brightdata' ? MAX_PAGES : MAX_PAGES_GRATIS); p++) {
     // Listagem de imóveis do SOLEON: /lotes/imovel (pág 1) e ?tipo=imovel&page=N (2+).
     const url = `${tenant.base}/lotes/imovel${p > 1 ? `?tipo=imovel&page=${p}` : ''}`;
-    const { html, via: v, semCota } = await fetchTenant(url);
+    let { html, via: v, semCota } = await fetchTenant(url);
+    // PÁGINA 1 GANHA UMA 2ª CHANCE (03/11). Sem ela o tenant inteiro sai zerado por uma falha passageira: em 03/11
+    // CALIL e HAMMERLEIL (e DANIELGARCIA em 31/10) gravaram `falhou` com 0 listados numa rodada de 80+ tenants —
+    // o banco trouxe a listagem do HAMMERLEIL (200, 30 lotes) às 14h27, depois da janela de 30 s do viaBanco, e o
+    // direto abriu as duas em 3–4 s logo depois. Uma nova tentativa custa 15 s só no tenant que falhou.
+    if (!html && p === 1 && !semCota) {
+      await sleep(15000);
+      ({ html, via: v, semCota } = await fetchTenant(url));
+    }
     if (semCota) SEM_COTA.add(tenant.fonte);
     if (!html) break;
     via = via || v;
@@ -1035,7 +1048,7 @@ async function main() {
         motivo: semCota
           ? MOTIVO_SEM_COTA(tenant.fonte)
           : VAZIO_DECLARADO.has(tenant.fonte) ? MOTIVO_VAZIO_DECLARADO
-          : 'execução sem nenhum lote pronto',
+          : MOTIVO_SEM_LISTAGEM(tenant.fonte) || 'execução sem nenhum lote pronto',
       });
     }
     if (SEM_COTA.size) {
@@ -1123,7 +1136,7 @@ async function main() {
         motivo: SEM_COTA.has(tenant.fonte)
           ? MOTIVO_SEM_COTA(tenant.fonte)
           : VAZIO_DECLARADO.has(tenant.fonte) ? MOTIVO_VAZIO_DECLARADO
-          : 'tenant sem lote nesta execução',
+          : MOTIVO_SEM_LISTAGEM(tenant.fonte) || 'tenant sem lote nesta execução',
       });
     if (!rows.length) continue;
     await registrarConhecimento(supabase, {
