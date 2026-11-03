@@ -20,5 +20,16 @@ eq('18494: nopicfull.png NÃO vira foto', s.lotes.get('1')?.foto, null);
 eq('18494: leiloeiro', s.leiloeiro, 'Silvia Barros');
 eq('HTML vazio não quebra', parseLeilaoHasta('').lotes.size, 0);
 
+// 03/11 — o lote inteiro pela página fixa (o painel não renderizou em 88 de 180 leilões em 02/11).
+const l1 = um.lotes.get('1');
+eq('18524: valor da praça VIGENTE (o par 1ª/2ª comentado é ignorado)', l1.valorTxt, '388.750,00');
+eq('18524: status, data do lote e Cidade/UF do cartão', [l1.status, l1.dataLote, l1.cidadeUf], ['Ativo', '2026-10-29T14:30:00-03:00', 'Barueri/SP']);
+eq('18524: título do lote', l1.titulo.length > 10 && !/<|Barueri\/SP<br/.test(l1.titulo), true);
+eq('18524: cabeçalho judicial + encerramento das duas praças', [um.judicial, um.praca1, um.praca2], [true, '2026-10-29T14:30:00-03:00', '2026-11-18T14:30:00-03:00']);
+eq('18232: praça única vira praca1, sem praca2', [v.praca1, v.praca2], ['2026-10-02T17:00:00-03:00', undefined]);
+eq('18232: vara e Cidade/UF do leilão pelo cabeçalho', [v.varaComarca, v.cidadeLeilao, v.ufLeilao], ['Alienação Particular - TRT 15ª Região de Araraquara/SP', 'Araraquara', 'SP']);
+eq('18232: lote 2 — valor da praça única e título próprio', [v.lotes.get('2').valorTxt, /lote 10/.test(v.lotes.get('2').titulo)], ['39.000,00', true]);
+eq('18494: Cidade/UF fora do padrão chega crua (quem decide é o coletor)', s.lotes.get('1').cidadeUf, 'BRASÍLIA-DF /DF');
+
 console.log(`${falhas ? '✗' : '✓'} hastapublica-parse: ${ok} ok, ${falhas} falha(s)`);
 process.exit(falhas ? 1 : 0);

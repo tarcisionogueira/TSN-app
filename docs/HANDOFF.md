@@ -6,6 +6,36 @@
 
 
 
+## 03/11 — ABERTURA: FONTES "SEM MEDIÇÃO" ERAM CADÊNCIA; HASTAPÚBLICA LÊ A PÁGINA ESTÁTICA QUANDO O PAINEL FALHA
+
+- **Diagnóstico de abertura:** segurança 0/0, regras 0 crítico, KYC 0, cliente travado/chamados vazios, backup ok,
+  documental discriminando. A pasta local estava 11 commits atrás da produção (fast-forward feito).
+  Abertos para a próxima: `estado_fora_do_padrao` 138 (TURANI 33 multipropriedade, SUPORTE 25, ALEXANDRECOSTA 12,
+  GRANDESLEIL 9); timeout novo em `/api/publico` → `acervo_uf_contagem` (2× desde 02/11, família da #305);
+  6 de 7 cargas do IBGE com "fetch failed" no health-check; CNJ com TJSP em timeout e STJ/TST/TJMG em 429.
+- **61 fontes `medicao_velha` = tenants LeilãoPro.** `scraper-leilaopro.yml` é SEMANAL (quinta 10:50 UTC); 168 h >
+  teto de 108 h, e a cadência aprendida exige 3 intervalos (ligadas em 24–26/10, ainda não têm). Parser íntegro
+  (29/10: RENOVAR 40, SANTOSBORIN 40). Explicação gravada em `fonte_regressao_explicada` até **06/11** (dono
+  autorizou): se a rodada de 05/11 falhar, voltam sozinhas. Some de vez quando houver 3 semanas de histórico.
+- **As 4 restantes:** MILAN = HTTP 502 do próprio site em 02/11 (intermitente: rede em 26/10). VIVALEILOES =
+  Firecrawl 408 no catálogo. DANIELGARCIA = 1 rodada isolada com 0 em 31/10; site no ar (pg_net: 28 itens na home),
+  85 ativos parados desde 28/10, aguarda a próxima do runner residencial (tentativa 03/11 14:08 sem conclusão).
+  Achado lateral: o gate `SOLEON` em `coleta_cliente.fontes_acervo` só tem CALIL/VEGAS/TORRES3 — DANIELGARCIA e os
+  outros tenants do Soleon de imóveis ficam fora do freio pago. Nenhuma das 3 com explicação gravada.
+- **HASTAPUBLICA (56 contra piso 66) — conserto.** O painel `/leilao/painel/<id>` recebe as linhas de lote por
+  socket.io (porta 8080); em 02/11, **88 de 180** painéis não mostraram lote em 15 s (18 em 30/10, depois 21, 44).
+  A proteção de 26/10 evitava perder lote, mas o preço e a data congelavam (18461 Águas Claras/DF sem leitura desde
+  23/10 com a praça em 03/11). A página estática `/leilao/<id>` (servidor, pg_net abre) já tem, por cartão, título,
+  Cidade/UF, status, data e o valor da praça VIGENTE; o cabeçalho tem judicial/extrajudicial, vara e encerramento das
+  praças. `lib/hastapublica-parse.mjs` passa a extrair isso (+8 casos no teste, 17 ok) e `scraperHastaPublica`
+  usa a estática quando o painel vem sem linha de lote. Só entra lote em aberto (status medidos: Ativo,
+  Divulgação, Aguardar) com valor e título; qualquer outro caso mantém a proteção do leilão inteiro.
+  Armadilhas medidas: o par "Valor 1ª/2ª Praça" fica num comentário HTML (descartado antes de ler); na 2ª praça o
+  número vem dentro de `<span>`; o selo muda de cor (`greenbg`/`yellowbg`). **Seco ao vivo** (fetch local, 90
+  leilões com lote ativo): 84 lidos pela estática; 6 protegidos (leilões "Propostas/Venda Única" só mostram a
+  avaliação, sem valor mínimo). Em 16 lotes comparados com o banco, valor e data bateram em todos os que a
+  estática lê. Conferir na próxima rodada do `leiloeiros-puppeteer.yml` a linha "N pela página estática".
+
 ## 01/11 (noite 2) — CLASSIFICAÇÃO DE VEÍCULOS E IMÓVEIS + FILTROS + QUALIDADE DA COLETA
 
 Pedido do dono: "carros no filtro de caminhão, casas no filtro de apartamento". Tudo medido em seco antes de aplicar.

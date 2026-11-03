@@ -4852,6 +4852,8 @@ export async function scraperHastaPublica(browser) {
     const protegidos = [];
     const motivosProt = [];
     const proteger = (id, motivo) => { protegidos.push(`hastapublica_${id}_`); motivosProt.push(`${id}: ${motivo}`); };
+    let lidosPelaEstatica = 0; // leilões cujo painel não renderizou e foram lidos pela página estática
+
     for (const [id, href] of leiloes) {
       // Teto 250 → 350 (26/10): a agenda tinha 276 leilões (medido pelo banco, /agenda/0…260) e os 26 do fim saíam
       // do acervo todo dia. O que passar do teto agora fica protegido, não aposentado.
@@ -4872,7 +4874,8 @@ export async function scraperHastaPublica(browser) {
         const texto = (await page.evaluate(() => document.body.innerText).catch(() => '')).replace(/\r/g, '');
         if (!texto) { proteger(id, 'painel sem texto'); continue; }
         // Painel aberto mas sem NENHUMA linha de lote (de qualquer tipo): os lotes não renderizaram a tempo.
-        if (!/\d+\s*\|\s*[^\n]+\nLance Atual:/.test(texto)) proteger(id, 'painel sem linha de lote');
+        // Desde 03/11 isso não protege direto: a página estática (abaixo) é tentada primeiro.
+        const semLinhaDeLote = !/\d+\s*\|\s*[^\n]+\nLance Atual:/.test(texto);
         // FOTO + LEILOEIRO (28/09): o painel é montado por socket.io e este laço lê só o texto —
         // 126/126 lotes saíam sem foto, e `leiloeiro` recebia o "Comitente:" (a vara, o banco, às
         // vezes com a data da praça colada). A página ESTÁTICA /leilao/<id> vem pronta do servidor
@@ -4889,6 +4892,51 @@ export async function scraperHastaPublica(browser) {
           if (r?.html) estatica = parseLeilaoHasta(r.html);
           if (!estatica.lotes.size) console.log(`    HastaPública ${id}: página estática sem cartões (${r?.html ? 'HTML sem card-leilao' : r?.status ? `HTTP ${r.status}` : r?.erro}) — lotes sem foto`);
         } catch (e) { console.log(`    HastaPública ${id}: página estática falhou (${String(e?.message || e).slice(0, 80)}) — lotes sem foto`); }
+
+        // PAINEL QUE NÃO RENDERIZOU → O LOTE PELA PÁGINA ESTÁTICA (03/11). Em 02/11, 88 de 180 painéis vieram sem
+        // linha de lote em 15 s (socket.io na porta 8080) e ficavam só protegidos, com preço e data congelados. O
+        // cartão estático traz título, Cidade/UF, valor da praça vigente, data e status (lib/hastapublica-parse.mjs).
+        // Só lote em aberto ("Ativo", "Divulgação", "Aguardar" — os três medidos em 03/11) entra; cartão em qualquer
+        // outro status, ou sem valor/título, mantém a proteção do leilão inteiro — sem o painel não dá para saber
+        // se saiu de vez.
+        if (semLinhaDeLote) {
+          const cartoes = [...estatica.lotes.entries()];
+          const estranho = cartoes.find(([, c]) => !/^(Ativo|Divulga[çc][ãa]o|Aguardar)$/i.test(c.status || '') || !c.titulo || !parseBRL(c.valorTxt || ''));
+          if (!cartoes.length || estranho) {
+            proteger(id, !cartoes.length ? 'painel sem linha de lote' : `painel sem linha de lote; lote ${estranho[0]} na página estática: ${estranho[1].status || 'sem status'}`);
+            continue;
+          }
+          const agora = Date.now();
+          for (const [numLote, c] of cartoes) {
+            if (!RE_IMOVEL.test(`${c.titulo} ${estatica.varaComarca}`)) continue; // não é imóvel
+            const mCidUfLote = c.titulo.match(/([A-Za-zÀ-ÖØ-öø-ÿ'.\s]{2,40})\/([A-Za-z]{2})\s*$/);
+            const ufTitulo = mCidUfLote && UF_SIGLAS.has(mCidUfLote[2].toUpperCase()) ? mCidUfLote[2].toUpperCase() : '';
+            const p1 = estatica.praca1, p2 = estatica.praca2;
+            const dataLeilao = (p1 && new Date(p1).getTime() > agora) ? p1 : (p2 || p1 || c.dataLote);
+            imoveis.push({
+              fonte: 'HASTAPUBLICA',
+              fonte_id: `hastapublica_${id}_${numLote}`,
+              titulo: c.titulo.slice(0, 180),
+              tipo: normalizarTipo(c.titulo),
+              modalidade: estatica.judicial ? 'judicial' : 'extrajudicial',
+              estado: ufTitulo || estatica.ufLeilao,
+              cidade: toTitleCase(ufTitulo ? mCidUfLote[1].trim() : estatica.cidadeLeilao),
+              bairro: '', endereco: '',
+              valor_avaliacao: 0,
+              valor_minimo: parseBRL(c.valorTxt),
+              area_m2: 0,
+              descricao: [c.titulo, estatica.varaComarca].filter(Boolean).join(' · ').slice(0, 500),
+              link_edital: url,
+              url_lote: c.urlLote || url,
+              link_foto: c.foto || null,
+              leiloeiro: (estatica.leiloeiro || 'HastaPública Leilões').slice(0, 120),
+              data_leilao: dataLeilao,
+              forma_pagamento: 'a_vista',
+            });
+          }
+          lidosPelaEstatica++;
+          continue;
+        }
 
         const mTitulo = texto.match(/#\d+\s*-\s*([^\n]+)\n([^\n]+)/);
         const varaComarca = mTitulo ? mTitulo[2].trim() : '';
@@ -4952,7 +5000,7 @@ export async function scraperHastaPublica(browser) {
       await new Promise((r) => setTimeout(r, 250));
     }
     if (protegidos.length) { imoveis.sweepProtegidos = protegidos; imoveis.tenantsParciais = `${protegidos.length} leilão(ões) não lidos — ${motivosProt.slice(0, 6).join('; ')}`; }
-    console.log(`    HastaPública: ${imoveis.length} imóveis mapeados (${visitados} leilões visitados)${protegidos.length ? ` · ${protegidos.length} leilão(ões) PROTEGIDOS do sweep: ${motivosProt.slice(0, 6).join('; ')}` : ''}`);
+    console.log(`    HastaPública: ${imoveis.length} imóveis mapeados (${visitados} leilões visitados${lidosPelaEstatica ? `, ${lidosPelaEstatica} pela página estática por painel sem lote` : ''})${protegidos.length ? ` · ${protegidos.length} leilão(ões) PROTEGIDOS do sweep: ${motivosProt.slice(0, 6).join('; ')}` : ''}`);
     return imoveis;
   } finally {
     await page.close().catch(() => {});
