@@ -2,7 +2,8 @@ import { fmt, fmtPct, moedaOuTraco, pctOuTraco } from '../utils/calculos';
 import { imprimirHtml } from './pdfImprimir';
 import { cabecalhoBidPro, ESTILOS_CABECALHO } from './pdfCabecalho';
 import { notaMetodologicaTexto } from './NotaMetodologica';
-import { vendasDe, locacoesDe } from '../lib/niveis-mercado';
+import { vendasDe, locacoesDe, precoM2DoRelatorio } from '../lib/niveis-mercado';
+import { vereditoMercadologico } from '../lib/veredito-mercadologico';
 import { alertaAvaliacaoMercado } from '../utils/alertaAvaliacao';
 
 // Escape para o rodapé metodológico (texto montado dos dados da geração).
@@ -70,6 +71,9 @@ export function corpoMercadologico({ d, metricas: m, metricasTeto: mt, teto, isA
   };
 
   const sec = parseSecoes(parecer || '');
+  // Mesma regra do selo da tela (03/11): viável sem base local / reprovada com terreno não avaliado.
+  const vMerc = vereditoMercadologico({ isViavel, isUsoProprio, mercado, cidade: d.cidade });
+  const indicativa = vMerc.estado === 'indicativa' ? vMerc : null;
   const riscosBloq = (d.riscos||[]).filter(r=>r.tipo==='bloqueante');
   const sacTotal = (sacTab||[]).reduce((s,r)=>s+r.parcela,0);
   const priceTotal = (priceTab||[]).reduce((s,r)=>s+r.parcela,0);
@@ -103,11 +107,11 @@ ${(() => {
   const cel = (l, v, c='#111111') => `<div style="padding:8px 10px;border-right:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;">
     <div style="font-size:8px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">${l}</div>
     <div style="font-size:11.5px;font-weight:800;color:${c};margin-top:2px;">${v}</div></div>`;
-  const vereditoTxt = isUsoProprio
+  const vereditoTxt = indicativa ? indicativa.texto.toUpperCase() : isUsoProprio
     ? (isViavel ? 'RECOMENDADO PARA USO PRÓPRIO' : 'ECONOMIA IRRELEVANTE, REAVALIAR')
     : (isViavel ? 'APROVADO, VIÁVEL' : 'REPROVADO, RETORNO INSUFICIENTE');
-  const vCor = isViavel ? '#065f46' : '#b91c1c';
-  const vBg  = isViavel ? '#d1fae5' : '#fee2e2';
+  const vCor = indicativa ? '#92400e' : isViavel ? '#065f46' : '#b91c1c';
+  const vBg  = indicativa ? '#fef3c7' : isViavel ? '#d1fae5' : '#fee2e2';
   return `
 <div class="av" style="border:2px solid #111111;border-radius:8px;overflow:hidden;margin-bottom:16px;">
   <div style="background:#111111;color:white;padding:7px 12px;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:1.5px;">Quadro-Resumo da Operação</div>
@@ -131,7 +135,7 @@ ${(() => {
     <b>⚠ ${esc(al.titulo)}.</b> ${esc(al.texto)}
   </div>` : ''; })()}
   <div style="background:${vBg};color:${vCor};padding:9px 12px;font-size:12px;font-weight:900;text-align:center;letter-spacing:0.5px;">
-    ${isViavel?'✓':'✗'} VEREDITO: ${vereditoTxt}
+    ${indicativa?'⚠':isViavel?'✓':'✗'} VEREDITO: ${vereditoTxt}
   </div>
 </div>`;
 })()}
@@ -154,6 +158,11 @@ ${(() => {
 <div class="viab av" style="border-color:#d97706;background:#fef3c7;">
   <div style="font-size:15px;font-weight:900;color:#92400e;">⚠ DADOS INSUFICIENTES PARA CONCLUSÃO DE VIABILIDADE</div>
   <div style="font-size:10px;color:#b45309;margin-top:4px;">Informe o valor de arrematação e o valor de mercado/avaliação (e a área) para calcular a viabilidade. Os indicadores abaixo podem estar incompletos.</div>
+</div>`;
+  if (indicativa) return `
+<div class="viab av" style="border-color:#d97706;background:#fef3c7;">
+  <div style="font-size:15px;font-weight:900;color:#92400e;">⚠ ${esc(indicativa.texto.toUpperCase())}</div>
+  <div style="font-size:10px;color:#b45309;margin-top:4px;">Retorno calculado ${fmtPct(m.roi)} ${isAVista?'ROI':'ROE'}, sobre um valor de mercado que precisa ser confirmado antes do lance.</div>
 </div>`;
   return `
 <div class="viab av" style="border-color:${isViavel?'#10b981':'#dc2626'};background:${isViavel?'#d1fae5':'#fee2e2'};">
@@ -284,7 +293,7 @@ ${mercado?`<div class="av">
   ${/* Medida ausente vira travessão, nunca "R$ 0,00" — ver `moedaOuTraco` em utils/calculos.
        O PDF é a versão que o cliente ARQUIVA e mostra a terceiros: um "Rentabilidade 0,00%"
        impresso aqui vira documento afirmando que o imóvel não rende. (15/08.) */
-    [['Preço Médio/m²',moedaOuTraco(mercado.precoMedioM2),'#0D63DB'],
+    [['Preço Médio/m²',moedaOuTraco(precoM2DoRelatorio(mercado)),'#0D63DB'],
      ['Aluguel Médio',moedaOuTraco(mercado.aluguelMedio,{sufixo:'/mês'}),'#7c3aed'],
      ['Rentab. Bruta',pctOuTraco(mercado.yieldBruto),'#059669'],
      ['Rentab. Líquida',pctOuTraco(mercado.yieldLiquido),'#d97706']].map(([l,v,c])=>`
@@ -343,7 +352,7 @@ ${/* SAC VS PRICE NÃO SE APLICA AO PARCELAMENTO JUDICIAL (12/09, achado do dono
     SAC e PRICE dão a MESMA parcela — a própria seção imprimia "Diferença: R$ 0,00" sem dizer que
     o motivo é não haver escolha nenhuma). O cronograma mês a mês do parcelamento judicial já
     aparece no Fluxo de Caixa Mensal logo acima; esta seção só soma confusão para esse caso. */
-  !isAVista&&sacTab?.length>0&&d.origemCondicoesPagamento!=='padrao_legal'?`<div class="pb av">
+  !isAVista&&sacTab?.length>0&&!['padrao_legal','edital_incompleto'].includes(d.origemCondicoesPagamento)?`<div class="pb av">
 <h2>Tabelas de Financiamento, SAC vs PRICE</h2>
 <p style="font-size:9px;color:#475569;margin-bottom:8px;">Principal: R$ ${fmt((d.valorArrematacao||0)*(1-(d.sinalPercentual||0)/100))} · CET: ${fmtPct(d.cetAnual)} a.a. · Prazo: ${d.prazoMeses} meses</p>
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px;">
@@ -379,7 +388,7 @@ ${sec.conc?`<div class="av"><h2>Conclusão e Recomendação da Gestão</h2><pre>
 
 <div style="margin-top:24px;border-top:1px solid #e2e8f0;padding-top:10px;">
   <div style="font-size:7.5px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:#94a3b8;margin-bottom:4px;">Metodologia e ressalvas</div>
-  <p style="font-size:7.5px;line-height:1.5;color:#94a3b8;margin:0;text-align:justify;">${esc(notaMetodologicaTexto('mercadologico', { mercado, divergenciaArea }))}</p>
+  <p style="font-size:7.5px;line-height:1.5;color:#94a3b8;margin:0;text-align:justify;">${esc(notaMetodologicaTexto('mercadologico', { mercado, divergenciaArea, cidade: d.cidade }, null, { somenteAVista: isAVista || d.somenteAVista, sinalPercentual: d.sinalPercentual, prazoMeses: d.prazoMeses, origem: d.origemCondicoesPagamento, faltando: d.condicoesFaltando, parcelaMinima: d.parcelaMinimaEdital }))}</p>
 </div>
 
 <div style="margin-top:14px;border-top:2px solid #e2e8f0;padding-top:12px;display:flex;justify-content:space-between;font-size:8.5px;color:#94a3b8;">

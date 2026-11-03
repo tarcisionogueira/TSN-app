@@ -39,6 +39,39 @@ export const totalAmostrasDe = (m) => niveisDe(m).reduce((s, n) => {
   return s + (declarado || arr(n?.vendas).length + arr(n?.locacoes).length);
 }, 0);
 
+// DEDUP ENTRE NÍVEIS (12/09; virou função em 03/11). O mesmo imóvel repetido em dois níveis
+// (assinatura valor+m²+endereço) fica só no nível MAIS PRÓXIMO. Até 03/11 isto rodava só no fim de
+// gerar-analise, DEPOIS da conta ponderada: em Pirituba (abd7ffd9) a média usou 42 anúncios, dois em
+// dobro, e a tela listava 40 — o mesmo relatório com duas contagens e um R$/m² enviesado. Agora roda
+// antes da conta também. Devolve quantas repetições saíram.
+export function dedupVendasEntreNiveis(m) {
+  if (!m) return 0;
+  const vistos = new Set();
+  let removidas = 0;
+  const assinatura = (v) => `${Number(v?.valor) || 0}|${Number(v?.m2) || 0}|${String(v?.endereco || v?.bairro || '').toLowerCase().trim()}`;
+  for (const nv of niveisDe(m)) {
+    if (!Array.isArray(nv.vendas)) continue;
+    nv.vendas = nv.vendas.filter((v) => {
+      const chave = assinatura(v);
+      if (!chave.trim() || chave === '0|0|') return true; // sem dado suficiente p/ comparar, não arrisca descartar
+      if (vistos.has(chave)) { removidas++; return false; }
+      vistos.add(chave);
+      return true;
+    });
+  }
+  return removidas;
+}
+
+// UM R$/m² SÓ POR RELATÓRIO (03/11). Quando a conta ponderada substituiu o número da IA, é ELA o
+// preço do m² — no Resumo, no bloco Base de mercado, no PDF e no parecer. Relatório anterior a 03/11
+// gravou o número da IA no topo (`precoMedioM2`) e o ponderado só em `consolidado`: Pirituba mostrava
+// R$ 7.256 num lugar e R$ 6.684,69 no outro.
+export function precoM2DoRelatorio(m) {
+  const pond = Number(m?.consolidado?.precoMedioM2) || 0;
+  if (m?.valorPonderado?.aplicado && pond > 0) return pond;
+  return Number(m?.precoMedioM2) || 0;
+}
+
 export const totalVendasDe = (m) => vendasDe(m).length;
 export const totalLocacoesDe = (m) => locacoesDe(m).length;
 export const semAmostras = (m) => totalVendasDe(m) + totalLocacoesDe(m) === 0;

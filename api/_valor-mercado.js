@@ -39,6 +39,8 @@
  * a estimativa erra para o conservador, nunca para o otimista.
  */
 
+import { ehOutraCidade } from '../src/lib/origem-amostras.js';
+
 // Peso por proximidade: 1/(1 + d/250m). Contínuo, sem degrau — um anúncio a 249 m não pode
 // valer 3× um a 251 m só porque caiu do outro lado de uma linha.
 //   0 m → 1,00 · 250 m → 0,50 · 500 m → 0,33 · 1 km → 0,20 · 2 km → 0,11
@@ -123,6 +125,9 @@ export function prepararAmostras(vendas, { nivel, lote, tetoKm } = {}) {
     if (valorM2 < M2_PISO || valorM2 > M2_TETO) { descartadas.push({ ...a, _motivo: 'nao_e_venda', _valorM2: valorM2 }); continue; }
     // (1) O próprio lote / o próprio leilão.
     if (ehAutoReferencia(a, lote)) { descartadas.push({ ...a, _motivo: 'auto_referencia' }); continue; }
+    // (5) Outra CIDADE comprovada no endereço (03/11, caso Peruíbe: anúncios de São Paulo e Bauru com
+    // `distanciaKm: 0`). Raio é distância DENTRO da praça; anúncio de outra cidade não é comparável.
+    if (lote?.cidade && ehOutraCidade(a, lote.cidade)) { descartadas.push({ ...a, _motivo: 'outra_cidade' }); continue; }
     // Distância: a declarada, ou o teto NOMINAL do nível (ver cabeçalho).
     const dDecl = Number(a.distanciaKm);
     const temDist = Number.isFinite(dDecl) && dDecl >= 0;
@@ -269,6 +274,7 @@ export function explicarCalculo({ precoM2, area, unidade = 'm² privativo', n, d
   if (porMotivo.fora_do_raio) notas.push(`${porMotivo.fora_do_raio} fora do raio`);
   if (porMotivo.nao_e_venda) notas.push(`${porMotivo.nao_e_venda} fora da faixa de venda (provável aluguel)`);
   if (porMotivo.outlier) notas.push(`${porMotivo.outlier} discrepante da mediana da região`);
+  if (porMotivo.outra_cidade) notas.push(`${porMotivo.outra_cidade} de outra cidade`);
   return `R$ ${brl(precoM2)}/${unidade} × ${brl(area)} ${unidade.startsWith('m²') ? 'm²' : ''}`
     + ` = R$ ${brl(precoM2 * area)}. Média de ${n} anúncio(s), ponderada por proximidade`
     + ` (peso 1/(1+d/250m): 0m=1,00 · 250m=0,50 · 1km=0,20) e por recência.`

@@ -6,6 +6,28 @@
 
 
 
+## 03/11 — MERCADOLÓGICO + VIABILIDADE: 4 INCONSISTÊNCIAS DO DONO (Peruíbe 57573ba9, Pirituba abd7ffd9, Itu 9ba1ce0c)
+
+- **Edital ignorado (Peruíbe):** a tela só trocava sinal/prazo quando estavam no default bancário (5%/360); lote judicial
+  nasce no piso do art. 895 (25%/30) e o edital (10×, mín. R$ 5.000) nunca entrava; o servidor recalculava ROE/teto sem
+  ler o edital. Regra única `src/lib/condicoes-pagamento.js` (servidor + tela): edital > padrão legal > default; o que o
+  cliente digita vira origem `cliente`; parcela mínima limita o nº de parcelas; edital que permite parcelar sem dizer
+  quantas vezes, ou >60× (financiamento, juros não informados), vira `edital_incompleto` e o rodapé não confirma.
+  `_doc-extracao.js` passa a extrair `parcelaMinima`. Peruíbe: ROE 97,89% → 61,18%, teto R$ 135.260 → R$ 122.028.
+- **Comparáveis de outra cidade (Peruíbe):** `_valor-mercado.js` descarta amostra cujo endereço nomeia outra cidade
+  (`outra_cidade`; sem cidade escrita, fica). `mercado.baseLocal` grava locais × fora. Selo único
+  `src/lib/veredito-mercadologico.js` (tela + PDF): viável com < 3 comparáveis locais → "Viabilidade indicativa…".
+  Os anúncios de outros bairros da mesma cidade (`outrosBairros`) seguem FORA da conta (decisão do dono).
+- **Dois R$/m² e 42×40 (Pirituba):** o topo `precoMedioM2` guardava o número da IA; dedup só rodava depois da conta.
+  Agora `dedupVendasEntreNiveis` roda antes, o topo recebe o ponderado e `precoM2DoRelatorio` corrige relatório antigo
+  na tela/PDF. Metodologia descreve média ponderada (não "mediana"); texto do rodapé saiu para `src/lib/nota-metodologica.js`.
+- **Terreno excedente (Itu):** detecção por código `src/lib/terreno-excedente.js` (casa, terreno > 1.000 m² e > 3× a
+  construída). Com Índice de terreno cidade/bairro (4+ amostras) soma ao valor; sem ele (Itu hoje) avisa "não
+  avaliado" e reprovada vira indicativa. Viabilidade passa a receber as áreas do mercado (matrícula).
+- Teste `npm run testar:mercadologico-4` (fixture com os dados salvos). Afetados já emitidos (leitura): P1 4, P2 1,
+  P3 39 (4 com leilão futuro), P4 5 — nenhum regerado; a tela corrige selo/R$/m²/aviso ao abrir.
+- ⚠️ `scripts/rodar-testes.mjs` falha 0/173 no Windows (spawn de `npm` sem shell); no CI (Linux) roda normal.
+
 ## 03/11 — ABERTURA: FONTES "SEM MEDIÇÃO" ERAM CADÊNCIA; HASTAPÚBLICA LÊ A PÁGINA ESTÁTICA QUANDO O PAINEL FALHA
 
 - **Diagnóstico de abertura:** segurança 0/0, regras 0 crítico, KYC 0, cliente travado/chamados vazios, backup ok,

@@ -1,0 +1,93 @@
+{
+  "_origem": "Recorte de analises_mercado em 03/11 (Peruíbe 57573ba9, Pirituba abd7ffd9, Itu 9ba1ce0c): só os campos que entram nas contas.",
+  "peruibe": {
+    "cidade": "Peruíbe",
+    "d": { "tipo": "apartamento", "areaM2": 32.5, "areaTerrenoM2": 0, "cidade": "Peruíbe", "origem": "judicial", "objetivoCompra": "investimento",
+      "valorAvaliacao": 240000, "valorArrematacao": 96000, "valorMercado": 231714, "valorLocacao": 1350,
+      "sinalPercentual": 25, "prazoMeses": 30, "cetAnual": 0, "tabelaAmortizacao": "sac", "somenteAVista": false, "origemCondicoesPagamento": "padrao_legal",
+      "taxaLeiloeiroPercentual": 5, "honorariosPercentual": 10, "itbiPercentual": 5, "prazoVendaMeses": 12, "prazoReformaMeses": 3,
+      "iptuMensal": 0, "condominioMensal": 0, "debitosAssumidos": 0, "manutencaoEstimada": 0, "laudemio": 0, "foreiro": 0,
+      "taxaAdministrativaPercentual": 0, "despesasAdministrativas": 0, "descontoAVistaPercentual": 0 },
+    "condicoesEdital": {
+      "formaPagamento": "Arrematante pagará 20% do lance como sinal e garantia, mais 5% de comissão do leiloeiro, no ato do acerto. A segunda parcela de 80% será satisfeita em 24 horas após o leilão. Parcelamento: sinal de 25% e saldo em até 10 parcelas mensais corrigidas pelo IPCA, mínimo de R$ 5.000,00 por parcela, garantido por hipoteca.",
+      "regrasPagamento": { "fgts": null, "aVista": null, "parcelas": 10, "sinalPct": 25, "caucaoPct": null, "prazoDias": null, "comissaoPct": null, "financiavel": null, "parcelamentoPermitido": true }
+    },
+    "nivel1": { "vendas": [] }, "nivel2": { "vendas": [] },
+    "nivel3": { "vendas": [
+      { "m2": 32.5, "valor": 201000, "valorM2": 6184.62, "endereco": "Jardim Itapemirim - São Paulo - SP", "fonte": "A Villa Imoveis", "data": "recente", "distanciaKm": 0 },
+      { "m2": 32.5, "valor": 280000, "valorM2": 8615.38, "endereco": "Residencial Marinha do Arvoredo - Bauru - SP", "fonte": "Kenlo", "data": "2026-10", "distanciaKm": 0 },
+      { "m2": 32.5, "valor": 190000, "valorM2": 5846.15, "endereco": "Vila Aricanduva - São Paulo - SP", "fonte": "EFAX", "data": "recente", "distanciaKm": 0 }
+    ] },
+    "valorPonderado": { "valor": 231714, "amostras": 3, "aplicado": true, "precoMedioM2": 7129.67 },
+    "precoMedioM2": 6882.05,
+    "consolidado": { "precoMedioM2": 7129.67, "valorEstimadoImovel": 231714, "terrenoExcedente": { "haExcedente": false, "areaExcedenteM2": 0, "valorTerrenoExcedente": 0 } },
+    "metodologia": { "area": { "fonte": "matricula", "valor": 32.5 }, "comparaveis": { "origem": "pesquisa_web", "nVendas": 3, "nLocacoes": 2, "pesquisaEm": "2026-10-12T13:37:40.480Z" } }
+  },
+  "pirituba": {
+    "cidade": "Sao Paulo",
+    "area": 34.12,
+    "valorPonderado": { "valor": 228082, "amostras": 42, "aplicado": true, "precoMedioM2": 6684.69 },
+    "precoMedioM2": 7256,
+    "consolidado": { "precoMedioM2": 6684.69, "valorEstimadoImovel": 228082 },
+    "metodologia": { "area": { "fonte": "informada", "valor": 34.12 }, "comparaveis": { "origem": "pesquisa_web", "nVendas": 42, "nLocacoes": 6, "pesquisaEm": "2026-10-15T13:18:04.379Z" } },
+    "nivel1": { "vendas": [
+      { "m2": 40, "valor": 341320, "valorM2": 8533, "endereco": "Avenida Paula Ferreira, 3750", "data": "2026-10", "distanciaKm": 0 },
+      { "m2": 34, "valor": 233755, "valorM2": 6875, "endereco": "Avenida Paula Ferreira, 3750", "data": "2026-10", "distanciaKm": 0 },
+      { "m2": 34, "valor": 259900, "valorM2": 7644, "endereco": "Avenida Paula Ferreira, 3750", "data": "2026-10", "distanciaKm": 0 },
+      { "m2": 39, "valor": 320000, "valorM2": 8205, "endereco": "Avenida Paula Ferreira, 3750", "data": "recente", "distanciaKm": 0 },
+      { "m2": 34, "valor": 234600, "valorM2": 6900, "endereco": "Avenida Paula Ferreira, 3750", "data": "2026-10", "distanciaKm": 0 }
+    ] },
+    "nivel2": { "vendas": [
+      { "m2": 50, "valor": 270000, "endereco": "Pirituba, São Paulo/SP", "data": "2026-10", "distanciaKm": 0.5 },
+      { "m2": 67, "valor": 330000, "endereco": "Pirituba, São Paulo/SP", "data": "2026-10", "distanciaKm": 0.7 },
+      { "m2": 67, "valor": 329600, "endereco": "Pirituba, São Paulo/SP", "data": "2026-10", "distanciaKm": 0.7 },
+      { "m2": 68, "valor": 280000, "endereco": "Pirituba, São Paulo/SP", "data": "2026-10", "distanciaKm": 0.8 },
+      { "m2": 64, "valor": 372000, "endereco": "Pirituba, São Paulo/SP", "data": "2026-10", "distanciaKm": 0.6 },
+      { "m2": 56, "valor": 280000, "endereco": "Pirituba, São Paulo/SP", "data": "2026-10", "distanciaKm": 0.7 },
+      { "m2": 50, "valor": 280000, "endereco": "Pirituba, São Paulo/SP", "data": "2026-10", "distanciaKm": 0.5 },
+      { "m2": 50, "valor": 380000, "endereco": "Pirituba, São Paulo/SP", "data": "2026-10", "distanciaKm": 0.5 },
+      { "m2": 60, "valor": 360000, "endereco": "Pirituba, São Paulo/SP", "data": "2026-10", "distanciaKm": 0.8 },
+      { "m2": 63, "valor": 370000, "endereco": "Pirituba, São Paulo/SP", "data": "2026-10", "distanciaKm": 0.9 },
+      { "m2": 60, "valor": 370000, "endereco": "Pirituba, São Paulo/SP", "data": "2026-10", "distanciaKm": 0.8 },
+      { "m2": 63, "valor": 250100, "endereco": "Pirituba, São Paulo/SP", "data": "2026-10", "distanciaKm": 0.9 },
+      { "m2": 46, "valor": 251200, "endereco": "Pirituba, São Paulo/SP", "data": "2026-10", "distanciaKm": 0.4 },
+      { "m2": 65, "valor": 415000, "endereco": "Pirituba, São Paulo/SP", "data": "2026-10", "distanciaKm": 0.9 },
+      { "m2": 60, "valor": 450000, "endereco": "Pirituba, São Paulo/SP", "data": "2026-10", "distanciaKm": 0.8 },
+      { "m2": 59, "valor": 420000, "endereco": "Pirituba, São Paulo/SP", "data": "2026-10", "distanciaKm": 0.7 },
+      { "m2": 50, "valor": 375000, "endereco": "Pirituba, São Paulo/SP", "data": "2026-09", "distanciaKm": 0.5 },
+      { "m2": 62, "valor": 380000, "endereco": "Pirituba, São Paulo/SP", "data": "2026-10", "distanciaKm": 0.9 },
+      { "m2": 52, "valor": 355000, "endereco": "Pirituba, São Paulo/SP", "data": "2026-10", "distanciaKm": 0.6 },
+      { "m2": 52, "valor": 349000, "endereco": "Pirituba, São Paulo/SP", "data": "2026-10", "distanciaKm": 0.6 },
+      { "m2": 60, "valor": 430000, "endereco": "Pirituba, São Paulo/SP", "data": "2026-10", "distanciaKm": 0.8 },
+      { "m2": 51, "valor": 355000, "endereco": "Pirituba, São Paulo/SP", "data": "2026-10", "distanciaKm": 0.5 },
+      { "m2": 56, "valor": 752492, "endereco": "Pirituba, São Paulo/SP", "data": "2026-10", "distanciaKm": 0.7 },
+      { "m2": 50, "valor": 420000, "endereco": "Pirituba, São Paulo/SP", "data": "2026-10", "distanciaKm": 0.5 },
+      { "m2": 40, "valor": 220000, "endereco": "Pirituba, São Paulo/SP", "data": "2026-10", "distanciaKm": 0.3 },
+      { "m2": 70, "valor": 370000, "endereco": "Pirituba, São Paulo/SP", "data": "2026-10", "distanciaKm": 0.9 },
+      { "m2": 40, "valor": 320000, "endereco": "Pirituba, São Paulo/SP", "data": "2026-10", "distanciaKm": 0.3 },
+      { "m2": 98, "valor": 480000, "endereco": "Pirituba, São Paulo/SP", "data": "2026-10", "distanciaKm": 0.9 },
+      { "m2": 48, "valor": 250000, "endereco": "Pirituba, São Paulo/SP", "data": "2026-10", "distanciaKm": 0.4 },
+      { "m2": 50, "valor": 250000, "endereco": "Pirituba, São Paulo/SP", "data": "2026-10", "distanciaKm": 0.5 },
+      { "m2": 60, "valor": 516000, "endereco": "Pirituba, São Paulo/SP", "data": "2026-10", "distanciaKm": 0.8 },
+      { "m2": 56, "valor": 240000, "endereco": "Pirituba, São Paulo/SP", "data": "2026-10", "distanciaKm": 0.7 },
+      { "m2": 56, "valor": 275000, "endereco": "Pirituba, São Paulo/SP", "data": "2026-10", "distanciaKm": 0.7 },
+      { "m2": 52, "valor": 299999, "endereco": "Pirituba, São Paulo/SP", "data": "2026-10", "distanciaKm": 0.6 },
+      { "m2": 51, "valor": 300000, "endereco": "Pirituba, São Paulo/SP", "data": "2026-10", "distanciaKm": 0.5 }
+    ] },
+    "nivel3": { "vendas": [] }
+  },
+  "itu": {
+    "cidade": "Itu",
+    "d": { "tipo": "casa", "areaM2": 3017.5, "areaTerrenoM2": 0, "origemCondicoesPagamento": "padrao_legal", "valorAvaliacao": 3455000, "valorArrematacao": 1727500 },
+    "mercadoInputs": { "areaM2": 219.5, "areaTerrenoM2": 3017.5, "tipoImovel": "casa", "cidade": "Itu" },
+    "consolidado": { "precoMedioM2": 10622.19, "valorEstimadoImovel": 2331571, "areaConsiderada": 219.5, "terrenoExcedente": { "haExcedente": false, "areaExcedenteM2": 0, "valorTerrenoExcedente": 0 } },
+    "valorPonderado": { "valor": 2331571, "amostras": 13, "aplicado": true, "precoMedioM2": 10622.19 },
+    "metodologia": { "area": { "fonte": "matricula", "valor": 219.5 } },
+    "condicoesEdital": { "regrasPagamento": { "aVista": true, "parcelas": null, "sinalPct": null, "comissaoPct": 5, "parcelamentoPermitido": null } },
+    "nivel1": { "vendas": [
+      { "m2": 460.9, "valor": 7650000, "endereco": "Condomínio Fazenda Vila Real de Itu", "data": "2026-10", "distanciaKm": 0 },
+      { "m2": 500, "valor": 4500000, "endereco": "Condomínio Fazenda Vila Real de Itu", "data": "2026-10", "distanciaKm": 0 }
+    ] },
+    "nivel2": { "vendas": [] }, "nivel3": { "vendas": [] }
+  }
+}

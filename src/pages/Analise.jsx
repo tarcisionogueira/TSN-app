@@ -37,7 +37,10 @@ import RevisarTexto from '../components/RevisarTexto';
 import { alertaAvaliacaoMercado } from '../utils/alertaAvaliacao';
 import { COMISSAO_LEILOEIRO_PCT, ITBI_REGISTRO_PCT } from '../lib/rentabilidade';
 import { faltaNoRelatorio, relatorioEntregue } from '../lib/entrega-relatorio';
-import { vendasDe, locacoesDe, totalAmostrasDe, RAIO_NIVEL } from '../lib/niveis-mercado';
+import { vendasDe, locacoesDe, totalAmostrasDe, RAIO_NIVEL, precoM2DoRelatorio } from '../lib/niveis-mercado';
+import { aplicarCondicoesEdital } from '../lib/condicoes-pagamento';
+import { fraseTerrenoExcedente } from '../lib/terreno-excedente';
+import { vereditoMercadologico, fraseOrigemAmostras } from '../lib/veredito-mercadologico';
 import { soAceitaAVista } from '../data/pagamento.js';
 import { dataBrParaIso } from '../../api/_data-br.js';
 import { definirTrabalhoNaoSalvo } from '../utils/swAtualizacao';
@@ -748,7 +751,10 @@ export default function Analise() {
   const upN = useCallback((e) => {
     const { name, value } = e.target;
     const texts = ['nome','tipo','endereco','cidade','estado','cep','nomeCondominio','objetivoCompra','origem','status','tabelaAmortizacao','leiloeiro','dataLeilao','observacoes'];
-    setD(p => ({ ...p, [name]: texts.includes(name) ? value : (parseFloat(value)||0) }));
+    // Sinal/prazo digitados = escolha do CLIENTE (03/11): o edital não sobrescreve, e o rodapé não os
+    // apresenta como lidos no documento.
+    const doCliente = (name === 'sinalPercentual' || name === 'prazoMeses') ? { origemCondicoesPagamento: 'cliente' } : {};
+    setD(p => ({ ...p, [name]: texts.includes(name) ? value : (parseFloat(value)||0), ...doCliente }));
   }, []);
 
   const isAVista = cenario === 'aVista' || d.somenteAVista;
@@ -1717,8 +1723,13 @@ export default function Analise() {
     // quando o campo está vazio (nunca sobrescreve o que o usuário digitou).
     if (Number(r.valorAvaliacao) > 0) setD(p => (Number(p.valorAvaliacao) > 0 ? p : { ...p, valorAvaliacao: r.valorAvaliacao }));
     // Mesma regra para a METRAGEM que o servidor usou (edital/acervo/matrícula) quando o card veio sem.
+    // Área lida na MATRÍCULA prevalece sobre a do anúncio mesmo com o card preenchido (03/11, caso Itu: o
+    // card guardava 3.017,5 m² — o terreno — como área construída, e a matrícula dizia 219,5 m²).
     const aSrv = Number(r.mercado?.metodologia?.area?.valor) || 0;
-    if (aSrv > 0) setD(p => (Number(p.areaM2) > 0 ? p : { ...p, areaM2: aSrv }));
+    const tSrv = Number(r.mercado?.metodologia?.area?.terreno) || 0;
+    const daMatricula = r.mercado?.metodologia?.area?.fonte === 'matricula';
+    if (aSrv > 0) setD(p => ((Number(p.areaM2) > 0 && !daMatricula) ? p : { ...p, areaM2: aSrv }));
+    if (tSrv > 0) setD(p => ((Number(p.areaTerrenoM2) > 0 && !daMatricula) ? p : { ...p, areaTerrenoM2: tSrv }));
     if (r.parecer) { setParecer(r.parecer); setD(p => ({ ...p, parecer: r.parecer })); }
     // ── CUSTOS LIDOS NO EDITAL → PROJEÇÃO (pedido do dono, 06/08) ──────────────────
     // O servidor lê o edital ANTES de pesquisar e extrai o que muda a conta: comissão do
@@ -1771,18 +1782,20 @@ export default function Analise() {
       // sobre um produto que o leilão nem oferece. Mesma hierarquia já usada em
       // `aplicarExtracao`: edital manda, inclusive para destravar/trancar o parcelado;
       // campo que o usuário já ajustou (não está mais no valor de VAZIO) é respeitado.
-      if (rp?.parcelamentoPermitido === false && !d.somenteAVista) {
-        patch.somenteAVista = true; patch.origemCondicoesPagamento = 'edital_veda';
-        aplicados.push('parcelamento vedado pelo edital');
-      } else if (rp?.parcelamentoPermitido === true && d.somenteAVista) {
-        patch.somenteAVista = false; patch.origemCondicoesPagamento = 'edital';
-        aplicados.push('parcelamento permitido pelo edital');
-      }
-      if (Number(rp?.sinalPct) > 0 && !(Number(d.sinalPercentual) > 0 && d.sinalPercentual !== VAZIO.sinalPercentual)) {
-        patch.sinalPercentual = Number(rp.sinalPct); aplicados.push(`sinal ${String(rp.sinalPct).replace('.', ',')}%`);
-      }
-      if (Number(rp?.parcelas) > 0 && Number(d.prazoMeses) === VAZIO.prazoMeses) {
-        patch.prazoMeses = Number(rp.parcelas); aplicados.push(`${rp.parcelas} parcelas`);
+      // 03/11 (caso Peruíbe): o "valor de VAZIO" era só o default bancário (5%/360) — o piso do art. 895
+      // que o lote judicial já traz (25%/30) passava por escolha do cliente e as 10 parcelas do edital
+      // nunca entravam. A regra agora é a MESMA do servidor (src/lib/condicoes-pagamento.js).
+      const pc = aplicarCondicoesEdital(d, rp, ce?.formaPagamento);
+      if (pc) {
+        const { faltando, parcelaMinimaAplicada, parcelaMinimaEdital, ...campos } = pc;
+        Object.assign(patch, campos);
+        if (campos.somenteAVista) aplicados.push('parcelamento vedado pelo edital');
+        else {
+          aplicados.push(`sinal ${String(campos.sinalPercentual).replace('.', ',')}% e ${campos.prazoMeses} parcelas${parcelaMinimaAplicada ? ` (limitadas pela parcela mínima de R$ ${fmt(parcelaMinimaEdital)})` : ''}`);
+          if (faltando.length) aplicados.push(`o edital não informa ${faltando.join(' nem ')}`);
+        }
+        if (parcelaMinimaEdital) patch.parcelaMinimaEdital = parcelaMinimaEdital;
+        if (faltando.length) patch.condicoesFaltando = faltando;
       }
       if (aplicados.length) { setD(p => ({ ...p, ...patch })); setCustosEdital({ aplicados, custos: cst }); }
     }
@@ -3961,7 +3974,7 @@ export default function Analise() {
           const area = Number(d.areaM2) || Number(d.areaTerrenoM2) || 0;
           // 'matricula' | 'acervo' | 'informada' | 'cliente' — gravado pelo gerador.
           const fonteArea = mercado?.metodologia?.area?.fonte || null;
-          const pm2 = Number(mercado?.precoMedioM2) || 0;
+          const pm2 = precoM2DoRelatorio(mercado);
           const valorMedia = pm2 && area ? Math.round(pm2 * area) : (Number(d.valorMercado) || 0);
           const sugerido = Number(d.valorMercado) || (valorMedia ? Math.round(valorMedia * 0.9) : 0);
           const vAval = Number(d.valorAvaliacao) || 0;
@@ -4064,7 +4077,12 @@ export default function Analise() {
                 </div>
               ) : mercado?.consolidado?.baseCalculo ? (
                 <div style={{ fontSize:10.5, opacity:0.85, marginTop:10, lineHeight:1.5 }}>
-                  Base de mercado ({(mercado?.consolidado?.unidadeValor || '').replace(/_/g,' ') || 'por tipo'}): {mercado.consolidado.baseCalculo}.{nAmostras > 0 ? ` Média de ${nAmostras} comparáve${nAmostras > 1 ? 'is' : 'l'} do mesmo tipo/região.` : ''} Valor conservador para revenda em prazo saudável.
+                  Base de mercado ({(mercado?.consolidado?.unidadeValor || '').replace(/_/g,' ') || 'por tipo'}): {mercado.consolidado.baseCalculo}.{fraseOrigemAmostras(mercado, d.cidade, nAmostras)} Valor conservador para revenda em prazo saudável.
+                  {mercado?.consolidado?.terrenoExcedente?.haExcedente && !mercado.consolidado.terrenoExcedente.avaliado && (
+                    <div style={{ marginTop:6, background:'rgba(250,204,21,0.16)', border:'1px solid rgba(250,204,21,0.55)', borderRadius:8, padding:'6px 9px' }}>
+                      ⚠️ {fraseTerrenoExcedente(mercado.consolidado.terrenoExcedente)}
+                    </div>
+                  )}
                 </div>
               ) : valorMedia>0 && (
                 <div style={{ fontSize:10.5, opacity:0.8, marginTop:10, lineHeight:1.5 }}>
@@ -4223,12 +4241,21 @@ export default function Analise() {
         })()}
         {/* ── CAPA = PAINEL ÚNICO DE RETORNO: veredito + números que decidem + detalhe + próximo passo ── */}
         <div style={{ background:'white', borderRadius:16, border:'1px solid #e2e8f0', padding: isMobile?'16px':'20px 22px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }}>
-          <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:14, flexWrap:'wrap' }}>
-            {isUsoProprio ? <CheckCircle2 size={22} color="#10b981"/> : (mercadoSemDados ? <AlertTriangle size={22} color="#f59e0b"/> : (isViavel ? <CheckCircle2 size={22} color="#10b981"/> : <XCircle size={22} color="#ef4444"/>))}
-            <span style={{ fontSize:16, fontWeight:900, color: mercadoSemDados ? '#92400e' : (isViavel?'#065f46':'#b91c1c') }}>
-              {isUsoProprio ? 'Aprovado para uso próprio' : (mercadoSemDados ? 'Mercado não estimado nesta análise' : (isViavel ? 'Operação viável, vale avançar' : 'Operação reprovada, retorno insuficiente'))}
-            </span>
-          </div>
+          {(() => {
+            // Selo pela regra única de src/lib/veredito-mercadologico.js (03/11): viável sem base local e
+            // reprovada com terreno não avaliado viram "indicativa", em âmbar.
+            const v = vereditoMercadologico({ isViavel, isUsoProprio, mercadoSemDados, mercado, cidade: d.cidade });
+            const ambar = v.estado === 'sem_dados' || v.estado === 'indicativa';
+            const verde = v.estado === 'uso_proprio' || v.estado === 'viavel';
+            return (
+              <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:14, flexWrap:'wrap' }}>
+                {ambar ? <AlertTriangle size={22} color="#f59e0b"/> : (verde ? <CheckCircle2 size={22} color="#10b981"/> : <XCircle size={22} color="#ef4444"/>)}
+                <span style={{ fontSize:16, fontWeight:900, color: ambar ? '#92400e' : (verde ? '#065f46' : '#b91c1c') }}>
+                  {v.texto}
+                </span>
+              </div>
+            );
+          })()}
           {(() => {
             const al = alertaAvaliacaoMercado(d.valorMercado, d.valorAvaliacao);
             return al ? (
@@ -4443,7 +4470,7 @@ export default function Analise() {
                   falsa: o retorno de um lote é revenda, não aluguel. */}
               <div style={{ display:'grid', gridTemplateColumns: isMobile ? 'minmax(0, 1fr) minmax(0, 1fr)' : (mercado.locacaoNaoSeAplica ? 'minmax(0, 1fr)' : 'repeat(4, minmax(0, 1fr))'), gap:10 }}>
                 {[
-                  [mercado.fonteEstimativa === 'indice_bidpro' ? 'Preço/m² (Índice BidPro)' : 'Preço Médio/m²', moedaOuTraco(mercado.precoMedioM2), '#0D63DB','#eff6ff'],
+                  [mercado.fonteEstimativa === 'indice_bidpro' ? 'Preço/m² (Índice BidPro)' : 'Preço Médio/m²', moedaOuTraco(precoM2DoRelatorio(mercado)), '#0D63DB','#eff6ff'],
                   ...(mercado.locacaoNaoSeAplica ? [] : [
                     ['Aluguel Médio', moedaOuTraco(mercado.aluguelMedio, { sufixo: '/mês' }), '#8b5cf6','#ede9fe'],
                     // A auditoria final pode marcar um indicador como incoerente (ex.: yield
@@ -4514,7 +4541,7 @@ export default function Analise() {
 
               {/* Validação FipeZAP, média dos anúncios × índice independente */}
               {mercado.referenciaFipeZap?.encontrado && mercado.referenciaFipeZap.precoMedioM2 > 0 && (() => {
-                const anuncios = mercado.precoMedioM2 || 0;
+                const anuncios = precoM2DoRelatorio(mercado);
                 const fipe = mercado.referenciaFipeZap.precoMedioM2 || 0;
                 const div = fipe ? Math.round((anuncios - fipe) / fipe * 100) : 0;
                 const alinhado = Math.abs(div) <= 15;
@@ -5297,7 +5324,7 @@ export default function Analise() {
               hipotecado ao juízo, dividido por lei, sem escolha de sistema — e com CET=0%
               (default judicial) os dois sistemas nem chegam a divergir. O cronograma mês a mês
               já aparece no Fluxo de Caixa Mensal, logo acima. */}
-          {!d.somenteAVista && d.origemCondicoesPagamento !== 'padrao_legal' && <TabelaAmortizacao sacTabela={sacTab} priceTabela={priceTab} d={d}/>}
+          {!d.somenteAVista && !['padrao_legal', 'edital_incompleto'].includes(d.origemCondicoesPagamento) && <TabelaAmortizacao sacTabela={sacTab} priceTabela={priceTab} d={d}/>}
         </div>
       </Section>
 
@@ -5329,7 +5356,7 @@ export default function Analise() {
           análise no rodapé, para resguardo do que sustenta o parecer. Montada dos FATOS desta
           geração (origem dos comparáveis, período, área que prevaleceu, documento lido), não
           de texto fixo: rodapé que repete a mesma frase em todo relatório não resguarda nada. */}
-      <NotaMetodologica tipo="mercadologico" dados={analiseEntry?.result || { mercado }} condicoesPagamento={{ somenteAVista: d.somenteAVista, sinalPercentual: d.sinalPercentual, prazoMeses: d.prazoMeses, origem: d.origemCondicoesPagamento }} />
+      <NotaMetodologica tipo="mercadologico" dados={{ ...(analiseEntry?.result || { mercado }), cidade: d.cidade }} condicoesPagamento={{ somenteAVista: d.somenteAVista, sinalPercentual: d.sinalPercentual, prazoMeses: d.prazoMeses, origem: d.origemCondicoesPagamento, faltando: d.condicoesFaltando, parcelaMinima: d.parcelaMinimaEdital }} />
 
       {/* ── REGISTRO FOTOGRÁFICO (01/10, pedido do dono) — ao final, depois das projeções; o PDF
           traz a mesma grade numerada. Só quando o lote foi relido do banco (fotosLote ≠ null). */}

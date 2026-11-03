@@ -17,6 +17,7 @@
  * `origem: 'padrao_leiloeiro'` — estimado com base declarada, nunca inventado.
  */
 import { createHash } from 'node:crypto';
+import { parcelaMinimaDoTexto } from '../src/lib/condicoes-pagamento.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -158,6 +159,8 @@ export function extrairPagamentoTexto(texto) {
     sinalPct: pct(/(?:sinal|entrada)\s+(?:de\s+|m[íi]nim[oa]\s+de\s+)?(\d{1,2}(?:,\d{1,2})?)\s*%/i)
       ?? pct(/(\d{1,2}(?:,\d{1,2})?)\s*%\s+(?:de|a\s+t[íi]tulo\s+de)\s+(?:sinal|entrada)\b/i),
     caucaoPct: pct(/cau[çc][ãa]o\s+(?:de\s+)?(\d{1,2}(?:,\d{1,2})?)\s*%/i),
+    // "mínimo de R$ 5.000,00 por parcela" (03/11, Peruíbe): limita o número de parcelas da projeção.
+    parcelaMinima: parcelaMinimaDoTexto(t),
     // Comissão: o vão entre a palavra e o percentual muda muito de edital para edital —
     // "comissão de 5%", "comissão do(a) leiloeiro(a) a título de 5%", "Arbitro a comissão
     // da Leiloeira em 6%" (os dois últimos são a forma padrão dos editais JUDICIAIS e não

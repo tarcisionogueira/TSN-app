@@ -27,7 +27,10 @@ import { pagamentoPrior, pagamentoAprender } from './_doc-extracao.js';
 // servidor RECALCULAR a viabilidade depois de descobrir o valor de mercado (ver o bloco
 // "MÉTRICAS RECALCULADAS NO SERVIDOR" no parecer) — parecer e tela param de divergir.
 import { calcularMetricasCenario, calcularTetoLance } from '../src/utils/calculos.js';
-import { NIVEIS, vendasDe, locacoesDe, totalAmostrasDe, MIN_AMOSTRAS_ANTES_DO_NIVEL3 } from '../src/lib/niveis-mercado.js';
+import { NIVEIS, vendasDe, locacoesDe, totalAmostrasDe, MIN_AMOSTRAS_ANTES_DO_NIVEL3, dedupVendasEntreNiveis } from '../src/lib/niveis-mercado.js';
+import { aplicarCondicoesEdital } from '../src/lib/condicoes-pagamento.js';
+import { MIN_COMPARAVEIS_LOCAIS, cidadeEscritaDaAmostra } from '../src/lib/origem-amostras.js';
+import { avaliarTerrenoExcedente, fraseTerrenoExcedente } from '../src/lib/terreno-excedente.js';
 import { indicePrecifica, indiceApenasContexto, rotuloNivelIndice } from '../src/lib/indice-precifica.js';
 import { comCascataBusca } from './_busca-modelo.js';
 import { somaAreasMultiBem, avaliacaoAtualizadaDoTexto } from './_texto-imovel.js';
@@ -3428,6 +3431,8 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
             vendasDe(mercado));
         } catch (e) { console.error('[gerar-analise] base acumulada fora da conta do valor:', e?.message || e); }
         if (mercado) mercado.amostrasDaBase = base[1].length + base[2].length + base[3].length;
+        // Duplicata entre níveis sai ANTES da conta (03/11, Pirituba: média com 42, tela com 40).
+        if (mercado) dedupVendasEntreNiveis(mercado);
         avalPond = avaliarMercado({
           nivel1: [...(mercado?.nivel1?.vendas || []), ...base[1]],
           nivel2: [...(mercado?.nivel2?.vendas || []), ...base[2]],
@@ -3435,8 +3440,20 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
           // `vminImovel` só é declarado mais abaixo (const, zona morta temporal) — usar aqui
           // daria ReferenceError engolido pelo catch, desligando a trava de auto-referência EM
           // SILÊNCIO. Lê direto do acervo, que é a mesma origem daquela variável.
-          lote: { valorMinimo: Number(imDb?.valor_minimo) || 0, valorAvaliacao: avalDb, endereco: imovel?.endereco },
+          lote: { valorMinimo: Number(imDb?.valor_minimo) || 0, valorAvaliacao: avalDb, endereco: imovel?.endereco,
+            cidade: cidade || imovel?.cidade || imDb?.cidade || '' },
         });
+        // BASE LOCAL (03/11, caso Peruíbe): quantos comparáveis da PRÓPRIA cidade sustentam o valor. Abaixo
+        // de MIN_COMPARAVEIS_LOCAIS a tela não carimba "viável, vale avançar" e o texto diz a origem real.
+        if (mercado) {
+          const fora = avalPond.descartadas.filter(x => x._motivo === 'outra_cidade');
+          mercado.baseLocal = {
+            locais: avalPond.consolidado.n,
+            foraDaCidade: fora.length,
+            cidadesFora: [...new Set(fora.map(cidadeEscritaDaAmostra).filter(Boolean))],
+            suficiente: avalPond.consolidado.n >= MIN_COMPARAVEIS_LOCAIS,
+          };
+        }
         // QUANTAS AMOSTRAS AUTORIZAM SUBSTITUIR O NÚMERO DA IA (revisão 13/08).
         // Com 1 ou 2 amostras, a média ponderada é o preço de UM anúncio com nome de
         // estatística — e foi exatamente disso que este trabalho veio reclamar (o nível 1 da
@@ -3454,6 +3471,9 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
               precoMedioM2: r.precoMedioM2, precoMinM2: r.precoMinM2, precoMaxM2: r.precoMaxM2, totalAmostras: r.n };
           }
           const podeSubstituir = avalPond.consolidado.n >= MIN_P_SUBSTITUIR;
+          // UM R$/m² SÓ (03/11, Pirituba): o topo (`precoMedioM2`, lido pelo Resumo, pelo PDF e pelo parecer)
+          // guardava o número da IA (R$ 7.256) enquanto a conta ponderada valia R$ 6.684,69.
+          if (podeSubstituir) mercado.precoMedioM2 = avalPond.consolidado.precoMedioM2;
           mercado.consolidado = {
             ...(mercado.consolidado || {}),
             precoMedioM2: avalPond.consolidado.precoMedioM2,
@@ -3478,6 +3498,13 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
             .map(d => ({ fonte: d.fonte, valor: d.valor, m2: d.m2, distanciaKm: d.distanciaKm, motivo: d._motivo }));
           mercado.raioAmpliado = !!avalPond.ampliado;
           mercado.baseFina = !!avalPond.baseFina;
+        } else if (mercado && avalPond.descartadas.length) {
+          // Nenhuma amostra sobreviveu (ex.: todas de outra cidade). O número da IA continua, mas o motivo e
+          // os descartes ficam gravados — e `baseLocal.suficiente=false` segura o selo da tela.
+          mercado.amostrasDescartadas = avalPond.descartadas.slice(0, 40)
+            .map(d => ({ fonte: d.fonte, valor: d.valor, m2: d.m2, distanciaKm: d.distanciaKm, motivo: d._motivo }));
+          mercado.valorPonderado = { aplicado: false, amostras: 0, motivo: 'nenhum comparável local válido' };
+          mercado.baseFina = true;
         }
       }
     } catch (e) {
@@ -3486,6 +3513,34 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
       // no log do servidor e no result, para a próxima varredura achar sem precisar adivinhar.
       console.error('[valor-ponderado] falhou:', String(e?.message || e).slice(0, 200));
       if (mercado) mercado.valorPonderado = { aplicado: false, motivo: `erro: ${String(e?.message || e).slice(0, 120)}` };
+    }
+
+    // ── TERRENO EXCEDENTE, POR CÓDIGO (03/11, caso Itu: 219,5 m² construídos em 3.017,5 m² de terreno) ──
+    // Antes só existia se a IA preenchesse, e a conta ponderada acima reescrevia o valor só com a construção.
+    // Regra e textos em src/lib/terreno-excedente.js. Preço do terreno: Índice BidPro do segmento terreno.
+    try {
+      if (mercado && baseTipo === 'residencial' && areaM2 > 0) {
+        const aT = Number(mercadoInputs.areaTerrenoM2) || 0;
+        const tipoAlvo = mercadoInputs.tipoImovel || imovel?.tipo;
+        let te = avaliarTerrenoExcedente({ tipo: tipoAlvo, areaConstruidaM2: areaM2, areaTerrenoM2: aT });
+        if (te.haExcedente) {
+          let idxTerreno = null;
+          try { idxTerreno = imDb?.cidade_norm ? await lerIndiceBidPro(imDb, 'terreno') : null; } catch (e) { console.error('[terreno-excedente] índice de terreno:', e?.message || e); }
+          te = avaliarTerrenoExcedente({ tipo: tipoAlvo, areaConstruidaM2: areaM2, areaTerrenoM2: aT, indiceTerreno: idxTerreno });
+          const cons = mercado.consolidado || {};
+          const vCons = Number(cons.valorEstimadoImovel) || 0;
+          mercado.consolidado = {
+            ...cons,
+            terrenoExcedente: te,
+            ...(te.avaliado && vCons > 0 ? {
+              valorEstimadoImovel: vCons + te.valorTerrenoExcedente,
+              baseCalculo: `${cons.baseCalculo || ''} ${fraseTerrenoExcedente(te)}`.trim(),
+            } : {}),
+          };
+        }
+      }
+    } catch (e) {
+      console.error('[terreno-excedente] falhou:', String(e?.message || e).slice(0, 200));
     }
 
     // ── LOCAÇÃO PELA MESMA RÉGUA DA VENDA (decisão do dono, 20/08) ──────────────────────
@@ -3868,6 +3923,21 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
           // vez de esconder a incerteza atrás de um endereço só.
           _divergencia: divergenciaLocalizacao,
         };
+        // ÁREAS DA VIABILIDADE = AS DO MERCADO (03/11, caso Itu). `parecerInputs.d` vem da tela, que
+        // guardou a área do anúncio (3.017,5 m², o terreno) como construída e zerou o terreno; o mercado
+        // já tinha corrigido pela matrícula (219,5 m² construídos em 3.017,5 m²).
+        if (Number(mercadoInputs?.areaM2) > 0) pInp.areaM2 = Number(mercadoInputs.areaM2);
+        if (Number(mercadoInputs?.areaTerrenoM2) > 0) pInp.areaTerrenoM2 = Number(mercadoInputs.areaTerrenoM2);
+        // CONDIÇÕES DO EDITAL NO RECÁLCULO (03/11, caso Peruíbe). Antes o ROE e o teto saíam do piso do
+        // art. 895 (30 parcelas) com o edital dizendo 10 parcelas. Regra em src/lib/condicoes-pagamento.js.
+        {
+          const patchCond = aplicarCondicoesEdital(pInp, mercado?.condicoesEdital?.regrasPagamento, mercado?.condicoesEdital?.formaPagamento);
+          if (patchCond) {
+            const { faltando, parcelaMinimaAplicada, ...campos } = patchCond;
+            Object.assign(pInp, campos);
+            parecerDiag.condicoesEdital = { aplicado: campos.origemCondicoesPagamento, sinal: campos.sinalPercentual, prazo: campos.prazoMeses, parcelaMinimaAplicada, faltando };
+          }
+        }
         if (usarPraca) {
           parecerDiag.lanceTrocadoPelaPraca = { cliente: vArrCliente, usado: pracaRef.valor, qual: pracaRef.qual, data: pracaRef.data };
           console.log('[praca-referencia]', JSON.stringify({ imovel: String(imovelId), cliente: vArrCliente, usado: pracaRef.valor, qual: pracaRef.qual }));
@@ -3896,10 +3966,12 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
         // métricas já vieram "prontos" do cliente — sem isto, o cenário à vista errado
         // (calculado no CLIENTE, antes de existir qualquer checagem de documento) passava
         // batido intacto pelo servidor.
-        const precisaRecalcular = (vmServidor > 0 || aluguelEntrouAgora || pagamentoContraditorio)
+        const condicoesMudaram = !!parecerDiag.condicoesEdital;
+        const precisaRecalcular = (vmServidor > 0 || aluguelEntrouAgora || pagamentoContraditorio || condicoesMudaram)
           && (vmCliente <= 0
             || aluguelEntrouAgora
             || pagamentoContraditorio
+            || condicoesMudaram
             || (vmServidor > 0 && Math.abs(vmServidor - vmCliente) / vmServidor > 0.02)
             || !(Number(metricasParecer.capitalMobilizado) > 0));
         if (precisaRecalcular) {
@@ -3988,6 +4060,14 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
             conteudoParecer += `\n\nCUSTOS E ENCARGOS DECLARADOS NO DOCUMENTO DO LOTE (lidos automaticamente do edital, use estes números em vez de qualquer premissa):\n${cl.map(x => '- ' + x).join('\n')}
 COMO USAR (obrigatório): dedique um parágrafo aos CUSTOS DA OPERAÇÃO segundo o documento. Se algum número do edital DIVERGIR do que sustentou as projeções acima, diga isso EXPLICITAMENTE ao cliente, estime o impacto no capital aportado e no retorno, e oriente a refazer a conta com o número do edital. Os DÉBITOS em aberto (IPTU/condomínio) NÃO são carrego mensal: são valores a assumir na aquisição, e a responsabilidade depende de cláusula do edital, portanto trate-os como tal e mande confirmar. Não invente valor que não esteja nesta lista.`;
           }
+        }
+        // RESSALVAS QUE O VEREDITO DA TELA JÁ APLICA (03/11) — o parecer não pode recomendar AVANÇAR por cima delas.
+        if (mercado?.baseLocal && !mercado.baseLocal.suficiente) {
+          conteudoParecer += `\n\nBASE DE MERCADO NÃO LOCAL (obrigatório citar): só ${mercado.baseLocal.locais} comparável(is) de venda da própria cidade${mercado.baseLocal.foraDaCidade ? `; ${mercado.baseLocal.foraDaCidade} anúncio(s) de outras cidades (${(mercado.baseLocal.cidadesFora || []).join(', ')}) foram excluídos da conta` : ''}. A viabilidade é INDICATIVA: não recomende avançar sem antes confirmar o preço de venda localmente (corretor da região ou anúncios do bairro).`;
+        }
+        const teP = mercado?.consolidado?.terrenoExcedente;
+        if (teP?.haExcedente && !teP.avaliado) {
+          conteudoParecer += `\n\nTERRENO EXCEDENTE NÃO AVALIADO (obrigatório citar): ${fraseTerrenoExcedente(teP)} Um resultado negativo pode ser efeito desta lacuna; trate a viabilidade como INDICATIVA e oriente avaliar o terreno com comparáveis de lote.`;
         }
         // RE-TENTA a redação: até 2 tentativas enquanto houver orçamento. Um 429/overloaded/timeout
         // do Anthropic (retries:0) não pode mais deixar o parecer vazio de forma definitiva. A causa
@@ -4094,7 +4174,8 @@ COMO USAR (obrigatório): dedique um parágrafo aos CUSTOS DA OPERAÇÃO segundo
           periodo: datasAmostra.length ? { de: datasAmostra[0].slice(0, 7), ate: datasAmostra[datasAmostra.length - 1].slice(0, 7) } : null,
           pesquisaEm: mercado.pesquisaEm || null,
         },
-        area: { valor: areaM2 || null, fonte: areaFonte, divergencia: divergenciaArea },
+        // `terreno` (03/11): a tela leva as DUAS áreas para a viabilidade (caso Itu: só a construída voltava).
+        area: { valor: areaM2 || null, fonte: areaFonte, divergencia: divergenciaArea, terreno: Number(mercadoInputs?.areaTerrenoM2) || null },
         documento: {
           editalLido: !!mercado.condicoesEdital?.fonte,
           editalFonte: mercado.condicoesEdital?.fonte || null,
@@ -4240,18 +4321,8 @@ COMO USAR (obrigatório): dedique um parágrafo aos CUSTOS DA OPERAÇÃO segundo
     // Assinatura = valor+m2+endereço (imóveis genuinamente diferentes não colidem nisso); mantém
     // a ocorrência do nível MAIS PRÓXIMO (nível 1 vence) e descarta a repetição dos níveis 2/3.
     if (result.mercado) {
-      const vistos = new Set();
-      const assinatura = (v) => `${Number(v?.valor) || 0}|${Number(v?.m2) || 0}|${String(v?.endereco || v?.bairro || '').toLowerCase().trim()}`;
-      for (const nv of NIVEIS.map((k) => result.mercado[k]).filter(Boolean)) {
-        if (!Array.isArray(nv.vendas)) continue;
-        nv.vendas = nv.vendas.filter((v) => {
-          const chave = assinatura(v);
-          if (!chave.trim() || chave === '0|0|') return true; // sem dado suficiente p/ comparar, não arrisca descartar
-          if (vistos.has(chave)) return false;
-          vistos.add(chave);
-          return true;
-        });
-      }
+      // Desde 03/11 a mesma função roda ANTES da conta ponderada; aqui pega o que etapas posteriores trouxeram.
+      dedupVendasEntreNiveis(result.mercado);
       for (const nv of NIVEIS.map((k) => result.mercado[k]).filter(Boolean)) {
         nv.totalAmostras = (nv.vendas?.length || 0) + (nv.locacoes?.length || 0);
       }
