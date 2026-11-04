@@ -42,7 +42,11 @@
     no stream inteiro é de outro lote — valor estimado só dentro de `lotDetails`, fase pela `currentLotAuctionSetting`
     (o 1º `listingPhase` é o 1º leilão vencido e marcava "encerrado" lote em 2º leilão). Seco: 14 abertos de 20.
     Sem fixture de teste ainda (página de 235 KB).
-  - **Marcus Vinícius:** ainda falta.
+  - **Marcus Vinícius entrou** (fonte `MARCUSVINICIUS`, `scraper-marcusvinicius.mjs` no `scraper-dom.yml`). Brain at
+    Work, server-rendered: home → `leilao/<id>` → `item/<id>/lote-NN`. A home mistura bem móvel trabalhista (tear,
+    telhas, tênis, piso "200 m2") — o filtro de imóvel sai do `data-busca` do card, com lista de exclusão que vence.
+    Sem avaliação no site (só no edital): `valor_avaliacao` fica 0, não se copia a 1ª praça. Seco: 8 de 8 prontos;
+    teste `scripts/testes/marcusvinicius-parse.mjs` (12/12).
 - **Decisão do dono:** Coimbra (17 lotes) e Big Leilão são SPA sobre Supabase. Ler a API pública com a chave publicada
   no site foi barrado pelo classificador de permissão; alternativa é navegador headless no runner residencial.
 - **Descartados:** DNS morto (Cruzeiro, Ícaro, Marchioro, NetEditais, Valle, Tassiana) · Arremax 522 · Startup

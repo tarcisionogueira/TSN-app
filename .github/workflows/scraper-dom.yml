@@ -119,6 +119,9 @@ on:
       - 'scripts/scraper-kwara.mjs'
       - 'scripts/lib/kwara-parse.mjs'
       - 'scripts/lib/motor/fontes/kwara.mjs'
+      - 'scripts/scraper-marcusvinicius.mjs'
+      - 'scripts/lib/marcusvinicius-parse.mjs'
+      - 'scripts/lib/motor/fontes/marcusvinicius.mjs'
       - 'scripts/scraper-triacca.mjs'
       - 'scripts/lib/triacca-parse.mjs'
       - 'scripts/lib/motor/fontes/triacca.mjs'
@@ -338,6 +341,16 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           KWARA_DRYRUN: ${{ env.DRYRUN_PADRAO }}
         run: node scripts/scraper-kwara.mjs
+
+      - name: Marcus Vinícius Leilões (Montes Claros/MG — 8 imóveis)
+        # 04/11: Brain at Work, server-rendered sem anti-bot. Home lista os leilões (a maioria é bem móvel trabalhista; o filtro
+        # de imóvel sai do data-busca do card) → leilão → item. Seco de 04/11: 8 de 8 prontos. Fetch grátis.
+        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'marcusvinicius')) }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          MARCUSVINICIUS_DRYRUN: ${{ env.DRYRUN_PADRAO }}
+        run: node scripts/scraper-marcusvinicius.mjs
 
       - name: Triacca — Lara Forster, Alexsandro e Lunelli (RS)
         # 30/10 (fila #380): plataforma TRIACCA (PHP, charset misto); a home lista todos os bens e o slug separa veículo
