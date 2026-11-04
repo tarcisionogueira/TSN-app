@@ -1014,10 +1014,10 @@ export default function Analise() {
         body: JSON.stringify({ imovel_id: imovelInicial.id, action: acao, ...(acao === 'enviar' ? { texto: textoLeiloeiro } : {}) }),
       });
       const j = await r.json().catch(() => ({}));
-      if (j?.semContato) { setPedidoLeiloeiroTexto({ texto: j.texto, linkLote: j.linkLote, contatoDisponivel: false, telefone: j.telefone || null, telefoneErro: !!j.telefoneErro }); setTextoLeiloeiro(j.texto); return; }
+      if (j?.semContato) { setPedidoLeiloeiroTexto({ texto: j.texto, linkLote: j.linkLote, contatoDisponivel: false, telefone: j.telefone || null, telefoneErro: !!j.telefoneErro, chamadoId: j.chamadoId || null }); setTextoLeiloeiro(j.texto); return; }
       if (!r.ok || j?.error) { showMsg(j?.error || 'Não foi possível preparar o pedido agora.', 'error'); return; }
       if (acao === 'preview') {
-        setPedidoLeiloeiroTexto({ texto: j.texto, linkLote: j.linkLote, contatoDisponivel: j.contatoDisponivel, telefone: j.telefone || null, telefoneErro: !!j.telefoneErro });
+        setPedidoLeiloeiroTexto({ texto: j.texto, linkLote: j.linkLote, contatoDisponivel: j.contatoDisponivel, telefone: j.telefone || null, telefoneErro: !!j.telefoneErro, chamadoId: j.chamadoId || null });
         setTextoLeiloeiro(j.texto);
         return;
       }
@@ -1106,6 +1106,7 @@ export default function Analise() {
                     : pedidoLeiloeiroTexto.telefone
                       ? 'Ainda não temos o e-mail deste leiloeiro — ajuste o texto se quiser e mande pelo WhatsApp (ou copie).'
                       : 'Ainda não temos o e-mail deste leiloeiro cadastrado — ajuste o texto se quiser e copie para enviar pelo canal de contato dele.'}
+                  {!pedidoLeiloeiroTexto.contatoDisponivel && pedidoLeiloeiroTexto.chamadoId && <span style={{ display:'block', fontWeight:500, color:'#0f766e', marginTop:4 }}>Abrimos um chamado de documentos no Atendimento: lá dá para cadastrar o contato, reenviar e anexar o que chegar.</span>}
                   {pedidoLeiloeiroTexto.telefoneErro && <span style={{ display:'block', fontWeight:500, color:'#b45309', marginTop:4 }}>Não consegui consultar o telefone do leiloeiro agora — o botão do WhatsApp volta quando você reabrir o pedido.</span>}
                 </div>
                 <textarea value={textoLeiloeiro} onChange={e => setTextoLeiloeiro(e.target.value)} rows={8} spellCheck lang="pt-BR"

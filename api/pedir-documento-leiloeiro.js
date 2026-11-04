@@ -37,6 +37,7 @@ import { contatoImovelSuperbid, fonteComContatoNaPagina } from './_contato-lote.
 import { contatosAlternativos, mensagemBloqueio } from './_contatos-alternativos.js';
 import { getAuthUser, unauthorized } from './_auth.js';
 import { enviarEmail } from './_email.js';
+import { abrirChamadoDocumentos } from './_chamado-documentos.js';
 import { checkRateLimit, rateLimitedResponse } from './_rate-limit.js';
 import { pedidoRepetido, respostaRepetido } from './_pedido-unico.js';
 
@@ -61,14 +62,18 @@ function sb(path, opts = {}) {
     headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json', ...(opts.headers || {}) },
   });
 }
+// Devolve o id do pedido gravado (o chamado de documentos se liga a ele) ou null.
 async function auditar(row) {
   try {
-    await fetch(`${SUPABASE_URL}/rest/v1/documental_pedidos_leiloeiro`, {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/documental_pedidos_leiloeiro`, {
       method: 'POST',
-      headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=representation' },
       body: JSON.stringify(row),
     });
-  } catch { /* padrao-ok: auditoria não pode derrubar a resposta ao cliente */ }
+    if (!r.ok) { console.error('[pedir-documento-leiloeiro] auditar HTTP', r.status); return null; }
+    const [g] = await r.json().catch(() => []);
+    return g?.id || null;
+  } catch (e) { console.error('[pedir-documento-leiloeiro] auditar:', String(e?.message || e).slice(0, 120)); return null; } // auditoria não pode derrubar a resposta
 }
 const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -177,7 +182,10 @@ export default async function handler(req) {
   // PASSO 1 — PREVIEW: devolve o rascunho pronto, sem mandar nada e sem gastar rate limit. O
   // front mostra num campo editável; quem usa complementa (ou não) antes de confirmar o envio.
   if (acao === 'preview') {
-    return json({ ok: true, texto: corpoTextoPuro, linkLote: linkLote || null, contatoDisponivel: !!contato?.email, telefone, telefoneErro });
+    // Sem e-mail, a tela nem oferece "enviar" (só copiar/WhatsApp) — então é AQUI que o pedido
+    // vira chamado (04/11), senão ele morre na tela de quem pediu. Um chamado aberto por lote.
+    const ch = contato?.email ? null : await abrirChamadoDocumentos({ imovelId, motivo: 'sem_contato', itens: itensTexto });
+    return json({ ok: true, texto: corpoTextoPuro, linkLote: linkLote || null, contatoDisponivel: !!contato?.email, telefone, telefoneErro, chamadoId: ch?.ok ? ch.chamadoId : null });
   }
 
   // PASSO 2 — ENVIAR: o corpo é o que o CHAMADOR mandou (o editado, se editou) — nunca
@@ -186,8 +194,11 @@ export default async function handler(req) {
   const textoFinal = String(body?.texto || '').trim().slice(0, MAX_TEXTO_EDITADO) || corpoTextoPuro;
 
   if (!contato?.email) {
-    await auditar({ imovel_id: imovelId, user_id: user.id, fonte: imovel.fonte || null, destinatario_email: null, itens_pedidos: itensTexto, texto_enviado: null, status: 'sem_contato' });
-    return json({ ok: false, semContato: true, texto: textoFinal, linkLote: linkLote || null, telefone, telefoneErro });
+    const pedidoId = await auditar({ imovel_id: imovelId, user_id: user.id, fonte: imovel.fonte || null, destinatario_email: null, itens_pedidos: itensTexto, texto_enviado: null, status: 'sem_contato' });
+    // 04/11: sem contato, o pedido não pode morrer na tela de quem pediu — vira chamado no
+    // Atendimento, onde a equipe acha o contato, reenvia e acompanha até o documento chegar.
+    const ch = await abrirChamadoDocumentos({ imovelId, pedidoId, motivo: 'sem_contato', itens: itensTexto });
+    return json({ ok: false, semContato: true, texto: textoFinal, linkLote: linkLote || null, telefone, telefoneErro, chamadoId: ch.ok ? ch.chamadoId : null });
   }
 
   // HTML a partir do texto LIVRE (editado): sem a tabela estruturada do rascunho original,

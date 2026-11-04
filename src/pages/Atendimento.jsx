@@ -488,6 +488,12 @@ export default function Atendimento() {
             <SaquesPJDoCliente key={chamadoAtivo.user_id} userId={chamadoAtivo.user_id} />
           )}
 
+          {/* Documentos do leiloeiro (04/11): o lote, o contato e as ações para resolver sem sair
+              do chamado — cadastrar contato, reenviar o pedido, anexar o que chegou por WhatsApp. */}
+          {(role === 'admin' || role === 'analista') && chamadoAtivo.tipo === 'documentos_leiloeiro' && (
+            <DocumentosLeiloeiroPainel key={chamadoAtivo.id} chamadoId={chamadoAtivo.id} encerrado={chamadoAtivo.status === 'finalizado'} />
+          )}
+
           {/* Mensagens */}
           <div style={{ padding: '20px', flex: 1, overflowY: 'auto', minHeight: 320, maxHeight: 460, display: 'flex', flexDirection: 'column', gap: 14 }}>
             {/* `[]` inicial diz "vazio confirmado" antes de o servidor responder: por um instante a
@@ -673,6 +679,161 @@ function SaquesPJDoCliente({ userId }) {
           </span>
         </div>
       ))}
+    </div>
+  );
+}
+
+// CHAMADO DE DOCUMENTOS DO LEILOEIRO (04/11, pedido do dono). O chamado nasce sozinho quando o
+// pedido automático ao leiloeiro não consegue sair (sem e-mail cadastrado, leiloeiro que não
+// responde, e-mail que falhou). Aqui a equipe resolve sem sair do chamado: cadastra o contato
+// (mesma rota do Admin, /api/leiloeiro-contato), reenvia o pedido com o reply-to que faz a
+// resposta entrar sozinha no lote, ou anexa o que chegou por WhatsApp (/api/upload-anexo, a mesma
+// rota da Análise). Quando o que foi pedido entra no lote, o BANCO encerra o chamado
+// (gatilho zz_anexo_chamado_documentos) — por qualquer caminho que o documento chegue.
+const ROTULO_DOC = { matricula: 'Matrícula', edital: 'Edital', regras_venda: 'Regras de venda', regras: 'Regras', laudo: 'Laudo' };
+const STATUS_PEDIDO = {
+  enviado: 'e-mail enviado', represado: 'na fila de envio', aguardando: 'na fila (teto semanal)',
+  sem_contato: 'sem contato', equipe_whatsapp: 'leiloeiro não responde', falha: 'e-mail falhou',
+  dispensado: 'dispensado', prazo_curto: 'leilão perto demais',
+};
+
+function DocumentosLeiloeiroPainel({ chamadoId, encerrado }) {
+  const [d, setD] = useState(null);
+  const [erro, setErro] = useState('');
+  const [ocupado, setOcupado] = useState('');
+  const [msg, setMsg] = useState(null);
+  const [email, setEmail] = useState('');
+  const [tipoAnexo, setTipoAnexo] = useState('matricula');
+
+  async function carregar() {
+    try {
+      const r = await apiCall(`/api/chamado-documentos?chamado_id=${encodeURIComponent(chamadoId)}`);
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.ok) { setErro(j.error || `HTTP ${r.status}`); return; }
+      setErro(''); setD(j);
+      if (j.faltando?.length) setTipoAnexo(j.faltando[0]);
+    } catch (e) { setErro(e.message || 'falha de rede'); }
+  }
+  useEffect(() => { carregar(); }, [chamadoId]);
+
+  async function salvarContato() {
+    const valor = email.trim();
+    if (!valor || !d?.imovel?.fonte) return;
+    setOcupado('contato'); setMsg(null);
+    try {
+      const r = await apiCall('/api/leiloeiro-contato', { method: 'POST', body: JSON.stringify({ fonte: d.imovel.fonte, email: valor }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || j?.error) throw new Error(j?.error || `HTTP ${r.status}`);
+      setEmail(''); setMsg({ ok: true, txt: `Contato salvo para ${d.imovel.fonte}. Agora é só enviar o pedido.` });
+      await carregar();
+    } catch (e) { setMsg({ ok: false, txt: 'Não consegui salvar o contato: ' + e.message }); }
+    setOcupado('');
+  }
+
+  async function acao(nome) {
+    setOcupado(nome); setMsg(null);
+    try {
+      const r = await apiCall('/api/chamado-documentos', { method: 'POST', body: JSON.stringify({ acao: nome, chamado_id: chamadoId }) });
+      const j = await r.json().catch(() => ({}));
+      setMsg({ ok: r.ok && j.ok, txt: j.mensagem || j.error || (j.ok ? 'Feito.' : `HTTP ${r.status}`) });
+      await carregar();
+    } catch (e) { setMsg({ ok: false, txt: e.message || 'falha de rede' }); }
+    setOcupado('');
+  }
+
+  async function anexar(file) {
+    if (!file || !d?.imovel?.id) return;
+    if (file.size > 20 * 1024 * 1024) { setMsg({ ok: false, txt: 'Arquivo acima de 20 MB.' }); return; }
+    setOcupado('anexo'); setMsg(null);
+    try {
+      const fd = new FormData();
+      fd.append('file', file); fd.append('imovel_id', d.imovel.id); fd.append('tipo', tipoAnexo);
+      const { data: { session } } = await supabase.auth.getSession();
+      const r = await fetch('/api/upload-anexo', { method: 'POST', headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}, body: fd });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+      // O documento entrou no lote: as análises paradas esperando por ele voltam para a fila.
+      const rr = await apiCall('/api/chamado-documentos', { method: 'POST', body: JSON.stringify({ acao: 'regerar', chamado_id: chamadoId }) });
+      const jr = await rr.json().catch(() => ({}));
+      setMsg(rr.ok && jr.ok
+        ? { ok: true, txt: `${ROTULO_DOC[tipoAnexo]} anexada ao lote.${jr.analises ? ` ${jr.analises} análise(s) serão geradas de novo.` : ''}` }
+        : { ok: false, txt: `${ROTULO_DOC[tipoAnexo]} anexada, mas não consegui pôr as análises para gerar de novo: ${jr.error || `HTTP ${rr.status}`}` });
+      await carregar();
+    } catch (e) { setMsg({ ok: false, txt: 'Não consegui anexar: ' + e.message }); }
+    setOcupado('');
+  }
+
+  const box = { padding: '12px 20px', background: '#f0f9ff', borderBottom: '1px solid #bae6fd', fontSize: 12.5, color: '#0c4a6e' };
+  if (erro) return <div style={{ ...box, background: '#fffbeb', borderColor: '#fde68a', color: '#b45309' }}>Não consegui ler o lote deste chamado: {erro}</div>;
+  if (!d) return <div style={box}>Carregando o lote…</div>;
+
+  const im = d.imovel;
+  const contatoErro = d.contato?.erro;
+  const temEmail = !!d.contato?.email;
+  const btn = (cor, extra = {}) => ({ padding: '6px 12px', background: cor, color: 'white', border: 'none', borderRadius: 7, fontWeight: 700, fontSize: 12, cursor: ocupado ? 'default' : 'pointer', opacity: ocupado ? 0.6 : 1, ...extra });
+  return (
+    <div style={box}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 6 }}>
+        <b style={{ fontSize: 13 }}>📄 {im.titulo || 'Lote'}</b>
+        <span style={{ color: '#475569' }}>{[im.cidade, im.estado].filter(Boolean).join('/')} · {im.leiloeiro || im.fonte}</span>
+        <a href={`#/analise?imovel=${im.id}`} style={{ color: '#0D63DB', fontWeight: 700 }}>Abrir análise</a>
+        {im.url_lote && <a href={im.url_lote} target="_blank" rel="noopener noreferrer" style={{ color: '#0D63DB', fontWeight: 700 }}>Página do leiloeiro ↗</a>}
+      </div>
+
+      <div style={{ marginBottom: 6 }}>
+        {d.faltando.length
+          ? <>Falta no lote: <b>{d.faltando.map(t => ROTULO_DOC[t]).join(' e ')}</b></>
+          : <span style={{ color: '#166534', fontWeight: 700 }}>Matrícula e edital já estão no lote.</span>}
+        {d.anexos?.length > 0 && <span style={{ color: '#475569' }}> · no lote: {[...new Set(d.anexos.map(a => ROTULO_DOC[a.tipo] || a.tipo))].join(', ')}</span>}
+      </div>
+
+      {!encerrado && d.faltando.length > 0 && (
+        <div style={{ display: 'grid', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span>Contato:</span>
+            {contatoErro ? <span style={{ color: '#b45309' }}>não consegui consultar ({contatoErro})</span>
+              : temEmail ? <b>{d.contato.email}</b>
+              : <span style={{ color: '#b45309', fontWeight: 700 }}>sem e-mail cadastrado</span>}
+            {d.telefone?.numero && (
+              <a href={`https://wa.me/${d.telefone.numero}`} target="_blank" rel="noopener noreferrer" style={{ color: '#15803d', fontWeight: 700 }}>
+                {d.telefone.whatsapp ? 'WhatsApp' : 'Telefone'} +{d.telefone.numero}
+              </a>
+            )}
+          </div>
+          {!temEmail && !contatoErro && (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder={`e-mail do leiloeiro (${im.fonte})`}
+                style={{ flex: '1 1 220px', padding: '6px 10px', borderRadius: 7, border: '1px solid #cbd5e1', fontSize: 12 }} />
+              <button onClick={salvarContato} disabled={!!ocupado || !email.trim()} style={btn('#0f766e')}>{ocupado === 'contato' ? 'Salvando…' : 'Salvar contato'}</button>
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <button onClick={() => acao('enviar')} disabled={!!ocupado || !temEmail} title={temEmail ? '' : 'Cadastre o e-mail do leiloeiro primeiro'}
+              style={btn(temEmail ? '#0D63DB' : '#94a3b8')}>{ocupado === 'enviar' ? 'Enviando…' : '✉️ Enviar pedido ao leiloeiro'}</button>
+            <span style={{ color: '#64748b' }}>ou anexe o que chegou:</span>
+            <select value={tipoAnexo} onChange={e => setTipoAnexo(e.target.value)} style={{ padding: '5px 8px', borderRadius: 7, border: '1px solid #cbd5e1', fontSize: 12 }}>
+              <option value="matricula">Matrícula</option>
+              <option value="edital">Edital</option>
+              <option value="regras_venda">Regras de venda</option>
+            </select>
+            <label style={{ ...btn('#475569'), display: 'inline-block' }}>
+              {ocupado === 'anexo' ? 'Anexando…' : '📎 Anexar arquivo'}
+              <input type="file" accept={ACEITA_DOCUMENTO} disabled={!!ocupado} style={{ display: 'none' }}
+                onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; anexar(f); }} />
+            </label>
+          </div>
+        </div>
+      )}
+
+      {msg && <div style={{ marginTop: 8, fontWeight: 600, color: msg.ok ? '#166534' : '#b91c1c' }}>{msg.txt}</div>}
+
+      {d.pedidos?.length > 0 && (
+        <div style={{ marginTop: 8, color: '#475569', fontSize: 11.5 }}>
+          Pedidos: {d.pedidos.slice(0, 5).map(p => (
+            `${new Date(p.criado_em).toLocaleDateString('pt-BR')} ${STATUS_PEDIDO[p.status] || p.status}${p.respondido_em ? ' · respondido' : ''}`
+          )).join(' · ')}
+        </div>
+      )}
     </div>
   );
 }
