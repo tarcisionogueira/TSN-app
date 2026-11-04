@@ -39358,3 +39358,11 @@ inspecionada por agente/Playwright), não código nosso; ruído.
 com Combo grátis), #317 (sinal "aprendido" de veículos nunca nasce), #318 (menores). #298 fechada.
 **Ainda abertas comigo:** #311 (nenhum disparo da captura CEF pelo servidor desde o token novo — aguarda caso real),
 #280 (rodada de veículos do scraper-dom, junto da #315), #305 amanhã.
+
+## 04/11 — Mercadológico ignorava a rua da descrição e a condição de pagamento do anúncio (Campinas/SUPERBID 2af9c54c)
+Queixa do dono: o relatório não lia matrícula/edital para metragem, endereço, pagamento e débitos. Medido no log da geração (10:22 UTC):
+- **Matrícula:** `[matricula-extrato] nenhum candidato` — a Superbid publica só o NÚMERO (148217) e "Área Total: 139,0 m²" no texto, sem PDF. Os 139 m² são área TOTAL; a trava `mercado_area_incoerente` acertou ao ancorar na avaliação. Sem matrícula não há privativa — pendência #405 (767 lotes SUPERBID com nº de matrícula na descrição e `numero_matricula` nulo).
+- **Endereço:** `[endereco-busca] rua:false` com "Endereço Completo RUA PRESBÍTERO SIGMUNDO SIMBERG,55 … CEP 13067-790" na descrição. A rua só vinha do card ou de texto de cartório. **Corrigido:** `enderecoDoTexto` (movido para `api/_endereco-do-texto.js`; `scripts/lib` reexporta) entra quando o card não tem rua, e grava `endereco`/`cep` no acervo só onde estão vazios.
+- **Pagamento:** o edital (regras genéricas do Banco Inter) dava `{aVista, fgts, comissão 4%}` sem números, e o título dizia "Entrada de 30% + Saldo em 240x". Dois defeitos: (a) `resolverPagamentoDoc` escolhia o PRIMEIRO objeto inteiro — agora a cascata é **por campo**; (b) `condicoesEdital.regrasPagamento` nunca consultava o título quando havia edital — agora o anúncio completa só os campos que o documento não afirmou (`regrasOrigem: 'edital+anuncio'`). 240x cai na regra de financiamento de `aplicarCondicoesEdital` (juros do sistema, não confirmada).
+- **Débitos:** o edital não lista débito; nada a extrair neste lote.
+Abertura também achou 6 fontes zeradas (HAMMERLEIL 302, HASTA 244, …) — pendência #404.

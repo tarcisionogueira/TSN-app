@@ -37,6 +37,7 @@ import { comCascataBusca } from './_busca-modelo.js';
 import { somaAreasMultiBem, avaliacaoAtualizadaDoTexto } from './_texto-imovel.js';
 import { normalizarTipo } from './_tipo.js';
 import { extrairEnderecoMatricula } from './_registro-matricula.js';
+import { enderecoDoTexto } from './_endereco-do-texto.js';
 import { docsManuaisSaneados } from './_docs-manuais.js';
 import { dataLeilaoIso } from './_data-br.js';
 import { pedidoRepetido, CORPO_REPETIDO } from './_pedido-unico.js';
@@ -2314,6 +2315,25 @@ export default async function handler(req, res) {
       // comparáveis usa o endereço certo mas o contexto demográfico/FipeZAP/socio continua
       // pedindo dado da cidade ERRADA, os dois desalinhados no mesmo relatório.
       if (cidFinal !== cid) mercadoInputs.cidade = cidFinal;
+      // RUA QUE ESTÁ NA DESCRIÇÃO DO PRÓPRIO LOTE (04/11, Campinas/SUPERBID 2af9c54c): o card veio com
+      // `endereco` vazio e a descrição dizia "Endereço Completo RUA PRESBÍTERO SIGMUNDO SIMBERG,55,APTO 107
+      // … CEP: 13067-790". O relatório buscou comparáveis por "Parque das Constelações" (`rua:false`) — a
+      // rua só era lida do card ou de texto de cartório ("situado na…"), e anúncio não escreve assim. Mesma
+      // régua (com as travas de rua vizinha/leiloeiro/outro município) do backfill endereco-da-descricao.
+      // Grava no acervo só onde está vazio, para a próxima geração e o geocodificador já partirem dela.
+      if (!rua) {
+        const doTexto = enderecoDoTexto(`${imA.titulo || ''}. ${imA.descricao || ''}`, cidFinal);
+        if (doTexto?.endereco) {
+          rua = doTexto.endereco;
+          const patchEnd = { endereco: rua.slice(0, 200) };
+          if (doTexto.cep) patchEnd.cep = doTexto.cep;
+          try {
+            const rEnd = await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&or=(endereco.is.null,endereco.eq.)`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify(patchEnd) });
+            if (!rEnd.ok) console.warn('[endereco-descricao] gravar falhou', rEnd.status);
+          } catch (e) { console.warn('[endereco-descricao] gravar falhou', e?.message); }
+        }
+        console.log('[endereco-descricao]', JSON.stringify({ imovel: String(imovelId), achou: doTexto?.endereco || null, cep: doTexto?.cep || null, motivo: doTexto?.motivo || null }));
+      }
       const partes = [rua, bairro, cidFinal].filter(Boolean);
       if (rua || bairro) mercadoInputs.endereco = partes.join(', ') + (est ? `/${est}` : '');
       if (!mercadoInputs.nomeCondominio && imA.nomecondominio) mercadoInputs.nomeCondominio = imA.nomecondominio;
@@ -3376,6 +3396,26 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
               regrasOrigem: 'documental', regrasTexto: formaTxt.slice(0, 400) };
           }
         } catch (e) { console.warn('[analise] condições do documental:', e?.message); }
+      }
+    }
+    // CONDIÇÃO ANUNCIADA PELO VENDEDOR (04/11, Campinas/SUPERBID 2af9c54c): o título dizia "Entrada de 30% +
+    // Saldo em 240x" e o edital (regras genéricas do Banco Inter) só "à vista ou financiado com o vendedor",
+    // sem números. Como o edital EXISTIA, `regrasPagamento` = {aVista, fgts, comissão} e a projeção saiu 100%
+    // à vista no mês 0 — o título nunca era consultado neste caminho. Completa SÓ os campos que o documento
+    // não disse (o edital continua mandando no que afirma); 240x cai na regra de financiamento de
+    // `aplicarCondicoesEdital` (juros do sistema, condição não confirmada).
+    {
+      const rpAtual = mercado.condicoesEdital?.regrasPagamento;
+      const semParcela = !rpAtual || !(Number(rpAtual.parcelas) >= 2 || Number(rpAtual.sinalPct) > 0);
+      const txtAnuncio = String(imDb?.titulo || '');
+      const doAnuncio = semParcela && txtAnuncio ? extrairPagamentoTexto(txtAnuncio) : null;
+      if (doAnuncio && (Number(doAnuncio.parcelas) >= 2 || Number(doAnuncio.sinalPct) > 0) && rpAtual?.parcelamentoPermitido !== false) {
+        const preencher = Object.fromEntries(Object.entries(doAnuncio).filter(([k, v]) => v !== null && (rpAtual?.[k] ?? null) === null));
+        mercado.condicoesEdital = { ...(mercado.condicoesEdital || {}),
+          regrasPagamento: { ...(rpAtual || {}), ...preencher, ...(Number(doAnuncio.parcelas) >= 2 ? { parcelamentoPermitido: true } : {}) },
+          regrasOrigem: mercado.condicoesEdital?.regrasOrigem || (rpAtual ? 'edital+anuncio' : 'anuncio'),
+          regrasTexto: mercado.condicoesEdital?.regrasTexto || txtAnuncio.slice(0, 400) };
+        console.log('[pagamento-anuncio]', JSON.stringify({ imovel: String(imovelId), preencheu: Object.keys(preencher) }));
       }
     }
     // EDITAL NÃO LIDO (escaneado/judicial/sem PDF): herda o CONSENSO aprendido do

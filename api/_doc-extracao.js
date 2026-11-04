@@ -203,10 +203,15 @@ export function resolverPagamentoDoc({ docFatos, fichaCef, titulo, regrasPagamen
   const fcFin = String(fc.financiamento ?? '') === 'true' || fc.financiamento === true;
   const fcFgts = String(fc.fgts ?? '') === 'true' || fc.fgts === true;
   const pagCef = (fcFin || fcFgts) ? { financiavel: fcFin || null, fgts: fcFgts || null, origem: 'ficha_cef' } : null;
-  return docFatos
-    || regrasPagamentoEdital
-    || pagCef
-    || (titulo ? { ...(extrairPagamentoTexto(String(titulo)) || {}), origem: 'titulo' } : null);
+  // CASCATA POR CAMPO, não por objeto (04/11): o primeiro objeto não-nulo vencia INTEIRO. Edital que só
+  // dizia {aVista, fgts, comissão} apagava o "Entrada de 30% + 240x" do título — e a fonte mais forte
+  // nem tinha falado de parcelas. Agora cada campo vem da fonte mais forte que o AFIRMA.
+  const camadas = [docFatos, regrasPagamentoEdital, pagCef,
+    titulo ? { ...(extrairPagamentoTexto(String(titulo)) || {}), origem: 'titulo' } : null].filter((c) => c && typeof c === 'object');
+  if (!camadas.length) return null;
+  const out = {};
+  camadas.forEach((c, i) => { for (const [k, v] of Object.entries(c)) if (v !== null && v !== undefined && out[k] === undefined && (k !== 'origem' || i === 0)) out[k] = v; });
+  return Object.keys(out).length ? out : null;
 }
 
 /**
