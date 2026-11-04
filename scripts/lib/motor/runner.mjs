@@ -273,15 +273,22 @@ export function planejarAlvo({ urls, meta, chaveDe, maxLotes, maxRefresh, recusa
   };
 }
 
-async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debug, semBD, dryrun = true }) {
+export async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debug, semBD, dryrun = true }) {
   const enumerado = await enumerar(fetchFonte, tenant, cfg, { maxPages: cfg.maxPages, debug, semBD });
   const { fetchOk, via, eventosCount, vazioDeclarado } = enumerado;
   // FILTRO OPCIONAL POR URL (30/09, NORDESTE): quando a URL já diz que o lote não é imóvel, ele sai
   // ANTES de gastar uma das `maxLotes` leituras de detalhe. Sem o gancho, nada muda.
-  const urls = cfg.parse.urlCandidata ? enumerado.urls.filter(cfg.parse.urlCandidata) : enumerado.urls;
+  const urlsFiltradas = cfg.parse.urlCandidata ? enumerado.urls.filter(cfg.parse.urlCandidata) : enumerado.urls;
+  // LOTE JÁ LIDO NA LISTAGEM PRIMEIRO (04/11, LEJE): o detalhe de evento de lote único sai de graça do catálogo
+  // (`detCatalogo`), mas a fila seguia a ordem da home — os primeiros eram de eventos com vários lotes, que pagam
+  // página. Ordem estável: só puxa os gratuitos para a frente, o resto fica como estava.
+  const urls = enumerado.detCatalogo?.size
+    ? [...urlsFiltradas.filter((u) => enumerado.detCatalogo.has(u)), ...urlsFiltradas.filter((u) => !enumerado.detCatalogo.has(u))]
+    : urlsFiltradas;
   const foraPelaUrl = enumerado.urls.length - urls.length;
   console.log(`[${tenant.fonte}] enumerados ${enumerado.urls.length} lote(s)${via ? ` (via ${via})` : ''}${foraPelaUrl ? ` · ${foraPelaUrl} fora pela URL (não é imóvel) · ${urls.length} candidatos` : ''}`);
   const prontos = []; let encerrados = 0, sem = 0, reprov = 0, cotaNegada = 0, relidos = 0, naoImovel = 0;
+  let orcamentoEsgotado = false;
   // Motivo de cada "sem detalhe" (23/10): o motor devolve o porquê no `via` e o runner o descartava —
   // LEILAOELETRONICO deu 118 de 118 sem detalhe duas vezes sem dizer se foi 403, timeout ou banco.
   const motivosSem = new Map();
@@ -336,6 +343,9 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
       if (pararReleitura && i >= iReleitura) break;
       const url = alvo[i];
       const detPronto = enumerado.detCatalogo?.get(url);
+      // Orçamento já recusou um lote: o que exige página paga fica para a próxima rodada, mas o que veio
+      // pronto da listagem continua sendo gravado (04/11 — antes o `break` jogava fora até o gratuito).
+      if (orcamentoEsgotado && !detPronto) { cotaNegada++; continue; }
       const r = detPronto ? { html: null, via: 'catalogo' } : await fetchFonte(url, { semBD });
       // A releitura é um EXTRA que só existe enquanto for grátis: no primeiro detalhe que vier
       // pela via paga, para. Sem isto, a folga do orçamento viraria gasto de Bright Data em
@@ -355,9 +365,10 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
       // detalhe caia no caminho pago. Recusou uma, recusa as próximas: para aqui e conta o
       // que ficou por buscar — o número honesto não é "a fonte tem 9", é "vi 9 de 40".
       if (r?.semCota) {
-        cotaNegada = alvo.length - i;
-        console.log(`💰 [${tenant.fonte}] teto de orçamento no lote ${i + 1}/${alvo.length} — ${cotaNegada} por buscar. NÃO é regressão da fonte.`);
-        break;
+        orcamentoEsgotado = true; cotaNegada++;
+        const gratis = alvo.slice(i + 1).filter((u) => enumerado.detCatalogo?.has(u)).length;
+        console.log(`💰 [${tenant.fonte}] teto de orçamento no lote ${i + 1}/${alvo.length} — os que pedem página ficam para a próxima rodada${gratis ? `; ${gratis} já lido(s) na listagem seguem` : ''}. NÃO é regressão da fonte.`);
+        continue;
       }
       const html = r?.html;
       if (!html && !detPronto) { sem++; contarSem(r?.via); continue; }

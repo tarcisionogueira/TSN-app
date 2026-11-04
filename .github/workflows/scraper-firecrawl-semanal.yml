@@ -53,7 +53,10 @@ jobs:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
-          FIRECRAWL_MAX_PAGINAS: '40'
+          # 04/11: 40 era o custo SÓ da listagem (1 página por evento, ~40 eventos no ar) — não sobrava nada para os
+          # lotes e toda rodada desde 30/10 gravou 0. 110 = ~40 de listagem + ~65 lotes novos; ~440 créditos/mês,
+          # dentro do plano pago de 5.000 (o helper ainda limita à fatia da semana do saldo real).
+          FIRECRAWL_MAX_PAGINAS: '110'
           LEJE_DRYRUN: ${{ env.DRYRUN_PADRAO }}
         run: node scripts/scraper-leje.mjs
 
