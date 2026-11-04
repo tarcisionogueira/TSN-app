@@ -365,7 +365,7 @@ export default function Landing() {
                     style={{ flex: mobile ? '0 0 80%' : undefined, scrollSnapAlign: 'start', minWidth: 0, background: 'white', borderRadius: 18, border: '1px solid #e2e8f0', overflow: 'hidden', textDecoration: 'none', color: '#0f172a', display: 'flex', flexDirection: 'column', boxShadow: '0 4px 16px rgba(15,23,42,0.06)' }}>
                     <div style={{ position: 'relative', paddingTop: '62%', background: '#e2e8f0' }}>
                       {l.foto && (
-                        <img src={l.foto} alt={`${TIPO_LABEL[l.tipo] || 'Imóvel'} em ${l.cidade}`} loading="lazy"
+                        <img referrerPolicy="no-referrer" src={l.foto} alt={`${TIPO_LABEL[l.tipo] || 'Imóvel'} em ${l.cidade}`} loading="lazy"
                           onError={(e) => { e.currentTarget.style.display = 'none'; }}
                           style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
                       )}

@@ -256,7 +256,7 @@ function LazyImage({ src, alt, style, semFoto = 'Leiloeiro não divulgou foto' }
   return (
     <div ref={ref} style={{ ...style, background:'#f1f5f9', overflow:'hidden', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center' }}>
       {visible && atual
-        ? <img src={atual} alt={alt} loading="lazy"
+        ? <img referrerPolicy="no-referrer" src={atual} alt={alt} loading="lazy"
             style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }}
             onError={() => setIdx(i => i + 1)}
           />
@@ -597,7 +597,7 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
               const cands = fotoCandidatos({ foto: im.link_foto, fonte: im.fonte, fonteId: im.fonte_id });
               if (!cands.length) return '';
               const resto = JSON.stringify(cands.slice(1)).replace(/'/g, '&#39;');
-              return `<img src="${escHtml(cands[0])}" data-cands='${resto}' onerror="(function(el){try{var c=JSON.parse(el.getAttribute('data-cands')||'[]');if(c.length){el.setAttribute('data-cands',JSON.stringify(c.slice(1)));el.src=c[0];}else{el.style.display='none';}}catch(e){el.style.display='none';}})(this)" style="width:100%;height:100px;object-fit:cover;border-radius:6px;margin-bottom:8px;display:block"/>`;
+              return `<img referrerpolicy="no-referrer" src="${escHtml(cands[0])}" data-cands='${resto}' onerror="(function(el){try{var c=JSON.parse(el.getAttribute('data-cands')||'[]');if(c.length){el.setAttribute('data-cands',JSON.stringify(c.slice(1)));el.src=c[0];}else{el.style.display='none';}}catch(e){el.style.display='none';}})(this)" style="width:100%;height:100px;object-fit:cover;border-radius:6px;margin-bottom:8px;display:block"/>`;
             })()}
             <div style="font-weight:700;font-size:12px;color:#111;margin-bottom:3px;line-height:1.3">${escHtml(im.titulo || 'Imóvel')}</div>
             <div style="font-size:11px;color:#64748b;margin-bottom:6px">📍 ${escHtml(im.cidade)}, ${escHtml(im.estado)}</div>

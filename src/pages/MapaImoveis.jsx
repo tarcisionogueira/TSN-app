@@ -130,7 +130,7 @@ export default function MapaImoveis() {
         marker.bindPopup(`
           <div style="font-family:Inter,sans-serif;min-width:200px">
             ${_fotoSrc
-              ? `<img src="${_fotoSrc}" data-proxy="${_fotoProxy}" style="width:100%;height:100px;object-fit:cover;border-radius:6px;margin-bottom:8px" onerror="if(this.dataset.proxy){this.src=this.dataset.proxy;this.dataset.proxy='';}else{this.style.display='none';}"/>`
+              ? `<img referrerpolicy="no-referrer" src="${_fotoSrc}" data-proxy="${_fotoProxy}" style="width:100%;height:100px;object-fit:cover;border-radius:6px;margin-bottom:8px" onerror="if(this.dataset.proxy){this.src=this.dataset.proxy;this.dataset.proxy='';}else{this.style.display='none';}"/>`
               : ''}
             <div style="font-weight:700;font-size:13px;color:#111;margin-bottom:4px">${im.titulo || 'Imóvel'}</div>
             <div style="font-size:12px;color:#64748b;margin-bottom:6px">${im.cidade || ''} — ${im.estado || ''}</div>

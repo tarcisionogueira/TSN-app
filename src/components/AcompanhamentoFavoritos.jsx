@@ -80,7 +80,7 @@ export default function AcompanhamentoFavoritos({ tipo = null } = {}) {
               <div key={`${f.tipo}-${f.itemId}`} onClick={() => abrir(f)}
                 style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', border: '1px solid #f1f5f9', borderRadius: 12, cursor: 'pointer', background: '#fcfcfd' }}>
                 <div style={{ width: 52, height: 52, borderRadius: 9, overflow: 'hidden', flexShrink: 0, background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  {f.foto ? <img src={f.foto} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.currentTarget.style.display = 'none'; }} /> : <Tipo size={20} color="#94a3b8" />}
+                  {f.foto ? <img referrerPolicy="no-referrer" src={f.foto} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.currentTarget.style.display = 'none'; }} /> : <Tipo size={20} color="#94a3b8" />}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13.5, fontWeight: 800, color: '#111', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.titulo || (f.tipo === 'veiculo' ? 'Veículo' : 'Imóvel')}</div>

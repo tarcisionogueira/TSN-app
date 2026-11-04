@@ -355,7 +355,7 @@ export default function VeiculoDetalhe() {
                 ? <span style={{ fontSize: 13, color: '#64748b', padding: 16, textAlign: 'center' }}>Não foi possível carregar a foto {fotoAtiva + 1}. Tente a próxima.</span>
                 : (() => {
                     const src = fotoOriginal === fotoAtiva ? fotos[fotoAtiva] : fotoReduzida(fotos[fotoAtiva], 800);
-                    return <img key={src} src={src} alt={`${v.titulo || 'Veículo'} — foto ${fotoAtiva + 1}`}
+                    return <img referrerPolicy="no-referrer" key={src} src={src} alt={`${v.titulo || 'Veículo'} — foto ${fotoAtiva + 1}`}
                       onError={() => (src !== fotos[fotoAtiva] ? setFotoOriginal(fotoAtiva) : setFotoFalhou(fotoAtiva))}
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }} />;
                   })())
@@ -381,7 +381,7 @@ export default function VeiculoDetalhe() {
               {fotos.map((f, i) => (
                 <button key={i} onClick={() => setFotoAtiva(i)}
                   style={{ flexShrink: 0, width: 56, height: 56, borderRadius: 8, overflow: 'hidden', border: i === fotoAtiva ? '2px solid #0D63DB' : '1px solid #e2e8f0', padding: 0, cursor: 'pointer', background: 'none' }}>
-                  <img src={fotoReduzida(f, 240)} alt="" loading="lazy"
+                  <img referrerPolicy="no-referrer" src={fotoReduzida(f, 240)} alt="" loading="lazy"
                     onError={(e) => { if (e.currentTarget.src !== f && !e.currentTarget.dataset.orig) { e.currentTarget.dataset.orig = '1'; e.currentTarget.src = f; } }}
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 </button>

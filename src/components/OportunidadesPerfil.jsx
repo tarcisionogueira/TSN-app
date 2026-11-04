@@ -52,7 +52,7 @@ export default function OportunidadesPerfil({ cliente }) {
           background: 'white', border: '1px solid #e9d5ff', borderRadius: 10, padding: 8, marginBottom: 6,
         }}>
           {o.foto
-            ? <img src={o.foto} alt="" loading="lazy" style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 8, flexShrink: 0 }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+            ? <img referrerPolicy="no-referrer" src={o.foto} alt="" loading="lazy" style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 8, flexShrink: 0 }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
             : <div style={{ width: 56, height: 56, borderRadius: 8, background: '#f1f5f9', flexShrink: 0 }} />}
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: '#111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.titulo || o.tipo}</div>

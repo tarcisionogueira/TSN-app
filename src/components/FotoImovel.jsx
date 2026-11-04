@@ -22,7 +22,7 @@ export default function FotoImovel({ imovel, imovelId, iconSize = 22, imgStyle }
   const src = cands[idx] || null;
   if (!src) return <Building2 size={iconSize} color="#cbd5e1" />;
   return (
-    <img
+    <img referrerPolicy="no-referrer"
       src={src}
       alt=""
       style={imgStyle || { width: '100%', height: '100%', objectFit: 'cover' }}

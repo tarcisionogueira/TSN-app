@@ -115,7 +115,7 @@ export default function ImovelGate() {
         <div>
           <div style={{ width: '100%', aspectRatio: '4/3', borderRadius: 14, overflow: 'hidden', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             {fotoPrincipal
-              ? <img src={fotoPrincipal} alt={im.titulo || ''} onError={() => (galeria.length > 1 ? null : setImgIdx((i) => i + 1))} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ? <img referrerPolicy="no-referrer" src={fotoPrincipal} alt={im.titulo || ''} onError={() => (galeria.length > 1 ? null : setImgIdx((i) => i + 1))} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               : <Home size={48} color="#cbd5e1" />}
           </div>
           {galeria.length > 1 && (

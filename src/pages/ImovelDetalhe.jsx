@@ -320,7 +320,7 @@ function ImoveisSimilares({ imovel, nav }) {
               <div style={{ height: 110, background: '#f1f5f9', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>Sem foto</span>
                 {cands.length > 0 && (
-                  <img src={cands[0]} data-idx="0" alt="" loading="lazy"
+                  <img referrerPolicy="no-referrer" src={cands[0]} data-idx="0" alt="" loading="lazy"
                     style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
                     onError={e => {
                       const el = e.currentTarget;
@@ -1585,7 +1585,7 @@ export default function ImovelDetalhe() {
             {/* Foto + badges */}
             <div style={{ borderRadius: 16, overflow: 'hidden', position: 'relative', background: '#111111', minHeight: 260 }}>
               {imgDetalheSrc ? (
-                <img src={imgDetalheSrc} alt={imovel.titulo} onError={() => setImgIdx(i => i + 1)}
+                <img referrerPolicy="no-referrer" src={imgDetalheSrc} alt={imovel.titulo} onError={() => setImgIdx(i => i + 1)}
                   style={{ width: '100%', height: 320, objectFit: 'cover', display: 'block' }} />
               ) : (
                 <div style={{ height: 260, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 8, color: '#475569' }}>
@@ -1622,7 +1622,7 @@ export default function ImovelDetalhe() {
                       border: i === fotoAtivaIdx ? '2px solid #0D63DB' : '2px solid transparent',
                       opacity: i === fotoAtivaIdx ? 1 : 0.7, background: '#f1f5f9',
                     }}>
-                    <img src={fotoReduzidaSePesada(url, 240) || url} alt={`Foto ${i + 1}`} loading="lazy"
+                    <img referrerPolicy="no-referrer" src={fotoReduzidaSePesada(url, 240) || url} alt={`Foto ${i + 1}`} loading="lazy"
                       style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                       onError={e => {
                         // miniatura reduzida falhou → tenta o original antes de esconder

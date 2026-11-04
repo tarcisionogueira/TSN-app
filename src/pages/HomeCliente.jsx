@@ -503,7 +503,7 @@ export default function HomeCliente() {
                     <button key={l.id} onClick={() => abrirLote(l, i + 1)}
                       style={{ display: 'flex', flexDirection: 'column', padding: 0, background: 'white', border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden', cursor: 'pointer', textAlign: 'left' }}>
                       <div style={{ position: 'relative', width: '100%', aspectRatio: '16/10', background: '#f1f5f9' }}>
-                        {l.foto && <img src={l.foto} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />}
+                        {l.foto && <img referrerPolicy="no-referrer" src={l.foto} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />}
                         {Number(l.desconto_pct) > 0 && (
                           <span style={{ position: 'absolute', top: 8, right: 8, background: '#16a34a', color: 'white', fontWeight: 900, fontSize: 12, padding: '2px 7px', borderRadius: 7 }}>-{l.desconto_pct}%</span>
                         )}

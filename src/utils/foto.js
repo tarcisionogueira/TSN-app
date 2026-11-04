@@ -1,3 +1,8 @@
+// SEM REFERER (04/11, casa do Alphaville Residencial 6 / Taba Leilões): o CDN do leiloeiro (Cloudflare,
+// plataforma Degrau) devolve a foto com 200 quando o pedido vem SEM Referer e bloqueia quando vem com o
+// nosso domínio — no celular a página mostrava só o "?" de imagem quebrada. Toda <img> de foto de leiloeiro
+// leva `referrerPolicy="no-referrer"` (JSX) / `referrerpolicy="no-referrer"` (HTML montado em string, como
+// api/publico.js). Ao criar <img> nova de foto de lote, ponha o atributo.
 // Candidatos de foto de um imóvel, em ordem de preferência. ÚNICO lugar dessa
 // regra — a Busca e os cards de "imóveis semelhantes" mantinham cópias que
 // divergiram: a dos similares ignorava o link_foto do CEF e construía uma URL
