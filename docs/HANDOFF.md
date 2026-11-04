@@ -6,6 +6,38 @@
 
 
 
+## 04/11 — "QUEDA GRANDE DE CARROS" (dono): sucata de propósito + SODRÉ lendo 0 de 1.126
+
+- **Contador da landing 11.795 (29/10) → 9.096 (02/11); 8.829 ativos em 04/11.** Medido por motivo de desligamento
+  nos 10 dias: ~2.050 `sucata` (a decisão do dono de 30/10, gatilho `trg_zz_veiculo_fora_do_acervo`; amostra de 10
+  conferida — todas "sucata aproveitável/inservível" na descrição), ~2.900 leilão vencido (retenção normal), 145
+  gêmeos, 55 não-veículo. Superbid desligado SEM motivo antes da data: amostra de 8 na API pública → 6 `total: 0` ou
+  `removed`, 2 carroceria/cabine (não-veículo). Ou seja: Superbid está certo.
+- **O defeito real era o SODRÉ: 3 ativos (todos vencidos) contra 1.126 no site.** O site passou a disparar antes duas
+  buscas de CONTAGEM (`size: 0`, só `aggs`) e o coletor guardava a 1ª POST de `/api/search-lots` como modelo de
+  paginação — paginava um corpo que nunca devolve lote e ficava com os 48 do 1º card. E paginava por `page/perPage`,
+  que o Elasticsearch ignora: o certo é `from/size`. Conserto: `escolherReqListagemSodre` (fica a busca com
+  `size > 0`) + paginação `from/size`, nos dois coletores (imóveis e veículos). Em seco com o site real: **943
+  abertos** lidos de 1.126. Imóveis do Sodré não tinham o problema (22 no site, 23 ativos).
+- **Ainda a olhar:** FREITAS 1.007 ativos e TODOS com data vencida; PESTANA 861 de 1.060 — estão inflando o contador
+  (a retenção de 15 dias só tira depois da apuração). Não mexi.
+
+## 04/11 — LEILOEIROS QUE FALTAVAM: 5 ENTRAM, 3 PEDEM LEITOR, 2 AGUARDAM DECISÃO
+
+- **Entram (dry-run com dado real, sem gravar):** TENLEILAO 15 · LEILAOINVESTMENT 2 (SOLEON, credenciados TJSP
+  nunca triados) · LEILAONET 22 · POSITIVOLEIL 13 (Degrau) · LEILOESANAPOLIS 2 (Roisoft).
+- **LeilãoNet e Positivo só pelo runner residencial:** o `/sitemap.xml` dá 400 ao pg_net e 200 do IP do dono. Flag
+  `soResidencial` no tenant tira os dois da rodada padrão do GitHub; o runner pede pelo nome
+  (`DEGRAU_RESIDENCIAL`). Linha em `coleta_cliente` (72 h) aplicada — sem ela o gate pula para sempre (exit 6).
+- **Anápolis "devolvia HTML" na triagem** porque o teste era GET sem `X-Requested-With`; o POST do transporte já
+  devolve o JSON. Forma nº 10: o instrumento da triagem media outra requisição.
+- **Pedem leitor novo:** Kwara (26, Next.js marketplace), Lunelli (12 abertos de 46 listados), Marcus Vinícius (~7, MG).
+  Erico Sobral (3, Leilão VIP white-label) não vale leitor.
+- **Decisão do dono:** Coimbra (17 lotes) e Big Leilão são SPA sobre Supabase. Ler a API pública com a chave publicada
+  no site foi barrado pelo classificador de permissão; alternativa é navegador headless no runner residencial.
+- **Descartados:** DNS morto (Cruzeiro, Ícaro, Marchioro, NetEditais, Valle, Tassiana) · Arremax 522 · Startup
+  (Cloudflare) · innlei (federação, não leiloeiro).
+
 ## 03/11 — VALOR DE MERCADO SEM ÁREA NÃO É VALOR (análise a3ce7044, sala comercial em BH)
 
 - **Causa:** `gerar-analise.js` aceitava `mercado.consolidado.valorEstimadoImovel` da IA sem conferir a área. Sala sem

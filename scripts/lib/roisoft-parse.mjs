@@ -28,6 +28,9 @@ export const TENANTS = {
   teleselima: t('TELESELIMA', 'Teles & Lima Leilões', 'teleselimaleiloes.com.br'),
   triade: t('TRIADELEILOES', 'Tríade Leilões', 'triadeleiloes.com.br'),
   ubaldo: t('UBALDOLEILOES', 'Ubaldo Leilões', 'ubaldoleiloes.com.br'),
+  // 04/11: o mesmo POST de catálogo (com Accept/X-Requested-With, como o transporte já manda) devolve o JSON da
+  // plataforma — o "devolve HTML" da triagem era o GET sem esses cabeçalhos. 2 imóveis no catálogo em 04/11.
+  anapolis: t('LEILOESANAPOLIS', 'Leilões Anápolis', 'leiloesanapolis.com.br'),
 };
 
 /** JSON do catálogo → { total, porPagina, dados }; null se não for o JSON da plataforma. */

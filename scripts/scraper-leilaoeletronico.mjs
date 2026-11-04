@@ -20,7 +20,9 @@ if (!SB_URL || !SB_KEY) { console.error('Faltam VITE_SUPABASE_URL / SUPABASE_SER
 const sel = (process.env.LEILAOELETRONICO_TENANTS || '').split(',').map((x) => x.trim().toLowerCase()).filter(Boolean);
 const desconhecidas = sel.filter((k) => !TENANTS_POR_CHAVE[k]);
 if (desconhecidas.length) { console.error(`LEILAOELETRONICO_TENANTS desconhecido: ${desconhecidas.join(',')} (conhecidos: ${Object.keys(TENANTS_POR_CHAVE).join(',')})`); process.exit(1); }
-const tenants = sel.length ? sel.map((k) => TENANTS_POR_CHAVE[k]) : undefined;
+// Sem seleção explícita, roda todos MENOS os `soResidencial` (04/11): esses o banco/GitHub não abrem e entram só pelo
+// runner residencial, que os pede pelo nome (LEILAOELETRONICO_TENANTS=leilaonet,positivo).
+const tenants = sel.length ? sel.map((k) => TENANTS_POR_CHAVE[k]) : Object.values(TENANTS_POR_CHAVE).filter((t) => !t.soResidencial);
 
 rodarFonte(cfg, {
   tenants,

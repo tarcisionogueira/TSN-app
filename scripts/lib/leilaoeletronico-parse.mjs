@@ -103,6 +103,11 @@ export const TENANTS = {
   verona: { fonte: 'VERONALEIL', leiloeiro: 'Verona Leilões (Odilson Alves de Oliveira)', base: 'https://www.veronaleiloes.com.br', catalogo: '/sitemap.xml' }, // 14 no feed
   cris: { fonte: 'CRISLEILOES', leiloeiro: 'Cris Leilões (Cristiane Franklin Simões)', base: 'https://www.crisleiloes.com.br', catalogo: '/sitemap.xml' }, // 13 no feed
   insigne: { fonte: 'INSIGNELEIL', leiloeiro: 'Insigne Leilões (Cesar Augusto de Souza Santos)', base: 'https://www.insigneleiloes.com.br', catalogo: '/sitemap.xml' }, // 8 no feed
+  // 04/11 — SÓ PELO RUNNER RESIDENCIAL (`soResidencial`): o feed dá 400 ao servidor do banco (pg_net) e 200 do IP
+  // residencial do dono. Dry-run daqui: LEILAONET 23 enumerados / 22 prontos (inclui imóveis da Justiça Federal),
+  // POSITIVOLEIL 18 / 13 (3 fração ideal, 2 não-imóvel). Ficam FORA da rodada padrão do GitHub (scraper-dom.yml).
+  leilaonet: { fonte: 'LEILAONET', leiloeiro: 'LeilãoNet', base: 'https://www.leilaonet.com.br', catalogo: '/sitemap.xml', soResidencial: true },
+  positivo: { fonte: 'POSITIVOLEIL', leiloeiro: 'Positivo Leilões', base: 'https://www.positivoleiloes.com.br', catalogo: '/sitemap.xml', soResidencial: true },
   conecta: { fonte: 'CONECTALEIL', leiloeiro: 'Conecta Leilões (João Victor de Abreu Morbi Galvão Frota)', base: 'https://www.conectaleiloes.com.br', catalogo: '/sitemap.xml' }, // 5 no feed
 };
 

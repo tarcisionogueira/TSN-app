@@ -241,6 +241,10 @@ const TODOS_TENANTS = [
   { fonte: 'ARENALEILAO', leiloeiro: 'Arena Leilão (Danilo Cardoso da Silva)', base: 'https://www.arenaleilao.com.br' },
   // FORA: guariglia.com.br (SP) — o banco recusa o certificado TLS do site ("SSL peer certificate"); sem página lida não
   // há prova de catálogo. Não confundir com GUARIGLIA (guariglialeiloes.com.br, BA), que já coleta.
+  // 04/11 (credenciados do TJSP nunca triados): dry-run do IP residencial, via grátis — TENLEILAO 17 enumerados /
+  // 15 prontos (judiciais SP, edital e matrícula em PDF), LEILAOINVESTMENT 2/2. Nenhum lote dos dois domínios no acervo.
+  { fonte: 'TENLEILAO', leiloeiro: 'Ten Leilão', base: 'https://www.tenleilao.com.br' },
+  { fonte: 'LEILAOINVESTMENT', leiloeiro: 'Leilão Investment (Luiz Carlos Levoto)', base: 'https://www.leilaoinvestment.com.br' },
 ];
 
 // ── REPROVADOS NO DRY-RUN DE 29/08 — histórico. Em 26/10 os cinco foram REMEDIDOS e entraram (bloco "LIGADOS COM

@@ -280,6 +280,11 @@ rodar GLOBOLEILOES env GLOBO_DRYRUN=0 node scripts/scraper-globo.mjs
 # não — ver lib/motor/fontes/leje.mjs). Não estava aqui: ficou zerado sem nenhum caminho vivo.
 rodar LEJE env LEJE_DRYRUN=0 node scripts/scraper-leje.mjs
 
+# DEGRAU_RESIDENCIAL (04/11) — LeilãoNet e Positivo Leilões, plataforma Degrau (mesmo coletor do LEILAOELETRONICO).
+# O feed /sitemap.xml dá 400 ao servidor do banco e 200 daqui; ficam fora da rodada do GitHub (`soResidencial`).
+# Fetch direto, grátis (semBD). Dry-run de 04/11: 22 + 13 imóveis prontos.
+rodar DEGRAU_RESIDENCIAL env LEILAOELETRONICO_TENANTS=leilaonet,positivo LEILAOELETRONICO_DRYRUN=0 node scripts/scraper-leilaoeletronico.mjs
+
 # FREITAS (27/09) — freitasleiloeiro.com.br, imóveis. Recusa o IP do GitHub; de casa é fetch
 # direto, grátis (FREITAS_BD desligado por padrão).
 # 27/09: FREITAS_BD=1 — a via direta falhou também do PC (motivo agora vai para fonte_saude);

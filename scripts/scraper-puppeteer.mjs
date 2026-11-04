@@ -2776,6 +2776,20 @@ async function datarVeiculosLjudSemData(browser, max = 250) {
   console.log(`    LJUD veículos sem data: ${alvo.length} lidos pelo link · ${datados} datados · ${semRotulo} sem rótulo de encerramento · ${falhas} falha(s) ao gravar`);
 }
 
+// LISTAGEM DO SODRÉ = a busca que PEDE lotes (04/11). O site passou a disparar antes duas buscas de
+// CONTAGEM (`size: 0`, só `aggs`) e o coletor guardava a primeira POST que via: paginava um corpo que
+// nunca devolve lote, saía na página 1 e ficava só com os 48 do primeiro card — veículos com 3 ativos
+// (todos vencidos) contra 1.126 no site, imóveis com 23. Fica a última busca com `size > 0`; sem
+// nenhuma, a primeira (comportamento antigo). Forma nº 10: "results: []" era o pedido, não a fonte.
+export function escolherReqListagemSodre(atual, req) {
+  let corpo = {};
+  try { corpo = JSON.parse(req.postData() || '{}') || {}; } catch { corpo = {}; } // padrao-ok: corpo ilegível = não é listagem; cai no critério "primeira vista"
+  const novo = { url: req.url(), body: req.postData() || '', headers: req.headers(), lista: Number(corpo.size) > 0 };
+  if (!atual) return novo;
+  if (novo.lista && !atual.lista) return novo;
+  return atual;
+}
+
 // ─── SODRÉ SANTORO ────────────────────────────────────────────────────────────
 // Nuxt SPA. Os lotes vêm de POST /api/search-lots (results[] com campos ricos:
 // lot_title, lot_category, lot_description, bid_initial, lot_city/state,
@@ -2789,10 +2803,7 @@ async function scraperSodre(browser) {
   const lotesMap = new Map();
   let reqInfo = null;
   page.on('request', req => {
-    if (reqInfo) return;
-    if (/\/api\/search-lots/.test(req.url()) && req.method() === 'POST') {
-      reqInfo = { url: req.url(), body: req.postData() || '', headers: req.headers() };
-    }
+    if (/\/api\/search-lots/.test(req.url()) && req.method() === 'POST') reqInfo = escolherReqListagemSodre(reqInfo, req);
   });
   page.on('response', async (resp) => {
     if (!/\/api\/search-lots/.test(resp.url())) return;
@@ -2806,7 +2817,9 @@ async function scraperSodre(browser) {
   });
   try {
     // /imoveis/lotes = view flat de lotes (search-lots com corpo mais amplo).
-    await page.goto('https://www.sodresantoro.com.br/imoveis/lotes', { waitUntil: 'networkidle2', timeout: 45000 });
+    // 04/11: o site mantém conexão aberta e o networkidle2 pode não chegar; a listagem já foi interceptada
+    // até lá (mesmo tratamento do coletor de veículos). Sem lista capturada, reqInfo fica nulo e nada é paginado.
+    await page.goto('https://www.sodresantoro.com.br/imoveis/lotes', { waitUntil: 'networkidle2', timeout: 45000 }).catch((e) => console.log(`    Sodré: navegação sem networkidle (${String(e.message).slice(0, 60)}) — segue com o que foi interceptado`));
     await new Promise(r => setTimeout(r, 3500));
 
     // A resposta do search-lots é { results:[], total, page, perPage }. Paginamos
@@ -2820,9 +2833,10 @@ async function scraperSodre(browser) {
       const hdrs = { ...(reqInfo.headers || {}) };
       ['host', 'content-length', 'accept-encoding', 'connection'].forEach(h => delete hdrs[h]);
       hdrs['content-type'] = hdrs['content-type'] || 'application/json';
+      // 04/11: o site pagina por from/size (Elasticsearch); page/perPage são ignorados — ver escolherReqListagemSodre.
       const perPage = 100;
       for (let p = 1; p <= 60; p++) {
-        const body = { ...baseBody, page: p, perPage };
+        const body = { ...baseBody, from: (p - 1) * perPage, size: perPage };
         let res = null;
         try {
           res = await page.evaluate(async (url, headers, b) => {
@@ -3125,10 +3139,7 @@ async function scraperSodreVeiculos(browser) {
   const lotesMap = new Map();
   let reqInfo = null;
   page.on('request', req => {
-    if (reqInfo) return;
-    if (/\/api\/search-lots/.test(req.url()) && req.method() === 'POST') {
-      reqInfo = { url: req.url(), body: req.postData() || '', headers: req.headers() };
-    }
+    if (/\/api\/search-lots/.test(req.url()) && req.method() === 'POST') reqInfo = escolherReqListagemSodre(reqInfo, req);
   });
   page.on('response', async (resp) => {
     if (!/\/api\/search-lots/.test(resp.url())) return;
@@ -3150,9 +3161,10 @@ async function scraperSodreVeiculos(browser) {
       const hdrs = { ...(reqInfo.headers || {}) };
       ['host', 'content-length', 'accept-encoding', 'connection'].forEach(h => delete hdrs[h]);
       hdrs['content-type'] = hdrs['content-type'] || 'application/json';
+      // 04/11: o site pagina por from/size (Elasticsearch); page/perPage são ignorados — ver escolherReqListagemSodre.
       const perPage = 100;
       for (let p = 1; p <= 60; p++) {
-        const body = { ...baseBody, page: p, perPage };
+        const body = { ...baseBody, from: (p - 1) * perPage, size: perPage };
         let res = null;
         try {
           res = await page.evaluate(async (url, headers, b) => {
