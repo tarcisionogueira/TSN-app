@@ -33,6 +33,16 @@
   devolve o JSON. Forma nº 10: o instrumento da triagem media outra requisição.
 - **Pedem leitor novo:** Kwara (26, Next.js marketplace), Lunelli (12 abertos de 46 listados), Marcus Vinícius (~7, MG).
   Erico Sobral (3, Leilão VIP white-label) não vale leitor.
+  - **Lunelli entrou (tarde de 04/11):** é TRIACCA (rodapé "TRIACCA FRAMEWORK"), tenant novo em `triacca-parse.mjs`, mas
+    com template NOVO de lote (`pracas_novas`, preços em `precos_principais`, PDFs em `arquivos/produtos/` com nome no
+    `download`) → `parseDetalheNovo`. "00/00/0000" = praça sem data. Maquinário judicial (cabine de pintura, tear,
+    janelas) sai como não-imóvel. Seco: 6 abertos (os demais encerrados, fração ou box).
+  - **Kwara entrou:** `scraper-kwara.mjs` no `scraper-dom.yml`. JSON-LD `Product` (nome, descrição, preço e fim da fase
+    vigente) + stream RSC (`lotDetails`: PDFs, endereço, ocupação). ⚠️ O stream traz os lotes RELACIONADOS: campo buscado
+    no stream inteiro é de outro lote — valor estimado só dentro de `lotDetails`, fase pela `currentLotAuctionSetting`
+    (o 1º `listingPhase` é o 1º leilão vencido e marcava "encerrado" lote em 2º leilão). Seco: 14 abertos de 20.
+    Sem fixture de teste ainda (página de 235 KB).
+  - **Marcus Vinícius:** ainda falta.
 - **Decisão do dono:** Coimbra (17 lotes) e Big Leilão são SPA sobre Supabase. Ler a API pública com a chave publicada
   no site foi barrado pelo classificador de permissão; alternativa é navegador headless no runner residencial.
 - **Descartados:** DNS morto (Cruzeiro, Ícaro, Marchioro, NetEditais, Valle, Tassiana) · Arremax 522 · Startup

@@ -116,6 +116,9 @@ on:
       - 'scripts/scraper-botelho.mjs'
       - 'scripts/lib/botelho-parse.mjs'
       - 'scripts/lib/motor/fontes/botelho.mjs'
+      - 'scripts/scraper-kwara.mjs'
+      - 'scripts/lib/kwara-parse.mjs'
+      - 'scripts/lib/motor/fontes/kwara.mjs'
       - 'scripts/scraper-triacca.mjs'
       - 'scripts/lib/triacca-parse.mjs'
       - 'scripts/lib/motor/fontes/triacca.mjs'
@@ -327,9 +330,19 @@ jobs:
           BOTELHO_DRYRUN: ${{ env.DRYRUN_PADRAO }}
         run: node scripts/scraper-botelho.mjs
 
-      - name: Triacca — Lara Forster e Alexsandro (RS)
+      - name: Kwara (marketplace extrajudicial — 14 imóveis)
+        # 04/11: Next.js sem anti-bot, vendedores empresa (SPE, credor fiduciário). Seco de 04/11: 14 abertos de 20. Fetch grátis.
+        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'kwara')) }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          KWARA_DRYRUN: ${{ env.DRYRUN_PADRAO }}
+        run: node scripts/scraper-kwara.mjs
+
+      - name: Triacca — Lara Forster, Alexsandro e Lunelli (RS)
         # 30/10 (fila #380): plataforma TRIACCA (PHP, charset misto); a home lista todos os bens e o slug separa veículo
         # e máquina. Seco de 30/10: 1 terreno aberto em Getúlio Vargas (Lara); Alexsandro sem leilão. Fetch grátis.
+        # 04/11: + Lunelli (Bento Gonçalves), template novo de lote (`pracas_novas`). Seco: 6 imóveis abertos.
         if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'triacca')) }}
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
