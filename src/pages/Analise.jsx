@@ -2314,7 +2314,8 @@ export default function Analise() {
   const _aArea = Number(d.areaM2) || Number(d.areaTerrenoM2) || 0;
   const _aPm2 = Number(mercado?.precoMedioM2) || 0;
   const _aAvalM2 = Number(d.valorAvaliacao) > 0 && _aArea > 0 ? Number(d.valorAvaliacao) / _aArea : 0;
-  const areaSuspeita = !!areaAlerta || (!areaConfirmadaPelaMatricula && _aAvalM2 > 0 && _aPm2 > 0 && _aPm2 > 3 * _aAvalM2);
+  // `avaliacaoDefasada` (04/11): o servidor concluiu que a área é sustentada pelo lote e a avaliação é que destoa.
+  const areaSuspeita = !!areaAlerta || (!mercado?.avaliacaoDefasada && !areaConfirmadaPelaMatricula && _aAvalM2 > 0 && _aPm2 > 0 && _aPm2 > 3 * _aAvalM2);
   // A "área privativa implícita" (avaliação ÷ R$/m²) continua no `areaAlerta` do gerador
   // como sinal de diagnóstico, mas NÃO é mais exibida: número derivado impresso em m² é
   // lido como metragem do imóvel, e não é medida de lugar nenhum. Ver o aviso abaixo.

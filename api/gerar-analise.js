@@ -38,6 +38,7 @@ import { somaAreasMultiBem, avaliacaoAtualizadaDoTexto } from './_texto-imovel.j
 import { normalizarTipo } from './_tipo.js';
 import { extrairEnderecoMatricula } from './_registro-matricula.js';
 import { enderecoDoTexto } from './_endereco-do-texto.js';
+import { areaCorroborada, fatorArea, areaMedianaComparaveis } from './_area-coerencia.js';
 import { docsManuaisSaneados } from './_docs-manuais.js';
 import { dataLeilaoIso } from './_data-br.js';
 import { pedidoRepetido, CORPO_REPETIDO } from './_pedido-unico.js';
@@ -1942,6 +1943,7 @@ ${inp._divergencia.resolvida
 MERCADO:${mercado?.fonteEstimativa === 'indice_bidpro' ? '\n- ATENÇÃO: não há anúncios comparáveis ativos na região agora; a estimativa de mercado abaixo vem do ÍNDICE BIDPRO (base própria). O parecer DEVE informar isso ao cliente com transparência (referência de mercado por falta de comparativos ativos na localidade), SEM inventar comparáveis nem citar anúncios específicos.' : ''}
 ${mercado?.fonteEstimativa === 'base_propria' ? '\n- ORIGEM DOS COMPARÁVEIS: base própria BidPro. São anúncios REAIS do mesmo tipo já capturados nesta praça, cada um com fonte e mês de referência, e não uma pesquisa feita agora. Diga isso ao cliente com naturalidade e transparência (a base é recente e do mesmo recorte), e trate as datas dos comparáveis como o que são: o retrato do período, não do minuto.' : ''}
 - Preço médio/m² (${mercado?.fonteEstimativa === 'indice_bidpro' ? 'Índice BidPro, base própria' : mercado?.fonteEstimativa === 'base_propria' ? 'mediana dos comparáveis da base própria' : 'média dos anúncios'}): R$ ${brl(mercado?.precoMedioM2)}
+${mercado?.avaliacaoDefasada ? `- ⚠️ AVALIAÇÃO DO LEILÃO DEFASADA: a avaliação equivale a R$ ${brl(mercado.avaliacaoDefasada.avalM2)}/m², contra R$ ${brl(mercado.avaliacaoDefasada.compM2)}/m² dos comparáveis, e a área de ${brl(mercado.avaliacaoDefasada.areaUsada)} m² é sustentada pelo próprio lote (${mercado.avaliacaoDefasada.motivos.join('; ')}). O valor de mercado usa os comparáveis com fator de área ${String(mercado.avaliacaoDefasada.fatorArea).replace('.', ',')} (NBR 14653-2: unidade grande vende por m² menor que as pequenas). Explique isso ao cliente; trate a avaliação como possivelmente antiga e recomende vistoria/opinião de corretor local antes do lance, dada a diferença.` : ''}
 ${mercado?.areaAlerta ? `- ⚠️ ÁREA NÃO CONFIRMADA: os ${brl(mercado.areaAlerta.areaUsada)} m² do anúncio são provavelmente ÁREA TOTAL (com áreas comuns/terreno), NÃO privativa — a R$ ${brl(mercado.areaAlerta.compM2)}/m² dos comparáveis, a avaliação corresponde a cerca de ${brl(mercado.areaAlerta.areaPrivativaImplicita)} m² privativos. NUNCA chame essa metragem de "área privativa" nem multiplique o R$/m² por ela; o valor de mercado foi ancorado na avaliação. Diga isso ao cliente e recomende confirmar a área privativa na matrícula antes do lance.` : ''}
 - Aluguel médio: R$ ${brl(mercado?.aluguelMedio)} · Yield: ${(mercado?.yieldBruto || 0).toFixed(2)}% bruto / ${(mercado?.yieldLiquido || 0).toFixed(2)}% líquido
 ${mercado?.referenciaFipeZap?.encontrado ? `- Referência FipeZAP (${mercado.referenciaFipeZap.localidade || inp.cidade || ''}, ${mercado.referenciaFipeZap.mesReferencia || 'recente'}): R$ ${brl(mercado.referenciaFipeZap.precoMedioM2)}/m² · valorização 12m: ${(Number(mercado.referenciaFipeZap.valorizacao12m) || 0).toFixed(1)}%. Compare com a média dos anúncios acima: se divergirem muito, comente e use a mais conservadora na defesa.` : ''}
@@ -3655,8 +3657,26 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
     try {
       if (valorMercado && avalDb > 0 && areaM2 > 0 && precoM2 > 0 && areaFonte !== 'matricula' && (baseTipo === 'residencial' || baseTipo === 'comercial')) {
         const avalM2 = avalDb / areaM2;
-        if (precoM2 > 3 * avalM2) {
-          const areaPriv = Math.round(avalDb / precoM2);
+        const areaPrivTeste = Math.round(avalDb / precoM2);
+        // A ÁREA PODE ESTAR CERTA E A AVALIAÇÃO DEFASADA (04/11, Porto Trapiche: 4 aptos unificados, 700 m²,
+        // 5 suítes, comparáveis do próprio prédio a R$ 32 mil/m² × avaliação de 2019 a R$ 6,5 mil/m²). Quando o
+        // texto do lote sustenta a área (ver api/_area-coerencia.js), vale o mercado — homogeneizado pelo fator
+        // de área da NBR 14653-2, porque o m² de uma unidade grande não é o de uma pequena.
+        const corr = precoM2 > 3 * avalM2
+          ? areaCorroborada({ texto: `${imDb?.titulo || ''} ${descricaoImovel || ''}`, areaPrivImplicita: areaPrivTeste })
+          : { corroborada: false, motivos: [] };
+        if (corr.corroborada) {
+          const areaComp = areaMedianaComparaveis([...(mercado.nivel1?.vendas || []), ...(mercado.nivel2?.vendas || [])]);
+          const fa = fatorArea(areaComp, areaM2);
+          valorMercado = Math.round(precoM2 * fa * areaM2);
+          mercado.avaliacaoDefasada = { avalM2: Math.round(avalM2), compM2: Math.round(precoM2), areaUsada: areaM2, areaMediaComparaveis: areaComp || null, fatorArea: fa, motivos: corr.motivos };
+          if (mercado.consolidado) mercado.consolidado = { ...mercado.consolidado, valorEstimadoImovel: valorMercado, areaConsiderada: areaM2,
+            baseCalculo: `R$ ${Math.round(precoM2).toLocaleString('pt-BR')}/m² dos comparáveis × fator de área ${String(fa).replace('.', ',')} (NBR 14653-2: avaliando de ${Math.round(areaM2)} m² contra comparáveis de ~${areaComp} m²) × ${Math.round(areaM2)} m²` };
+          console.log('[avaliacao-defasada]', JSON.stringify({ imovel: String(imovelId), ...mercado.avaliacaoDefasada, valorMercado }));
+          await registrarAnomalia('avaliacao_defasada', fonteDb, imovelId, 'valor_avaliacao',
+            `Comparáveis R$${Math.round(precoM2)}/m² vs avaliação R$${Math.round(avalM2)}/m² (${(precoM2 / avalM2).toFixed(1)}x) com a área ${areaM2} m² sustentada pelo lote (${corr.motivos.join('; ')}) — mercado pelos comparáveis com fator de área ${fa}.`, true);
+        } else if (precoM2 > 3 * avalM2) {
+          const areaPriv = areaPrivTeste;
           areaAlerta = { areaUsada: areaM2, compM2: Math.round(precoM2), avalM2: Math.round(avalM2), areaPrivativaImplicita: areaPriv, motivo: 'area_provavel_total_nao_privativa' };
           valorMercado = Math.round(avalDb); // âncora conservadora (avaliação), não o comps×área inflado
           await registrarAnomalia('mercado_area_incoerente', fonteDb, imovelId, 'area_m2',
@@ -3664,6 +3684,8 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
         }
       }
     } catch { /* coerência é best-effort: nunca bloqueia o relatório */ }
+    // Reaproveitamento não herda o diagnóstico de outra geração: só fica o que ESTA rodada concluiu.
+    if (!mercado.avaliacaoDefasada?.compM2 || areaAlerta) mercado.avaliacaoDefasada = null;
     mercado.areaAlerta = areaAlerta; // null quando coerente (limpa alerta antigo em reaproveitamento)
     let valorLocacao = mercado.aluguelMedio ? Math.round(mercado.aluguelMedio) : null;
 

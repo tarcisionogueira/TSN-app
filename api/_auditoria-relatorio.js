@@ -87,7 +87,7 @@ export function auditarMercadologico(result, ctx = {}) {
   // ── C5. O valor de mercado não fecha com preço/m² × área ────────────────────────────
   // Tolerância larga (30%): há margem conservadora de revenda e ancoragem na avaliação.
   // Só acusa quando a conta não se explica de jeito nenhum.
-  if (precoM2 > 0 && areaCons > 0 && vMercado > 0 && cons.unidadeValor !== 'imovel' && !m.areaAlerta) {
+  if (precoM2 > 0 && areaCons > 0 && vMercado > 0 && cons.unidadeValor !== 'imovel' && !m.areaAlerta && !m.avaliacaoDefasada) {
     const bruto = precoM2 * areaCons;
     if (!perto(vMercado, bruto, 0.30) && !perto(vMercado, bruto * 0.9, 0.30)) {
       avisos.push({ chave: 'valor_nao_fecha_com_m2', msg: `Valor de mercado R$ ${Math.round(vMercado)} não se explica por R$ ${Math.round(precoM2)}/m² × ${areaCons} m².` });
