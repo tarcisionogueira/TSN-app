@@ -261,17 +261,21 @@ export async function drenarPedidosAguardando({ max = 10 } = {}) {
 }
 
 // Frase para o cliente, a partir do retorno de `pedirDocumentosAoLeiloeiro`. '' quando não há o que dizer.
-export function fraseDoPedido(p) {
+// `semAnalise` (04/11): pedido feito pela pré-checagem da tela, SEM análise documental gravada —
+// não há o que regenerar sozinho quando o documento chegar, então a frase não promete isso.
+export function fraseDoPedido(p, { semAnalise = false } = {}) {
   if (!p) return '';
   const data = p.em ? new Date(p.em).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '';
+  const depois = semAnalise ? 'aí é só gerar a análise de novo' : 'a análise é gerada automaticamente';
   if (['enviado', 'represado', 'ja_pedido'].includes(p.status)) {
-    return ` Pedimos o documento ao leiloeiro por e-mail${data ? ` em ${data}` : ''}: quando ele responder, o arquivo entra no lote e a análise é gerada automaticamente.`;
+    return ` Pedimos o documento ao leiloeiro por e-mail${data ? ` em ${data}` : ''}: quando ele responder, o arquivo entra no lote e ${depois}.`;
   }
-  if (p.status === 'aguardando') return ' O pedido ao leiloeiro já está na fila de envio: quando ele responder, o arquivo entra no lote e a análise é gerada automaticamente.';
-  if (p.status === 'equipe_whatsapp') return ' Nossa equipe vai pedir o documento diretamente ao leiloeiro; quando chegar, a análise é gerada automaticamente.';
+  if (p.status === 'aguardando') return ` O pedido ao leiloeiro já está na fila de envio: quando ele responder, o arquivo entra no lote e ${depois}.`;
+  if (p.status === 'equipe_whatsapp') return ` Nossa equipe vai pedir o documento diretamente ao leiloeiro; quando chegar, ${depois}.`;
   // Sem contato ou e-mail que não saiu: só promete "nossa equipe" se o chamado abriu de fato.
+  // `sem_contato` repetido na janela de 7 dias volta como status com `chamado` do pedido anterior.
   if ((p.status === 'sem_contato' || p.status === 'falha') && p.chamado) {
-    return ' O leiloeiro não publicou o documento e o pedido automático não conseguiu sair: nossa equipe abriu um chamado para buscar com ele. Quando chegar, a análise é gerada automaticamente.';
+    return ` O leiloeiro não publicou o documento e o pedido automático não conseguiu sair: nossa equipe abriu um chamado para buscar com ele. Quando chegar, ${depois}.`;
   }
   if (p.status === 'prazo_curto') return ' Como o leilão é em menos de 48 horas, não há tempo para o leiloeiro responder por e-mail: anexe o documento ou fale direto com o leiloeiro.';
   return '';

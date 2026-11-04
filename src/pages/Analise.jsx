@@ -1866,7 +1866,23 @@ export default function Analise() {
         motivo: `A análise jurídica precisa da matrícula e do edital. Anexe ${faltaTxt} (PDF) para gerar a análise.`,
       });
       setRelSel('documental');
-      return; // pede o anexo já — não chama o servidor nem consome a análise
+      // Sem isto o pedido automático ao leiloeiro (e o chamado de documentos) nunca rodava neste
+      // caso, que é o mais comum: ele só existia dentro do gerar-documental (04/11). Não gera
+      // análise nem usa IA; as travas por lote e por leiloeiro são do servidor.
+      if (imovelInicial?.id) {
+        const imovelPedido = imovelInicial.id;
+        apiCall('/api/pedido-documentos-lote', { method: 'POST', body: JSON.stringify({ imovel_id: imovelPedido, faltando }) })
+          .then(async r => {
+            const j = await r.json().catch(() => ({}));
+            if (!r.ok) { console.warn('[pedido-documentos-lote]', r.status, j?.error); return; }
+            if (!j.frase) return;
+            setParecerDocumental(prev => (prev?.precisaDocumentos && !prev.pedidoLeiloeiro)
+              ? { ...prev, motivo: prev.motivo + j.frase, pedidoLeiloeiro: { status: j.status } }
+              : prev);
+          })
+          .catch(e => console.warn('[pedido-documentos-lote] rede:', e?.message || e));
+      }
+      return; // pede o anexo já — não chama o servidor de análise nem consome a análise
     }
 
     const payload = {
