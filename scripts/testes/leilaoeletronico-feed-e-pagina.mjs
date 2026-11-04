@@ -63,7 +63,9 @@ assert.equal(r.fonte, 'LEILAOELETRONICO');
 assert.equal(r.fonte_id, 'leilaoeletronico_2653');
 assert.equal(r.tipo, 'casa');
 assert.equal(r.desconto_percentual, 17);
-assert.equal(r.fotos.length, 2);
+// 2 do feed (fixture com nome encurtado) + a da galeria da página (fancybox 1300x1300), sem repetir arquivo.
+assert.equal(r.fotos.length, 3);
+assert.ok(r.fotos.includes('https://www.leilaoeletronico.com.br/imagens/1300x1300/b87aab10-ac8c-41c9-a873-1f5a14e31203.jpg'));
 assert.equal(r.latitude, -23.473705034577538);
 assert.equal(r.geocod_nivel, 'endereco');
 assert.equal(r.leiloeiro, 'Leilão Eletrônico');
@@ -201,3 +203,36 @@ assert.equal(parseDetalhe('<!DOCTYPE html><html><head><meta name="description" c
   'https://www.upleilao.com.br/lote/grande-oportunidade-pgfn-industrial-em-barueri/89/', { agora: AGORA }), null);
 
 console.log('✓ leilaoeletronico: feed + página → linha (todos os casos)');
+
+// (04/11) ANEXOS nos outros dois temas — trechos REAIS (Destak 9059 e GF 427, lidos por navegador em 04/11).
+{
+  const casca = (docs, extra = '') => `<html><body><main><div class="dg-lote-fotos">${extra}</div></main>
+<section id="dg-lote-documentos" class="dg-lote-box">${docs}</section></body></html>`;
+  const destak = casca(`<ul class="dg-lote-anexos dg-new-lista jsLoteAnexos">
+ <li class="dg-lote-documentos-downloads__item "> Matrícula
+  <a class="dg-lote-cfgs-item" href="https://www.destakleiloes.com.br/previewlote/6046/9059/74fe4ddb-0351-4ae5-98cd-26410311f2ad.pdf" target="_blank"><svg viewBox="0 0 42 42"><path d="M1"></path></svg><span class="dg-tooltip">Visualizar</span></a>
+  <a class="dg-lote-cfgs-item" href="https://www.destakleiloes.com.br/downloadlote/6046/9059/74fe4ddb-0351-4ae5-98cd-26410311f2ad.pdf" target="_blank"><svg viewBox="0 0 490 490"><path d="M2"></path></svg><span class="dg-tooltip">Baixar</span></a>
+ </li>
+ <li class="dg-lote-documentos-downloads__item "> Edital do Leilão
+  <a href="https://www.destakleiloes.com.br/previewlote/6046/9059/050203e7-977b-49ac-bf7c-ad0433c6abf2.pdf"><span class="dg-tooltip">Visualizar</span></a>
+  <a href="https://www.destakleiloes.com.br/downloadlote/6046/9059/050203e7-977b-49ac-bf7c-ad0433c6abf2.pdf"><span class="dg-tooltip">Baixar</span></a>
+ </li></ul>`, `<a data-fancybox="preview" href="https://www.destakleiloes.com.br/imagens/1300x1300/aaa-1.jpg"><img src="x"></a>
+ <a href="https://www.destakleiloes.com.br/imagens/1300x1300/aaa-2.jpg" data-fancybox="preview"><img src="y"></a>
+ <a href="https://www.destakleiloes.com.br/imagens/1300x1300/aaa-1.jpg" data-fancybox="preview"></a>
+ <a href="https://www.destakleiloes.com.br/lote/outro/1/"><img src="https://www.destakleiloes.com.br/imagens-complete/605x487/de-outro-lote.jpg"></a>`);
+  const dd = parseDetalhe(destak, 'https://www.destakleiloes.com.br/lote/apartamento-duplex-em-sao-carlos-sp/9059/', { agora: AGORA });
+  assert.deepEqual(dd.anexos.map((a) => [a.tipo, a.nome]), [['matricula', 'Matrícula'], ['edital', 'Edital do Leilão']]);
+  assert.ok(dd.anexos.every((a) => a.url.includes('/downloadlote/')), 'Destak: prefere o link de baixar');
+  assert.equal(dd.link_edital, 'https://www.destakleiloes.com.br/downloadlote/6046/9059/050203e7-977b-49ac-bf7c-ad0433c6abf2.pdf');
+  assert.deepEqual(dd.fotos, ['https://www.destakleiloes.com.br/imagens/1300x1300/aaa-1.jpg', 'https://www.destakleiloes.com.br/imagens/1300x1300/aaa-2.jpg'], 'galeria sem repetir e sem foto de outro lote');
+
+  const gf = casca(`<ul class="dg-lote-anexos jsLoteAnexos">
+ <li><a href="https://www.gfleiloes.com.br/preview/ec1fcbbb-abc8-4d13-b254-30d3cea39ae0.pdf" target="_blank" class=""><span class="dg-icon icon-mini-arrow-2"></span> Matrícula</a></li>
+ <li><a href="https://www.gfleiloes.com.br/preview/56163c83-ac2e-42dd-8e37-41257279ad75.pdf" target="_blank" class=""><span class="dg-icon icon-mini-arrow-2"></span> Laudo de Avaliação</a></li>
+ <li><a href="https://www.gfleiloes.com.br/preview/efbe5ec5-1b6d-447e-99ad-56fd88584714.pdf" target="_blank" class=""><span class="dg-icon icon-mini-arrow-2"></span> Edital do Leilão</a></li>
+</ul><ul><li><a><span class="dg-icon icon-somar"></span> Fale com o especialista</a></li></ul>`);
+  const dg = parseDetalhe(gf, 'https://www.gfleiloes.com.br/lote/leilao-extrajudicial-sicoob/427/', { agora: AGORA });
+  assert.deepEqual(dg.anexos.map((a) => a.tipo), ['matricula', 'laudo', 'edital']);
+  assert.equal(dg.link_matricula, 'https://www.gfleiloes.com.br/preview/ec1fcbbb-abc8-4d13-b254-30d3cea39ae0.pdf');
+}
+console.log('ok — anexos nos 3 temas e galeria completa');

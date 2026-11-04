@@ -271,14 +271,37 @@ export function parseDetalhe(html, url, { agora = new Date() } = {}) {
   const endereco = limpo((loc.match(/class=["'][^"']*dg-lote-local-endereco[^"']*["'][^>]*>\s*([^<]*\S[^<]*?)\s*<\/div>/i)
     || loc.match(/<div[^>]*>\s*([^<]*\S[^<]{4,198}?)\s*<\/div>/) || [])[1]) || null;
 
-  const anexos = [...secao(h, 'dg-lote-documentos').matchAll(/<li[^>]*>\s*([^<]+?)\s*<a[\s\S]*?<\/li>/gi)].flatMap(([bloco, nome]) => {
-    const dl = (bloco.match(/href=["']([^"']*\/download\/[^"']+)["']/i) || [])[1];
-    if (!dl) return [];
-    const n = limpo(nome);
+  // ANEXOS — TRÊS TEMAS da mesma plataforma (04/11, medido em página real): Leilão Eletrônico/Taba `<li>Nome <a
+  // /preview/…>Visualizar</a> <a /download/…>Baixar</a>`; Destak e afins `/previewlote/<a>/<b>/<uuid>.pdf` +
+  // `/downloadlote/…` (o regex exigia `/download/` e a Destak saía com 0 anexo em 307 de 307); GF `<li><a /preview/…>
+  // Matrícula</a></li>` — só visualização, com o NOME DENTRO do link. Nome = texto do <li> sem os rótulos de botão;
+  // link = o de baixar, senão o de visualizar. Sem isso o edital/matrícula não chegava à IA nem ao investidor.
+  const vistos = new Set();
+  const anexos = [...secao(h, 'dg-lote-documentos').matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi)].flatMap(([, li]) => {
+    const hrefs = [...li.matchAll(/href=["']([^"']+)["']/gi)].map((m) => m[1]);
+    const dl = hrefs.find((u) => /\/download(?:lote)?\//i.test(u)) || hrefs.find((u) => /\/preview(?:lote)?\//i.test(u));
+    if (!dl) return []; // "Fale com o especialista", "Imprimir Lote": <li> sem documento
+    const n = limpo(li.replace(/<svg[\s\S]*?<\/svg>/gi, ' ')).replace(/\b(Visualizar|Baixar|Download)\b/gi, ' ').replace(/\s+/g, ' ').trim();
     const tipo = /matr[íi]cula/i.test(n) ? 'matricula' : /edital/i.test(n) ? 'edital' : /laudo|avalia/i.test(n) ? 'laudo' : 'outro';
     let abs; try { abs = new URL(dl, url).href; } catch { return []; }
+    if (vistos.has(abs)) return [];
+    vistos.add(abs);
     return [{ tipo, nome: n.slice(0, 120) || 'Documento', url: abs }];
   });
+
+  // FOTOS — TODAS as da galeria do lote (04/11, dono: "quero fotos, anexos, descrição"). O feed traz no máximo 20
+  // (Alphaville Res. 6 no Taba: 20 no feed, 46 na página). A galeria são os <a data-fancybox href=".../imagens/WxH/…">;
+  // os cards de outros lotes não usam fancybox. Feed + página, sem repetir o mesmo arquivo em tamanhos diferentes.
+  const arqFoto = (u) => String(u).split('/').pop().split('?')[0].toLowerCase();
+  const fotosPagina = [...h.matchAll(/<a\b[^>]*\bdata-fancybox\b[^>]*>/gi)]
+    .map(([a]) => (a.match(/href=["']([^"']*\/imagens\/\d+x\d+\/[^"'?#]+)["']/i) || [])[1])
+    .filter(Boolean).map((u) => { try { return new URL(u, url).href; } catch { return null; } }).filter(Boolean);
+  const vistasFoto = new Set();
+  const fotos = [...(feed?.fotos || []), ...fotosPagina].filter((u) => {
+    const k = arqFoto(u);
+    if (!k || vistasFoto.has(k)) return false;
+    vistasFoto.add(k); return true;
+  }).slice(0, 60);
 
   const mat = (String(descricao || '').match(/matr[íi]cula(?:\s+imobili[áa]ria)?\s*(?:n[º°.o]*\s*)?:?\s*([\d.]{3,})/i) || [])[1]?.replace(/\.$/, '') || null;
   const proc = (String(descricao || '').match(/\b(\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4})\b/) || [])[1] || null;
@@ -346,7 +369,7 @@ export function parseDetalhe(html, url, { agora = new Date() } = {}) {
     descricao, numero_matricula: mat, numero_processo: proc, anexos,
     link_edital: anexos.find((a) => a.tipo === 'edital')?.url || null,
     link_matricula: anexos.find((a) => a.tipo === 'matricula')?.url || null,
-    link_foto: feed?.fotos?.[0] || null, fotos: feed?.fotos || [],
+    link_foto: fotos[0] || null, fotos,
     encerrado: HOSTS_COM_FEED.has(hostDe(url)) && (!feed || encerrado),
   };
 }
