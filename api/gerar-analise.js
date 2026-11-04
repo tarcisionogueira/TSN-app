@@ -38,7 +38,7 @@ import { somaAreasMultiBem, avaliacaoAtualizadaDoTexto } from './_texto-imovel.j
 import { normalizarTipo } from './_tipo.js';
 import { extrairEnderecoMatricula } from './_registro-matricula.js';
 import { enderecoDoTexto } from './_endereco-do-texto.js';
-import { areaCorroborada, fatorArea, areaMedianaComparaveis } from './_area-coerencia.js';
+import { areaCorroborada, fatorArea, areaMedianaComparaveis, matriculaParcial } from './_area-coerencia.js';
 import { docsManuaisSaneados } from './_docs-manuais.js';
 import { dataLeilaoIso } from './_data-br.js';
 import { pedidoRepetido, CORPO_REPETIDO } from './_pedido-unico.js';
@@ -2421,7 +2421,15 @@ export default async function handler(req, res) {
   const tPre = Date.now();
   try { matriculaPre = await colher(extratoMatriculaP); } catch { matriculaPre = null; }
   try { editalPre = await colher(extratoEditalP); } catch { editalPre = null; }
-  if (mercadoInputs && matriculaPre) {
+  // LOTE COM VÁRIAS MATRÍCULAS (04/11, Porto Trapiche): a matrícula lida pode ser de UMA das unidades — a área
+  // dela não substitui a do lote (api/_area-coerencia.js · matriculaParcial). Vale para os três pontos abaixo.
+  const textoLoteMat = `${imovel?.titulo || ''} ${descricaoImovel || ''}`;
+  const parcialPre = matriculaPre ? matriculaParcial({ texto: textoLoteMat, areaMatricula: matriculaPre.areaPrivativaM2, areaAnuncio: areaAnunciada }) : { parcial: false };
+  if (parcialPre.parcial) {
+    console.log('[matricula-parcial]', JSON.stringify({ imovel: String(imovelId), matriculas: parcialPre.matriculas, lida: Number(matriculaPre.areaPrivativaM2) || null, anuncio: areaAnunciada }));
+    try { await registrarAnomalia('matricula_parcial_multi', imovel?.fonte || '', imovelId, 'area_m2', `Lote com ${parcialPre.matriculas.length} matrículas (${parcialPre.matriculas.join(', ')}); a matrícula lida dá ${matriculaPre.areaPrivativaM2} m² contra ${areaAnunciada} m² do lote — mantida a área do lote.`, true); } catch { /* best-effort */ }
+  }
+  if (mercadoInputs && matriculaPre && !parcialPre.parcial) {
     const aMat = Number(matriculaPre.areaPrivativaM2) || 0;
     const aTer = Number(matriculaPre.areaTerrenoM2) || 0;
     if (aMat >= 5 && aMat <= 100000) mercadoInputs.areaM2 = aMat;
@@ -3033,7 +3041,8 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
       const aAcervo = Number(imDb?.area_m2) || 0;
       if (areaM2 <= 0 && aAcervo >= 5 && aAcervo <= 100000) { areaM2 = aAcervo; areaFonte = 'acervo'; }
       const aDoc = Number(imDb?.ficha_juridica?.areaPrivativaM2) || 0;
-      if (aDoc >= 5 && aDoc <= 100000) { areaM2 = aDoc; areaFonte = 'matricula'; } // autoritativa
+      const docParcial = matriculaParcial({ texto: textoLoteMat, areaMatricula: aDoc, areaAnuncio: areaAnunciada || aAcervo }).parcial;
+      if (aDoc >= 5 && aDoc <= 100000 && !docParcial) { areaM2 = aDoc; areaFonte = 'matricula'; } // autoritativa
     } catch { /* segue com a área informada */ }
 
     // ── METRAGEM DA MATRÍCULA sem depender do documental (05/08) ────────────────
@@ -3061,7 +3070,8 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
         }));
       }
       const aMat = Number(mat?.areaPrivativaM2) || 0;
-      if (aMat >= 5 && aMat <= 100000) {
+      const matParcial = matriculaParcial({ texto: textoLoteMat, areaMatricula: aMat, areaAnuncio: areaAnunciada || Number(areaM2) || 0 }).parcial;
+      if (aMat >= 5 && aMat <= 100000 && !matParcial) {
         // A referência da divergência é a área ANUNCIADA, capturada antes de a matrícula
         // sobrescrever o input da busca — senão a comparação seria matrícula×matrícula e o
         // aviso ao cliente nunca dispararia.

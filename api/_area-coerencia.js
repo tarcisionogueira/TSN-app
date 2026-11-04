@@ -62,3 +62,26 @@ export function areaMedianaComparaveis(vendas) {
   const k = Math.floor(areas.length / 2);
   return Math.round(areas.length % 2 ? areas[k] : (areas[k - 1] + areas[k]) / 2);
 }
+
+// LOTE COM VÁRIAS MATRÍCULAS (04/11, Porto Trapiche: aptos 111–114 unificados, matrículas 24.374, 24.421, 24.422
+// e 24.423). Os documentos que o leiloeiro enviou trazem a área privativa de UMA delas (92,80 m², apto 111) — e o
+// mercadológico deixava a área da matrícula lida substituir a do lote inteiro (700 m²), derrubando o valor para o
+// de um apartamento só. Matrícula de UMA unidade não mede um lote de várias.
+
+/** Números de matrícula citados no texto do lote ("Matrículas nº 24.374, 24.421 e 24.423", "Matrícula: 24.374 (apt. 114), 24.421 ..."). */
+export function matriculasDoTexto(texto) {
+  const t = String(texto || '');
+  const out = new Set();
+  for (const m of t.matchAll(/matr[íi]culas?\s*(?:n[º°o.]*\s*)?:?\s*((?:\d{1,3}(?:\.\d{3})+|\d{3,7})(?:(?:\s*\([^)]{0,30}\))?\s*(?:,|\be\b)\s*(?:n[º°o.]*\s*)?(?:\d{1,3}(?:\.\d{3})+|\d{3,7}))*)/gi)) {
+    for (const n of m[1].replace(/\([^)]*\)/g, ' ').matchAll(/\b(\d{1,3}(?:\.\d{3})+|\d{3,7})\b/g)) out.add(n[1].replace(/\./g, ''));
+  }
+  return [...out];
+}
+
+/** A área de UMA matrícula lida vale para o lote? Não quando o lote tem 2+ matrículas e ela cobre < 70% do anunciado. */
+export function matriculaParcial({ texto, areaMatricula, areaAnuncio }) {
+  const mats = matriculasDoTexto(texto);
+  const aM = Number(areaMatricula) || 0, aA = Number(areaAnuncio) || 0;
+  const parcial = mats.length >= 2 && aM > 0 && aA > 0 && aM < 0.7 * aA;
+  return { parcial, matriculas: mats };
+}
