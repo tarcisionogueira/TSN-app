@@ -32,6 +32,11 @@ const MOTIVO = {
     porque: 'o leiloeiro não respondeu os últimos pedidos por e-mail, então o automático parou de insistir.',
     fazer: 'Peça pelo telefone/WhatsApp do leiloeiro. O que ele mandar, anexe pelo painel deste chamado: o lote recebe o documento e as análises são geradas de novo.',
   },
+  // 05/11 (dono): todo lote sem matrícula/edital vira chamado, mesmo quando o e-mail saiu.
+  acompanhar: {
+    porque: 'falta documento no lote e o pedido saiu por e-mail para o leiloeiro — acompanhe até chegar.',
+    fazer: 'Se o leiloeiro não responder em até 2 dias úteis, ligue ou chame no WhatsApp pelos contatos abaixo. O que ele mandar, anexe pelo painel deste chamado: o chamado fecha sozinho e o cliente é avisado de que já pode gerar o relatório.',
+  },
   falha: {
     porque: 'o e-mail ao leiloeiro não saiu (o provedor recusou ou deu erro).',
     fazer: 'Confira o endereço do leiloeiro no painel deste chamado e tente "Enviar pedido ao leiloeiro" de novo.',
@@ -140,11 +145,24 @@ export async function abrirChamadoDocumentos({ imovelId, pedidoId = null, motivo
       if (!chamadoId) throw new Error('chamado não confirmado pelo banco');
     }
 
-    const rm = await sb('chamados_mensagens', {
-      method: 'POST', headers: { Prefer: 'return=minimal' },
-      body: JSON.stringify({ chamado_id: chamadoId, autor_tipo: 'sistema', autor_nome: 'Sistema', conteudo: montarMensagem(imovel, imovelId, { motivo, itens, destinatario, contatos: await contatosParaLigar(imovel) }) }),
-    });
-    if (!rm.ok) console.error('[chamado-documentos] mensagem HTTP', rm.status);
+    // Sem repetir (05/11): cada cliente que abre o lote passava por aqui e o chamado de Tramandaí
+    // juntou 3 mensagens idênticas. Mesmo motivo que a última mensagem do sistema nos últimos
+    // 7 dias → não grava de novo; só o primeiro parágrafo (o motivo) é comparado.
+    const cabeca = `Documentos do lote precisam da equipe: ${(MOTIVO[motivo] || { porque: motivo }).porque}`;
+    let repetida = false;
+    if (!novo) {
+      const desde = new Date(Date.now() - 7 * 86_400_000).toISOString();
+      const ru = await sb(`chamados_mensagens?chamado_id=eq.${chamadoId}&autor_tipo=eq.sistema&criado_em=gt.${encodeURIComponent(desde)}&conteudo=like.${encodeURIComponent('Documentos do lote precisam da equipe:*')}&select=conteudo&order=criado_em.desc&limit=1`);
+      if (ru.ok) { const [u] = await ru.json().catch(() => []); repetida = !!u && String(u.conteudo).split('\n')[0] === cabeca; }
+      else console.error('[chamado-documentos] ler última mensagem HTTP', ru.status); // sem ler, grava (repetir é melhor que sumir)
+    }
+    if (!repetida) {
+      const rm = await sb('chamados_mensagens', {
+        method: 'POST', headers: { Prefer: 'return=minimal' },
+        body: JSON.stringify({ chamado_id: chamadoId, autor_tipo: 'sistema', autor_nome: 'Sistema', conteudo: montarMensagem(imovel, imovelId, { motivo, itens, destinatario, contatos: await contatosParaLigar(imovel) }) }),
+      });
+      if (!rm.ok) console.error('[chamado-documentos] mensagem HTTP', rm.status);
+    }
     if (!novo) {
       const ru = await sb(`chamados?id=eq.${chamadoId}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ atualizado_em: new Date().toISOString() }) });
       if (!ru.ok) console.error('[chamado-documentos] atualizar chamado HTTP', ru.status);

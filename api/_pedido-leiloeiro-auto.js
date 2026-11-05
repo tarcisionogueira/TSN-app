@@ -117,6 +117,21 @@ async function gravar(linha) {
   return g?.id || null;
 }
 
+// QUEM ESTÁ ESPERANDO (05/11, dono): todo usuário que parou por falta de documento fica registrado
+// em `documentos_aguardando` — não só o primeiro do lote. Quando matrícula e edital entram no lote, os
+// gatilhos marcam `pronto_em` e o avisar-documentos-cron avisa cada um. Devolve se registrou: a frase
+// ao cliente só promete o aviso quando ele existe de fato.
+async function registrarAguardando(imovelId, userId) {
+  try {
+    const r = await sb('documentos_aguardando?on_conflict=imovel_id,user_id', {
+      method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=representation' },
+      body: JSON.stringify({ imovel_id: String(imovelId), user_id: userId, criado_em: new Date().toISOString(), pronto_em: null, avisado_em: null, aviso_erro: null }),
+    });
+    if (!r.ok) { console.error('[pedido-leiloeiro-auto] registrar aguardando HTTP', r.status); return false; }
+    return ((await r.json().catch(() => [])).length || 0) > 0;
+  } catch (e) { console.error('[pedido-leiloeiro-auto] registrar aguardando:', String(e?.message || e).slice(0, 120)); return false; }
+}
+
 // O automático não consegue andar sozinho → chamado no Atendimento (04/11). O resultado vai no
 // retorno (`chamado`) para a frase ao cliente não prometer "nossa equipe" sem chamado aberto.
 async function encaminharEquipe({ imovelId, pedidoId, motivo, itensTexto, destinatario }) {
@@ -136,8 +151,14 @@ export async function pedirDocumentosAoLeiloeiro({ imovelId, userId, faltando, f
   if (!SUPABASE_URL || !SERVICE_KEY) return { status: 'erro', erro: 'configuracao_ausente' };
   try {
     const desde = new Date(Date.now() - JANELA_LOTE_DIAS * DIA).toISOString();
-    const [ja] = forcar ? [] : await lerJson(`documental_pedidos_leiloeiro?imovel_id=eq.${encodeURIComponent(imovelId)}&criado_em=gt.${encodeURIComponent(desde)}&status=in.(${STATUS_ATIVOS})&select=criado_em,status,respondido_em,chamado_id&order=criado_em.desc&limit=1`);
-    if (ja) return { status: ja.status === 'enviado' || ja.status === 'represado' ? 'ja_pedido' : ja.status, em: ja.criado_em, respondidoEm: ja.respondido_em || null, chamado: ja.chamado_id || null };
+    const [ja] = forcar ? [] : await lerJson(`documental_pedidos_leiloeiro?imovel_id=eq.${encodeURIComponent(imovelId)}&criado_em=gt.${encodeURIComponent(desde)}&status=in.(${STATUS_ATIVOS})&select=id,criado_em,status,respondido_em,chamado_id,itens_pedidos,destinatario_email&order=criado_em.desc&limit=1`);
+    if (ja) {
+      // Outro cliente já pediu este lote: este também entra na lista de quem é avisado.
+      const aviso = await registrarAguardando(imovelId, userId);
+      // Pedido anterior ao chamado-sempre (05/11) não tem chamado: abre agora e liga o pedido a ele.
+      const chamado = ja.chamado_id || await encaminharEquipe({ imovelId, pedidoId: ja.id, motivo: ['enviado', 'represado', 'aguardando'].includes(ja.status) ? 'acompanhar' : ja.status, itensTexto: Array.isArray(ja.itens_pedidos) ? ja.itens_pedidos : [], destinatario: ja.destinatario_email || null });
+      return { status: ja.status === 'enviado' || ja.status === 'represado' ? 'ja_pedido' : ja.status, em: ja.criado_em, respondidoEm: ja.respondido_em || null, chamado, aviso };
+    }
 
     const [imovel] = await lerJson(`imoveis_leilao?id=eq.${encodeURIComponent(imovelId)}&select=${SEL_IMOVEL}&limit=1`);
     if (!imovel) return { status: 'erro', erro: 'imovel_nao_encontrado' };
@@ -145,7 +166,9 @@ export async function pedirDocumentosAoLeiloeiro({ imovelId, userId, faltando, f
     if (/caixa|cef/i.test(imovel.fonte || '')) return { status: 'nada_a_pedir' };
     const prox = proximoLeilao(imovel);
     if (prox.encerrado) return { status: 'nada_a_pedir' };
-    if (!forcar && prox.ms && prox.ms - Date.now() < PRAZO_MIN_LEILAO_H * 3_600_000) return { status: 'prazo_curto' };
+    // A equipe reenviando (forcar) não é um cliente esperando.
+    const aviso = forcar ? false : await registrarAguardando(imovelId, userId);
+    if (!forcar && prox.ms && prox.ms - Date.now() < PRAZO_MIN_LEILAO_H * 3_600_000) return { status: 'prazo_curto', aviso };
 
     // Superbid (13/10): organizador do EVENTO na página da oferta antes do cadastro (que dá o SAC da SOLD
     // para os 48 leiloeiros da plataforma). Sem organizador, segue o cadastro como antes.
@@ -160,24 +183,31 @@ export async function pedirDocumentosAoLeiloeiro({ imovelId, userId, faltando, f
 
     if (!contato?.email) {
       const pedidoId = await gravar({ ...base, status: 'sem_contato' });
-      return { status: 'sem_contato', chamado: await encaminharEquipe({ imovelId, pedidoId, motivo: 'sem_contato', itensTexto }) };
+      return { status: 'sem_contato', chamado: await encaminharEquipe({ imovelId, pedidoId, motivo: 'sem_contato', itensTexto }), aviso };
     }
     const email = String(contato.email).trim().toLowerCase();
     const sit = forcar ? {} : await situacaoEndereco(email);
     if (sit.naoResponde) {
       const pedidoId = await gravar({ ...base, destinatario_email: email, status: 'equipe_whatsapp' });
-      return { status: 'equipe_whatsapp', chamado: await encaminharEquipe({ imovelId, pedidoId, motivo: 'equipe_whatsapp', itensTexto, destinatario: email }) };
+      return { status: 'equipe_whatsapp', chamado: await encaminharEquipe({ imovelId, pedidoId, motivo: 'equipe_whatsapp', itensTexto, destinatario: email }), aviso };
     }
-    if (sit.tetoCheio) { await gravar({ ...base, destinatario_email: email, status: 'aguardando' }); return { status: 'aguardando', em: new Date().toISOString() }; }
+    if (sit.tetoCheio) {
+      const pedidoId = await gravar({ ...base, destinatario_email: email, status: 'aguardando' });
+      // Chamado SEMPRE (05/11, dono): mesmo com o e-mail na fila, a equipe acompanha e pode ligar.
+      return { status: 'aguardando', em: new Date().toISOString(), chamado: await encaminharEquipe({ imovelId, pedidoId, motivo: 'acompanhar', itensTexto, destinatario: email }), aviso };
+    }
 
     const env = await enviar(email, imovel, itensTexto, userId);
     const pedidoId = await gravar({ ...base, destinatario_email: email, texto_enviado: env.texto_enviado, resend_id: env.resend_id, status: env.status, resposta_token: env.resposta_token });
     if (env.status === 'falha') {
       // Reenvio da equipe que falhou já está dentro do chamado (quem chamou registra lá).
       const chamado = forcar ? null : await encaminharEquipe({ imovelId, pedidoId, motivo: 'falha', itensTexto, destinatario: email });
-      return { status: 'falha', erro: env.erro || 'falha_envio', chamado, pedidoId, destinatario: email };
+      return { status: 'falha', erro: env.erro || 'falha_envio', chamado, pedidoId, destinatario: email, aviso };
     }
-    return { status: env.status, em: new Date().toISOString(), pedidoId, destinatario: email };
+    // Chamado SEMPRE (05/11, dono): o e-mail saiu, e a equipe acompanha — se o leiloeiro não
+    // responder, liga. O reenvio da equipe (forcar) já está dentro do chamado.
+    const chamado = forcar ? null : await encaminharEquipe({ imovelId, pedidoId, motivo: 'acompanhar', itensTexto, destinatario: email });
+    return { status: env.status, em: new Date().toISOString(), pedidoId, destinatario: email, chamado, aviso };
   } catch (e) {
     console.error('[pedido-leiloeiro-auto] falhou:', String(e?.message || e).slice(0, 160));
     return { status: 'erro', erro: String(e?.message || e).slice(0, 120) };
@@ -267,15 +297,17 @@ export function fraseDoPedido(p, { semAnalise = false } = {}) {
   if (!p) return '';
   const data = p.em ? new Date(p.em).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '';
   const depois = semAnalise ? 'aí é só gerar a análise de novo' : 'a análise é gerada automaticamente';
+  // Aviso de chegada (05/11): só promete quando o registro em documentos_aguardando existe.
+  const avisa = p.aviso ? ' Você recebe um aviso por e-mail (e aqui na Análise) assim que a matrícula e o edital chegarem.' : '';
   if (['enviado', 'represado', 'ja_pedido'].includes(p.status)) {
-    return ` Pedimos o documento ao leiloeiro por e-mail${data ? ` em ${data}` : ''}: quando ele responder, o arquivo entra no lote e ${depois}.`;
+    return ` Pedimos o documento ao leiloeiro por e-mail${data ? ` em ${data}` : ''}${p.chamado ? ' e nossa equipe acompanha o pedido' : ''}: quando ele responder, o arquivo entra no lote e ${depois}.${avisa}`;
   }
-  if (p.status === 'aguardando') return ` O pedido ao leiloeiro já está na fila de envio: quando ele responder, o arquivo entra no lote e ${depois}.`;
-  if (p.status === 'equipe_whatsapp') return ` Nossa equipe vai pedir o documento diretamente ao leiloeiro; quando chegar, ${depois}.`;
+  if (p.status === 'aguardando') return ` O pedido ao leiloeiro já está na fila de envio${p.chamado ? ' e nossa equipe acompanha' : ''}: quando ele responder, o arquivo entra no lote e ${depois}.${avisa}`;
+  if (p.status === 'equipe_whatsapp') return ` Nossa equipe vai pedir o documento diretamente ao leiloeiro; quando chegar, ${depois}.${avisa}`;
   // Sem contato ou e-mail que não saiu: só promete "nossa equipe" se o chamado abriu de fato.
   // `sem_contato` repetido na janela de 7 dias volta como status com `chamado` do pedido anterior.
   if ((p.status === 'sem_contato' || p.status === 'falha') && p.chamado) {
-    return ` O leiloeiro não publicou o documento e o pedido automático não conseguiu sair: nossa equipe abriu um chamado para buscar com ele. Quando chegar, ${depois}.`;
+    return ` O leiloeiro não publicou o documento e o pedido automático não conseguiu sair: nossa equipe abriu um chamado para buscar com ele. Quando chegar, ${depois}.${avisa}`;
   }
   if (p.status === 'prazo_curto') return ' Como o leilão é em menos de 48 horas, não há tempo para o leiloeiro responder por e-mail: anexe o documento ou fale direto com o leiloeiro.';
   return '';

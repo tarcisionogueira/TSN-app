@@ -1705,6 +1705,22 @@ export default function Analise() {
     })();
     return () => { vivo = false; };
   }, [imovelInicial?.id, imovelInicial?.manual, imovelInicial?.fonte]); // eslint-disable-line react-hooks/exhaustive-deps
+  // "OS DOCUMENTOS CHEGARAM" (05/11, dono): o cliente parou aqui por falta de matrícula/edital e o
+  // leiloeiro já mandou — `documentos_aguardando.pronto_em` (gatilhos da migração 20261105). Mesma
+  // notícia do e-mail do avisar-documentos-cron. Falha de leitura só some a faixa (é aviso, não trava).
+  const [documentosChegaram, setDocumentosChegaram] = useState(null);
+  useEffect(() => {
+    const id = imovelInicial?.id;
+    if (!ehUuid(id)) { setDocumentosChegaram(null); return; }
+    let vivo = true;
+    (async () => {
+      const { data, error } = await supabase.from('documentos_aguardando').select('pronto_em').eq('imovel_id', id).not('pronto_em', 'is', null).limit(1);
+      if (!vivo) return;
+      if (error) { registrarEvento('erro_ui', { alvo: 'analise_documentos_chegaram', detalhe: `${id}: ${error.message}`.slice(0, 120) }); return; }
+      setDocumentosChegaram(data?.[0]?.pronto_em || null);
+    })();
+    return () => { vivo = false; };
+  }, [imovelInicial?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!docsRecuperados) return;
     setDocsManuais(docsRecuperados.map((x, i) => ({ ...x, id: `rec_${i}_${Date.now()}`, lendo: false, tipoDoNome: false })));
@@ -2899,6 +2915,11 @@ export default function Analise() {
               {propostaPosLeilao && (
                 <div style={{ background:'#f3e8ff', border:'1px solid #ddd6fe', borderRadius:12, padding:'12px 14px', marginBottom:16, fontSize:12.5, color:'#5b21b6', lineHeight:1.6 }}>
                   <strong>Leilão encerrado{loteEncerradoReal.ultimaData ? ` em ${dataBR(loteEncerradoReal.ultimaData)}` : ''} sem lance registrado.</strong> Liberado para a equipe gerar os relatórios e compor a proposta de compra direta ao leiloeiro.
+                </div>
+              )}
+              {documentosChegaram && !faltaMatMercado && !(relMercadoGerado && relDocumentalGerado) && (
+                <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:12, padding:'12px 14px', marginBottom:16, fontSize:12.5, color:'#166534', lineHeight:1.6 }}>
+                  <strong>📎 Os documentos chegaram!</strong> A matrícula e o edital deste lote já foram fornecidos pelo leiloeiro{documentosChegaram ? ` (${new Date(documentosChegaram).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })})` : ''} e estão anexados. Você já pode gerar o relatório.
                 </div>
               )}
               {faltaMatMercado && (

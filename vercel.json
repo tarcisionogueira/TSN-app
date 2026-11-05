@@ -468,6 +468,10 @@
       "schedule": "15 */3 * * *"
     },
     {
+      "path": "/api/avisar-documentos-cron",
+      "schedule": "*/20 * * * *"
+    },
+    {
       "path": "/api/arquivar-anexos-email-cron",
       "schedule": "25 * * * *"
     }
