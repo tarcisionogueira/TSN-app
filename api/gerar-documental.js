@@ -587,12 +587,12 @@ async function lerDoc(url, deadline, info = {}) {
     if (doc.kind === 'imagem') return { kind: 'imagem', base64: doc.base64, mediaType: doc.mediaType, url };
     if (doc.kind === 'pacote') {
       return { kind: 'pacote', url, falhas: doc.falhas || [], itens: doc.itens.map((it) => (it.kind === 'texto'
-        ? { kind: 'text', text: String(it.texto || '').slice(0, 60000), url, nome: it.nome }
+        ? { kind: 'text', text: String(it.texto || '').slice(0, 60000), url, nome: it.nome, convertido: true }
         : { kind: it.kind, base64: it.base64, mediaType: it.mediaType, url, nome: it.nome })) };
     }
     // .pdf que veio como TEXTO não convertido = página HTML de bloqueio/negação → falha desta tentativa.
     if (ehPdfUrl && !doc.convertido) { info.motivo = 'link de PDF devolveu página (bloqueio/negação), não o arquivo'; return null; }
-    if (doc.kind === 'texto') return { kind: 'text', text: doc.texto.slice(0, doc.convertido ? 60000 : 12000), url };
+    if (doc.kind === 'texto') return { kind: 'text', text: doc.texto.slice(0, doc.convertido ? 60000 : 12000), url, convertido: !!doc.convertido };
     info.motivo = doc.motivo || 'formato não legível';
     console.log(`[lerDoc] formato não legível (${info.motivo}) ${url}`);
     return null;
@@ -1276,14 +1276,23 @@ export default async function handler(req, res) {
             finally { await parser.destroy().catch(() => {}); }
           } catch { charsTexto = null; } // escaneado/quebrado → null, e a visão segue sendo a única via
         }
-        lidos.push({ rotulo: u2.rotulo, url: u.url, kind: doc.kind, cache: deCache, tipo: u.tipo || tipoDoc, charsTexto });
+        // PÁGINA DO LOTE NÃO É DOCUMENTO (05/11, dono: "não deve ser gerado sem o edital e a matrícula").
+        // Muitas fontes gravam a página do lote em link_edital; lida, ela vira TEXTO sem conversão e
+        // entrava como "Edital" lido — em Tramandaí o relatório foi liberado assim, sem edital nenhum.
+        // Texto não convertido (HTML) segue no prompt como contexto, mas com outro tipo e outro rótulo:
+        // não satisfaz a trava de matrícula/edital, e a IA não o lê como se fosse o edital.
+        const ehPaginaLote = doc.kind === 'text' && !doc.convertido;
+        const tipoArquivo = u.tipo || tipoDoc;
+        const tipoFinal = ehPaginaLote && ['edital', 'regras_venda', 'regras', 'matricula', 'matricula_registrada'].includes(tipoArquivo) ? 'pagina_lote' : tipoArquivo;
+        const rotuloFinal = tipoFinal === 'pagina_lote' ? `Página do lote no site do leiloeiro (não é o ${u2.rotulo}; só o texto do anúncio)` : u2.rotulo;
+        lidos.push({ rotulo: rotuloFinal, url: u.url, kind: doc.kind, cache: deCache, tipo: tipoFinal, charsTexto, arquivo: !ehPaginaLote });
         // PDF vira bloco `document`, IMAGEM vira bloco `image` (matrícula fotografada ou
         // digitalizada em JPEG/PNG — a IA lê as duas), e texto segue como texto. O `else`
         // antigo mandava tudo que não fosse PDF como texto, o que transformava imagem em
         // ruído no prompt. Ver `_doc-leitura.js`.
         if (doc.kind === 'pdf') blocos.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: doc.base64 }, title: u2.rotulo });
         else if (doc.kind === 'imagem') blocos.push({ type: 'image', source: { type: 'base64', media_type: doc.mediaType, data: doc.base64 } });
-        else blocos.push({ type: 'text', text: `=== ${u2.rotulo} (${u.url}) ===\n${doc.text}` });
+        else blocos.push({ type: 'text', text: `=== ${rotuloFinal} (${u.url}) ===\n${doc.text}` });
       }
     }
     // Texto colado manualmente (inclusão manual / fallback). Teto de 60.000 = o MESMO dos documentos que o
@@ -1338,7 +1347,9 @@ export default async function handler(req, res) {
     // GATE PÓS-GERAÇÃO (abaixo) pede o que faltar. Assim não bloqueamos à toa uma
     // matrícula presente mas mal-rotulada, nem geramos laudo sem os dois documentos.
     const temTextoColado = !!(body?.textoEdital || body?.textoMatricula);
-    if (lidos.length === 0 && !temTextoColado) {
+    // Só ARQUIVO conta (05/11): a página do lote e a foto não são documento — com só elas, nada de IA.
+    const lidosArquivo = lidos.filter(l => l.arquivo);
+    if (lidosArquivo.length === 0 && !temTextoColado) {
       // Leiloeiro INTEGRADO (Caixa): a matrícula/edital só saem por navegador real
       // (sessão). Em vez de pedir anexo manual, ENFILEIRA a captura automática (job
       // que roda a cada 10-15 min baixa os PDFs via navegador e guarda no storage; a
@@ -1373,7 +1384,7 @@ export default async function handler(req, res) {
       const faltandoInicial = faltandoPre.length ? faltandoPre : ['matricula', ehVendaDiretaSem ? 'regras_venda' : 'edital'];
       const nomeDoc = (t) => t === 'matricula' ? 'a matrícula' : t === 'regras_venda' ? 'as regras da venda' : 'o edital';
       const faltaTxt = faltandoInicial.map(nomeDoc).join(' e ');
-      const jaTemTxt = lidos.length ? `Já temos ${lidos.map(l => l.rotulo).join(', ')}. ` : '';
+      const jaTemTxt = lidosArquivo.length ? `Já temos ${lidosArquivo.map(l => l.rotulo).join(', ')}. ` : '';
       // Matrícula login-gated (ZUK/GRUPOLANCE) ou já negative-cached → NÃO promete "sai
       // sozinha" (a captura genérica pula essas fontes e não há re-disparo do laudo).
       const matriculaNaoAutoResolve = faltandoInicial.includes('matricula') && !ehCaixaFonte
@@ -2315,7 +2326,11 @@ export default async function handler(req, res) {
     const processoNaoVerificado = !!(procNum || procNome) && !cnjConfirmaNumero && (cnjNumeroFalhou || (!procNum && cnjNomeFalhou));
     const isVendaDiretaDoc = /venda_(direta|online)/i.test(String(row?.modalidade || ''));
     const ehCaixaFonteDoc = /caixa|cef/i.test(row?.fonte || '');
-    const leuMatriculaFinal = !!da.matricula || leuMatricula;
+    // A confirmação da IA (documentosAnalisados) só vale se houve ARQUIVO além do outro documento
+    // central (05/11): ela já confirmou "edital" lendo a página do lote. Arquivo de tipo genérico
+    // continua valendo — é assim que chega a matrícula mal rotulada (SUPERBID).
+    const arquivoAlemDe = (tipos) => lidos.some(l => l.arquivo && !['foto_imovel', 'pagina_lote', ...tipos].includes(tipoLido(l)));
+    const leuMatriculaFinal = leuMatricula || (!!da.matricula && arquivoAlemDe(['edital', 'regras_venda', 'regras']));
     // CAIXA VENDA ONLINE: o documento que rege a compra é a "REGRA DE VENDA ONLINE" PADRONIZADA
     // (venda-imoveis.caixa.gov.br/.../comocomprar.pdf), NÃO um edital por lote. Esse PDF genérico
     // às vezes falha o fetch (403/Bright Data) e a IA não confirma leitura do "edital" → o gate
@@ -2323,7 +2338,8 @@ export default async function handler(req, res) {
     // existe para venda online. Para CEF, matrícula lida + as regras padronizadas (que o prompt já
     // conhece) satisfazem o gate: não bloqueamos por edital inexistente. Se a IA LEU um edital real
     // (leilão SFI com edital fetchável), ele conta normalmente (da.edital) e nada muda.
-    const leuEdital = !!da.edital || lidos.some(l => ['edital', 'regras_venda'].includes(tipoLido(l))) || !!body?.textoEdital
+    const leuEdital = lidos.some(l => l.arquivo && ['edital', 'regras_venda'].includes(tipoLido(l))) || !!body?.textoEdital
+      || (!!da.edital && arquivoAlemDe(['matricula', 'matricula_registrada']))
       || (ehCaixaFonteDoc && leuMatriculaFinal);
     const faltando = [];
     if (!leuMatriculaFinal) faltando.push('matricula');

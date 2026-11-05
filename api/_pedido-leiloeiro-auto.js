@@ -88,7 +88,7 @@ async function situacaoEndereco(email) {
 function montarTexto(imovel, itensTexto) {
   const lote = imovel.titulo || [imovel.endereco, imovel.cidade, imovel.estado].filter(Boolean).join(', ') || 'Lote';
   const link = imovel.url_lote || imovel.link_edital || '';
-  const texto = `Prezados,\n\nA equipe da BidPro Brasil está analisando o lote abaixo para um cliente interessado e não localizou na página do leilão o(s) documento(s) a seguir:\n\n${itensTexto.map(t => `• ${t}`).join('\n')}\n\nLote: ${lote}${link ? `\nPágina do lote: ${link}` : ''}${imovel.numero_processo ? `\nProcesso: ${imovel.numero_processo}` : ''}\n\nPoderiam, por gentileza, responder a este e-mail com o(s) arquivo(s) em anexo (PDF)?\n\nAgradecemos a atenção.\n\nEquipe BidPro Brasil`;
+  const texto = `Prezados,\n\nA equipe da BidPro Brasil está analisando o lote abaixo para um cliente interessado e precisa dos documentos a seguir para concluir a análise:\n\n${itensTexto.map(t => `• ${t}`).join('\n')}\n• Demais anexos do lote, se houver (laudo de avaliação, auto de penhora, certidões, regulamento)\n\nLote: ${lote}${link ? `\nPágina do lote: ${link}` : ''}${imovel.numero_processo ? `\nProcesso: ${imovel.numero_processo}` : ''}\n\nPoderiam, por gentileza, responder a este e-mail com o(s) arquivo(s) em anexo (PDF)?\n\nAgradecemos a atenção.\n\nEquipe BidPro Brasil`;
   return { texto, assunto: `Documentação do lote — ${lote}${imovel.numero_processo ? ` (proc. ${imovel.numero_processo})` : ''}` };
 }
 
@@ -146,7 +146,12 @@ async function encaminharEquipe({ imovelId, pedidoId, motivo, itensTexto, destin
  * Continua recusando lote encerrado e Caixa.
  */
 export async function pedirDocumentosAoLeiloeiro({ imovelId, userId, faltando, forcar = false }) {
-  const itens = [...new Set(faltando || [])].filter(t => ROTULO[t]);
+  // MÍNIMO DO PEDIDO (05/11, dono): "edital e matrícula são o básico para avaliar um leilão" — o pedido
+  // leva SEMPRE os dois (em venda direta, as regras da venda no lugar do edital), mais o que a análise
+  // apontou. Os demais anexos do lote vão no texto como pedido aberto ("se houver"), fora de
+  // itens_pedidos: o chamado e o aviso fecham pela matrícula e pelo edital, não por eles.
+  const apontados = [...new Set(faltando || [])].filter(t => ROTULO[t]);
+  const itens = apontados.length ? [...new Set(['matricula', apontados.includes('regras_venda') ? 'regras_venda' : 'edital', ...apontados])] : [];
   if (!itens.length || !imovelId || !userId) return { status: 'nada_a_pedir' };
   if (!SUPABASE_URL || !SERVICE_KEY) return { status: 'erro', erro: 'configuracao_ausente' };
   try {
@@ -260,10 +265,14 @@ export async function drenarPedidosAguardando({ max = 10 } = {}) {
     };
     try {
       const [imovel] = await lerJson(`imoveis_leilao?id=eq.${encodeURIComponent(p.imovel_id)}&select=${SEL_IMOVEL}&limit=1`);
-      const itens = (Array.isArray(p.itens_pedidos) ? p.itens_pedidos : []).filter((rot) => {
+      // Dispensa só quando TUDO o que foi pedido já chegou; senão o e-mail sai com o pedido inteiro
+      // (matrícula e edital são o mínimo — 05/11, dono).
+      const pedidosFila = Array.isArray(p.itens_pedidos) ? p.itens_pedidos : [];
+      const faltaAlgum = pedidosFila.some((rot) => {
         const t = ROTULO_PARA_TIPO[rot];
         return !(t === 'matricula' && imovel?.tem_matricula_doc) && !(t === 'edital' && imovel?.tem_edital_doc);
       });
+      const itens = faltaAlgum ? pedidosFila : [];
       const prox = imovel ? proximoLeilao(imovel) : { encerrado: true };
       if (!itens.length || prox.encerrado || (prox.ms && prox.ms - Date.now() < PRAZO_MIN_LEILAO_H * 3_600_000)) {
         await marcar({ status: !itens.length ? 'dispensado' : 'prazo_curto' }); out.dispensados++; continue;

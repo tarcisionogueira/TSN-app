@@ -693,13 +693,15 @@ function SaquesPJDoCliente({ userId }) {
 const ROTULO_DOC = { matricula: 'Matrícula', edital: 'Edital', regras_venda: 'Regras de venda', regras: 'Regras', laudo: 'Laudo' };
 // Texto do pedido ao leiloeiro (WhatsApp / copiar). O e-mail tem o próprio modelo no servidor
 // (api/_pedido-leiloeiro-auto.js); aqui é a versão curta, no tom de mensagem.
-function mensagemPedidoLeiloeiro(im, faltando) {
+function mensagemPedidoLeiloeiro(im, faltandoApontado = []) {
+  // Matrícula e edital são o mínimo de qualquer pedido (05/11, dono); o resto vem "se houver".
+  const faltando = [...new Set(['matricula', (faltandoApontado || []).includes('regras_venda') ? 'regras_venda' : 'edital', ...(faltandoApontado || [])])];
   const itens = faltando.map(t => (t === 'matricula' ? 'a matrícula atualizada do imóvel' : t === 'edital' ? 'o edital do leilão' : (ROTULO_DOC[t] || t).toLowerCase()));
   const lista = itens.length > 1 ? `${itens.slice(0, -1).join(', ')} e ${itens[itens.length - 1]}` : itens[0];
   return [
     'Olá, tudo bem?',
     `Aqui é da BidPro Brasil. Estamos analisando para um cliente o lote "${im.titulo || 'do seu leilão'}"${im.cidade ? ` (${[im.cidade, im.estado].filter(Boolean).join('/')})` : ''}${im.numero_processo ? `, processo ${im.numero_processo}` : ''}.`,
-    `Para concluir a análise, poderia nos enviar ${lista || 'os documentos do lote'}? Pode ser por aqui mesmo, em PDF.`,
+    `Para concluir a análise, poderia nos enviar ${lista || 'os documentos do lote'}? Se houver outros anexos do lote (laudo de avaliação, auto de penhora, certidões), pode mandar junto também. Pode ser por aqui mesmo, em PDF.`,
     im.url_lote ? `Lote: ${im.url_lote}` : null,
     'Obrigado!',
   ].filter(Boolean).join('\n\n');

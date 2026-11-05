@@ -151,15 +151,18 @@ export default async function handler(req) {
     !imovel.tem_matricula_doc && !imovel.link_matricula ? 'matricula' : null,
     imovel.tem_edital_doc === false ? 'edital' : null,
   ].filter(Boolean);
-  const faltando = [...new Set([...(Array.isArray(result.faltando) ? result.faltando : []), ...faltaNoAcervo])].filter(t => DOC_FALTA_LABEL[t]);
+  const apontados = [...new Set([...(Array.isArray(result.faltando) ? result.faltando : []), ...faltaNoAcervo])].filter(t => DOC_FALTA_LABEL[t]);
   const lacunas = (Array.isArray(result.lacunas) ? result.lacunas : []).filter(Boolean).slice(0, MAX_LACUNAS);
-  if (!faltando.length && !lacunas.length) {
+  if (!apontados.length && !lacunas.length) {
     return json({ error: 'Não há documento faltando neste lote (matrícula e edital publicados) nem pendência na análise documental.' }, 400);
   }
 
   const enderecoLabel = imovel.titulo || [imovel.endereco, imovel.cidade, imovel.estado].filter(Boolean).join(', ') || `Imóvel ${imovelId}`;
   const linkLote = imovel.url_lote || imovel.link_edital || '';
 
+  // MÍNIMO DO PEDIDO (05/11, dono): matrícula e edital (ou regras da venda) vão sempre; os demais
+  // anexos do lote entram como pedido aberto no fim da lista.
+  const faltando = [...new Set(['matricula', apontados.includes('regras_venda') ? 'regras_venda' : 'edital', ...apontados])];
   const itensTexto = [
     ...faltando.map(t => DOC_FALTA_LABEL[t]),
     ...lacunas,
@@ -167,7 +170,7 @@ export default async function handler(req) {
 
   const nomeCliente = user.user_metadata?.nome || user.user_metadata?.full_name || 'Interessado(a)';
   const assunto = `Documentação do lote — ${enderecoLabel}${imovel.numero_processo ? ` (proc. ${imovel.numero_processo})` : ''}`;
-  const corpoTextoPuro = `Prezados,\n\nSou interessado(a) no lote abaixo e, para concluir minha análise antes do leilão, peço a gentileza de confirmar os pontos a seguir:\n\nLote: ${enderecoLabel}${linkLote ? `\nPágina do lote: ${linkLote}` : ''}${imovel.numero_processo ? `\nProcesso: ${imovel.numero_processo}` : ''}\n\n${itensTexto.map(t => `• ${t}`).join('\n')}\n\nAgradeço desde já a atenção.\n\n${nomeCliente}`;
+  const corpoTextoPuro = `Prezados,\n\nSou interessado(a) no lote abaixo e, para concluir minha análise antes do leilão, peço a gentileza de confirmar os pontos a seguir:\n\nLote: ${enderecoLabel}${linkLote ? `\nPágina do lote: ${linkLote}` : ''}${imovel.numero_processo ? `\nProcesso: ${imovel.numero_processo}` : ''}\n\n${itensTexto.map(t => `• ${t}`).join('\n')}\n• Demais anexos do lote, se houver (laudo de avaliação, auto de penhora, certidões, regulamento)\n\nAgradeço desde já a atenção.\n\n${nomeCliente}`;
 
   // Contato do LEILOEIRO do lote, não da fonte (28/09): em plataforma multi-tenant a fonte são
   // dezenas de leiloeiros. Falha ao resolver é erro — nunca "sem contato" (forma #2).
