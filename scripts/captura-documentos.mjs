@@ -170,7 +170,8 @@ async function baixarPdfDireto(url, referer) {
 // direto (Cloudflare no CDN do leiloeiro). Respeita o teto semanal (proposito 'docs').
 // Última recusa de ORÇAMENTO do Bright Data nesta captura (05/11): sem ela, "o teto disse não" e "a página não
 // tem documento" saíam iguais, e o lote ia para `sem_documento` — terminal, nunca retentado (forma nº 5).
-let recusaOrcamentoBD = null;
+// POR PROPÓSITO (05/11): leiloeiro com cota própria (ex.: LEILAOBRASIL) esgotada não pode travar o `docs` dos outros.
+const recusasOrcamentoBD = new Map(); // proposito → motivo
 async function baixarPdfBD(url, referer, proposito = 'docs') {
   if (!brightDataDisponivel()) return null;
   let resp = null;
@@ -178,7 +179,7 @@ async function baixarPdfBD(url, referer, proposito = 'docs') {
     resp = await buscarViaBrightData(url, { proposito, timeoutMs: 45000, headers: referer ? { Referer: referer } : null, exigirOk: false });
   } catch (e) {
     if (!(e instanceof ErroBrightData)) throw e;
-    if (e.semCota) recusaOrcamentoBD = e.motivo;
+    if (e.semCota) recusasOrcamentoBD.set(proposito, e.motivo);
     return null;
   }
   if (!resp || !resp.ok) return null;
@@ -462,18 +463,18 @@ async function processar(browser, item) {
   // gastar um com a página bloqueada para redescobrir o mesmo link (05/11: GF/Destak/Silva — Cloudflare no runner).
   if (!capturados.length && bloqueado && brightDataDisponivel()) {
     for (const c of conhecidos.filter((k) => /\.(pdf|docx?)(\?|#|$)/i.test(k.url) && !urlsSalvas.has(k.url)).slice(0, 3)) {
-      if (capturados.length >= 8 || recusaOrcamentoBD) break;
+      if (capturados.length >= 8 || recusasOrcamentoBD.has(propositoBD)) break;
       const buf = await baixarPdfBD(c.url, paginaLote, propositoBD);
       if (buf) { try { await salvar(buf, c.url, limparNome(c.nome)); } catch { /* */ } }
     }
   }
-  if (!capturados.length && bloqueado && paginaLote && brightDataDisponivel() && !recusaOrcamentoBD) {
+  if (!capturados.length && bloqueado && paginaLote && brightDataDisponivel() && !recusasOrcamentoBD.has(propositoBD)) {
     let resp = null;
     try {
       resp = await buscarViaBrightData(paginaLote, { proposito: propositoBD, timeoutMs: 45000, exigirOk: false });
     } catch (e) {
       if (!(e instanceof ErroBrightData)) throw e;
-      if (e.semCota) recusaOrcamentoBD = e.motivo;
+      if (e.semCota) recusasOrcamentoBD.set(propositoBD, e.motivo);
       console.log(`[docs] ${item.imovel_id} ${im.fonte || ''}: CAMINHO 3 recusado — ${e.message}`);
     }
     if (resp && resp.ok) {
@@ -493,7 +494,8 @@ async function processar(browser, item) {
   // dava 0 links e o lote saía `sem_documento` — terminal. 327 lotes da plataforma Degrau e centenas de outros
   // (GF 116, Bolsa 54, Destak 46…) com edital/matrícula no anexo foram arquivados assim. Agora vira `bloqueado`,
   // que a fila retenta depois (documentos_fila_proxima), e o motivo diz se foi orçamento ou anti-bot.
-  if (!capturados.length && bloqueado) throw new Error(`bloqueado_antibot${recusaOrcamentoBD ? ` (Bright Data sem cota: ${recusaOrcamentoBD})` : brightDataDisponivel() ? '' : ' (Bright Data não configurado)'}`);
+  const recusaBD = recusasOrcamentoBD.get(propositoBD);
+  if (!capturados.length && bloqueado) throw new Error(`bloqueado_antibot${recusaBD ? ` (Bright Data sem cota: ${propositoBD}/${recusaBD})` : brightDataDisponivel() ? '' : ' (Bright Data não configurado)'}`);
   if (!capturados.length) throw new Error('nenhum_documento_encontrado');
   return capturados;
 }
