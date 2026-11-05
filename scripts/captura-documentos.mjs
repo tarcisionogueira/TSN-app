@@ -17,7 +17,7 @@ import { createClient } from '@supabase/supabase-js';
 import puppeteer from 'puppeteer';
 import { Buffer } from 'buffer';
 import { createHash } from 'node:crypto';
-import { fetchViaBrightData, brightDataDisponivel, propositoDaFonte } from '../api/_brightdata.js';
+import { fetchViaBrightData, buscarViaBrightData, ErroBrightData, brightDataDisponivel, propositoDaFonte } from '../api/_brightdata.js';
 import { carregarPDFParse } from '../api/_pdf-safe.js';
 import { extrairMatriculaTexto, extrairPagamentoTexto, extrairCustosTexto, extrairIdentidadeTexto } from '../api/_doc-extracao.js';
 import { isolarBlocoDoLote, ehDocMultiLote } from '../api/_edital-extrato.js';
@@ -168,9 +168,19 @@ async function baixarPdfDireto(url, referer) {
 
 // Download via Bright Data (CAMINHO 3): para PDFs cujo host também barra o fetch
 // direto (Cloudflare no CDN do leiloeiro). Respeita o teto semanal (proposito 'docs').
+// Última recusa de ORÇAMENTO do Bright Data nesta captura (05/11): sem ela, "o teto disse não" e "a página não
+// tem documento" saíam iguais, e o lote ia para `sem_documento` — terminal, nunca retentado (forma nº 5).
+let recusaOrcamentoBD = null;
 async function baixarPdfBD(url, referer, proposito = 'docs') {
   if (!brightDataDisponivel()) return null;
-  const resp = await fetchViaBrightData(url, { proposito, timeoutMs: 45000, headers: referer ? { Referer: referer } : null });
+  let resp = null;
+  try {
+    resp = await buscarViaBrightData(url, { proposito, timeoutMs: 45000, headers: referer ? { Referer: referer } : null, exigirOk: false });
+  } catch (e) {
+    if (!(e instanceof ErroBrightData)) throw e;
+    if (e.semCota) recusaOrcamentoBD = e.motivo;
+    return null;
+  }
   if (!resp || !resp.ok) return null;
   try {
     const buf = Buffer.from(await resp.arrayBuffer());
@@ -448,8 +458,24 @@ async function processar(browser, item) {
   // documento — desbloqueia fontes como o PECINI (Cloudflare 403). Baixa o HTML do
   // lote, extrai os links de documento e busca cada PDF (direto → e, se o host também
   // barrar, via Bright Data). Respeita o teto semanal de custo (proposito 'docs').
-  if (!capturados.length && bloqueado && paginaLote && brightDataDisponivel()) {
-    const resp = await fetchViaBrightData(paginaLote, { proposito: propositoBD, timeoutMs: 45000 });
+  // Com o PDF já CONHECIDO (anexos lidos pelo coletor), vai direto nele: 1 request por documento em vez de
+  // gastar um com a página bloqueada para redescobrir o mesmo link (05/11: GF/Destak/Silva — Cloudflare no runner).
+  if (!capturados.length && bloqueado && brightDataDisponivel()) {
+    for (const c of conhecidos.filter((k) => /\.(pdf|docx?)(\?|#|$)/i.test(k.url) && !urlsSalvas.has(k.url)).slice(0, 3)) {
+      if (capturados.length >= 8 || recusaOrcamentoBD) break;
+      const buf = await baixarPdfBD(c.url, paginaLote, propositoBD);
+      if (buf) { try { await salvar(buf, c.url, limparNome(c.nome)); } catch { /* */ } }
+    }
+  }
+  if (!capturados.length && bloqueado && paginaLote && brightDataDisponivel() && !recusaOrcamentoBD) {
+    let resp = null;
+    try {
+      resp = await buscarViaBrightData(paginaLote, { proposito: propositoBD, timeoutMs: 45000, exigirOk: false });
+    } catch (e) {
+      if (!(e instanceof ErroBrightData)) throw e;
+      if (e.semCota) recusaOrcamentoBD = e.motivo;
+      console.log(`[docs] ${item.imovel_id} ${im.fonte || ''}: CAMINHO 3 recusado — ${e.message}`);
+    }
     if (resp && resp.ok) {
       const html = await resp.text().catch(() => '');
       const cands = linksDocDeHtml(html, paginaLote);
@@ -463,6 +489,11 @@ async function processar(browser, item) {
     }
   }
 
+  // BLOQUEADO não é "sem documento" (05/11): a página de desafio do Cloudflare ("Just a moment...") era varrida,
+  // dava 0 links e o lote saía `sem_documento` — terminal. 327 lotes da plataforma Degrau e centenas de outros
+  // (GF 116, Bolsa 54, Destak 46…) com edital/matrícula no anexo foram arquivados assim. Agora vira `bloqueado`,
+  // que a fila retenta depois (documentos_fila_proxima), e o motivo diz se foi orçamento ou anti-bot.
+  if (!capturados.length && bloqueado) throw new Error(`bloqueado_antibot${recusaOrcamentoBD ? ` (Bright Data sem cota: ${recusaOrcamentoBD})` : brightDataDisponivel() ? '' : ' (Bright Data não configurado)'}`);
   if (!capturados.length) throw new Error('nenhum_documento_encontrado');
   return capturados;
 }
@@ -489,7 +520,7 @@ async function main() {
   console.log(`Processando ${fila.length} imóvel(is) — ${p1} deles ativos SEM data (prioridade máxima)...`);
 
   const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox', '--disable-setuid-sandbox'] });
-  let ok = 0, erros = 0, semDoc = 0;
+  let ok = 0, erros = 0, semDoc = 0, bloq = 0;
   // Negative-cache: quando CHECAMOS o lote e a matrícula NÃO saiu (só edital, ou nada),
   // marca matricula_checada_em. Torna a lacuna CONHECIDA (não silenciosa) e faz o
   // enfileirador respeitar um cooldown de 30d em vez de re-capturar todo dia um lote
@@ -521,6 +552,17 @@ async function main() {
       // afogava qualquer falha de verdade no meio. Agora vira estado TERMINAL 'sem_documento',
       // com o negative-cache aplicado de imediato, e sai da conta de erros.
       const semDocumento = /nenhum_documento_encontrado/.test(String(e.message));
+      const bloqueadoAntibot = /^bloqueado_antibot/.test(String(e.message));
+      if (bloqueadoAntibot) {
+        // Não é medição nem erro de código: a fonte barrou (e o pago não pôde entrar). Volta à fila depois,
+        // sem negative-cache e sem gastar tentativa — quem decide a hora é documentos_fila_proxima.
+        const { error: eBloq } = await supabase.from('documentos_fila').update({
+          status: 'bloqueado', tentativas: item.tentativas || 0, erro: String(e.message).slice(0, 300), processado_em: new Date().toISOString(),
+        }).eq('imovel_id', item.imovel_id).select('imovel_id');
+        if (eBloq) console.error(`  ${item.imovel_id}: não gravei 'bloqueado' (${eBloq.message})`);
+        bloq++; console.log(`⛔ ${item.imovel_id}: ${e.message} — volta à fila depois`);
+        continue;
+      }
       await supabase.from('documentos_fila').update({
         status: semDocumento ? 'sem_documento' : 'erro',
         erro: String(e.message).slice(0, 300), processado_em: new Date().toISOString(),
@@ -537,7 +579,7 @@ async function main() {
     await new Promise(r => setTimeout(r, 800));
   }
   await browser.close();
-  console.log(`Concluído: ${ok} ok, ${semDoc} sem documento (medido), ${erros} erro(s) de verdade.`);
+  console.log(`Concluído: ${ok} ok, ${semDoc} sem documento (medido), ${bloq} bloqueado(s) pela fonte (voltam à fila), ${erros} erro(s) de verdade.`);
 }
 
 main().catch(e => { console.error(e); process.exit(1); });
