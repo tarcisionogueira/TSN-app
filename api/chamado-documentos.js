@@ -9,6 +9,9 @@
  *  POST { acao:'enviar',  chamado_id } → manda o pedido por e-mail ao leiloeiro (depois de cadastrar
  *                                        o contato em /api/leiloeiro-contato), com o reply-to que faz
  *                                        a resposta entrar sozinha no lote
+ *  POST { acao:'whatsapp', chamado_id, mensagem } → a equipe abriu o pedido no WhatsApp do leiloeiro (o envio
+ *                                        é no aparelho dela, wa.me com o texto pronto — sem API paga): fica
+ *                                        registrado no chamado o quê e para quem foi pedido (05/11)
  *  POST { acao:'regerar', chamado_id } → depois de a equipe anexar o documento (/api/upload-anexo):
  *                                        as análises documentais paradas em "faltam documentos"
  *                                        voltam para a fila do regenerar-relatorios-cron
@@ -122,6 +125,19 @@ export default async function handler(req) {
       return json({ ok, status: p.status, destinatario: p.destinatario || null, mensagem: texto }, ok ? 200 : 422);
     }
 
+    if (acao === 'whatsapp') {
+      const rl = await checkRateLimit(`chamado-documentos:whatsapp:${chamadoId}`, 10, 86_400_000);
+      if (!rl.ok) return rateLimitedResponse(rl.resetAt);
+      const rTel = await sb('rpc/telefone_leiloeiro_resolver', { method: 'POST', body: JSON.stringify({ p_fonte: imovel.fonte || '', p_leiloeiro: imovel.leiloeiro || null }) });
+      if (!rTel.ok) return json({ error: `Não consegui ler o telefone do leiloeiro (HTTP ${rTel.status}).` }, 502);
+      const tel = (await rTel.json().catch(() => []))[0];
+      if (!tel?.telefone) return json({ error: 'Este leiloeiro não tem telefone cadastrado.' }, 400);
+      const mensagem = String(body?.mensagem || '').trim().slice(0, 1500);
+      const texto = `💬 Pedido aberto no WhatsApp do leiloeiro (+${tel.telefone}) por ${autor.autorNome}. O que ele mandar, anexe aqui: o lote recebe o documento e as análises são geradas de novo.${mensagem ? `\n\nMensagem:\n${mensagem}` : ''}`;
+      await registrarNoChamado(chamadoId, texto, autor);
+      return json({ ok: true, mensagem: '💬 Registrado no chamado. Quando o leiloeiro mandar, anexe o arquivo aqui.' });
+    }
+
     if (acao === 'regerar') {
       const rr = await sb(`analises_documental?imovel_id=eq.${chamado.imovel_id}&result->>precisaDocumentos=eq.true`, {
         method: 'PATCH', headers: { Prefer: 'return=representation' },
@@ -135,7 +151,7 @@ export default async function handler(req) {
       return json({ ok: true, analises: n });
     }
 
-    return json({ error: 'acao inválida (use enviar ou regerar)' }, 400);
+    return json({ error: 'acao inválida (use enviar, whatsapp ou regerar)' }, 400);
   } catch (e) {
     console.error('[chamado-documentos] falhou:', String(e?.message || e).slice(0, 160));
     return json({ error: 'Não consegui ler o chamado agora: ' + String(e?.message || e).slice(0, 120) }, 502);

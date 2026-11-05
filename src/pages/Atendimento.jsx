@@ -691,6 +691,20 @@ function SaquesPJDoCliente({ userId }) {
 // rota da Análise). Quando o que foi pedido entra no lote, o BANCO encerra o chamado
 // (gatilho zz_anexo_chamado_documentos) — por qualquer caminho que o documento chegue.
 const ROTULO_DOC = { matricula: 'Matrícula', edital: 'Edital', regras_venda: 'Regras de venda', regras: 'Regras', laudo: 'Laudo' };
+// Texto do pedido ao leiloeiro (WhatsApp / copiar). O e-mail tem o próprio modelo no servidor
+// (api/_pedido-leiloeiro-auto.js); aqui é a versão curta, no tom de mensagem.
+function mensagemPedidoLeiloeiro(im, faltando) {
+  const itens = faltando.map(t => (t === 'matricula' ? 'a matrícula atualizada do imóvel' : t === 'edital' ? 'o edital do leilão' : (ROTULO_DOC[t] || t).toLowerCase()));
+  const lista = itens.length > 1 ? `${itens.slice(0, -1).join(', ')} e ${itens[itens.length - 1]}` : itens[0];
+  return [
+    'Olá, tudo bem?',
+    `Aqui é da BidPro Brasil. Estamos analisando para um cliente o lote "${im.titulo || 'do seu leilão'}"${im.cidade ? ` (${[im.cidade, im.estado].filter(Boolean).join('/')})` : ''}${im.numero_processo ? `, processo ${im.numero_processo}` : ''}.`,
+    `Para concluir a análise, poderia nos enviar ${lista || 'os documentos do lote'}? Pode ser por aqui mesmo, em PDF.`,
+    im.url_lote ? `Lote: ${im.url_lote}` : null,
+    'Obrigado!',
+  ].filter(Boolean).join('\n\n');
+}
+
 const STATUS_PEDIDO = {
   enviado: 'e-mail enviado', represado: 'na fila de envio', aguardando: 'na fila (teto semanal)',
   sem_contato: 'sem contato', equipe_whatsapp: 'leiloeiro não responde', falha: 'e-mail falhou',
@@ -703,6 +717,7 @@ function DocumentosLeiloeiroPainel({ chamadoId, encerrado }) {
   const [ocupado, setOcupado] = useState('');
   const [msg, setMsg] = useState(null);
   const [email, setEmail] = useState('');
+  const [telefone, setTelefone] = useState('');
   const [tipoAnexo, setTipoAnexo] = useState('matricula');
 
   async function carregar() {
@@ -716,18 +731,38 @@ function DocumentosLeiloeiroPainel({ chamadoId, encerrado }) {
   }
   useEffect(() => { carregar(); }, [chamadoId]);
 
-  async function salvarContato() {
-    const valor = email.trim();
+  // `campo`: 'email' ou 'telefone' — o mesmo endpoint grava um ou outro (/api/leiloeiro-contato).
+  async function salvarContato(campo = 'email') {
+    const valor = (campo === 'email' ? email : telefone).trim();
     if (!valor || !d?.imovel?.fonte) return;
     setOcupado('contato'); setMsg(null);
     try {
-      const r = await apiCall('/api/leiloeiro-contato', { method: 'POST', body: JSON.stringify({ fonte: d.imovel.fonte, email: valor }) });
+      const r = await apiCall('/api/leiloeiro-contato', { method: 'POST', body: JSON.stringify({ fonte: d.imovel.fonte, [campo]: valor }) });
       const j = await r.json().catch(() => ({}));
       if (!r.ok || j?.error) throw new Error(j?.error || `HTTP ${r.status}`);
-      setEmail(''); setMsg({ ok: true, txt: `Contato salvo para ${d.imovel.fonte}. Agora é só enviar o pedido.` });
+      if (campo === 'email') setEmail(''); else setTelefone('');
+      setMsg({ ok: true, txt: `${campo === 'email' ? 'E-mail' : 'Telefone'} salvo para ${d.imovel.fonte} (vale para todos os lotes dele). Agora é só enviar o pedido.` });
       await carregar();
     } catch (e) { setMsg({ ok: false, txt: 'Não consegui salvar o contato: ' + e.message }); }
     setOcupado('');
+  }
+
+  // WhatsApp: abre a conversa JÁ com a mensagem (no aparelho da equipe, sem API paga) e registra no
+  // chamado. A janela abre ANTES da chamada ao servidor — depois de um await o navegador bloqueia o pop-up.
+  async function pedirWhatsapp(texto) {
+    window.open(`https://wa.me/${d.telefone.numero}?text=${encodeURIComponent(texto)}`, '_blank', 'noopener');
+    setOcupado('whatsapp'); setMsg(null);
+    try {
+      const r = await apiCall('/api/chamado-documentos', { method: 'POST', body: JSON.stringify({ acao: 'whatsapp', chamado_id: chamadoId, mensagem: texto }) });
+      const j = await r.json().catch(() => ({}));
+      setMsg({ ok: r.ok && j.ok, txt: j.mensagem || j.error || `HTTP ${r.status}` });
+    } catch (e) { setMsg({ ok: false, txt: 'WhatsApp aberto, mas não consegui registrar no chamado: ' + (e.message || 'falha de rede') }); }
+    setOcupado('');
+  }
+
+  async function copiar(texto) {
+    try { await navigator.clipboard.writeText(texto); setMsg({ ok: true, txt: 'Mensagem copiada.' }); }
+    catch (e) { setMsg({ ok: false, txt: `Não consegui copiar (${e?.message || 'sem permissão'}) — selecione o texto e copie à mão.` }); }
   }
 
   async function acao(nome) {
@@ -770,6 +805,10 @@ function DocumentosLeiloeiroPainel({ chamadoId, encerrado }) {
   const im = d.imovel;
   const contatoErro = d.contato?.erro;
   const temEmail = !!d.contato?.email;
+  const telErro = d.telefone?.erro;
+  const temTel = !!d.telefone?.numero;
+  const temWhats = temTel && !!d.telefone.whatsapp;
+  const textoPedido = mensagemPedidoLeiloeiro(im, d.faltando);
   const btn = (cor, extra = {}) => ({ padding: '6px 12px', background: cor, color: 'white', border: 'none', borderRadius: 7, fontWeight: 700, fontSize: 12, cursor: ocupado ? 'default' : 'pointer', opacity: ocupado ? 0.6 : 1, ...extra });
   return (
     <div style={box}>
@@ -794,22 +833,35 @@ function DocumentosLeiloeiroPainel({ chamadoId, encerrado }) {
             {contatoErro ? <span style={{ color: '#b45309' }}>não consegui consultar ({contatoErro})</span>
               : temEmail ? <b>{d.contato.email}</b>
               : <span style={{ color: '#b45309', fontWeight: 700 }}>sem e-mail cadastrado</span>}
-            {d.telefone?.numero && (
-              <a href={`https://wa.me/${d.telefone.numero}`} target="_blank" rel="noopener noreferrer" style={{ color: '#15803d', fontWeight: 700 }}>
-                {d.telefone.whatsapp ? 'WhatsApp' : 'Telefone'} +{d.telefone.numero}
-              </a>
-            )}
+            <span>·</span>
+            {telErro ? <span style={{ color: '#b45309' }}>telefone: não consegui consultar ({telErro})</span>
+              : temTel ? <a href={temWhats ? `https://wa.me/${d.telefone.numero}` : `tel:+${d.telefone.numero}`} target="_blank" rel="noopener noreferrer" style={{ color: '#15803d', fontWeight: 700 }}>
+                  {temWhats ? 'WhatsApp' : 'Telefone'} +{d.telefone.numero}
+                </a>
+              : <span style={{ color: '#b45309', fontWeight: 700 }}>sem telefone cadastrado</span>}
           </div>
-          {!temEmail && !contatoErro && (
+          {((!temEmail && !contatoErro) || (!temTel && !telErro)) && (
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder={`e-mail do leiloeiro (${im.fonte})`}
-                style={{ flex: '1 1 220px', padding: '6px 10px', borderRadius: 7, border: '1px solid #cbd5e1', fontSize: 12 }} />
-              <button onClick={salvarContato} disabled={!!ocupado || !email.trim()} style={btn('#0f766e')}>{ocupado === 'contato' ? 'Salvando…' : 'Salvar contato'}</button>
+              {!temEmail && !contatoErro && <>
+                <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder={`e-mail do leiloeiro (${im.fonte})`}
+                  style={{ flex: '1 1 200px', padding: '6px 10px', borderRadius: 7, border: '1px solid #cbd5e1', fontSize: 12 }} />
+                <button onClick={() => salvarContato('email')} disabled={!!ocupado || !email.trim()} style={btn('#0f766e')}>{ocupado === 'contato' ? 'Salvando…' : 'Salvar e-mail'}</button>
+              </>}
+              {!temTel && !telErro && <>
+                <input type="tel" value={telefone} onChange={e => setTelefone(e.target.value)} placeholder="WhatsApp/telefone: (11) 98765-4321"
+                  style={{ flex: '1 1 180px', padding: '6px 10px', borderRadius: 7, border: '1px solid #cbd5e1', fontSize: 12 }} />
+                <button onClick={() => salvarContato('telefone')} disabled={!!ocupado || !telefone.trim()} style={btn('#0f766e')}>{ocupado === 'contato' ? 'Salvando…' : 'Salvar telefone'}</button>
+              </>}
             </div>
           )}
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <button onClick={() => acao('enviar')} disabled={!!ocupado || !temEmail} title={temEmail ? '' : 'Cadastre o e-mail do leiloeiro primeiro'}
-              style={btn(temEmail ? '#0D63DB' : '#94a3b8')}>{ocupado === 'enviar' ? 'Enviando…' : '✉️ Enviar pedido ao leiloeiro'}</button>
+              style={btn(temEmail ? '#0D63DB' : '#94a3b8')}>{ocupado === 'enviar' ? 'Enviando…' : '✉️ Enviar e-mail pronto'}</button>
+            {temWhats && (
+              <button onClick={() => pedirWhatsapp(textoPedido)} disabled={!!ocupado} style={btn('#16a34a')}>
+                {ocupado === 'whatsapp' ? 'Registrando…' : '💬 Pedir pelo WhatsApp'}
+              </button>
+            )}
             <span style={{ color: '#64748b' }}>ou anexe o que chegou:</span>
             <select value={tipoAnexo} onChange={e => setTipoAnexo(e.target.value)} style={{ padding: '5px 8px', borderRadius: 7, border: '1px solid #cbd5e1', fontSize: 12 }}>
               <option value="matricula">Matrícula</option>
@@ -823,6 +875,15 @@ function DocumentosLeiloeiroPainel({ chamadoId, encerrado }) {
             </label>
           </div>
         </div>
+      )}
+
+      {!encerrado && d.faltando.length > 0 && (
+        <details style={{ marginTop: 8 }}>
+          <summary style={{ cursor: 'pointer', color: '#0D63DB', fontWeight: 700 }}>Ver / copiar a mensagem do pedido</summary>
+          <textarea readOnly value={textoPedido} rows={7}
+            style={{ width: '100%', marginTop: 6, padding: 8, borderRadius: 7, border: '1px solid #cbd5e1', fontSize: 12, fontFamily: 'inherit', boxSizing: 'border-box' }} />
+          <button onClick={() => copiar(textoPedido)} style={btn('#475569', { marginTop: 4 })}>📋 Copiar mensagem</button>
+        </details>
       )}
 
       {msg && <div style={{ marginTop: 8, fontWeight: 600, color: msg.ok ? '#166534' : '#b91c1c' }}>{msg.txt}</div>}
