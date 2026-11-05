@@ -9,10 +9,12 @@
  * da placa / do modelo) e no edital INTEIRO, que vale para o evento todo e pode misturar lotes.
  * O trecho é o que conta; o inteiro só aparece para mostrar quando ele discordaria.
  *
- * Env: VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY; RECON_FONTES (csv, opcional; padrão: as *_veic_ dos últimos 7 dias).
+ * Env: VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY; RECON_FONTES (csv, opcional; padrão: os leiloeiros da plataforma
+ * Degrau — o 1º seco, sem filtro de fonte, pegou 1.000 veículos de todas as fontes e respondeu outra pergunta).
  */
 import { carregarPDFParse } from '../api/_pdf-safe.js';
 import { classificarPatio } from './lib/patio-veiculo.mjs';
+import { TENANTS } from './lib/leilaoeletronico-parse.mjs';
 
 const SB_URL = process.env.VITE_SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -22,7 +24,8 @@ const MAX_BYTES = 15 * 1024 * 1024;
 const PDFParse = await carregarPDFParse();
 if (!PDFParse) { console.error('pdf-parse indisponível'); process.exit(1); }
 
-const r = await fetch(`${SB_URL}/rest/v1/veiculos_leilao?select=id,fonte,titulo,placa,modelo,anexos,status_patio&ativo=eq.true&status_patio=neq.confirmado&fonte_id=like.*_veic_*&criado_em=gte.${new Date(Date.now() - 7 * 864e5).toISOString()}&limit=1000`,
+const FONTES = (process.env.RECON_FONTES || Object.values(TENANTS).map((t) => t.fonte).join(',')).split(',').map((x) => x.trim()).filter(Boolean);
+const r = await fetch(`${SB_URL}/rest/v1/veiculos_leilao?select=id,fonte,titulo,placa,modelo,anexos,status_patio&ativo=eq.true&status_patio=neq.confirmado&fonte=in.(${FONTES.join(',')})&limit=2000`,
   { headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` }, signal: AbortSignal.timeout(30000) });
 if (!r.ok) { console.error(`não consegui ler os veículos: HTTP ${r.status}`); process.exit(2); }
 const veiculos = await r.json();
@@ -75,7 +78,7 @@ for (const v of veiculos) {
   const url = editalDe(v);
   if (!url) { tot.sem_edital++; continue; }
   const { texto, erro } = await textoDe(url);
-  if (!texto) { tot.edital_ilegivel++; erros[erro] = (erros[erro] || 0) + 1; continue; }
+  if (!texto) { tot.edital_ilegivel++; const k = `${v.fonte} ${erro}`; erros[k] = (erros[k] || 0) + 1; continue; }
   const trecho = trechoDoLote(texto, v);
   const inteiro = classificarPatio(texto);
   if (!trecho) tot.lote_nao_achado++;
