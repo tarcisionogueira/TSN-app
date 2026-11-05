@@ -4,6 +4,7 @@ import { CheckCircle2, Loader2, AlertCircle, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import PagamentoServico from '../components/PagamentoServico';
 import BoletoMp from '../components/BoletoMp';
+import TermoAceiteCobranca from '../components/TermoAceiteCobranca';
 import { AZUL, VERDE } from '../utils/marca';
 
 const fmtBRL = v => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -21,6 +22,7 @@ export default function CobrarAvulso() {
   const [pago, setPago] = useState(false);
   const [email, setEmail] = useState('');
   const [viaBoleto, setViaBoleto] = useState(false);
+  const [termoAceito, setTermoAceito] = useState(false);
 
   useEffect(() => {
     if (user?.email) setEmail(e => e || user.email);
@@ -128,6 +130,15 @@ export default function CobrarAvulso() {
           <div style={{ fontSize: 32, fontWeight: 800, color: '#0f172a' }}>{fmtBRL(cob.saldo_restante ?? cob.valor)}</div>
         </div>
 
+        {/* TERMO DE ACEITE (05/11): cobrança com termo só mostra o pagamento depois do aceite registrado no servidor. */}
+        {cob.termo && !cob.termo.aceito && !termoAceito ? (
+          <TermoAceiteCobranca cobrancaId={cob.id} termo={cob.termo} onAceito={(em) => { setEmail(em); setTermoAceito(true); }} />
+        ) : (<>
+        {cob.termo && (
+          <div style={{ fontSize: 12, color: '#166534', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '8px 10px', textAlign: 'center' }}>
+            ✓ Termo aceito. Agora é só concluir o pagamento{cob.parcelas_sem_juros > 1 ? ` — em até ${cob.parcelas_sem_juros}x sem juros no cartão` : ''}.
+          </div>
+        )}
         <div>
           <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>
             E-mail de quem está pagando
@@ -161,7 +172,7 @@ export default function CobrarAvulso() {
               servico={{ nome: cob.descricao, valor: cob.saldo_restante ?? cob.valor, proposito: 'cobranca_avulsa' }}
               extra={{ cobranca_id: cob.id }}
               email={email}
-              parcelasSemJuros={1}
+              parcelasSemJuros={cob.parcelas_sem_juros || 1}
               embutido
               onPago={() => setPago(true)}
               permitirSplit
@@ -170,6 +181,7 @@ export default function CobrarAvulso() {
             )}
           </div>
         )}
+        </>)}
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center', fontSize: 10.5, color: '#94a3b8' }}>
           <ShieldCheck size={12} /> Pagamento processado pelo Mercado Pago

@@ -24,7 +24,7 @@ export default async function handler(req) {
   const id = new URL(req.url).searchParams.get('id') || '';
   if (!UUID_RE.test(id)) return new Response(JSON.stringify({ error: 'id inválido' }), { status: 400 });
 
-  const r = await fetch(`${SUPABASE_URL}/rest/v1/cobrancas_avulsas?id=eq.${encodeURIComponent(id)}&select=id,descricao,valor,valor_pago_pix,status,destinatario_email,destinatario_nome,meio`, {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/cobrancas_avulsas?id=eq.${encodeURIComponent(id)}&select=id,descricao,valor,valor_pago_pix,status,destinatario_email,destinatario_nome,meio,parcelas_sem_juros,termo_titulo,termo_texto,termo_aceito_em`, {
     headers: { apikey: SVC, Authorization: `Bearer ${SVC}` }, signal: AbortSignal.timeout(10000),
   });
   const [cob] = r.ok ? await r.json().catch(() => []) : [];
@@ -45,5 +45,9 @@ export default async function handler(req) {
     nome_sugerido: cob.destinatario_nome || null,
     // 'boleto' = só boleto (serviços de cartório, 07/10); null = boleto, Pix ou cartão.
     meio: cob.meio || null,
+    // 05/11: parcelamento sem juros da cobrança (padrão 1x) e TERMO DE ACEITE antes do pagamento. O texto vai com os
+    // marcadores do signatário — a tela preenche para mostrar; o texto que vale é o preenchido no servidor no aceite.
+    parcelas_sem_juros: Number(cob.parcelas_sem_juros) || 1,
+    termo: cob.termo_texto ? { titulo: cob.termo_titulo || 'Termo de contratação', texto: cob.termo_texto, aceito: !!cob.termo_aceito_em } : null,
   }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 }

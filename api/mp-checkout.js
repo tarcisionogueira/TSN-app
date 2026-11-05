@@ -221,12 +221,14 @@ export default async function handler(req, res) {
     if (!cobranca_id) return res.status(400).json({ error: 'cobranca_id obrigatório' });
     const SB_URL = process.env.VITE_SUPABASE_URL, SB_KEY = process.env.SUPABASE_SERVICE_KEY;
     try {
-      const r = await fetch(`${SB_URL}/rest/v1/cobrancas_avulsas?id=eq.${encodeURIComponent(cobranca_id)}&select=id,descricao,valor,valor_pago_pix,status,meio`, {
+      const r = await fetch(`${SB_URL}/rest/v1/cobrancas_avulsas?id=eq.${encodeURIComponent(cobranca_id)}&select=id,descricao,valor,valor_pago_pix,status,meio,termo_texto,termo_aceito_em`, {
         headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` }, signal: AbortSignal.timeout(10000),
       });
       const [cob] = r.ok ? await r.json().catch(() => []) : [];
       if (!cob) return res.status(404).json({ error: 'Cobrança não encontrada.' });
       if (cob.status !== 'aberta') return res.status(409).json({ error: 'Esta cobrança já foi paga ou cancelada.' });
+      // TERMO DE ACEITE (05/11): cobrança com termo só é paga depois do aceite registrado (api/cobranca-avulsa-termo.js).
+      if (cob.termo_texto && !cob.termo_aceito_em) return res.status(409).json({ error: 'Leia e aceite o termo antes de pagar.' });
       const total = Number(cob.valor) || 0;
       if (total <= 0) return res.status(400).json({ error: 'Cobrança sem valor válido.' });
       const jaPagoPix = Number(cob.valor_pago_pix) || 0;
