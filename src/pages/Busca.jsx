@@ -214,7 +214,7 @@ const COLUNAS_BUSCA = [
   // Selos de documento: o LINK não autoriza (é a página do lote na maioria das fontes).
   // Quem sabe se existe ARQUIVO — no link, nos anexos ou no nosso Storage — é o banco.
   'tem_edital_doc','tem_matricula_doc',
-  'data_leilao','data_fim','forma_pagamento','viavel','score_viabilidade','fracionado',
+  'data_leilao','data_leilao_2','data_fim','forma_pagamento','viavel','score_viabilidade','fracionado',
   'resultado_leilao','valor_lance_vencedor',
   'fonte','fonte_id','numero_edital','numero_matricula','numero_processo',
   'latitude','longitude','score_financeiro','score_juridico','score_localizacao',
@@ -1383,6 +1383,8 @@ export default function Busca() {
             leiloeiro: im.leiloeiro,
             dataLeilao: im.data_leilao,
             dataFim: im.data_fim,   // PRAZO real (encerramento/2ª praça) — é o que a contagem usa
+            // Praças (05/11, dono: "aparecer os valores de todas as praças"): 1ª = valor_minimo, 2ª = valor_minimo_2.
+            valorMinimo1: im.valor_minimo ?? null, valorMinimo2: im.valor_minimo_2 ?? null, dataLeilao2: im.data_leilao_2 ?? null,
             pagamento: im.forma_pagamento ? [im.forma_pagamento] : [],
             viavel: im.viavel,
             scoreViabilidade: im.score_viabilidade,
@@ -1401,6 +1403,14 @@ export default function Busca() {
             resultadoLeilao: im.resultado_leilao ?? null,
           };
         });
+        // A RPC do raio não devolve `valor_minimo_2` (mudar o retorno dela exige recriar a função): busca o valor da
+        // 2ª praça só dos lotes da página que têm 2ª praça. Falha aqui não derruba a busca — o card só não mostra a 2ª.
+        const com2 = mapeados.filter(m => m.dataLeilao2 && m.valorMinimo2 == null).map(m => m.id);
+        if (com2.length) {
+          const { data: v2, error: e2 } = await supabase.from('imoveis_leilao_mascarado').select('id,valor_minimo_2').in('id', com2);
+          if (e2) console.warn('[busca] 2ª praça do raio não veio:', e2.message);
+          else { const porId = new Map((v2 || []).map(r => [r.id, r.valor_minimo_2])); for (const m of mapeados) if (porId.has(m.id)) m.valorMinimo2 = porId.get(m.id); }
+        }
         if (!atual()) return;   // busca antiga: outra já assumiu a tela
         setDistancias(novasDistancias);
         setResultados(mapeados);
@@ -1516,6 +1526,8 @@ export default function Busca() {
         leiloeiro: im.leiloeiro,
         dataLeilao: im.data_leilao,
         dataFim: im.data_fim,   // PRAZO real (encerramento/2ª praça) — é o que a contagem usa
+        // Praças (05/11, dono: "aparecer os valores de todas as praças"): 1ª = valor_minimo, 2ª = valor_minimo_2.
+        valorMinimo1: im.valor_minimo ?? null, valorMinimo2: im.valor_minimo_2 ?? null, dataLeilao2: im.data_leilao_2 ?? null,
         pagamento: im.forma_pagamento ? [im.forma_pagamento] : [],
         viavel: im.viavel,
         scoreViabilidade: im.score_viabilidade,
@@ -2481,6 +2493,14 @@ export default function Busca() {
                       <div style={{ fontWeight:900, color:'#111111', fontSize: isMobile ? 18 : 15 }}>{fmtBRL(im.valorMinimo)}</div>
                       {im.valorAvaliacao>0 && (
                         <div style={{ fontSize:10, color:'#64748b' }}>Aval. {fmtBRL(im.valorAvaliacao)}</div>
+                      )}
+                      {/* TODAS AS PRAÇAS (05/11, dono): com 2ª praça, o card mostra as duas com a data de cada uma. */}
+                      {im.valorMinimo2 > 0 && im.valorMinimo1 > 0 && im.valorMinimo2 !== im.valorMinimo1 && (
+                        <div style={{ marginTop:3, display:'grid', gap:1, fontSize:10.5, lineHeight:1.35 }}>
+                          <div style={{ color:'#334155' }}><b>1ª praça</b> {fmtBRL(im.valorMinimo1)}{im.dataLeilao ? ` · ${fmtData(im.dataLeilao, im.modalidade)}` : ''}</div>
+                          <div style={{ color:'#15803d', fontWeight:700 }}>2ª praça {fmtBRL(im.valorMinimo2)}{im.dataLeilao2 ? ` · ${fmtData(String(im.dataLeilao2).slice(0, 10), im.modalidade)}` : ''}
+                            {im.valorAvaliacao > 0 && im.valorMinimo2 < im.valorAvaliacao ? ` (−${Math.round(100 * (1 - im.valorMinimo2 / im.valorAvaliacao))}%)` : ''}</div>
+                        </div>
                       )}
                       {im.valorPisoProposta > 0 && im.valorPisoProposta < im.valorMinimo && (
                         <div title="Piso que o vendedor informou à plataforma (o site do leiloeiro não mostra). Ele analisa cada proposta — sem garantia de aceite; a proposta é vinculativa."
