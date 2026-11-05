@@ -33,6 +33,8 @@ export function tipoVeiculo(titulo) {
     || /\b(honda|yamaha|suzuki)\b[\s/]*(cg|cb|cbx|biz|pop|titan|fan|bros|nxr|xre|nx|twister|lead|pcx|ybr|factor|fazer|crypton|xtz|lander|neo|yes|intruder|dt|xt)\b/.test(t)) return 'moto';
   if (/[ôo]nibus/.test(t)) return 'onibus';
   if (/caminh[ãa]o|cavalo mec/.test(t)) return 'caminhao';
+  // Modelo que é SÓ caminhão e o título não diz "caminhão" (05/11, Silva: "AXOR 3344S6X4 | Mercedes Benz" saía carro).
+  if (/\b(axor|actros|atego|accelo|constellation|tector|stralis)\b/.test(t)) return 'caminhao';
   if (/reboque|carreta/.test(t)) return 'reboque';
   if (/\bvan\b|furg[ãa]o|utilit[áa]rio/.test(t)) return 'van_utilitario';
   return 'carro';
