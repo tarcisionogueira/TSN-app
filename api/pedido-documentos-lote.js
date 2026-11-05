@@ -50,12 +50,16 @@ export default async function handler(req) {
   const rl = await checkRateLimit(`pedido-documentos-lote:${user.id}`, 30, 86_400_000);
   if (!rl.ok) return rateLimitedResponse(rl.resetAt);
 
-  const r = await fetch(`${SUPABASE_URL}/rest/v1/imoveis_leilao?id=eq.${imovelId}&select=id,tem_matricula_doc,tem_edital_doc,modalidade&limit=1`, {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/imoveis_leilao?id=eq.${imovelId}&select=id,fonte,tem_matricula_doc,tem_edital_doc,modalidade&limit=1`, {
     headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
   });
   if (!r.ok) return json({ error: `Não consegui ler o lote (HTTP ${r.status}).` }, 502);
   const [imovel] = await r.json();
   if (!imovel) return json({ error: 'Lote não encontrado' }, 404);
+  // MATRÍCULA PARA O MERCADOLÓGICO (dono, 04/11: "bloquear sem matrícula"): a tela de Análise pergunta
+  // aqui antes de gerar o 1º relatório. `matriculaOk` segue a mesma régua do servidor de geração
+  // (api/gerar-analise.js · matriculaDisponivel): selo do lote ou Caixa (matrícula baixada sozinha).
+  const matriculaOk = !!imovel.tem_matricula_doc || /caixa|cef/i.test(String(imovel.fonte || ''));
 
   // Pede só o que o SERVIDOR e a TELA concordam que falta. O servidor impede pedir o que já temos;
   // a tela evita pedir o edital quando o lote tem um regulamento anexado (ela aceita `regras` no
@@ -66,10 +70,13 @@ export default async function handler(req) {
     !imovel.tem_matricula_doc ? 'matricula' : null,
     !imovel.tem_edital_doc ? (vendaDireta ? 'regras_venda' : 'edital') : null,
   ].filter(t => t && (daTela.has(t) || (t !== 'matricula' && (daTela.has('edital') || daTela.has('regras_venda')))));
-  if (!faltando.length) return json({ ok: true, status: 'nada_a_pedir', frase: '' });
+  if (!faltando.length || (matriculaOk && faltando.every(t => t === 'matricula'))) {
+    return json({ ok: true, status: 'nada_a_pedir', frase: '', matriculaOk });
+  }
 
   const p = await pedirDocumentosAoLeiloeiro({ imovelId, userId: user.id, faltando });
   if (p.status === 'erro' || p.status === 'falha') console.error('[pedido-documentos-lote]', p.status, p.erro);
   // Sem análise documental gravada não há o que regenerar sozinho: a frase não promete isso.
-  return json({ ok: p.status !== 'erro', status: p.status, frase: fraseDoPedido(p, { semAnalise: true }) }, p.status === 'erro' ? 502 : 200);
+  // Pedido que falhou NÃO muda a resposta sobre a matrícula: ela continua faltando.
+  return json({ ok: p.status !== 'erro', status: p.status, frase: fraseDoPedido(p, { semAnalise: true }), matriculaOk }, p.status === 'erro' ? 502 : 200);
 }

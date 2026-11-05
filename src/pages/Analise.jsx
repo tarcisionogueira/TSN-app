@@ -958,6 +958,9 @@ export default function Analise() {
   // (a análise documental passa a ler o documento de verdade). Requer imóvel da
   // base (uuid); em inclusão manual pura, o caminho é colar o texto do documento.
   const [enviandoAnexo, setEnviandoAnexo] = useState('');
+  // Mercadológico recusado por falta de matrícula (dono, 04/11): { motivo } enquanto o aviso está na
+  // tela. Anexar a matrícula por ele gera o MERCADOLÓGICO (não o documental).
+  const [faltaMatMercado, setFaltaMatMercado] = useState(null);
   const enviarDocBucket = async (file, tipo) => {
     if (!file) return;
     const imovelId = imovelInicial?.id;
@@ -987,6 +990,11 @@ export default function Analise() {
         // Complementar não dispara a geração sozinho (o usuário pode anexar vários
         // antes de gerar); entra na próxima análise pois o servidor lê todos os anexos.
         showMsg('Documento complementar anexado.');
+      } else if (faltaMatMercado && tipo === 'matricula') {
+        // Veio do aviso do mercadológico: gera ELE (o selo do lote acaba de ser recalculado pelo anexo).
+        setFaltaMatMercado(null);
+        showMsg('Matrícula enviada! Gerando o relatório mercadológico…');
+        gerarRelMercado(null, { matriculaAnexada: true });
       } else {
         showMsg(`${LBL[tipo] || 'Documento'} enviado! Gerando a análise…`);
         // bypassPreCheck: o doc acabou de subir (está no banco/imovel_anexos que o
@@ -1036,7 +1044,7 @@ export default function Analise() {
   // quanto quando a análise saiu mas faltou um documento central (ex.: SUPERBID
   // com matrícula lida e edital ausente — pede só o edital).
   const DOC_FALTA_LABEL = { matricula: 'Matrícula', edital: 'Edital', regras_venda: 'Regras de venda' };
-  const DocsFaltantesCard = ({ faltando = [], paginaLeiloeiro, motivo, compact = false }) => {
+  const DocsFaltantesCard = ({ faltando = [], paginaLeiloeiro, motivo, compact = false, titulo: tituloFixo, onGerar }) => {
     const faltam = [...new Set(faltando)].filter(t => DOC_FALTA_LABEL[t]);
     if (!faltam.length && !compact) faltam.push('matricula', 'edital'); // fallback defensivo
     const complementares = docsLeiloeiro.filter(x => x.tipo === 'outro');
@@ -1048,9 +1056,10 @@ export default function Analise() {
         <input type="file" accept={ACEITA_DOCUMENTO} disabled={!!enviandoAnexo} onChange={e=>{ const f=e.target.files?.[0]; e.target.value=''; enviarDocBucket(f, tipo); }} style={{display:'none'}}/>
       </label>
     );
-    const titulo = faltam.length === 1
+    const titulo = tituloFixo || (faltam.length === 1
       ? `Falta ${DOC_FALTA_LABEL[faltam[0]].toLowerCase()} para concluir a análise`
-      : 'Faltam documentos para concluir a análise';
+      : 'Faltam documentos para concluir a análise');
+    const gerandoAqui = onGerar ? gerandoMercado : gerandoDocumental;
     return (
       <div style={{ background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:16, padding: compact ? '18px 20px' : '24px', display:'flex', flexDirection:'column', gap:13, alignItems:'flex-start' }}>
         <div style={{ display:'flex', alignItems:'center', gap:10 }}>
@@ -1072,9 +1081,9 @@ export default function Analise() {
             passou a ler pela cota própria do leiloeiro). Pula a pré-checagem: ela só olha se HÁ
             link, e aqui o problema era a leitura, não a falta de link. */}
         {!compact && (
-          <button onClick={() => gerarRelDocumental(false, true)} disabled={gerandoDocumental}
-            style={{ display:'inline-flex', alignItems:'center', gap:7, padding:'10px 16px', background:'#0D63DB', color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:13.5, cursor: gerandoDocumental ? 'default' : 'pointer', opacity: gerandoDocumental ? 0.6 : 1 }}>
-            <RefreshCw size={15}/> {gerandoDocumental ? 'Gerando…' : 'Buscar os documentos de novo e gerar'}
+          <button onClick={() => (onGerar ? onGerar() : gerarRelDocumental(false, true))} disabled={gerandoAqui}
+            style={{ display:'inline-flex', alignItems:'center', gap:7, padding:'10px 16px', background:'#0D63DB', color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:13.5, cursor: gerandoAqui ? 'default' : 'pointer', opacity: gerandoAqui ? 0.6 : 1 }}>
+            <RefreshCw size={15}/> {gerandoAqui ? 'Gerando…' : onGerar ? 'Conferir de novo e gerar' : 'Buscar os documentos de novo e gerar'}
           </button>
         )}
         {imovelInicial?.id ? (<>
@@ -1558,7 +1567,17 @@ export default function Analise() {
   // override em `analisarMercadoClick`; a diferença é que aqui a geração é a do SERVIDOR, que
   // persiste. As derivadas (`metricas`/`teto`) são recalculadas sobre o snapshot corrigido,
   // senão o laudo iria com a viabilidade dos dados velhos.
-  const gerarRelMercado = async (override = null) => {
+  // A tela já sabe que o lote tem matrícula? (só para poupar a consulta; quem decide é o servidor)
+  const matriculaNaTela = () => {
+    const ehArqMat = (v) => /^https?:\/\//i.test(v || '') && !/matricula\.asp|detalhe-imovel\.asp/i.test(v);
+    return !!(/caixa|cef/i.test(String(imovelInicial?.fonte || ''))
+      || imovelInicial?.temMatriculaDoc
+      || docsLeiloeiro.some(x => x.tipo === 'matricula')
+      || ehArqMat(imovelInicial?.linkMatricula)
+      || textoMatricula.trim()
+      || docsManuais.some(x => x.tipo === 'matricula' && !x.lendo && (x.texto || x.ext)));
+  };
+  const gerarRelMercado = async (override = null, opcoes = {}) => {
     const ov = (override && typeof override === 'object' && !override.nativeEvent && !override.target) ? override : null;
     const dSnap = ov ? { ...d, ...ov } : { ...d };
     // A tentativa é registrada ANTES das recusas: sem isto, o clique que morre aqui some do
@@ -1579,6 +1598,27 @@ export default function Analise() {
     }
     const idAlvo = await garantirLoteReal();
     if (!idAlvo) return;
+    // SEM MATRÍCULA NÃO GERA (dono, 04/11): pergunta ao servidor ANTES de gastar. A mesma rota já
+    // pede a matrícula ao leiloeiro (ou abre o chamado da equipe) com as travas de sempre. Se a
+    // consulta falhar, segue: o servidor de geração confere de novo e recusa sem cobrar.
+    if (!paraUserId && !opcoes?.matriculaAnexada && !matriculaNaTela()) {
+      let chk = null;
+      try {
+        const rc = await apiCall('/api/pedido-documentos-lote', { method: 'POST', body: JSON.stringify({ imovel_id: idAlvo, faltando: ['matricula'] }) });
+        chk = await rc.json().catch(() => null);
+        if (!rc.ok && chk?.matriculaOk === undefined) { console.warn('[mercado] conferência da matrícula:', rc.status, chk?.error); chk = null; }
+      } catch (e) { console.warn('[mercado] conferência da matrícula (rede):', e?.message || e); }
+      if (chk?.matriculaOk === false) {
+        registrarEvento('analise_gerar', { alvo: 'mercado', detalhe: 'recusado: lote sem matricula' });
+        setFaltaMatMercado({
+          motivo: 'O relatório mercadológico só é gerado com a matrícula do imóvel, e este lote ainda não tem. Anexe a matrícula (PDF) e ele é gerado na hora. Nada foi cobrado.' + (chk.frase || ''),
+          paginaLeiloeiro: /^https?:\/\//i.test(imovelInicial?.linkEdital || '') ? imovelInicial.linkEdital : null,
+        });
+        setRelSel(null);
+        return;
+      }
+    }
+    setFaltaMatMercado(null);
     const isAVistaSnap = cenario === 'aVista' || dSnap.somenteAVista;
     const metricasSnap = ov ? calcularMetricasCenario(dSnap, dSnap.valorArrematacao || 0, isAVistaSnap) : metricas;
     const tetoSnap = ov ? calcularTetoLance(dSnap, isAVistaSnap, META, dSnap.valorMercado || 0) : teto;
@@ -2859,6 +2899,13 @@ export default function Analise() {
               {propostaPosLeilao && (
                 <div style={{ background:'#f3e8ff', border:'1px solid #ddd6fe', borderRadius:12, padding:'12px 14px', marginBottom:16, fontSize:12.5, color:'#5b21b6', lineHeight:1.6 }}>
                   <strong>Leilão encerrado{loteEncerradoReal.ultimaData ? ` em ${dataBR(loteEncerradoReal.ultimaData)}` : ''} sem lance registrado.</strong> Liberado para a equipe gerar os relatórios e compor a proposta de compra direta ao leiloeiro.
+                </div>
+              )}
+              {faltaMatMercado && (
+                <div style={{ marginBottom:16 }}>
+                  <DocsFaltantesCard faltando={['matricula']} titulo="O relatório mercadológico precisa da matrícula"
+                    motivo={faltaMatMercado.motivo} paginaLeiloeiro={faltaMatMercado.paginaLeiloeiro}
+                    onGerar={() => gerarRelMercado()} />
                 </div>
               )}
               <div style={{ display:'grid', gridTemplateColumns: isMobile?'minmax(0, 1fr)':'minmax(0, 1fr) minmax(0, 1fr)', gap:14 }}>

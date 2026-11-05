@@ -88,6 +88,25 @@ async function extrairEnderecoPdf(base64, deadline) {
   const uf = String(j.uf || '').trim();
   return { texto: partes.join(', ') + (uf ? `/${uf}` : ''), bairro: String(j.bairro || '').trim(), cep: String(j.cep || '').trim() };
 }
+// SEM MATRÍCULA NÃO GERA (dono, 04/11: "está gerando um relatório sem ter os anexos, só consumindo
+// verba"). true = há matrícula; false = não há; null = NÃO CONSEGUI CONFERIR (≠ "não há": quem chama
+// recusa com outro motivo, sem cobrar). Mesma régua da tela (api/pedido-documentos-lote.js):
+// selo do lote (`tem_matricula_doc`, recalculado pelos anexos) ou Caixa (matrícula baixada sozinha);
+// e, para o lote incluído à mão, a matrícula que veio nos docs da própria análise.
+async function matriculaDisponivel(imovelId, docsManuais) {
+  if ((docsManuais || []).some((x) => x.tipo === 'matricula' && (x.texto || x.ext))) return true;
+  const r = await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=fonte,tem_matricula_doc&limit=1`);
+  if (!r.ok) { console.error('[mercado] conferência da matrícula falhou: HTTP', r.status); return null; }
+  const [im] = await r.json();
+  if (!im) return false;
+  if (im.tem_matricula_doc || /caixa|cef/i.test(String(im.fonte || ''))) return true;
+  // Anexo de matrícula sem o selo atualizado (ex.: subiu agora e o gatilho ainda não refletiu).
+  const ra = await sb(`imovel_anexos?imovel_id=eq.${encodeURIComponent(String(imovelId))}&tipo=eq.matricula&select=id&limit=1`);
+  if (!ra.ok) { console.error('[mercado] leitura dos anexos falhou: HTTP', ra.status); return null; }
+  const anexos = await ra.json();
+  return Array.isArray(anexos) && anexos.length > 0;
+}
+
 async function garantirEnderecoDoc(imovelId, deadline) {
   try {
     const rows = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(imovelId)}&select=url_lote,link_edital,link_matricula,anexos&limit=1`)).json();
@@ -2077,6 +2096,22 @@ export default async function handler(req, res) {
     }
   }
   const base = { user_id: ownerId, imovel_id: String(imovelId), titulo: titulo || null, cidade: cidade || null, estado: estado || null, imovel: imovel || null, inputs: { mercadoInputs, parecerInputs, ...(docsManuais.length ? { docsManuais } : {}) }, data_leilao: dataLeilao };
+
+  // ── SEM MATRÍCULA → não gera e não cobra (dono, 04/11) ─────────────────────
+  // Antes da cota e da IA: o ponto é não gastar. Ficam de fora só a geração EM NOME DE cliente
+  // (atribuição de arremate pela equipe) e a regeração pós-arremate do cron — ali o lote já foi
+  // comprado e o relatório serve ao acompanhamento.
+  if (!onBehalf && !(isCron && body.posArremate === true)) {
+    const temMat = await matriculaDisponivel(imovelId, docsManuais);
+    if (temMat === null) {
+      res.status(503).json({ error: 'Não consegui conferir agora se o lote tem a matrícula. Tente de novo em instantes; nada foi cobrado.', motivo: 'matricula_nao_conferida' });
+      return;
+    }
+    if (!temMat) {
+      res.status(422).json({ error: 'O relatório mercadológico só é gerado com a matrícula do imóvel. Anexe a matrícula do lote para gerar; nada foi cobrado.', motivo: 'sem_matricula' });
+      return;
+    }
+  }
 
   // ── LEILÃO JÁ ENCERRADO → não gera e não cobra (regra do dono, 07/08) ───────
   // "não vale, pois já passou a data de arrematar". Checado ANTES da cota: o ponto do gate é
