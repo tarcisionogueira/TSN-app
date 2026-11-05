@@ -113,10 +113,25 @@ export default function CobrarAvulso() {
   return (
     <div style={wrap}>
       <div style={{ ...card, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {cob.termo ? (
+          // MESMO LAYOUT DO FECHAMENTO TRADICIONAL DA ASSESSORIA (05/11, dono — Checkout.jsx): título curto, preço em
+          // destaque, faixa âmbar de honorários. A descrição longa não vai no topo; o detalhe está no termo.
+          <div>
+            <h2 style={{ margin: '0 0 4px', fontWeight: 900, fontSize: 22, color: '#111111' }}>{cob.termo.titulo}</h2>
+            <p style={{ margin: '0 0 12px', color: '#64748b', fontSize: 15 }}>
+              <strong style={{ color: '#111111', fontSize: 28 }}>{fmtBRL(cob.saldo_restante ?? cob.valor)}</strong>
+              {cob.parcelas_sem_juros > 1 ? ` em até ${cob.parcelas_sem_juros}x sem juros` : ''}
+            </p>
+            {cob.subtitulo && (
+              <div style={{ background: '#fef3c7', color: '#d97706', fontSize: 13, fontWeight: 700, padding: '8px 12px', borderRadius: 8 }}>{cob.subtitulo}</div>
+            )}
+          </div>
+        ) : (
         <div style={{ textAlign: 'center' }}>
           <div style={{ fontWeight: 800, fontSize: 18, color: '#0f172a' }}>{cob.descricao}</div>
           <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>BidPro Brasil</div>
         </div>
+        )}
 
         {cob.valor_pago_pix > 0 && (
           <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#166534', textAlign: 'center' }}>
@@ -125,10 +140,10 @@ export default function CobrarAvulso() {
           </div>
         )}
 
-        <div style={{ textAlign: 'center', padding: '4px 0' }}>
+        {!cob.termo && <div style={{ textAlign: 'center', padding: '4px 0' }}>
           <div style={{ fontSize: 12, color: '#64748b' }}>Valor a pagar</div>
           <div style={{ fontSize: 32, fontWeight: 800, color: '#0f172a' }}>{fmtBRL(cob.saldo_restante ?? cob.valor)}</div>
-        </div>
+        </div>}
 
         {/* TERMO DE ACEITE (05/11): cobrança com termo só mostra o pagamento depois do aceite registrado no servidor. */}
         {cob.termo && !cob.termo.aceito && !termoAceito ? (

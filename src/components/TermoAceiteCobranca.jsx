@@ -80,13 +80,20 @@ export default function TermoAceiteCobranca({ cobrancaId, termo, onAceito }) {
 
   return (
     <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 16, display: 'grid', gap: 12 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, color: '#0f172a', fontSize: 14 }}>
-        <FileText size={16} color={AZUL} /> {termo?.titulo || 'Termo de contratação'}
-      </div>
+      {/* TERMO EM DROPDOWN no topo, como o fechamento tradicional (Checkout.jsx — "Ver o termo de contratação"). Todas
+          as cláusulas, preenchidas com os dados do cliente conforme ele digita; no passo do aceite abre sozinho. */}
+      <details open={etapa === 'termo'} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 12px' }}>
+        <summary style={{ color: '#0D63DB', cursor: 'pointer', fontWeight: 700, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <FileText size={15} color={AZUL} /> Ver o termo de contratação — {termo?.titulo || 'Assessoria'}
+        </summary>
+        <div style={{ marginTop: 8, maxHeight: 380, overflowY: 'auto', whiteSpace: 'pre-wrap', fontSize: 11.5, lineHeight: 1.55, color: '#334155' }}>
+          {textoPreenchido}
+        </div>
+      </details>
       <div style={{ fontSize: 12, color: '#64748b' }}>
         {etapa === 'identificar' && 'Passo 1 de 3 — informe seu CPF e e-mail. Se você já tem cadastro na BidPro, seus dados aparecem preenchidos.'}
         {etapa === 'dados' && `Passo 2 de 3 — ${cadastrado ? 'confira e complete' : 'preencha'} seus dados para o contrato.`}
-        {etapa === 'termo' && 'Passo 3 de 3 — leia o termo com seus dados e confirme o aceite. Depois disso, o pagamento é liberado.'}
+        {etapa === 'termo' && 'Passo 3 de 3 — confira o termo acima, já com os seus dados, e confirme o aceite. Depois disso, o pagamento é liberado.'}
       </div>
 
       {etapa === 'identificar' && (<>
@@ -114,17 +121,14 @@ export default function TermoAceiteCobranca({ cobrancaId, termo, onAceito }) {
           <div><label style={lbl}>Cidade</label><input style={inp} value={end.cidade} onChange={(e) => setEnd({ ...end, cidade: e.target.value })} /></div>
           <div><label style={lbl}>UF</label><input style={inp} maxLength={2} value={end.uf} onChange={(e) => setEnd({ ...end, uf: e.target.value.toUpperCase() })} /></div>
         </div>
-        <button style={btn(dadosOk)} disabled={!dadosOk} onClick={() => setEtapa('termo')}>Ver o termo</button>
+        <button style={btn(dadosOk)} disabled={!dadosOk} onClick={() => setEtapa('termo')}>Continuar para o aceite</button>
         <button onClick={() => setEtapa('identificar')} style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 12, cursor: 'pointer' }}>← Voltar</button>
       </>)}
 
       {etapa === 'termo' && (<>
-        <div style={{ maxHeight: 360, overflowY: 'auto', whiteSpace: 'pre-wrap', fontSize: 12, lineHeight: 1.55, color: '#1e293b', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: 12 }}>
-          {textoPreenchido}
-        </div>
         <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 13, color: '#0f172a', cursor: 'pointer' }}>
           <input type="checkbox" checked={li} onChange={(e) => setLi(e.target.checked)} style={{ marginTop: 3 }} />
-          <span>Li e aceito o termo acima. Entendo que este aceite eletrônico, registrado com data, hora e IP, tem validade de assinatura (Lei 14.063/2020).</span>
+          <span>Li e aceito o termo de contratação acima, com todas as suas cláusulas. Entendo que este aceite eletrônico, registrado com data, hora e IP, tem validade de assinatura (Lei 14.063/2020).</span>
         </label>
         <button style={btn(li && !ocupado)} disabled={!li || ocupado} onClick={aceitar}>
           {ocupado ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : 'Aceitar e ir para o pagamento'}
