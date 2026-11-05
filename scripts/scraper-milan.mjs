@@ -20,6 +20,7 @@ import { buscarViaBrightData, brightDataDisponivel, ErroBrightData } from '../ap
 import { registrarSaude } from './_saude-fonte.mjs';
 import { TENANTS, extrairEventosImoveis, parseEvento, montarRow, checarQualidade, ehDesafio } from './lib/milan-parse.mjs';
 import { confirmarMatriculas, copiarMatriculas } from './lib/milan-docs.mjs';
+import { agendaImoveis, eventoSiteback, descobrirLote, cardDoEvento } from './lib/milan-siteback.mjs';
 
 const T = TENANTS.milan;
 const DRYRUN = process.env.MILAN_DRYRUN !== '0';
@@ -78,36 +79,71 @@ async function amostrarSemValor(cod, ev, cards) {
 }
 
 async function main() {
-  if (!brightDataDisponivel()) throw new FalhaDeAcesso('sem_config', 'BRIGHTDATA_API_TOKEN/ZONE ausentes — o site só abre pelo Web Unlocker');
-  console.log(`MILAN ${DRYRUN ? '(DRY-RUN — não grava)' : '(GRAVANDO)'} · até ${MAX_EVENTOS} evento(s)`);
+  console.log(`MILAN ${DRYRUN ? '(DRY-RUN — não grava)' : '(GRAVANDO)'} · agenda pela siteback (grátis) · até ${MAX_EVENTOS} evento(s) de vários lotes pelo Bright Data`);
 
-  const home = await pagina(`${T.base}/`, 20000);
-  const eventos = extrairEventosImoveis(home).slice(0, MAX_EVENTOS);
-  console.log(`Home: ${eventos.length} evento(s) de imóveis → ${eventos.join(', ') || '(nenhum)'}`);
-  if (!eventos.length) {
-    // A home abriu (passou do tamanho mínimo) e não listou evento de imóvel: é resposta, não falha.
+  // AGENDA PELA SITEBACK (05/11): grátis e completa. A home pelo Bright Data listava no máximo 10 eventos e falhava
+  // (3 rodadas zeradas desde 05/10) — 14 dos 17 eventos de imóveis da agenda de 05/11 nunca tinham entrado.
+  const agenda = await agendaImoveis();
+  console.log(`Agenda: ${agenda.length} evento(s) de imóveis → ${agenda.map((e) => `${e.codLeilao}${Number(e.tipoLeilao) === 7 ? '(vários)' : ''}`).join(', ') || '(nenhum)'}`);
+  if (!agenda.length) {
+    // A agenda abriu e não listou imóvel: é resposta, não falha.
     await registrarSaude(supabase, T.fonte, [], 'milan', { ok: false, vazio: true, enumerados: 0, metricas: METRICAS_ZERO,
-      motivo: 'home lida, nenhum leilão de imóveis na agenda' });
+      motivo: 'agenda lida, nenhum leilão de imóveis' });
     return { gravados: 0, eventos: 0 };
   }
 
+  // Lote já conhecido de cada evento (o número do lote não vem na siteback): evita sondar a foto de novo.
+  const { data: conhecidos, error: eConh } = await supabase.from('imoveis_leilao').select('fonte_id,link_foto').eq('fonte', T.fonte);
+  if (eConh) throw new FalhaDeAcesso('supabase', `lotes conhecidos: ${eConh.message}`);
+  const loteConhecido = new Map();
+  for (const r of conhecidos || []) {
+    const m = String(r.fonte_id).match(/^milan_(\d+)_(\w+)$/i);
+    if (m && !loteConhecido.has(m[1])) loteConhecido.set(m[1], { lote: m[2], foto: r.link_foto });
+  }
+
   const prontos = [];
-  let enumerados = 0, encerrados = 0, reprovados = 0, eventosFalhos = 0, recusaCota = null;
-  for (const cod of eventos) {
+  let enumerados = 0, encerrados = 0, reprovados = 0, eventosFalhos = 0, semLote = 0, recusaCota = null, viaBD = 0;
+  const multi = [];
+  for (const item of agenda) {
+    const cod = String(item.codLeilao);
+    if (Number(item.tipoLeilao) === 7) { multi.push(cod); continue; }
+    // LOTE ÚNICO — tudo grátis: detalhe na siteback, lote pela foto no repositório.
+    let ev;
+    try { ev = await eventoSiteback(cod); }
+    catch (e) { eventosFalhos++; console.error(`  evento ${cod}: siteback falhou (${e.message})`); continue; }
+    enumerados++;
+    const achado = loteConhecido.get(cod) || await descobrirLote(ev.localFotos);
+    if (!achado) { semLote++; console.log(`  evento ${cod}: lote não descoberto pela foto (${ev.localFotos || 'sem localFotos'}) — fica para a próxima`); continue; }
+    const card = cardDoEvento(ev, achado);
+    const judicial = !!card.processo;
+    const row = montarRow({ cod, inicio: card.data_leilao, edital: null, judicial }, card, T);
+    if (card.praca2.valor && card.praca2.valor !== row.valor_minimo) row.valor_minimo_2 = card.praca2.valor;
+    if (card.data_leilao_2) row.data_leilao_2 = card.data_leilao_2;
+    if (card.processo) row.numero_processo = card.processo;
+    const q = checarQualidade(row, { estrito: false });
+    if (q.descartar) { reprovados++; console.log(`    ${cod}_${card.lote} DESCARTADO (${q.faltando.join(',')})`); continue; }
+    console.log(`  evento ${cod} (lote ${card.lote}) · ${row.titulo} · R$ ${row.valor_minimo}${row.valor_minimo_2 ? ` / 2ª R$ ${row.valor_minimo_2}` : ''}`);
+    prontos.push(row);
+  }
+
+  // VÁRIOS LOTES — a lista só sai pela página do evento (desafio do Cloudflare): Bright Data, com teto.
+  if (multi.length && !brightDataDisponivel()) console.log(`  ${multi.length} evento(s) de vários lotes sem Bright Data configurado — pulados`);
+  for (const cod of (brightDataDisponivel() ? multi.slice(0, MAX_EVENTOS) : [])) {
     let html;
     try {
+      viaBD++;
       html = await pagina(`${T.base}/leilao/imoveis/${cod}`);
     } catch (e) {
       eventosFalhos++;
       console.error(`  evento ${cod}: FALHA (${e.motivo || e.message})`);
-      if (e.semCota) { recusaCota = e.motivo; console.log(`  ⛔ parou por COTA — ${eventos.length - eventos.indexOf(cod)} evento(s) para a próxima rodada`); break; }
+      if (e.semCota) { recusaCota = e.motivo; console.log('  ⛔ parou por COTA — o resto fica para a próxima rodada'); break; }
       continue;
     }
     const ev = parseEvento(html, cod, T.base);
     enumerados += ev.lotes.length;
     const semValor = ev.lotes.filter(l => l.htmlSemValor && !l.encerrado);
     if (semValor.length) await amostrarSemValor(cod, ev, semValor);
-    console.log(`  evento ${cod} "${ev.tituloEvento}" · início ${ev.inicio || '?'} · ${ev.lotes.length} lote(s)`);
+    console.log(`  evento ${cod} "${ev.tituloEvento}" · início ${ev.inicio || '?'} · ${ev.lotes.length} lote(s) (Bright Data)`);
     for (const card of ev.lotes) {
       if (card.encerrado) { encerrados++; continue; }
       const row = montarRow(ev, card, T);
@@ -117,11 +153,12 @@ async function main() {
     }
     await sleep(500);
   }
+  if (semLote) console.log(`  ${semLote} evento(s) de lote único sem lote descoberto.`);
   console.log(`\nResumo: ${prontos.length} pronto(s) · ${enumerados} enumerado(s) · ${encerrados} encerrado(s) · ${reprovados} reprovado(s) · ${eventosFalhos} evento(s) sem acesso.`);
 
   if (!prontos.length) {
     // Nenhum evento abriu: falha de ACESSO (ou cota), nunca "fonte vazia".
-    if (eventosFalhos === eventos.length) throw new FalhaDeAcesso(recusaCota || 'eventos_inacessiveis', `${eventosFalhos} de ${eventos.length} evento(s) sem acesso`, !!recusaCota);
+    if (eventosFalhos && eventosFalhos >= agenda.length) throw new FalhaDeAcesso(recusaCota || 'eventos_inacessiveis', `${eventosFalhos} de ${agenda.length} evento(s) sem acesso`, !!recusaCota);
     await registrarSaude(supabase, T.fonte, [], 'milan', { ok: false, enumerados, metricas: METRICAS_ZERO,
       motivo: `nenhum lote pronto (${encerrados} encerrados · ${reprovados} reprovados)` });
     return { gravados: 0, enumerados };
@@ -144,11 +181,11 @@ async function main() {
   console.log(`✅ ${data.length} imóvel(is) MILAN gravados/atualizados.`);
   console.log(`  ${await copiarMatriculas(supabase, data, achados)}`);
 
-  const parcial = eventosFalhos > 0;
+  const parcial = eventosFalhos > 0 || semLote > 0;
   await registrarSaude(supabase, T.fonte, prontos, 'milan', parcial
-    ? { ok: false, semCota: !!recusaCota, enumerados, motivo: `coleta parcial: ${eventosFalhos} evento(s) sem acesso${recusaCota ? ' (cota)' : ''}` }
+    ? { ok: false, semCota: !!recusaCota, enumerados, motivo: `coleta parcial: ${eventosFalhos} evento(s) sem acesso${recusaCota ? ' (cota)' : ''}${semLote ? ` · ${semLote} lote(s) único(s) sem número descoberto` : ''}` }
     : { enumerados });
-  return { gravados: data.length, enumerados, eventosFalhos };
+  return { gravados: data.length, enumerados, eventosFalhos, semLote, viaBrightData: viaBD };
 }
 
 main()

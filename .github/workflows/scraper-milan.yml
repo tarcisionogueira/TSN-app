@@ -9,7 +9,7 @@ name: Scraper Milan Leilões (Bright Data)
 # default dry-run por engano gastou cota 8× sem gravar nada.
 on:
   schedule:
-    - cron: '35 11 * * 1,4'   # segunda e quinta, 11h35 UTC (08h35 BRT)
+    - cron: '35 11 * * *'   # todo dia 11h35 UTC (08h35 BRT) — 05/11: agenda e lote único pela siteback (grátis); Bright Data só no evento de vários lotes
   workflow_dispatch:
     inputs:
       dryrun:
