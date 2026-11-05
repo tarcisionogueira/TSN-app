@@ -1,0 +1,21 @@
+name: Medição — pátio dos veículos pelo edital (só leitura)
+
+# 05/11 (pedido do dono): quantos veículos sem pátio confirmado o EDITAL resolveria? Lê cada edital
+# uma vez (camada de texto, sem IA, sem Bright Data) e NUNCA grava. Ver scripts/recon-patio-edital-veiculos.mjs.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  medir:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Medir (só leitura)
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: node scripts/recon-patio-edital-veiculos.mjs
