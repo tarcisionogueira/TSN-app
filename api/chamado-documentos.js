@@ -25,6 +25,7 @@ import { checkRateLimit, rateLimitedResponse } from './_rate-limit.js';
 import { pedidoRepetido, respostaRepetido } from './_pedido-unico.js';
 import { pedirDocumentosAoLeiloeiro } from './_pedido-leiloeiro-auto.js';
 import { registrarNoChamado, TIPO_CHAMADO_DOCUMENTOS } from './_chamado-documentos.js';
+import { contatoNaJunta } from './_contato-junta.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -81,11 +82,13 @@ export default async function handler(req) {
 
     if (req.method === 'GET') {
       const argsContato = JSON.stringify({ p_fonte: imovel.fonte || '', p_leiloeiro: imovel.leiloeiro || null });
-      const [pedidos, anexos, rContato, rTel] = await Promise.all([
+      const [pedidos, anexos, rContato, rTel, junta] = await Promise.all([
         ler(`documental_pedidos_leiloeiro?imovel_id=eq.${chamado.imovel_id}&select=id,status,destinatario_email,itens_pedidos,automatico,criado_em,respondido_em,anexos_recebidos&order=criado_em.desc&limit=20`),
         ler(`imovel_anexos?imovel_id=eq.${chamado.imovel_id}&tipo=in.(matricula,edital,regras_venda,regras,laudo)&select=tipo,nome,criado_em&order=criado_em.desc&limit=30`),
         sb('rpc/contato_leiloeiro_resolver', { method: 'POST', body: argsContato }),
         sb('rpc/telefone_leiloeiro_resolver', { method: 'POST', body: argsContato }),
+        // Reserva: e-mail/telefone que a Junta Comercial publica para o dono do site do lote (05/11).
+        contatoNaJunta(imovel.url_lote),
       ]);
       // Contato ilegível ≠ "sem contato": a tela mostra o erro em vez de mandar cadastrar de novo.
       const contato = rContato.ok ? ((await rContato.json().catch(() => []))[0] || null) : undefined;
@@ -97,6 +100,7 @@ export default async function handler(req) {
         pedidos, anexos,
         contato: contato === undefined ? { erro: `HTTP ${rContato.status}` } : contato ? { email: contato.email || null, escopo: contato.escopo || null } : null,
         telefone: telefone === undefined ? { erro: `HTTP ${rTel.status}` } : telefone ? { numero: telefone.telefone, whatsapp: !!telefone.whatsapp } : null,
+        junta: junta.ok ? junta.contatos : { erro: junta.erro },
       });
     }
 

@@ -15,6 +15,8 @@
  * acessório a eles. O retorno diz o que aconteceu (`ok`/`erro`), não um null ambíguo.
  */
 
+import { contatoNaJunta } from './_contato-junta.js';
+
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
 const APP_ORIGIN   = process.env.APP_ORIGIN || 'https://bidprobrasil.com.br';
@@ -24,7 +26,7 @@ export const TIPO_CHAMADO_DOCUMENTOS = 'documentos_leiloeiro';
 const MOTIVO = {
   sem_contato: {
     porque: 'não temos e-mail cadastrado para este leiloeiro, então o pedido automático não saiu.',
-    fazer: 'Ache o e-mail (ou WhatsApp) no site do leiloeiro, cadastre no painel deste chamado e clique em "Enviar pedido ao leiloeiro". O e-mail cadastrado vale para todos os lotes dele.',
+    fazer: 'Ligue para o telefone abaixo, ou use o e-mail da Junta Comercial no painel deste chamado ("Usar este e-mail") e clique em "Enviar e-mail pronto". O e-mail cadastrado vale para todos os lotes dele.',
   },
   equipe_whatsapp: {
     porque: 'o leiloeiro não respondeu os últimos pedidos por e-mail, então o automático parou de insistir.',
@@ -60,7 +62,28 @@ function dataLeilao(im) {
   return Number.isFinite(ms) ? new Date(ms).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : null;
 }
 
-function montarMensagem(imovel, imovelId, { motivo, itens, destinatario }) {
+// Telefones para LIGAR já ao abrir o chamado (05/11, dono): o cadastrado por nós primeiro, depois o
+// que a Junta Comercial publica. Leitura que falhou vira linha dizendo isso, não silêncio.
+async function contatosParaLigar(imovel) {
+  const linhas = [];
+  try {
+    const r = await sb('rpc/telefone_leiloeiro_resolver', { method: 'POST', body: JSON.stringify({ p_fonte: imovel?.fonte || '', p_leiloeiro: imovel?.leiloeiro || null }) });
+    if (!r.ok) linhas.push(`Telefone cadastrado: não consegui consultar (HTTP ${r.status})`);
+    else {
+      const [t] = await r.json().catch(() => []);
+      if (t?.telefone) linhas.push(`${t.whatsapp ? 'WhatsApp' : 'Telefone'} cadastrado: +${t.telefone}`);
+    }
+  } catch (e) { linhas.push(`Telefone cadastrado: não consegui consultar (${String(e?.message || e).slice(0, 60)})`); }
+  const j = await contatoNaJunta(imovel?.url_lote);
+  if (!j.ok) linhas.push(`Junta Comercial: não consegui consultar (${j.erro})`);
+  for (const c of (j.ok ? j.contatos : []).slice(0, 3)) {
+    const tels = c.telefones.map(t => `${t.texto}${t.celular ? ' (celular)' : ''}`).join(' · ');
+    linhas.push(`Junta Comercial${c.uf ? ` ${c.uf}` : ''}${c.nome ? ` — ${c.nome}` : ''}: ${[tels, c.email].filter(Boolean).join(' · ') || 'sem contato publicado'}`);
+  }
+  return linhas;
+}
+
+function montarMensagem(imovel, imovelId, { motivo, itens, destinatario, contatos = [] }) {
   const m = MOTIVO[motivo] || { porque: motivo, fazer: '' };
   const lote = imovel?.titulo || [imovel?.endereco, imovel?.cidade, imovel?.estado].filter(Boolean).join(', ') || `Lote ${imovelId}`;
   const linhas = [
@@ -68,6 +91,7 @@ function montarMensagem(imovel, imovelId, { motivo, itens, destinatario }) {
     '',
     `Lote: ${lote}${imovel?.cidade ? ` — ${imovel.cidade}/${imovel.estado || ''}` : ''}`,
     `Leiloeiro: ${imovel?.leiloeiro || imovel?.fonte || 'não identificado'}${destinatario ? ` (${destinatario})` : ''}`,
+    contatos.length ? `Contato para ligar:\n${contatos.map(c => `• ${c}`).join('\n')}` : (motivo === 'falha' ? null : 'Contato para ligar: nenhum telefone cadastrado nem publicado pela Junta — procure no site do leiloeiro.'),
     itens?.length ? `Falta:\n${itens.map(i => `• ${i}`).join('\n')}` : null,
     dataLeilao(imovel || {}) ? `Leilão: ${dataLeilao(imovel)}` : null,
     imovel?.url_lote ? `Página do lote: ${imovel.url_lote}` : null,
@@ -118,7 +142,7 @@ export async function abrirChamadoDocumentos({ imovelId, pedidoId = null, motivo
 
     const rm = await sb('chamados_mensagens', {
       method: 'POST', headers: { Prefer: 'return=minimal' },
-      body: JSON.stringify({ chamado_id: chamadoId, autor_tipo: 'sistema', autor_nome: 'Sistema', conteudo: montarMensagem(imovel, imovelId, { motivo, itens, destinatario }) }),
+      body: JSON.stringify({ chamado_id: chamadoId, autor_tipo: 'sistema', autor_nome: 'Sistema', conteudo: montarMensagem(imovel, imovelId, { motivo, itens, destinatario, contatos: await contatosParaLigar(imovel) }) }),
     });
     if (!rm.ok) console.error('[chamado-documentos] mensagem HTTP', rm.status);
     if (!novo) {

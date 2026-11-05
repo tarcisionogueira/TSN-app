@@ -808,6 +808,8 @@ function DocumentosLeiloeiroPainel({ chamadoId, encerrado }) {
   const telErro = d.telefone?.erro;
   const temTel = !!d.telefone?.numero;
   const temWhats = temTel && !!d.telefone.whatsapp;
+  const juntaErro = Array.isArray(d.junta) ? null : d.junta?.erro || null;
+  const juntaContatos = Array.isArray(d.junta) ? d.junta : [];
   const textoPedido = mensagemPedidoLeiloeiro(im, d.faltando);
   const btn = (cor, extra = {}) => ({ padding: '6px 12px', background: cor, color: 'white', border: 'none', borderRadius: 7, fontWeight: 700, fontSize: 12, cursor: ocupado ? 'default' : 'pointer', opacity: ocupado ? 0.6 : 1, ...extra });
   return (
@@ -840,6 +842,31 @@ function DocumentosLeiloeiroPainel({ chamadoId, encerrado }) {
                 </a>
               : <span style={{ color: '#b45309', fontWeight: 700 }}>sem telefone cadastrado</span>}
           </div>
+          {/* Reserva (05/11): o que a Junta Comercial publica para o dono do site do lote. Só mostra;
+              quem decide usar é a equipe — nada sai sozinho para um endereço da Junta. */}
+          {(!temEmail || !temTel) && (juntaErro
+            ? <div style={{ color: '#b45309' }}>Junta Comercial: não consegui consultar ({juntaErro})</div>
+            : juntaContatos.length > 0 && (
+              <div style={{ background: 'white', border: '1px solid #bae6fd', borderRadius: 8, padding: '8px 10px', display: 'grid', gap: 6 }}>
+                <span style={{ fontWeight: 700 }}>📇 Pela Junta Comercial (cadastro oficial do leiloeiro dono do site):</span>
+                {juntaContatos.map((c, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <span style={{ color: '#475569' }}>{c.nome || 'Leiloeiro'}{c.uf ? ` (${c.uf})` : ''}{c.situacao && c.situacao !== 'ATIVO' ? ` · ${c.situacao.toLowerCase()}` : ''}</span>
+                    {c.telefones.map(t => (
+                      <span key={t.numero} style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                        <a href={`tel:+${t.numero}`} style={{ color: '#15803d', fontWeight: 700 }}>📞 {t.texto}</a>
+                        {t.celular && <a href={`https://wa.me/${t.numero}`} target="_blank" rel="noopener noreferrer" style={{ color: '#16a34a', fontSize: 11 }}>WhatsApp?</a>}
+                        {!temTel && !telErro && <button onClick={() => setTelefone(t.texto)} disabled={!!ocupado} style={btn('#64748b', { padding: '2px 8px', fontSize: 11 })}>usar</button>}
+                      </span>
+                    ))}
+                    {c.email && <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                      <b>{c.email}</b>
+                      {!temEmail && !contatoErro && <button onClick={() => setEmail(c.email)} disabled={!!ocupado} style={btn('#64748b', { padding: '2px 8px', fontSize: 11 })}>usar este e-mail</button>}
+                    </span>}
+                  </div>
+                ))}
+              </div>
+            ))}
           {((!temEmail && !contatoErro) || (!temTel && !telErro)) && (
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {!temEmail && !contatoErro && <>
