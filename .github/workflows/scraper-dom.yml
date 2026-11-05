@@ -747,6 +747,19 @@ jobs:
           VEIC_MAX_LOTES: '80'
         run: node scripts/scraper-veiculos-motor.mjs
 
+      # 05/11 (dono: "medir e já criar o coletor de veículos"): os veículos dos 34+ leiloeiros da plataforma Degrau
+      # (Leilão Eletrônico, Destak, Taba, GF…). O coletor de imóveis deles descarta veículo de propósito; aqui é o
+      # mesmo feed com o filtro invertido, pela via grátis. Passo próprio: `fontes=degrau_veic` testa só ele.
+      - name: Veículos — plataforma Degrau (Leilão Eletrônico, Destak, Taba, GF…)
+        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'veiculos') || contains(github.event.inputs.fontes, 'degrau_veic')) }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          VEIC_FONTES: leilaoeletronico
+          VEIC_DRYRUN: ${{ env.DRYRUN_PADRAO }}
+          VEIC_MAX_LOTES: '80'
+        run: node scripts/scraper-veiculos-motor.mjs
+
       - name: Notify on failure
         if: ${{ github.event_name == 'schedule' && (failure() || cancelled()) }}
         env:

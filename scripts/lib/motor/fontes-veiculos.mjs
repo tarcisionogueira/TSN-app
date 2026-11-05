@@ -17,5 +17,7 @@ import lancevip from './fontes/lancevip.mjs';
 import vixleiloes from './fontes/vixleiloes.mjs';
 // Portal dos Leilões (26/10): só lote ABERTO dos leilões que o site declara abertos, com gate de cobertura ≥ 90%.
 import portaldosleiloes from './fontes/portaldosleiloes.mjs';
+// 05/11: os 34+ leiloeiros da plataforma Degrau (Leilão Eletrônico, Destak, Taba, GF…) — mesmo feed dos imóveis.
+import leilaoeletronico from './fontes/leilaoeletronico.mjs';
 
-export const FONTES_VEICULOS = [freitas, globo, leilaobrasil, mgl, jeleiloes, simon, nakakogue, ares, suportev2, vixleiloes, lancevip, portaldosleiloes];
+export const FONTES_VEICULOS = [freitas, globo, leilaobrasil, mgl, jeleiloes, simon, nakakogue, ares, suportev2, vixleiloes, lancevip, portaldosleiloes, leilaoeletronico];

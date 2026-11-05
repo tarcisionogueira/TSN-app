@@ -3,7 +3,7 @@
 // CENTAVOS sem separador); o JSON-LD da página descreve OUTRO lote e não pode vazar para a linha.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { extrairUrlsDeLote, parseDetalhe, montarRow, idDaUrl, valorDoFeed, TENANTS } from '../lib/leilaoeletronico-parse.mjs';
+import { extrairUrlsDeLote, extrairUrlsDeVeiculo, parseDetalhe, montarRow, idDaUrl, valorDoFeed, TENANTS } from '../lib/leilaoeletronico-parse.mjs';
 
 const T = TENANTS.leilaoeletronico;
 const pagina2653 = readFileSync(new URL('./fixtures/leilaoeletronico-lote-2653.html', import.meta.url), 'utf8');
@@ -236,3 +236,12 @@ console.log('✓ leilaoeletronico: feed + página → linha (todos os casos)');
   assert.equal(dg.link_matricula, 'https://www.gfleiloes.com.br/preview/ec1fcbbb-abc8-4d13-b254-30d3cea39ae0.pdf');
 }
 console.log('ok — anexos nos 3 temas e galeria completa');
+
+// (05/11) VEÍCULOS: o mesmo feed com o filtro invertido — só o Honda Fit (2900); imóveis e o encerrado ficam fora.
+{
+  const v = extrairUrlsDeVeiculo(feed, T.base, { hojeISO: HOJE });
+  assert.deepEqual([...v.keys()], ['2900']);
+  assert.ok(v.get('2900').includes('/lote/leilao-de-veiculo-honda-fit-2012/2900/'));
+  assert.equal(extrairUrlsDeVeiculo('<html>sem feed</html>', T.base).size, 0);
+}
+console.log('ok — catálogo de veículos da plataforma');

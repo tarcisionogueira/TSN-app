@@ -10,7 +10,7 @@
  * `fonte` própria (saúde e baseline por leiloeiro); a releitura (`maxRefresh`) vale POR TENANT.
  */
 import {
-  TENANTS, extrairUrlsDeLote, idDaUrl, parseDetalhe, montarRow, checarQualidade,
+  TENANTS, extrairUrlsDeLote, extrairUrlsDeVeiculo, idDaUrl, parseDetalhe, montarRow, checarQualidade,
 } from '../../leilaoeletronico-parse.mjs';
 
 export const TENANTS_POR_CHAVE = TENANTS;
@@ -26,6 +26,10 @@ export default {
   maxRefresh: 60,
   tenants: Object.values(TENANTS),
   parse: { extrairUrlsDeLote, idDaUrl, parseDetalhe, montarRow, checarQualidade },
+  // VEÍCULOS (05/11): mesmo feed, filtro invertido (lib/leilaoeletronico-parse.mjs → extrairUrlsDeVeiculo); a página e o
+  // parser são os de imóvel e a conversão é a de sempre (lib/veiculo-do-lote.mjs: pátio pelo classificador único).
+  // Via grátis, como os imóveis. Roda no job `veiculos` do scraper-dom.yml (passo próprio).
+  veiculos: { catalogo: '/sitemap.xml', maxPages: 1, extrairUrlsDeLote: extrairUrlsDeVeiculo },
   conhecimento: {
     plataforma: 'Sua Plataforma de Leilão (Degrau) — tema padrão', acesso: 'fetch-direto (banco de reserva)', custo: 'gratis', anti_bot: 'nenhum',
     enumeracao: '/sitemap.xml (feed <listing>: praças com <end_date>/<rate>, cidade, coordenadas, fotos)',

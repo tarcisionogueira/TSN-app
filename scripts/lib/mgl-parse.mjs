@@ -66,7 +66,7 @@ export const idDaUrl = (url) => (String(url).match(/\/lote\/[^/]+\/(\d+)/) || []
 // (frota/sucata) continuam fora; a decisão final é de lib/veiculo-do-lote.mjs, já com a página lida.
 const RE_VEICULO_SLUG = /ve[ií]culo|automovel|carro|moto|caminhao|caminhonete|onibus|utilitario|furgao|reboque/i;
 const RE_NAO_VEICULO_SLUG = /sucata|pecas|bens-diversos|mobiliario|equipamento|maquin|trator|sofa|notebook|eletro|exemplo-de-leilao/i;
-const ehVeiculoDoFeed = (slug, nome) => {
+export const ehVeiculoDoFeed = (slug, nome) => {
   const t = `${slug.replace(/-/g, ' ')} ${nome}`;
   return (RE_VEICULO_SLUG.test(t) || RE_MARCA_VEICULO.test(t)) && !RE_NAO_VEICULO_SLUG.test(t);
 };

@@ -17,7 +17,7 @@
  *    lote 2419: price 1693902,00, 1ª praça 169390200 = a avaliação, 2ª 84695100 = 50%). Sem vírgula = centavos.
  */
 import { lotesDoFeed, ehFeedDegrau } from './degrau-feed.mjs';
-import { naoImovelDoFeed } from './mgl-parse.mjs';
+import { naoImovelDoFeed, ehVeiculoDoFeed } from './mgl-parse.mjs';
 import { inferirTipo, extrairArea, checarQualidade } from './leilaopro-parse.mjs';
 import { num, plaus, titleCase, montarRowDom, UF_POR_NOME, UFS, cidadeUFBare, semPrefixoCidade } from './dom-parse-util.mjs';
 import { decodificarEntidades } from '../../api/_texto-imovel.js';
@@ -158,15 +158,26 @@ const hostDe = (u) => { try { return new URL(u).host.replace(/^www\./, '').toLow
 const chaveFeed = (u, id) => `${hostDe(u)}|${id}`;
 
 // hojeISO: só o teste passa (data fixa da fixture); o motor chama com 2 argumentos e vale o relógio.
-export function extrairUrlsDeLote(html, base, { hojeISO } = {}) {
-  if (!ehFeedDegrau(html)) return new Map();
+function registrarFeed(html, base) {
   for (const [id, it] of itensDoFeed(html)) {
     let abs = base;
     try { abs = new URL(it.url, base).href; } catch { /* url malformada no feed: o lote fica com o host do tenant */ }
     FEED.set(chaveFeed(abs, id), it);
   }
   HOSTS_COM_FEED.add(hostDe(base));
+}
+export function extrairUrlsDeLote(html, base, { hojeISO } = {}) {
+  if (!ehFeedDegrau(html)) return new Map();
+  registrarFeed(html, base);
   return lotesDoFeed(html, base, { hojeISO, descartar: naoImovelDoFeed });
+}
+// VEÍCULOS (05/11, dono: "medir e já criar o coletor de veículos"): o MESMO feed com o filtro invertido — o mesmo
+// critério da MGL (lib/mgl-parse.mjs: slug/nome com cara de veículo inteiro; sucata/peça/máquina fora). O feed tem que
+// ser registrado aqui também: datas e lances de cada praça só existem nele (a página vem sem), e o parseDetalhe lê dali.
+export function extrairUrlsDeVeiculo(html, base, { hojeISO } = {}) {
+  if (!ehFeedDegrau(html)) return new Map();
+  registrarFeed(html, base);
+  return lotesDoFeed(html, base, { hojeISO, descartar: (slug, nome) => !ehVeiculoDoFeed(slug, nome) });
 }
 export const idDaUrl = (url) => (String(url).match(/\/lote\/[^/]+\/(\d+)/) || [])[1] || null;
 
