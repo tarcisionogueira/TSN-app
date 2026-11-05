@@ -1017,15 +1017,18 @@ export default function Analise() {
     if (!imovelInicial?.id || pedindoLeiloeiro) return;
     setPedindoLeiloeiro(true);
     try {
+      // Reenvio só com o aviso do pedido anterior já na tela (05/11): o servidor recusa sem isso.
+      const confirmar = acao === 'enviar' && !!pedidoLeiloeiroTexto?.pedidoRecente;
       const r = await apiCall('/api/pedir-documento-leiloeiro', {
         method: 'POST',
-        body: JSON.stringify({ imovel_id: imovelInicial.id, action: acao, ...(acao === 'enviar' ? { texto: textoLeiloeiro } : {}) }),
+        body: JSON.stringify({ imovel_id: imovelInicial.id, action: acao, ...(acao === 'enviar' ? { texto: textoLeiloeiro, confirmar_reenvio: confirmar } : {}) }),
       });
       const j = await r.json().catch(() => ({}));
+      if (j?.jaPedido) { setPedidoLeiloeiroTexto(prev => prev ? { ...prev, pedidoRecente: j.pedidoRecente } : prev); showMsg(j.error, 'error'); return; }
       if (j?.semContato) { setPedidoLeiloeiroTexto({ texto: j.texto, linkLote: j.linkLote, contatoDisponivel: false, telefone: j.telefone || null, telefoneErro: !!j.telefoneErro, chamadoId: j.chamadoId || null }); setTextoLeiloeiro(j.texto); return; }
       if (!r.ok || j?.error) { showMsg(j?.error || 'Não foi possível preparar o pedido agora.', 'error'); return; }
       if (acao === 'preview') {
-        setPedidoLeiloeiroTexto({ texto: j.texto, linkLote: j.linkLote, contatoDisponivel: j.contatoDisponivel, telefone: j.telefone || null, telefoneErro: !!j.telefoneErro, chamadoId: j.chamadoId || null });
+        setPedidoLeiloeiroTexto({ texto: j.texto, linkLote: j.linkLote, contatoDisponivel: j.contatoDisponivel, telefone: j.telefone || null, telefoneErro: !!j.telefoneErro, chamadoId: j.chamadoId || null, pedidoRecente: j.pedidoRecente || null });
         setTextoLeiloeiro(j.texto);
         return;
       }
@@ -1116,6 +1119,11 @@ export default function Analise() {
                       ? 'Ainda não temos o e-mail deste leiloeiro — ajuste o texto se quiser e mande pelo WhatsApp (ou copie).'
                       : 'Ainda não temos o e-mail deste leiloeiro cadastrado — ajuste o texto se quiser e copie para enviar pelo canal de contato dele.'}
                   {!pedidoLeiloeiroTexto.contatoDisponivel && pedidoLeiloeiroTexto.chamadoId && <span style={{ display:'block', fontWeight:500, color:'#0f766e', marginTop:4 }}>Abrimos um chamado de documentos no Atendimento: lá dá para cadastrar o contato, reenviar e anexar o que chegar.</span>}
+                  {pedidoLeiloeiroTexto.pedidoRecente && (() => { const pr = pedidoLeiloeiroTexto.pedidoRecente; return (
+                    <span style={{ display:'block', fontWeight:600, color:'#b91c1c', marginTop:4 }}>
+                      Já saiu um pedido para este lote em {new Date(pr.criado_em).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })}{pr.automatico ? ' (automático)' : ''}{pr.destinatario_email ? `, para ${pr.destinatario_email}` : ''}{Array.isArray(pr.itens_pedidos) && pr.itens_pedidos.length ? `, pedindo: ${pr.itens_pedidos.join(', ')}` : ''}. {pr.respondido_em ? 'O leiloeiro já respondeu.' : 'Ainda sem resposta.'} Só envie de novo se for pedir algo diferente.
+                    </span>
+                  ); })()}
                   {pedidoLeiloeiroTexto.telefoneErro && <span style={{ display:'block', fontWeight:500, color:'#b45309', marginTop:4 }}>Não consegui consultar o telefone do leiloeiro agora — o botão do WhatsApp volta quando você reabrir o pedido.</span>}
                 </div>
                 <textarea value={textoLeiloeiro} onChange={e => setTextoLeiloeiro(e.target.value)} rows={8} spellCheck lang="pt-BR"
@@ -1125,7 +1133,7 @@ export default function Analise() {
                   {pedidoLeiloeiroTexto.contatoDisponivel ? (
                     <button onClick={() => pedirAoLeiloeiro('enviar')} disabled={pedindoLeiloeiro || !textoLeiloeiro.trim()}
                       style={{ padding:'8px 14px', background:'#c2410c', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12.5, cursor: (pedindoLeiloeiro || !textoLeiloeiro.trim())?'default':'pointer', opacity: (pedindoLeiloeiro || !textoLeiloeiro.trim())?0.7:1 }}>
-                      {pedindoLeiloeiro ? 'Enviando…' : 'Enviar ao leiloeiro'}
+                      {pedindoLeiloeiro ? 'Enviando…' : pedidoLeiloeiroTexto.pedidoRecente ? 'Enviar mesmo assim' : 'Enviar ao leiloeiro'}
                     </button>
                   ) : (
                     <button onClick={() => { navigator.clipboard?.writeText(textoLeiloeiro).then(() => showMsg('Texto copiado.', 'success')).catch(() => {}); }}

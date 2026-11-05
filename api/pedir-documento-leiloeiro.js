@@ -112,6 +112,19 @@ export default async function handler(req) {
     return json({ error: 'Pedido ao leiloeiro (e-mail e WhatsApp) é exclusivo do administrador e da equipe de análise.' }, 403);
   }
 
+  // PEDIDO RECENTE AO MESMO LOTE (05/11): o pedido automático (api/_pedido-leiloeiro-auto.js) sai
+  // quando o cliente para por falta de documento, e este botão não sabia disso — o mesmo órgão
+  // recebeu o pedido duas vezes em 14 segundos. Agora o preview mostra o que já saiu e o envio só
+  // passa com confirmação explícita. Fica ANTES do rate limit: a recusa não pode gastar a cota do
+  // imóvel, senão o "enviar mesmo assim" bateria no 429. Falha de leitura não vira "nenhum pedido".
+  const desdePedido = new Date(Date.now() - 7 * 86_400_000).toISOString();
+  const rRec = await sb(`documental_pedidos_leiloeiro?imovel_id=eq.${encodeURIComponent(imovelId)}&criado_em=gt.${encodeURIComponent(desdePedido)}&status=in.(enviado,represado,aguardando)&select=criado_em,destinatario_email,itens_pedidos,automatico,chamado_id,respondido_em&order=criado_em.desc&limit=1`);
+  if (!rRec.ok) return json({ error: `Não consegui conferir se já houve pedido para este lote (HTTP ${rRec.status}). Tente de novo.` }, 502);
+  const [pedidoRecente = null] = await rRec.json().catch(() => [null]);
+  if (acao === 'enviar' && pedidoRecente && body?.confirmar_reenvio !== true) {
+    return json({ error: 'Já saiu um pedido de documentos para este lote nos últimos 7 dias. Confira e confirme se quer mandar outro.', jaPedido: true, pedidoRecente }, 409);
+  }
+
   // Rate limit SÓ no envio de verdade — o preview (montar/reler o texto) não gasta cota.
   // Duas chaves: por usuário (evita bombardear vários leiloeiros) e por imóvel (evita
   // reenviar o mesmo pedido repetidas vezes — o leiloeiro só precisa ver um).
@@ -185,7 +198,7 @@ export default async function handler(req) {
     // Sem e-mail, a tela nem oferece "enviar" (só copiar/WhatsApp) — então é AQUI que o pedido
     // vira chamado (04/11), senão ele morre na tela de quem pediu. Um chamado aberto por lote.
     const ch = contato?.email ? null : await abrirChamadoDocumentos({ imovelId, motivo: 'sem_contato', itens: itensTexto });
-    return json({ ok: true, texto: corpoTextoPuro, linkLote: linkLote || null, contatoDisponivel: !!contato?.email, telefone, telefoneErro, chamadoId: ch?.ok ? ch.chamadoId : null });
+    return json({ ok: true, texto: corpoTextoPuro, linkLote: linkLote || null, contatoDisponivel: !!contato?.email, telefone, telefoneErro, chamadoId: ch?.ok ? ch.chamadoId : null, pedidoRecente });
   }
 
   // PASSO 2 — ENVIAR: o corpo é o que o CHAMADOR mandou (o editado, se editou) — nunca
@@ -223,6 +236,7 @@ export default async function handler(req) {
     destinatario_email: contato.email, itens_pedidos: itensTexto, texto_enviado: textoFinal,
     resend_id: r.ok ? (r.id || null) : null, status: r.ok ? 'enviado' : 'falha',
     resposta_token: (r.ok || r.enfileirado) ? respostaToken : null, // represado sai depois com o MESMO reply-to
+    chamado_id: pedidoRecente?.chamado_id || null, // reenvio confirmado: fica no mesmo chamado do lote
   });
 
   // ENDEREÇO QUE JÁ DEVOLVEU E-MAIL (01/10, dono viu só "suprimido"): o helper barra quem deu
