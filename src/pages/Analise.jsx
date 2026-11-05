@@ -1052,6 +1052,14 @@ export default function Analise() {
     if (!faltam.length && !compact) faltam.push('matricula', 'edital'); // fallback defensivo
     const complementares = docsLeiloeiro.filter(x => x.tipo === 'outro');
     const jaTem = (t) => docsLeiloeiro.some(x => x.tipo === t);
+    // MATRÍCULA E EDITAL SÃO O MÍNIMO (05/11, dono): no documental, o botão do que o lote não tem em
+    // ARQUIVO aparece mesmo que a análise anterior não o tenha apontado — antes da trava nova a página
+    // do lote contava como edital, e o cartão não oferecia anexá-lo (Tramandaí). Não vale para o
+    // aviso do mercadológico (onGerar), que só precisa da matrícula.
+    if (!onGerar && docsLeiloeiro.length) {
+      if (!jaTem('matricula') && !faltam.includes('matricula')) faltam.unshift('matricula');
+      if (!jaTem('edital') && !jaTem('regras_venda') && !faltam.includes('edital') && !faltam.includes('regras_venda')) faltam.push('edital');
+    }
     const listaTxt = faltam.map(t => DOC_FALTA_LABEL[t].toLowerCase()).join(' e ');
     const AnexoBtn = ({ tipo, cor, rotulo, ok }) => (
       <label style={{ padding:'11px 18px', background: ok ? '#f0fdf4' : cor, color: ok ? '#15803d' : 'white', border: ok ? '1px solid #86efac' : 'none', borderRadius:10, fontWeight:800, fontSize:13.5, cursor: enviandoAnexo?'default':'pointer', display:'inline-flex', alignItems:'center', gap:7, opacity: (enviandoAnexo && enviandoAnexo!==tipo) ? 0.6 : 1 }}>
