@@ -47,7 +47,7 @@ function montarCarta({ nome, imovel, link }) {
     `Olá, ${nome || 'tudo bem'}!`,
     'Boa notícia: os documentos que faltavam no lote que você estava analisando já foram fornecidos pelo leiloeiro e estão anexados ao lote.',
     `${lote}${onde ? ` — ${onde}` : ''}`,
-    `Com a matrícula e o edital em mãos, você já pode gerar o relatório:\n${link}`,
+    `Com os documentos em mãos, você já pode gerar o relatório:\n${link}`,
     'Qualquer dúvida, é só responder este e-mail.',
     'Atenciosamente,\nEquipe BidPro Brasil',
   ];

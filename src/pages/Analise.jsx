@@ -2919,7 +2919,7 @@ export default function Analise() {
               )}
               {documentosChegaram && !faltaMatMercado && !(relMercadoGerado && relDocumentalGerado) && (
                 <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:12, padding:'12px 14px', marginBottom:16, fontSize:12.5, color:'#166534', lineHeight:1.6 }}>
-                  <strong>📎 Os documentos chegaram!</strong> A matrícula e o edital deste lote já foram fornecidos pelo leiloeiro{documentosChegaram ? ` (${new Date(documentosChegaram).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })})` : ''} e estão anexados. Você já pode gerar o relatório.
+                  <strong>📎 Os documentos chegaram!</strong> Os documentos que faltavam neste lote já foram fornecidos pelo leiloeiro{documentosChegaram ? ` (${new Date(documentosChegaram).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })})` : ''} e estão anexados. Você já pode gerar o relatório.
                 </div>
               )}
               {faltaMatMercado && (

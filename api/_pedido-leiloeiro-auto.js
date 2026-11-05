@@ -298,7 +298,7 @@ export function fraseDoPedido(p, { semAnalise = false } = {}) {
   const data = p.em ? new Date(p.em).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '';
   const depois = semAnalise ? 'aí é só gerar a análise de novo' : 'a análise é gerada automaticamente';
   // Aviso de chegada (05/11): só promete quando o registro em documentos_aguardando existe.
-  const avisa = p.aviso ? ' Você recebe um aviso por e-mail (e aqui na Análise) assim que a matrícula e o edital chegarem.' : '';
+  const avisa = p.aviso ? ' Você recebe um aviso por e-mail (e aqui na Análise) assim que os documentos que faltam chegarem.' : '';
   if (['enviado', 'represado', 'ja_pedido'].includes(p.status)) {
     return ` Pedimos o documento ao leiloeiro por e-mail${data ? ` em ${data}` : ''}${p.chamado ? ' e nossa equipe acompanha o pedido' : ''}: quando ele responder, o arquivo entra no lote e ${depois}.${avisa}`;
   }
