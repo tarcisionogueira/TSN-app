@@ -6,6 +6,57 @@
 
 
 
+## 05–06/11 — DEGRAU COMPLETA, ASSESSORIA 2 IMÓVEIS, MILAN, E A VARREDURA "SITE LISTA × ACERVO TEM"
+
+**Pendência viva: #410** (`select * from pendencias_projeto where id = 410;` — o detalhe tem as 5 passadas). Conferência
+agendada para 07/11 19h30 UTC (religados de Suporte/Gestão, agendado do scraper-dom, SOLEON com teto 150).
+
+**Captura/coleta**
+- Fotos de lote quebradas (Alphaville Res. 6): Cloudflare bloqueia Referer externo → `referrerPolicy="no-referrer"` em
+  todo `<img>` de lote (Busca, ImovelDetalhe, Gate, Mapa, Landing, Home, Favoritos, Oportunidades, Veículo, api/publico).
+- Plataforma Degrau (leilaoeletronico): anexos nos 3 temas, galeria completa (`data-fancybox`, até 60), e **coletor de
+  veículos** pelo mesmo feed (`extrairUrlsDeVeiculo`, passo próprio no scraper-dom).
+- Busca: cards mostram 1ª e 2ª praça com data; 2ª praça só fica verde quando é MENOR que a 1ª (Lei 9.514: a 2ª é a
+  dívida e pode passar da 1ª — 53 lotes na Site Leilões).
+- captura-documentos: desafio do Cloudflare vira `bloqueado` (não `sem_documento`), freio do Bright Data por propósito,
+  docs 60/dia (pendência #408 manda voltar a 25/150 quando os bloqueados zerarem).
+- **Milan**: conectada grátis pela API pública `siteback.milanleiloes.com.br` (agenda + evento; lote único descoberto pela
+  foto em `adm.milanleiloes.com.br`). 34 ativos. E-mail pedindo feed oficial enviado.
+- **Hasta**: do runner, 403 + desafio do Cloudflare em todas as rotas (recon-hasta-direto). Não precisa: os 488 imóveis
+  são da Caixa e o coletor CEF já os traz (gêmeos HASTA×CEF escondem a cópia CEF enquanto o Hasta está vivo).
+- Mapeamento do dono (Chrome) SOLEON + LeilãoPro Core: sem API; tudo no HTML. **Renovar proíbe robôs nos termos** — e-mail
+  pedindo autorização/feed enviado em 06/11 (contato@renovarleiloes.com.br). LeilãoPro: robots veta as pastas de PDF —
+  decisão do dono pendente (guardar só o link?). Questão jurídica geral: proxy pago para passar desafio do Cloudflare.
+
+**Varredura "site lista × acervo tem" (06/11)** — `public.fonte_captacao_lacuna()` cruza `fonte_saude.enumerados` com o
+acervo ativo + veículo suprimido por regra + recusa com motivo (`coleta_lote_recusado`); `descartado: valor` NÃO
+desconta (pode ser parser). Nome diferente de `fonte_cobertura()` (que já existia e mede preenchimento de campos).
+Achados e consertos:
+- **SOLEON** (Site Leilões 300/595, João Emílio 197/462, Hammer 194/603): teto 40–60 detalhes/rodada → 150 no runner
+  residencial (grátis, `SOLEON_NO_BD`).
+- **Bolsa de Leilões = eletrodomésticos** (logística reversa Casas Bahia) gravados como terreno/comercial em BH: 64
+  desativados, tenant fora da Leiloar; `naoEhImovel` ganhou geladeira/fogão/TV/notebook (pegou +1 LEILAOBRASIL, +1 HASTA).
+- **GF**: feed Degrau lista 162 lotes que o site dá 404 (rascunho/retirado) — motor agora memoriza 404 por 3 dias.
+- **Sublime**: fila do Pecini nunca relia lote INATIVO sem motivo; agora relê os com praça futura que o sitemap lista.
+- **Suporte/Gestão**: 9 imóveis vivos inativos sem motivo, religados. Os gatilhos `imovel_barrar_bem_movel`,
+  `imovel_barrar_fracao_ideal` e `trg_desativa_leilao_encerrado` desligavam SEM motivo — agora gravam `nao_imovel` /
+  `fracao_ideal` / `praca_vencida`. "Inativo sem motivo" = ninguém decidiu (é o que Pecini e Bayit religam).
+- Alarmes falsos explicados: Savoy/Shiokawa (empresa credenciada, sucata), Hasta/PW (veículos e máquinas no mesmo site),
+  DH/Lunelli/Leilões Online MS/Curiaú/Vianna (encerrado/não-imóvel na memória), Nordeste/Vix (enumerados = site todo),
+  Alberto Macedo/Bayit (praça vencida que o site segue listando).
+- **Agendado do scraper-dom vermelho todo dia desde 29/10**: o motor dava exit 1 em zero EXPLICADO (tudo recusado antes).
+  Corrigido; Alliance (403 + desafio desde 31/10, 0 ativos) com `continue-on-error` — a saúde segue acusando.
+
+**Dinheiro/cliente**
+- Cobrança avulsa com **termo de aceite** (assessoria 2 imóveis, R$ 8.000 em até 12x sem juros, êxito 10% mín. R$ 7.000
+  por imóvel): cliente informa CPF+e-mail, dados pré-preenchidos se tiver cadastro, aceite grava texto+SHA-256+IP+UA;
+  mp-checkout/asaas recusam pagar sem aceite. Link: `/#/cobranca/c40d33c8-b6d0-4884-9f2e-b99c1ae784e7`.
+- Chamado: botão "Pedir pelo WhatsApp" com a mensagem pronta do documento que falta.
+
+**Abertos para a próxima sessão**: conferência de 07/11 (acima); resposta da Milan e da Renovar na caixa
+tarcisio@bidprobrasil.com.br; decisão do dono sobre PDFs da LeilãoPro e o proxy; o motor gravar em `fonte_saude` quantos
+descartou por categoria (para a lacuna se explicar sozinha).
+
 ## 04/11 — "QUEDA GRANDE DE CARROS" (dono): sucata de propósito + SODRÉ lendo 0 de 1.126
 
 - **Contador da landing 11.795 (29/10) → 9.096 (02/11); 8.829 ativos em 04/11.** Medido por motivo de desligamento
