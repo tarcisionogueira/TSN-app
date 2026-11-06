@@ -2498,7 +2498,9 @@ export default function Busca() {
                       {im.valorMinimo2 > 0 && im.valorMinimo1 > 0 && im.valorMinimo2 !== im.valorMinimo1 && (
                         <div style={{ marginTop:3, display:'grid', gap:1, fontSize:10.5, lineHeight:1.35 }}>
                           <div style={{ color:'#334155' }}><b>1ª praça</b> {fmtBRL(im.valorMinimo1)}{im.dataLeilao ? ` · ${fmtData(im.dataLeilao, im.modalidade)}` : ''}</div>
-                          <div style={{ color:'#15803d', fontWeight:700 }}>2ª praça {fmtBRL(im.valorMinimo2)}{im.dataLeilao2 ? ` · ${fmtData(String(im.dataLeilao2).slice(0, 10), im.modalidade)}` : ''}
+                          {/* 2ª praça MAIOR que a 1ª existe (Lei 9.514: a 2ª é a dívida + despesas, que pode passar do valor do imóvel —
+                              53 lotes da SITELEILOES em 06/11). Aí ela não é a oportunidade: sem verde. */}
+                          <div style={{ color: im.valorMinimo2 < im.valorMinimo1 ? '#15803d' : '#334155', fontWeight: im.valorMinimo2 < im.valorMinimo1 ? 700 : 400 }}>2ª praça {fmtBRL(im.valorMinimo2)}{im.dataLeilao2 ? ` · ${fmtData(String(im.dataLeilao2).slice(0, 10), im.modalidade)}` : ''}
                             {im.valorAvaliacao > 0 && im.valorMinimo2 < im.valorAvaliacao ? ` (−${Math.round(100 * (1 - im.valorMinimo2 / im.valorAvaliacao))}%)` : ''}</div>
                         </div>
                       )}

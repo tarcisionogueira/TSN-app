@@ -146,7 +146,10 @@ if quer HASTA && node scripts/coleta-gate.mjs atrasada HASTA 168; then
 fi
 
 # SOLEON (calil/vegas/3torres) — sem Cloudflare: fetch direto do IP residencial = grátis (SOLEON_NO_BD).
-rodar SOLEON env SOLEON_NO_BD=1 SOLEON_DRYRUN=0 node scripts/scraper-soleon.mjs
+# TETO 150/tenant (06/11): a lista já é lida inteira de graça (SITELEILOES enumera 595, JOAOEMILIO 462), mas o acervo
+# tinha 300 e 197 — o teto de 40–60 detalhes por rodada, 2x/semana, não alcançava. Daqui é grátis (SOLEON_NO_BD),
+# sequencial e com pausa; o teto só existe para a rodada não monopolizar o runner.
+rodar SOLEON env SOLEON_NO_BD=1 SOLEON_DRYRUN=0 SOLEON_MAX_LOTES=150 node scripts/scraper-soleon.mjs
 # SOLEON VEÍCULOS (21/10): mesmo cluster, /lotes/veiculo (~300 no site, 0 no acervo). Só via grátis.
 rodar SOLEON_VEICULOS env SOLEON_VEICULOS=1 SOLEON_NO_BD=1 SOLEON_DRYRUN=0 node scripts/scraper-soleon.mjs
 
