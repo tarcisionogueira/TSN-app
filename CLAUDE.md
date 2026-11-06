@@ -550,7 +550,9 @@ Settings → Environment Variables → Add New → marcar Production + Preview +
 
 ## Banco de dados
 - Migrações SQL: `supabase/migrations/`
-- Executar manualmente no painel Supabase → SQL Editor
+- **Quem aplica é a sessão, não o dono (06/11, decisão do dono):** escreva o `.sql` em `supabase/migrations/` e aplique com o `apply_migration` do conector Supabase, no mesmo trabalho. O dono delegou essa rotina por uma regra de `autoMode.allow` em `~/.claude/settings.json` (fora do repo, de propósito). Não mande o dono ao SQL Editor por padrão.
+- **Fica com o dono:** o que apaga dado ou tira proteção (`DROP`, `TRUNCATE`, `DELETE`, `REVOKE`). Entregue o comando pronto e diga o que ele faz. Se o `apply_migration` for bloqueado, não contorne: peça que ele autorize no chat citando a migração, ou que rode no SQL Editor.
+- **PowerShell, cmd e WSL rodam da própria sessão** (conferido em 06/11, inclusive `crontab`). Só peça ao dono o que exige `sudo` (pede senha), login em painel ou MFA.
 - Tabelas críticas: `perfis`, `imoveis`, `planos_config`, `verificar_cpf_rate`
 
 ## APIs — Segurança
