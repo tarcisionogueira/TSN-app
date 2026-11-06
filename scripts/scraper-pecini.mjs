@@ -522,11 +522,11 @@ async function main() {
   const visto = new Map();   // fonte_id → { atualizado_em, ativo }
   for (let i = 0; i < ids.length; i += 200) {
     const { data, error } = await supabase.from('imoveis_leilao')
-      .select('fonte_id,atualizado_em,ativo').in('fonte_id', ids.slice(i, i + 200));
+      .select('fonte_id,atualizado_em,ativo,suprimido_motivo,data_fim').in('fonte_id', ids.slice(i, i + 200));
     // Um erro aqui NÃO pode virar "não tem nada no banco": isso reclassificaria o acervo
     // inteiro como novo e faria a rodada gastar cota recapturando o que já existe.
     if (error) { console.error(`falha ao ler o acervo (${error.message}). Abortado.`); process.exitCode = 1; return; }
-    for (const r of data || []) visto.set(r.fonte_id, { atualizado_em: r.atualizado_em || null, ativo: r.ativo !== false });
+    for (const r of data || []) visto.set(r.fonte_id, { atualizado_em: r.atualizado_em || null, ativo: r.ativo !== false, motivo: r.suprimido_motivo || null, fim: r.data_fim || null });
   }
   // MEMÓRIA DE RECUSA (24/10, #358 — a mesma tabela do motor, #238). Lote lido e recusado nunca entra em
   // imoveis_leilao, então sem isto ele era "novo" para sempre e tomava a vaga dos imóveis já gravados.
@@ -550,7 +550,7 @@ async function main() {
   });
   const { novos, antigos } = plano;
   const alvoLotes = plano.fila;
-  console.log(`no banco: ${visto.size} · novos: ${novos.length} · antigos ativos: ${antigos.length} · não-imóvel pelo endereço: ${plano.foraPeloEndereco.length}${plano.recusadosPulados ? ` · ${plano.recusadosPulados} recusado(s) há pouco, pulados` : ''} · alvo '${ALVO}' · processando: ${alvoLotes.length}`);
+  console.log(`no banco: ${visto.size} · novos: ${novos.length} · inativos sem motivo a reler: ${plano.religar.length} · antigos ativos: ${antigos.length} · não-imóvel pelo endereço: ${plano.foraPeloEndereco.length}${plano.recusadosPulados ? ` · ${plano.recusadosPulados} recusado(s) há pouco, pulados` : ''} · alvo '${ALVO}' · processando: ${alvoLotes.length}`);
 
   // ─── SAIU DO SITE? PERGUNTE À ENUMERAÇÃO, NÃO À COLETA (18/08) ───────────────────────────
   //

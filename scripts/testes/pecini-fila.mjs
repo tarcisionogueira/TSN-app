@@ -17,7 +17,8 @@ const BASE = 'https://www.sublimeleiloes.com.br';
 // Mesma extração do parseSitemap (scraper-pecini.mjs): /lote/{slug}/{id}/ — "citroën-…" fica de fora lá também.
 const lotes = [...new Map([...fx.sitemap.map(u => `${BASE}/lote/${u}/`).join('\n').matchAll(/\/lote\/([a-z0-9-]+)\/(\d+)\/?/gi)]
   .map(m => [m[2], { id: m[2], loteUrl: `${BASE}/lote/${m[1]}/${m[2]}/` }])).values()];
-const noBanco = new Map(fx.banco.map(([id, ativo, at]) => [`sublime_${id}`, { ativo: !!ativo, atualizado_em: at }]));
+// Os inativos da fixture (snapshot de 24/10) foram desligados POR DECISÃO (sumiu/praça) — motivo preenchido.
+const noBanco = new Map(fx.banco.map(([id, ativo, at]) => [`sublime_${id}`, { ativo: !!ativo, atualizado_em: at, motivo: ativo ? null : 'sumiu_da_fonte' }]));
 const base = { lotes, noBanco, prefixo: 'sublime_', maxLotes: 40 };
 
 // 1) Classificação pelo ENDEREÇO: as motos e as máquinas passavam (só `motos?` casava) e viraram "terreno".
@@ -59,5 +60,19 @@ const pago = planejarFilaSitemap({ ...base, releituraLivre: false });
 assert.deepEqual(pago.fila.map(l => l.id), pago.novos.map(l => l.id));
 // 5) PECINI: slug "<cidade>-<uf>", sem filtro de não-imóvel (como sempre foi).
 assert.equal(planejarFilaSitemap({ ...base, filtrarNaoImovel: false }).foraPeloEndereco.length, 0);
+
+// 6) RELIGAR (06/11): inativo SEM motivo, com praça por vir e ainda no sitemap, volta à fila (depois dos novos, antes
+// da releitura). Sem motivo mas encerrado, ou com motivo, continua fora.
+{
+  const alvoId = p.antigos[0].id;
+  const nb = new Map(noBanco);
+  nb.set(`sublime_${alvoId}`, { ...nb.get(`sublime_${alvoId}`), ativo: false, motivo: null, fim: '2099-01-01' });
+  const r6 = planejarFilaSitemap({ ...base, noBanco: nb, releituraLivre: true, hoje: '2026-11-06' });
+  assert.deepEqual(r6.religar.map(l => l.id), [alvoId]);
+  assert.equal(r6.fila[r6.novos.length].id, alvoId, 'religar vem logo depois dos novos');
+  nb.set(`sublime_${alvoId}`, { ...nb.get(`sublime_${alvoId}`), fim: '2026-10-01' });
+  assert.equal(planejarFilaSitemap({ ...base, noBanco: nb, releituraLivre: true, hoje: '2026-11-06' }).religar.length, 0, 'encerrado sem motivo não volta');
+  assert.equal(planejarFilaSitemap({ ...base, releituraLivre: true, hoje: '2026-11-06' }).religar.length, 0, 'desligado com motivo não volta');
+}
 
 console.log('✓ pecini-fila: classificação, fila grátis com releitura, memória de recusa, caminho pago e PECINI');

@@ -44,7 +44,7 @@ export const naoImovelPelaPagina = (url, titulo = '', tituloCru = '') =>
  * @param alvo       'novos' (padrão) | 'antigos' | 'todos' — PECINI_ALVO, mantido
  * @param filtrarNaoImovel  false na PECINI (slug "<cidade>-<uf>", sem tipo de bem — como sempre foi)
  */
-export function planejarFilaSitemap({ lotes, noBanco, recusados = new Set(), prefixo, maxLotes, releituraLivre = false, alvo = 'novos', filtrarNaoImovel = true }) {
+export function planejarFilaSitemap({ lotes, noBanco, recusados = new Set(), prefixo, maxLotes, releituraLivre = false, alvo = 'novos', filtrarNaoImovel = true, hoje = new Date().toISOString().slice(0, 10) }) {
   const fid = (l) => `${prefixo}${l.id}`;
   const foraPeloEndereco = filtrarNaoImovel ? lotes.filter(l => naoImovelPeloEndereco(l.loteUrl)) : [];
   const fora = new Set(foraPeloEndereco.map(fid));
@@ -52,15 +52,21 @@ export function planejarFilaSitemap({ lotes, noBanco, recusados = new Set(), pre
   const naoImovelNoAcervo = foraPeloEndereco.map(fid).filter(k => noBanco.get(k)?.ativo);
   const candidatos = lotes.filter(l => !fora.has(fid(l)));
   const novos = candidatos.filter(l => !noBanco.has(fid(l)) && !recusados.has(fid(l)));
+  // RELIGAR (06/11): lote INATIVO SEM MOTIVO que o sitemap ainda lista nunca era revisto — "antigos" eram só os
+  // ativos, e "novos" só os ausentes do banco. A SUBLIME tinha 5 imóveis com praça em novembro presos assim desde
+  // 06–16/10. Desligado COM motivo (sumiu_da_fonte, nao_imovel, gêmeo…) segue fora: foi decisão. Entra na fila
+  // depois dos novos e antes da releitura. Só com praça ainda por vir (`fim`): encerrado desligado pelo gatilho
+  // do banco também fica sem motivo, e relê-lo toda rodada seria leitura jogada fora.
+  const religar = candidatos.filter(l => { const b = noBanco.get(fid(l)); return b && !b.ativo && !b.motivo && !(b.fim && b.fim < hoje); });
   const antigos = candidatos.filter(l => noBanco.get(fid(l))?.ativo)
     .sort((a, b) => String(noBanco.get(fid(a))?.atualizado_em || '').localeCompare(String(noBanco.get(fid(b))?.atualizado_em || ''))
       || (a.id < b.id ? -1 : 1));
-  const fila = alvo === 'antigos' ? antigos
-    : alvo === 'todos' || releituraLivre ? [...novos, ...antigos]
-    : (novos.length ? novos : antigos);
+  const fila = alvo === 'antigos' ? [...religar, ...antigos]
+    : alvo === 'todos' || releituraLivre ? [...novos, ...religar, ...antigos]
+    : (novos.length ? novos : [...religar, ...antigos]);
   const filaCortada = fila.slice(0, maxLotes);
   return {
-    fila: filaCortada, novos, antigos, foraPeloEndereco, naoImovelNoAcervo,
+    fila: filaCortada, novos, antigos, religar, foraPeloEndereco, naoImovelNoAcervo,
     recusadosPulados: lotes.filter(l => recusados.has(fid(l)) && !noBanco.has(fid(l))).length,
     iReleitura: Math.min(alvo === 'antigos' ? 0 : novos.length, filaCortada.length),
   };
