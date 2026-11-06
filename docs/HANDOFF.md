@@ -6,6 +6,51 @@
 
 
 
+## 05–06/11 — MATRÍCULA E EDITAL VIRAM O MÍNIMO; AVISO QUANDO O DOCUMENTO CHEGA; A SESSÃO APLICA MIGRAÇÃO
+
+**Regra do dono:** edital e matrícula são o básico para avaliar um leilão. O pedido ao leiloeiro leva sempre os dois (e os
+demais anexos "se houver"), e o relatório documental não sai sem os dois em arquivo.
+**Pendências vivas:** ver `select * from pendencias_abertas();` — #411 a #415 (origem `sessao 05-06/11 documentos`).
+
+**Commits:** 693dc664 · aacbec06 · e3bf6f3c · 673ef507 · d8caafd7 · 1aa4d2b8.
+
+**Fluxo novo: quem espera o documento é avisado**
+- Tabela `documentos_aguardando` (20261105): todo usuário que parou por falta de documento, não só o primeiro do lote.
+  Gatilhos de anexo e de selo marcam `pronto_em`; `api/avisar-documentos-cron.js` (*/20) manda o e-mail; faixa verde na Análise.
+- Chamado de documentos abre sempre, mesmo com o e-mail enviado, para a equipe acompanhar e ligar.
+- Primeiro caso real (Tramandaí, TURANI, cf9177bd): aviso entregue às 15:40 de 05/11.
+
+**O que o primeiro caso real ensinou**
+- **A página do lote contava como edital (forma nº 10).** Muitas fontes gravam a página em `link_edital`; lida, ela virava
+  TEXTO com rótulo "Edital", e a IA ainda confirmava `documentosAnalisados.edital`. Agora `api/gerar-documental.js` marca
+  `arquivo` em cada lido: texto sem conversão vira tipo `pagina_lote` (segue no prompt só como contexto) e não satisfaz a trava.
+  Sem nenhum arquivo, para ANTES da IA. A confirmação da IA só vale se houver arquivo além do outro documento central.
+- **Brecha deixada de propósito:** arquivo de nome genérico (ex.: REGULAMENTO) ainda conta como edital se a IA confirmar. É o
+  caminho que reconhece matrícula mal rotulada (SUPERBID).
+- **Régua do aviso ida e volta:** a 20261105b afrouxou (bastava o que o pedido pediu), a 20261105c voltou a exigir matrícula E
+  edital em arquivo, porque o pedido passou a pedir os dois. A vigente é a da 20261105c.
+- **Três e-mails ao mesmo leiloeiro em um lote (Copacabana, 73d648bb):** automático às 14:10, botão manual às 14:11 (não olhava
+  o que já tinha saído) e reenvio pelo chamado às 16:13 (decisão de pessoa, mantido). O botão agora mostra o pedido dos últimos
+  7 dias e o servidor recusa sem `confirmar_reenvio`. A conferência roda antes do rate limit, senão o reenvio confirmado daria 429.
+- **Cartão de documentos na Análise:** só oferecia o que a análise anterior apontou, então não havia onde anexar o edital
+  de Tramandaí. No documental, agora oferece matrícula e edital que o lote não tem em arquivo.
+
+**Permissões: a sessão aplica migração (06/11)**
+- O dono perguntou por que sempre roda comandos à mão. Causa: o modo automático bloqueia migração em produção por padrão
+  (`[Production Deploy]`), e o CLAUDE.md mandava usar o SQL Editor.
+- O dono colou uma regra em `autoMode.allow` no `~/.claude/settings.json` (o classificador NÃO lê `autoMode` do settings do
+  projeto) e o CLAUDE.md foi atualizado. **Ainda não testado:** a primeira migração real é o teste.
+- Testado: PowerShell, cmd e WSL rodam da sessão, inclusive `crontab`. `sudo` no WSL pede senha e fica com o dono.
+- `.claude/settings.json` lista `mcp__Supabase__*` e `mcp__Vercel__*`, mas no app desktop os conectores têm nome com UUID:
+  essas liberações parecem não valer lá (inferido pelo nome, não testado).
+
+**Estado ao fechar**
+- Tramandaí: matrícula e edital anexados, relatório documental gerado às 16:58 de 05/11, confiança média.
+- `20261105c` apareceu VAZIO na pasta local em 06/11 (causa desconhecida); restaurado do git. O banco estava certo.
+- Não testado em produção: a tela "Enviar mesmo assim" e o texto novo do e-mail ao leiloeiro.
+
+---
+
 ## 05–06/11 — DEGRAU COMPLETA, ASSESSORIA 2 IMÓVEIS, MILAN, E A VARREDURA "SITE LISTA × ACERVO TEM"
 
 **Pendência viva: #410** (`select * from pendencias_projeto where id = 410;` — o detalhe tem as 5 passadas). Conferência
