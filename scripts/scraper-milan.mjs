@@ -145,7 +145,11 @@ async function main() {
     // em ?pagina=N (mapeamento do dono, 05/11). Só a 1ª era lida — o 15666 entrou até o 020. Segue enquanto a página
     // vem cheia e traz lote novo; cada página é 1 requisição do Bright Data, por isso o teto MAX_PAGINAS_EVENTO.
     const vistos = new Set(ev.lotes.map((l) => l.lote));
-    for (let p = 2, ultima = ev.lotes.length; p <= MAX_PAGINAS_EVENTO && ultima >= 20; p++) {
+    // Segue se a página anterior tem link para ?pagina=N ou veio quase cheia: a 1ª rodada (06/11) parou porque a 1ª página
+    // rendeu 19 cards lidos de 20 (o 007 não foi lido) e "< 20" foi tomado como última página.
+    const temProxima = (html, n) => new RegExp(`[?&]pagina=${n}(?!\\d)`).test(String(html || '').replace(/&amp;/g, '&'));
+    let htmlAnt = html;
+    for (let p = 2, ultima = ev.lotes.length; p <= MAX_PAGINAS_EVENTO && (ultima >= 15 || temProxima(htmlAnt, p)); p++) {
       let h;
       try { viaBD++; h = await pagina(`${T.base}/leilao/imoveis/${cod}?pagina=${p}`); }
       catch (e) {
@@ -153,9 +157,12 @@ async function main() {
         if (e.semCota) recusaCota = e.motivo;
         break;
       }
+      htmlAnt = h;
       const novos = parseEvento(h, cod, T.base).lotes.filter((l) => !vistos.has(l.lote));
       for (const l of novos) { vistos.add(l.lote); ev.lotes.push(l); }
       ultima = novos.length;
+      console.log(`  evento ${cod} pág. ${p}: +${novos.length} lote(s)`);
+      if (!novos.length) break;
       await sleep(500);
     }
     enumerados += ev.lotes.length;
