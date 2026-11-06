@@ -105,8 +105,17 @@ export async function enumerar(fetchFonte, tenant, cfg, { maxPages, debug, semBD
   // podia falhar por conta própria.
   if (cfg.parse.extrairUrlsDeEvento && fetchOk) {
     const todosEventos = [...(cfg.eventosEmTodasPaginas ? eventosPaginas : cfg.parse.extrairUrlsDeEvento(htmlPagina1, tenant.base)).values()];
-    const eventos = todosEventos.slice(0, cfg.maxEventos ?? 12);
-    if (todosEventos.length > eventos.length) cortada = `${eventos.length} de ${todosEventos.length} eventos`;
+    // RODÍZIO (06/11): com mais eventos que o teto, o corte caía SEMPRE no mesmo ponto e os últimos eventos do site nunca
+    // eram lidos (rodada de 05/11: HASTA 12 de 18, CENTRALSUL 25 de 30, SCHULMANN 8 de 9). Cada dia começa de um ponto
+    // diferente — o custo por rodada é o mesmo e todo evento entra ao longo da semana. A lista segue marcada `cortada`,
+    // então a varredura de sumidos continua não desligando ninguém por não ter sido lido hoje.
+    const maxEv = cfg.maxEventos ?? 12;
+    let eventos = todosEventos.slice(0, maxEv);
+    if (todosEventos.length > maxEv) {
+      const ini = (Math.floor(Date.now() / 864e5) * maxEv) % todosEventos.length;
+      eventos = [...todosEventos.slice(ini), ...todosEventos.slice(0, ini)].slice(0, maxEv);
+      cortada = `${eventos.length} de ${todosEventos.length} eventos (rodízio a partir do ${ini + 1}º)`;
+    }
     eventosCount = eventos.length;
     if (debug) console.log(`   [${tenant.fonte}] nível 2: ${eventos.length} evento(s)`);
     // ⚠️ O EVENTO TAMBÉM PAGINA (29/08). Isto lia UMA página por evento — o que bastava para o
@@ -627,7 +636,10 @@ export async function rodarFonte(cfg, opts) {
     console.log(`✅ [${tenant.fonte}] ${prontos.length} imóveis gravados/atualizados.`);
     // `cotaNegada` no ramo de SUCESSO: coleta cortada no meio pelo orçamento devolve lotes
     // de verdade e cai aqui — sem este número a linha vira medição sadia da fonte.
-    await registrarSaude(supabase, tenant.fonte, prontos, cfg.chave, { enumerados, cotaNegada });
+    // Lista cortada vai para a LINHA da saúde (06/11): até aqui só aparecia no log da varredura de sumidos, e a busca
+    // por "leiloeiro que só lê a 1ª página" dependia de baixar o log. Palavra 'cortada', nunca 'parcial' (o stale lê
+    // 'parcial' no motivo como coleta incompleta).
+    await registrarSaude(supabase, tenant.fonte, prontos, cfg.chave, { enumerados, cotaNegada, ...(listaCortada ? { motivo: `lista cortada: ${listaCortada}` } : {}) });
     await desligarEncerrados(supabase, tenant, encerradosAtivos);
     // VARREDURA DE SUMIDOS, opt-in (10/10, #195). O motor só revisita o que o CATÁLOGO lista: lote
     // que saiu do site nunca é reaberto, e sem data de leilão nunca expira — LEJE tinha 12 de 15

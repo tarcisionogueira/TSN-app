@@ -14,7 +14,7 @@ export default {
   paginaParam: 'page',
   maxPages: 1,
   // Os lotes da home também entram (o motor lê a página 1 do catálogo antes dos eventos).
-  maxEventos: 8,
+  maxEventos: 15, // 06/11: 8 cortava a SCHULMANN (9 eventos); grátis
   maxPagesEvento: 1,
   // Schulmann ~65 imóveis abertos (25/10, home + categorias); Karla ~8; Braga 0 (só teste da Labasoft).
   maxRefresh: 80,

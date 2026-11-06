@@ -23,7 +23,7 @@ export default {
   catalogo: '/externo/',
   paginaParam: 'page',
   maxPages: 1,
-  maxEventos: 25,
+  maxEventos: 40, // 06/11: 25 cortava a CENTRALSUL (30 eventos); grátis
   // ~60 imóveis somando os 7 tenants (25/10): a releitura cobre o acervo todo dia.
   maxRefresh: 80,
   maxPagesEvento: 1,

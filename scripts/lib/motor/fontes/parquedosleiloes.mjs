@@ -14,7 +14,7 @@ export default {
   catalogo: '/leiloes?is_lot=1&type_id=3', // cada tenant traz o seu
   paginaParam: 'page',
   // 12 lotes por página, mais novos primeiro; os abertos cabem na 1ª (30/10: 2 judiciais abertos, 18 páginas de histórico).
-  maxPages: 2,
+  maxPages: 5, // 06/11: o catálogo seguia na página 3 (lista cortada nas 2); grátis
   maxRefresh: 24,
   tenants: Object.values(TENANTS),
   parse: { extrairUrlsDeLote, extrairUrlsDeEvento, idDaUrl, parseDetalhe, montarRow, checarQualidade },
