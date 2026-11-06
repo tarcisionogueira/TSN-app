@@ -3323,6 +3323,16 @@ async function retencaoVeiculosVencidos() {
       .or(`resultado_leilao.is.null,resultado_leilao.eq.vendido,resultado_apurado_em.is.null,resultado_apurado_em.lt.${limite}`);
     if (error) { console.log(`  ⚠️ retenção de veículos vencidos falhou: ${String(error.message).slice(0, 120)}`); return; }
     if (count) console.log(`  🗑️  ${count} veículo(s) desativado(s) — leilão há mais de 15 dias.`);
+    // SEM DATA E PARADO (06/11, #410). Veículo sem `data_leilao` nunca vence pela regra acima, e o tenant que ESVAZIOU
+    // (SUPORTE esleiloes/vlleiloes: site sem veículo à venda) fica protegido do sweep por "vazio com N ativos" — 62
+    // lotes vendidos/encerrados ficavam na vitrine para sempre. Lote vivo é regravado a cada rodada (atualizado_em);
+    // 10 dias sem toque = saiu do site.
+    const parado = new Date(Date.now() - 10 * 86400000).toISOString();
+    const { error: e2, count: c2 } = await supabase.from('veiculos_leilao')
+      .update({ ativo: false, suprimido_motivo: 'sem_data_parado' }, { count: 'exact' })
+      .eq('ativo', true).is('data_leilao', null).lt('atualizado_em', parado);
+    if (e2) console.log(`  ⚠️ veículos sem data parados: falhou (${String(e2.message).slice(0, 120)})`);
+    else if (c2) console.log(`  🗑️  ${c2} veículo(s) sem data e sem toque há 10+ dias desativado(s).`);
   } catch (e) {
     console.log(`  ⚠️ retenção de veículos vencidos falhou: ${String(e.message).slice(0, 120)}`);
   }
