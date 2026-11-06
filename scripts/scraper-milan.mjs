@@ -25,6 +25,7 @@ import { agendaImoveis, eventoSiteback, descobrirLote, cardDoEvento } from './li
 const T = TENANTS.milan;
 const DRYRUN = process.env.MILAN_DRYRUN !== '0';
 const MAX_EVENTOS = Number(process.env.MILAN_MAX_EVENTOS || 10);
+const MAX_PAGINAS_EVENTO = Number(process.env.MILAN_MAX_PAGINAS_EVENTO || 8); // 20 lotes/página → até 160 por evento
 const SB_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -140,6 +141,23 @@ async function main() {
       continue;
     }
     const ev = parseEvento(html, cod, T.base);
+    // PAGINAÇÃO DO EVENTO (06/11, dono: "lote 022 do 15666 não aparece"): a página mostra 20 lotes e as seguintes ficam
+    // em ?pagina=N (mapeamento do dono, 05/11). Só a 1ª era lida — o 15666 entrou até o 020. Segue enquanto a página
+    // vem cheia e traz lote novo; cada página é 1 requisição do Bright Data, por isso o teto MAX_PAGINAS_EVENTO.
+    const vistos = new Set(ev.lotes.map((l) => l.lote));
+    for (let p = 2, ultima = ev.lotes.length; p <= MAX_PAGINAS_EVENTO && ultima >= 20; p++) {
+      let h;
+      try { viaBD++; h = await pagina(`${T.base}/leilao/imoveis/${cod}?pagina=${p}`); }
+      catch (e) {
+        console.error(`  evento ${cod} pág. ${p}: FALHA (${e.motivo || e.message}) — segue com ${ev.lotes.length} lote(s)`);
+        if (e.semCota) recusaCota = e.motivo;
+        break;
+      }
+      const novos = parseEvento(h, cod, T.base).lotes.filter((l) => !vistos.has(l.lote));
+      for (const l of novos) { vistos.add(l.lote); ev.lotes.push(l); }
+      ultima = novos.length;
+      await sleep(500);
+    }
     enumerados += ev.lotes.length;
     const semValor = ev.lotes.filter(l => l.htmlSemValor && !l.encerrado);
     if (semValor.length) await amostrarSemValor(cod, ev, semValor);
