@@ -565,7 +565,10 @@ export async function rodarFonte(cfg, opts) {
       });
       if (!dryrun) await desligarEncerrados(supabase, tenant, encerradosAtivos);
       console.error(`[${tenant.fonte}] nada a gravar.${estado.semCota ? ' (sem cota Bright Data — orçamento, não regressão.)' : ''}`);
-      if (exitCodeSeFalha) process.exitCode = 1;
+      // Zero EXPLICADO (tudo o que a lista trouxe já estava na memória de recusa: encerrado, não-imóvel…) é resposta, não
+      // falha — 'vazio' na saúde. Até 06/11 ele também dava exit 1, e o agendado do scraper-dom terminava em failure TODO
+      // dia desde 29/10 (CUSTODIO, PARQUEDOSLEILOES, VERONALEIL): o vermelho diário escondia falha nova de verdade.
+      if (exitCodeSeFalha && !zeroExplicado) process.exitCode = 1;
       continue;
     }
 

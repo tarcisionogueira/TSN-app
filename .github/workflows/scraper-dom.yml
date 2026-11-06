@@ -285,6 +285,10 @@ jobs:
         # evento só o card com praça futura ou venda direta sem data. Seco de 28/10: 14 leilões, 25 lotes, 11 imóveis
         # prontos (12 carretas e 1 Civic saem como não-imóvel). Fetch grátis; páginas de ~1 s (houve picos de 40–60 s).
         if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'alliance')) }}
+        # 06/11: desde 31/10 o site recusa o runner (HTTP 403; banco: desafio do Cloudflare) — 0 ativos, pendência aberta.
+        # A falha CONHECIDA não pinta o agendado de vermelho todo dia (escondia falha nova); fonte_saude segue gravando
+        # 'falhou' e fonte_regressao_pendente() continua acusando. Tire o continue-on-error quando o acesso voltar.
+        continue-on-error: true
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
