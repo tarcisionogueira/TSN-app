@@ -283,6 +283,45 @@ function parseClassico(h, url) {
   };
 }
 
+// ── 4º TEMPLATE: o clássico SEM o prefixo `l-` (06/11 — ML Leilões e Hatory) ──────────────────────────────────────
+// `<div class="cabecalho">` / `<span class="nome">` / `<ul class="datas"><li>Data: 16/11/2026 às 10:00` /
+// `<span class="local">Local: , RONDONOPOLIS-MT` / `<span id="status">ABERTO` / `<ul id="valores"><li><strong>Avaliação:
+// </strong> <span>R$ …` (rótulo e valor na ordem inversa do clássico) / `<div id="descricao">`. Sem leitor, 18 lotes da
+// Hatory e 5 da ML (fazenda de 81 ha em Poxoréu, lance mínimo R$ 616 mil) saíam "parser não leu a página".
+function parseCabecalho(h, url) {
+  const nomeLeilao = limpar((h.match(/<div class="cabecalho"[\s\S]*?<span class="nome">([\s\S]*?)<\/span>/i) || [])[1]);
+  const local = limpar((h.match(/<span class="local">\s*(?:Local:)?([\s\S]*?)<\/span>/i) || [])[1]).replace(/^[\s,]+/, '');
+  const descricao = limpar((h.match(/<div id="descricao">[\s\S]*?<p>([\s\S]*?)<\/p>/i) || [])[1]);
+  const textoMeio = limpar((h.match(/<div class="texto-meio">([\s\S]*?)<\/div>/i) || [])[1]);
+  const categoria = limpar((h.match(/<span class="categoria-bem">([\s\S]*?)<\/span>/i) || [])[1]).replace(/[\s-]+$/, '');
+  const { cidade, estado } = cidadeDoLote({ url, local, texto: `${descricao} ${textoMeio}` });
+  const datas = [...(h.match(/<ul class="datas">([\s\S]*?)<\/ul>/i)?.[1] ?? '').matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi)]
+    .map((m) => dataPlausivel(dataHora(limpar(m[1])))).filter(Boolean);
+  const valores = h.match(/<ul id="valores"[^>]*>([\s\S]*?)<\/ul>/i)?.[1] ?? '';
+  const rotulado = (rot) => plaus(num((valores.match(new RegExp(`${rot}[^<]*<\\/strong>\\s*<span>\\s*R\\$\\s*([\\d.]+,\\d{2})`, 'i')) || [])[1]));
+  const avaliacao = rotulado('Avalia[çc][ãa]o');
+  const minimo = rotulado('Lance M[íi]nimo');
+  const foto = (h.match(/<div id="galeria">[\s\S]*?<img src="([^"]+)"/i) || [])[1] || null;
+  const fotoAbs = foto && !/default\.(jpe?g|png)/i.test(foto) ? new URL(foto.replace('/externo/../', '/'), url).href : null;
+  const pdf = (h.match(/href="([^"]+\.pdf)"[^>]*class="edital-download"/i) || [])[1];
+  const edital = pdf ? new URL(pdf.replace(/\/externo\/bens\/\.\.\/\.\.\//, '/'), url).href : null;
+  const status = limpar((h.match(/<span id="status"[^>]*>([\s\S]*?)<\/span>/i) || [])[1]).toUpperCase();
+  return {
+    nomeLeilao, status,
+    // Categoria do site que não é imóvel (Hatory: veículos de prefeitura) — o motor descarta como não-imóvel.
+    naoImovel: !!categoria && CATEGORIA_NAO_IMOVEL.test(categoria) && !/im[óo]ve/i.test(categoria),
+    titulo: tituloDe(descricao, cidade, estado), cidade, estado,
+    valor_avaliacao: avaliacao, valor_minimo: minimo || avaliacao, valor_minimo_2: null,
+    modalidade: /extrajudicial/i.test(nomeLeilao) ? 'extrajudicial' : 'judicial',
+    area_m2: extrairAreaM2(descricao) || 0,
+    descricao: descricao ? `${nomeLeilao ? `${nomeLeilao}. ` : ''}${descricao}`.slice(0, 8000) : null,
+    data_leilao: datas[0] || null, data_leilao_2: datas[1] || null,
+    link_foto: fotoAbs, link_edital: edital || url,
+    anexos: edital ? [{ tipo: 'edital', nome: 'Edital do lote', url: edital }] : [],
+    numero_matricula: matriculaDe(descricao),
+  };
+}
+
 // ── 2º TEMPLATE (Bootstrap "responsivo") ──────────────────────────────────────────────────────────
 const CATEGORIA_NAO_IMOVEL = /ve[íi]cul|moto|autom[óo]v|caminh|[ôo]nibus|m[áa]quin|equipament|eletr[ôo]|m[óo]veis|sucata|semovent|animai|j[óo]ias|recicl/i;
 function parseResponsivo(h, url) {
@@ -400,8 +439,9 @@ export function parseDetalhe(html, url, { agora = new Date() } = {}) {
   const h = String(html || '');
   const classico = /class="l-cabecalho-nome"/.test(h);
   const angular = !classico && /<script id="ng-state"/.test(h);
-  if (!classico && !angular && !/<b>\s*LOCAL:\s*<\/b>|class="mb-0 destaque"/i.test(h)) return null; // nenhum dos três templates
-  const lido = classico ? parseClassico(h, url) : angular ? parseAngular(h, url) : parseResponsivo(h, url);
+  const cabecalho = !classico && !angular && /<div class="cabecalho"[\s\S]*?<span class="nome">/i.test(h);
+  if (!classico && !angular && !cabecalho && !/<b>\s*LOCAL:\s*<\/b>|class="mb-0 destaque"/i.test(h)) return null; // nenhum dos templates
+  const lido = classico ? parseClassico(h, url) : angular ? parseAngular(h, url) : cabecalho ? parseCabecalho(h, url) : parseResponsivo(h, url);
   if (!lido) return null;
   const { nomeLeilao, status, ...det } = lido;
   // Leilão/lote de teste da plataforma: nunca vira lote.

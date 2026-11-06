@@ -566,7 +566,9 @@ export async function rodarFonte(cfg, opts) {
           // outra). Quando o CATÁLOGO foi recusado, o motivo diz isso.
           : /^dom-\d{3}$/.test(String(viaCatalogo || '')) || viaCatalogo === 'bloqueado'
             ? `catálogo recusado (${viaCatalogo === 'bloqueado' ? 'bloqueado também via Bright Data' : `HTTP ${String(viaCatalogo).slice(4)}`}) — acesso negado ao runner, não parser`
-            : String(viaCatalogo || '').startsWith('sem-bd') || String(viaCatalogo || '').startsWith('firecrawl-')
+            // 06/11: catálogo com HTTP 4xx/5xx (MSIS 404 do Gabriel/Moniz, LBR 500) gravava "nenhum lote lido" — forma
+            // nº 10, mandava olhar o parser. É o site/acesso.
+            : String(viaCatalogo || '').startsWith('sem-bd') || String(viaCatalogo || '').startsWith('firecrawl-') || /HTTP \d{3}/.test(String(viaCatalogo || ''))
               // 21/10: `firecrawl-sem-chave` (runner sem FIRECRAWL_API_KEY) caía no genérico abaixo — o LEJE gravou
               // "sem nenhum lote pronto" 4×/dia por 9 dias apontando para o parser, que estava certo.
               ? `catálogo não abriu: ${viaCatalogo} — acesso do runner, não parser`

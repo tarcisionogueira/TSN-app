@@ -3423,12 +3423,20 @@ async function salvarVeiculos(registros, rotulo) {
     if (encerradosNaEntrada) console.log(`    ${nome}: ${encerradosNaEntrada} com praça vencida há 2+ dias gravado(s) INATIVO(s) (novo ou já desligado — não ressuscita)`);
   }
   let salvos = 0;
-  for (let i = 0; i < aptos.length; i += 200) {
-    const lote = aptos.slice(i, i + 200);
-    const { error } = await supabase.from('veiculos_leilao').upsert(lote, { onConflict: 'fonte,fonte_id' });
-    if (error) { console.log(`  ⚠️ veiculos_leilao upsert falhou: ${String(error.message).slice(0, 150)}`); continue; }
-    salvos += lote.length;
-  }
+  // LOTE DE 50 + METADES NO TIMEOUT (06/11). Com 200 linhas o upsert passava dos 8 s do banco (17 gatilhos por linha,
+  // `trg_veiculo_local` consulta área urbana): "statement timeout" deixou de fora 400 da SODRE (827 de 1.227), 200 da
+  // SUPORTE e, pela mesma assinatura, 600 da SUPERBID. Bloco que estoura é refeito em metades até 10 linhas.
+  const gravar = async (bloco) => {
+    const { error } = await supabase.from('veiculos_leilao').upsert(bloco, { onConflict: 'fonte,fonte_id' });
+    if (!error) return bloco.length;
+    if (/statement timeout/i.test(String(error.message)) && bloco.length > 10) {
+      const meio = Math.ceil(bloco.length / 2);
+      return (await gravar(bloco.slice(0, meio))) + (await gravar(bloco.slice(meio)));
+    }
+    console.log(`  ⚠️ veiculos_leilao upsert falhou (${bloco.length} linhas): ${String(error.message).slice(0, 150)}`);
+    return 0;
+  };
+  for (let i = 0; i < aptos.length; i += 50) salvos += await gravar(aptos.slice(i, i + 50));
   console.log(`    ${nome}: ${salvos} salvos em veiculos_leilao`);
   await saudeVeiculos(fonteV, Object.assign(aptos, { coletaParcial: registros.coletaParcial }), { gravados: salvos });
   if (registros.coletaParcial) console.log(`  🛑 ${nome}: coleta parcial (${String(registros.coletaParcial).slice(0, 160)}) — sumidos não desligados`);
@@ -4902,6 +4910,17 @@ export async function scraperHastaPublica(browser) {
             catch (e) { return { erro: String((e && e.message) || e) }; }
           }, `/leilao/${id}`);
           if (r?.html) estatica = parseLeilaoHasta(r.html);
+          // 2ª VIA FORA DO NAVEGADOR (06/11): em 05/11 os 14 leilões vieram "HTML sem card-leilao" pelo fetch de dentro
+          // da página, enquanto a MESMA URL pelo banco (pg_net) trazia o cartão que o parser lê. Tenta pelo Node antes de
+          // proteger o leilão, e o log diz o que veio (título/tamanho) para a próxima investigação não começar do zero.
+          if (!estatica.lotes.size) {
+            const abs = new URL(`/leilao/${id}`, page.url()).href;
+            const x = await fetch(abs, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36' }, signal: AbortSignal.timeout(20000) })
+              .then(async (y) => ({ status: y.status, html: y.ok ? await y.text() : '' }))
+              .catch((e) => ({ status: 0, html: '', erro: String(e?.message || e).slice(0, 60) }));
+            if (x.html) estatica = parseLeilaoHasta(x.html);
+            console.log(`    HastaPública ${id}: 2ª via (Node) ${x.status || x.erro} · ${x.html.length} B · "${((x.html.match(/<title>([^<]*)/i) || [])[1] || '').trim().slice(0, 50)}" · ${estatica.lotes.size} cartão(ões)`);
+          }
           if (!estatica.lotes.size) console.log(`    HastaPública ${id}: página estática sem cartões (${r?.html ? 'HTML sem card-leilao' : r?.status ? `HTTP ${r.status}` : r?.erro}) — lotes sem foto`);
         } catch (e) { console.log(`    HastaPública ${id}: página estática falhou (${String(e?.message || e).slice(0, 80)}) — lotes sem foto`); }
 
