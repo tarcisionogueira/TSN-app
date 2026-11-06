@@ -10,7 +10,7 @@
 
 **Regra do dono:** edital e matrícula são o básico para avaliar um leilão. O pedido ao leiloeiro leva sempre os dois (e os
 demais anexos "se houver"), e o relatório documental não sai sem os dois em arquivo.
-**Pendências vivas:** ver `select * from pendencias_abertas();` — #411 a #415 (origem `sessao 05-06/11 documentos`).
+**Pendências vivas:** ver `select * from pendencias_abertas();` — #411 a #414 e #416 (origem `sessao 05-06/11 documentos`).
 
 **Commits:** 693dc664 · aacbec06 · e3bf6f3c · 673ef507 · d8caafd7 · 1aa4d2b8.
 
