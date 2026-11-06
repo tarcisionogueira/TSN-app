@@ -371,7 +371,14 @@ export async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLote
         continue;
       }
       const html = r?.html;
-      if (!html && !detPronto) { sem++; contarSem(r?.via); continue; }
+      if (!html && !detPronto) {
+        sem++; contarSem(r?.via);
+        // LOTE QUE O FEED LISTA E O SITE RESPONDE 404 (06/11): a GF tinha 146 assim ("não encontrado", fora da home e da
+        // busca — rascunho ou retirado) e o coletor reabria os 146 TODA rodada, ~7 min. Vai para a memória de recusa por
+        // 3 dias (curto: se o leiloeiro publicar, volta logo) — e a fonte_captacao_lacuna() deixa de contá-los como perda.
+        if (i < iReleitura && /^inexistente/.test(String(r?.via || ''))) recusas.push({ fonte_id: idFonte(tenant, cfg.parse.idDaUrl(url)), motivo: 'inexistente (404 no site)', dias: 3 });
+        continue;
+      }
       // `await` + `fetchFonte` (13/10): parser que precisa de uma 2ª página ou de um PDF (plataforma
       // Leiloar /externo/: valores só no edital) é assíncrono. Para os síncronos, nada muda.
       const det = detPronto || await cfg.parse.parseDetalhe(html, url, { fetchFonte, tenant });

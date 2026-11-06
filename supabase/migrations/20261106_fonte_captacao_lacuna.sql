@@ -14,21 +14,31 @@ language sql stable security invoker set search_path = public as $$
       from fonte_saude s
      where s.enumerados is not null and s.status <> 'sem_cota' and s.executado_em > now() - interval '10 days'
      order by s.fonte, s.executado_em desc),
+  -- `no_acervo` = captado: ativo no acervo + escondido por regra + recusado com motivo (abaixo).
   im as (select i.fonte, count(*) n from imoveis_leilao i where i.ativo group by 1),
   -- Veículo escondido por REGRA (sucata etc., suprimido_motivo) conta como captado: foi lido e recusado de propósito.
-  ve as (select v.fonte, count(*) n from veiculos_leilao v where v.ativo or v.suprimido_motivo is not null group by 1)
-  select u.fonte, u.enumerados,
-         coalesce(case when u.fonte like '%\_VEICULOS' then ve.n else im.n end, 0) as no_acervo,
-         u.enumerados - coalesce(case when u.fonte like '%\_VEICULOS' then ve.n else im.n end, 0) as faltam,
-         round(100.0 * coalesce(case when u.fonte like '%\_VEICULOS' then ve.n else im.n end, 0) / nullif(u.enumerados, 0)) as pct,
-         u.executado_em, u.status
-    from ult u
-    left join im on im.fonte = u.fonte
-    left join ve on ve.fonte = replace(u.fonte, '_VEICULOS', '')
-   where u.enumerados >= p_min
+  ve as (select v.fonte, count(*) n from veiculos_leilao v where v.ativo or v.suprimido_motivo is not null group by 1),
+  -- Lote LIDO e RECUSADO com motivo (encerrado, não-imóvel, fração ideal…) também foi captado: a memória #238 guarda
+  -- o porquê. Sem isto DH (124 encerrados), Vianna (102 não-imóveis) e Curiaú (140) pareciam perda. Exceção:
+  -- 'descartado: valor' NÃO desconta — é o parser que não achou o preço, pode ser defeito (Bolsa: 260 em 06/11).
+  rc as (select r.fonte, count(*) n from coleta_lote_recusado r where r.motivo not like 'descartado: valor%' group by 1),
+  acv as (
+    select u.fonte, u.enumerados, u.executado_em, u.status,
+           coalesce(case when u.fonte like '%\_VEICULOS' then ve.n else im.n end, 0)
+             + case when u.fonte like '%\_VEICULOS' then 0 else coalesce(rc.n, 0) end as n
+      from ult u
+      left join im on im.fonte = u.fonte
+      left join ve on ve.fonte = replace(u.fonte, '_VEICULOS', '')
+      left join rc on rc.fonte = u.fonte)
+  select a.fonte, a.enumerados, least(a.n, a.enumerados)::bigint as no_acervo,
+         greatest(a.enumerados - a.n, 0)::bigint as faltam,
+         round(100.0 * least(a.n, a.enumerados) / nullif(a.enumerados, 0)) as pct,
+         a.executado_em, a.status
+    from acv a
+   where a.enumerados >= p_min
      -- 'vazio' = o coletor leu tudo e o site não tinha nada arrematável (ex.: SAVOY 2.306 de 2.319 só para empresa
      -- credenciada). Recusa por regra, não perda — 06/11 a 1ª versão acusou SAVOY e SHIOKAWA (sucata) assim.
-     and u.status <> 'vazio'
-     and coalesce(case when u.fonte like '%\_VEICULOS' then ve.n else im.n end, 0) < u.enumerados * p_pct / 100.0
+     and a.status <> 'vazio'
+     and a.n < a.enumerados * p_pct / 100.0
    order by 4 desc;
 $$;

@@ -65,7 +65,9 @@ export const TENANTS = {
   // JUCESP/JUCEMG (triagem pelo banco de 26/10, `tri2610`). Adri e Bolsa na RAIZ (/externo/ dá 404; home lista
   // /leilao/<id>); Federal e OA em /externo/. Leilões e lotes lidos pelo banco e passados no motor em seco.
   adri: { fonte: 'ADRILEIL', leiloeiro: 'Adri Leilões (Laiza Machado de Oliveira Adri)', base: 'https://www.adrileiloes.com.br', catalogo: '/' }, // 1 leilão (MG)
-  bolsa: { fonte: 'BOLSADELEIL', leiloeiro: 'Bolsa de Leilões', base: 'https://www.bolsadeleiloes.com.br', catalogo: '/' }, // 3 leilões
+  // BOLSA FORA (06/11): o site é de eletrodomésticos, eletrônicos e veículos da logística reversa ("Leilões Online de
+  // Eletrodomésticos…"). Os 64 ativos eram geladeiras e fogões gravados como terreno/comercial em BH — desativados.
+  // bolsa: { fonte: 'BOLSADELEIL', leiloeiro: 'Bolsa de Leilões', base: 'https://www.bolsadeleiloes.com.br', catalogo: '/' },
   federal: { fonte: 'FEDERALLEIL', leiloeiro: 'Federal Leilões', base: 'https://www.leiloesfederal.com.br' }, // 1 leilão, 7 lotes
   oa: { fonte: 'OALEILOES', leiloeiro: 'OA Leilões', base: 'https://www.oaleiloes.com.br' }, // 8 leilões
   tenorio: { fonte: 'TENORIOLEIL', leiloeiro: 'Tenório Leilões (Luis Guilherme Tenório)', base: 'https://tenorioleiloes.com.br', catalogo: '/' }, // 0 imóvel (MS)

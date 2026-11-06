@@ -378,7 +378,9 @@ export function fotoDeHtml(html, urlBase) {
 // "Áreas"/"Ônibus" no início de palavra nunca casavam (1º teste: o complexo industrial da Rontan
 // — "Áreas - Máquinas" — saía como não-imóvel).
 const P = (alt) => new RegExp(`(?<!\\p{L})(?:${alt})(?!\\p{L})`, 'iu');
-const RE_BEM_MOVEL_PALAVRA = P('ve[ií]culos?|motos?|sucatas?|renavam|chassi|motocicletas?|motoneta|ciclomotor|autom[oó]vel|caminh[aã]o|caminhonete|semirreboque|reboque|trator(?:es)?|carretas?|empilhadeira|retroescavadeira|colheitadeira|[oô]nibus|embarca[çc][aã]o|jet ?ski|semoventes?|bovinos?|m[aá]quinas?|equipamentos?|dobradeiras?|tornos? mec[aâ]nicos?|prensas?|guilhotinas?|ferramentas?|compressor(?:es)?|geradores?|mobili[aá]rios?|eletrodom[eé]sticos?|sucata de');
+const RE_BEM_MOVEL_PALAVRA = P('ve[ií]culos?|motos?|sucatas?|renavam|chassi|motocicletas?|motoneta|ciclomotor|autom[oó]vel|caminh[aã]o|caminhonete|semirreboque|reboque|trator(?:es)?|carretas?|empilhadeira|retroescavadeira|colheitadeira|[oô]nibus|embarca[çc][aã]o|jet ?ski|semoventes?|bovinos?|m[aá]quinas?|equipamentos?|dobradeiras?|tornos? mec[aâ]nicos?|prensas?|guilhotinas?|ferramentas?|compressor(?:es)?|geradores?|mobili[aá]rios?|eletrodom[eé]sticos?|eletr[oô]nicos?|geladeiras?|refrigeradores?|fog[oõ]es|fog[aã]o|frigobar|lavadoras?|televisor(?:es)?|smart ?tv|notebooks?|celulares?|sucata de');
+// 06/11: geladeira/fogão/TV entraram na lista — a Bolsa de Leilões (eletrodomésticos da logística reversa) pôs 64
+// "terrenos" de R$ 1–8 mil no acervo e o LEILAOBRASIL um "Televisor AOC… e frigobar".
 // Marca SEM barra, com modelo e ANO ("Renault Megane 1.6 B - 99/00", "I/PEUGEOT 206 SOLEIL - 2000")
 // — o 1º seco real (25/09) deixou passar esses dois; a barra não é regra, o ano é.
 const RE_MARCA_ANO = /\b(honda|yamaha|suzuki|fiat|volkswagen|chevrolet|ford|renault|toyota|hyundai|scania|iveco|mercedes|citroen|peugeot|nissan|mitsubishi|kia|jeep|bmw|audi|volvo)\b[^\n]{0,60}?(\b(19|20)\d{2}\b|\b\d{2}\s*\/\s*\d{2}\b)/i;
