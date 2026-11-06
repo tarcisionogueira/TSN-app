@@ -51,6 +51,43 @@ demais anexos "se houver"), e o relatório documental não sai sem os dois em ar
 
 ---
 
+## 06/11 (madrugada–manhã) — INSPEÇÃO GERAL DE CAPTAÇÃO E CONTATOS DOS LEILOEIROS
+
+Pendência viva: **#410** (detalhe com todas as passadas). Conferência agendada 07/11 19h30 UTC.
+
+**Captação (o que se perdia e foi corrigido)**
+- **Milan**: evento de vários lotes só lia a 1ª página (20 lotes) — segue `?pagina=N` (22015c5); 15666 foi de 19 para 24.
+- **Motor**: lista de eventos cortada sempre no mesmo ponto (Hasta 12/18, Central Sul 25/30, Schulmann 8/9) → rodízio
+  diário; tetos grátis maiores (Leiloar 40, Labasoft 15, Parque 5 pág., Alfa 5); "lista cortada" vai ao motivo da
+  `fonte_saude` (6451a32). Catálogo com HTTP 4xx/5xx não grava mais "nenhum lote lido" (7d7d4e7).
+- **Viva e Jinkings** saíram do Firecrawl (falhando desde 02/11) para o coletor Degrau grátis (65c5a5c): 31 + 2 ativos.
+- **Veículos** (`salvarVeiculos`): upsert de 200 estourava os 8 s (SODRE 827/1227, SUPORTE, SUPERBID) → blocos de 50 e
+  metades no timeout. Veículo **sem data e sem toque há 10 dias** sai como `sem_data_parado` (a9997e9).
+- **Leiloar 4º template** (`div.cabecalho`, ML/Hatory) com teste de fixture real: ML gravou a fazenda de Poxoréu.
+- **Hasta Pública**: página estática sem cartão dentro do Chromium → 2ª via pelo Node antes de proteger.
+- **Bolsa de Leilões** era eletrodoméstico gravado como terreno (64 desativados, tenant fora); `naoEhImovel` ganhou
+  geladeira/fogão/TV/notebook. GF: feed lista 162 lotes que o site dá 404 → memória de recusa de 3 dias.
+- **Sublime**: fila do Pecini nunca relia inativo SEM motivo → relê os com praça futura. **Suporte/Gestão**: 9 vivos
+  religados; os gatilhos `imovel_barrar_bem_movel`/`_fracao_ideal`/`trg_desativa_leilao_encerrado` agora gravam
+  `nao_imovel`/`fracao_ideal`/`praca_vencida` ("inativo sem motivo" = ninguém decidiu).
+- **Agendado do scraper-dom** vermelho todo dia desde 29/10: exit 1 em zero explicado → corrigido; Alliance (403+desafio)
+  com `continue-on-error`.
+- `public.fonte_captacao_lacuna()` = site lista × acervo (desconta recusa com motivo e vazio por regra).
+- **Externos (não é nosso)**: Pestana (captcha Radware na API de lotes), LEJE (403), Luiz Lobato (manutenção),
+  Gabriel/Moniz (MSIS 404), Hasta (Cloudflare; coberto pela CEF). Abertos: MGL Fernando/Jonas/Lucas (feed 204,
+  1 imóvel), lote 007 da Milan.
+
+**Contatos dos leiloeiros**
+- O varredor semanal (`capturar-contatos-leiloeiros.yml`) morria no 1º minuto desde 02/11 (offset + order=fonte
+  estourava o timeout) → paginação por `id` (543bbd6). Rodado e gravado.
+- 138 homes bloqueiam o runner: lidas pelo banco (`bastidor.req`, tarefa `contato0611`), e-mail protegido do Cloudflare
+  (`/cdn-cgi/l/email-protection#hex`) decodificado em SQL (XOR com o 1º byte). Regra: domínio do próprio site ou
+  e-mail gratuito publicado; nunca sobrescreve.
+- **Resultado**: 118→277 fontes com e-mail, 120→279 com telefone (de 366 com imóvel ativo); lotes de leiloeiro sem
+  e-mail 5.359→2.759. Sem e-mail ainda: Hasta e Pestana (formulário — texto da Pestana entregue ao dono), Hammer
+  (contato@hleiloes.com, outro domínio — aguarda o dono), Frazão, Leilotech, GF, Sold, D1 Lance, Emílio Matos.
+- E-mails enviados: Renovar (pedido de autorização/feed — os termos proíbem robôs).
+
 ## 05–06/11 — DEGRAU COMPLETA, ASSESSORIA 2 IMÓVEIS, MILAN, E A VARREDURA "SITE LISTA × ACERVO TEM"
 
 **Pendência viva: #410** (`select * from pendencias_projeto where id = 410;` — o detalhe tem as 5 passadas). Conferência
