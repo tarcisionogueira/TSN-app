@@ -15,7 +15,8 @@ language sql stable security invoker set search_path = public as $$
      where s.enumerados is not null and s.status <> 'sem_cota' and s.executado_em > now() - interval '10 days'
      order by s.fonte, s.executado_em desc),
   im as (select i.fonte, count(*) n from imoveis_leilao i where i.ativo group by 1),
-  ve as (select v.fonte, count(*) n from veiculos_leilao v where v.ativo group by 1)
+  -- Veículo escondido por REGRA (sucata etc., suprimido_motivo) conta como captado: foi lido e recusado de propósito.
+  ve as (select v.fonte, count(*) n from veiculos_leilao v where v.ativo or v.suprimido_motivo is not null group by 1)
   select u.fonte, u.enumerados,
          coalesce(case when u.fonte like '%\_VEICULOS' then ve.n else im.n end, 0) as no_acervo,
          u.enumerados - coalesce(case when u.fonte like '%\_VEICULOS' then ve.n else im.n end, 0) as faltam,
@@ -25,6 +26,9 @@ language sql stable security invoker set search_path = public as $$
     left join im on im.fonte = u.fonte
     left join ve on ve.fonte = replace(u.fonte, '_VEICULOS', '')
    where u.enumerados >= p_min
+     -- 'vazio' = o coletor leu tudo e o site não tinha nada arrematável (ex.: SAVOY 2.306 de 2.319 só para empresa
+     -- credenciada). Recusa por regra, não perda — 06/11 a 1ª versão acusou SAVOY e SHIOKAWA (sucata) assim.
+     and u.status <> 'vazio'
      and coalesce(case when u.fonte like '%\_VEICULOS' then ve.n else im.n end, 0) < u.enumerados * p_pct / 100.0
    order by 4 desc;
 $$;
