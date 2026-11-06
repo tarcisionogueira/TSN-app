@@ -56,6 +56,10 @@ export const TENANTS = {
   // 24/10 (pendência 356). GF: o <city> do feed é o padrão "Acrelândia/Acre" em TODOS os lotes e o título traz o BAIRRO
   // ("Vila Prudente/ SP") — entrou depois que a cidade passou a exigir prova do IBGE (parseDetalhe). 27 imóveis abertos.
   gf:         { fonte: 'GFLEILOES',      leiloeiro: 'GF Leilões', base: 'https://www.gfleiloes.com.br', catalogo: '/sitemap.xml' }, // 27, SP
+  // 06/11: vieram do motor MGL (Firecrawl, zerou em 02/11). Feed e página abrem pelo banco com as mesmas seções dg-lote-*;
+  // fonte_id igual (vivaleiloes_<id>, jinkingsleiloes_<id>) — os lotes gravados continuam os mesmos.
+  viva:       { fonte: 'VIVALEILOES',    leiloeiro: 'Viva Leilões', base: 'https://www.vivaleiloes.com.br', catalogo: '/sitemap.xml' }, // 51 no feed, SP
+  jinkings:   { fonte: 'JINKINGSLEILOES', leiloeiro: 'Jinkings Leilões', base: 'https://www.jinkingsleiloes.com.br', catalogo: '/sitemap.xml' }, // 15 no feed, MG/TO
   // ABSOLUTA (recon 24/10 pelo banco, via pelada): a rota do feed ESTÁ certa — 38, 41 e 44 abrem com HTTP 200 e as
   // seções dg-lote-*. Os 404 da 1ª triagem eram 30 e 31, lotes que saíram do site e o feed ainda lista. O motor já trata
   // isso (detalhe que não abre = sem detalhe, não grava). O feed tem ainda 5 "exemplo-de-leilao" (demo da plataforma).

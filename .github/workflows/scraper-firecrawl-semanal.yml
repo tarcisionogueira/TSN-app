@@ -18,7 +18,7 @@ on:
         required: false
         default: 'leje,mgl'
       mgl_tenants:
-        description: 'csv dos sites MGL (fernando,jonas,lucas,viva,jinkings) — vazio = todos'
+        description: 'csv dos sites MGL (fernando,jonas,lucas) — vazio = todos'
         required: false
         default: ''
       gravar:

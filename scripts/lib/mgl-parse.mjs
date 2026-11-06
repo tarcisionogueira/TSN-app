@@ -23,15 +23,8 @@ export const TENANTS = {
   fernando: { fonte: 'FERNANDOLEILOEIRO', leiloeiro: 'Fernando Leiloeiro', base: 'https://www.fernandoleiloeiro.com.br', catalogo: '/sitemap.xml' },
   jonas: { fonte: 'JONASLEILOEIRO', leiloeiro: 'Jonas Leiloeiro', base: 'https://www.jonasleiloeiro.com.br', catalogo: '/sitemap.xml' },
   lucas: { fonte: 'LUCASLEILOEIRO', leiloeiro: 'Lucas Leiloeiro', base: 'https://www.lucasleiloeiro.com.br', catalogo: '/sitemap.xml' },
-  // 10/10: mesma plataforma Degrau, achada no radar de editais (Cloudflare 400 ao runner). SP capital.
-  viva: { fonte: 'VIVALEILOES', leiloeiro: 'Viva Leilões', base: 'https://www.vivaleiloes.com.br',
-    // A busca por ID_Categoria=2 volta vazia aqui (o id da categoria é outro). 15/10: catálogo = feed
-    // /sitemap.xml (43 abertos contra 13 no acervo pela home) — ver lib/degrau-feed.mjs. Jinkings idem.
-    catalogo: '/sitemap.xml' },
-  // 10/10 (#91): mesma plataforma; imóveis rurais/comerciais em MG/TO. A home redireciona para
-  // /proximos_leiloes/1/1/, que lista os lotes. (andraleiloes.com.br também é Degrau, mas em 10/10
-  // só tinha veículos do Detran e bens de prefeitura — fica de fora até ter imóvel.)
-  jinkings: { fonte: 'JINKINGSLEILOES', leiloeiro: 'Jinkings Leilões', base: 'https://www.jinkingsleiloes.com.br', catalogo: '/sitemap.xml' },
+  // VIVA e JINKINGS SAÍRAM (06/11) para o coletor grátis da plataforma (lib/leilaoeletronico-parse.mjs): feed e página
+  // abrem pelo banco (pg_net) sem Firecrawl. Aqui a VIVA zerou em 02/11 com firecrawl-408 (29 ativos ficaram parados).
 };
 
 // Slug de lote que NÃO é imóvel (medido nos 3 catálogos em 10/10). Prefeitura = frota/sucata.
