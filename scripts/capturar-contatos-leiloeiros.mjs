@@ -32,12 +32,17 @@ async function sb(path, init = {}) {
   if (!r.ok) throw new Error(`supabase ${r.status} em ${path.split('?')[0]}: ${t.slice(0, 200)}`);
   return t ? JSON.parse(t) : null;
 }
+// PAGINAÇÃO POR CHAVE (06/11). Era `order=fonte` + `offset`: em 02/11 a leitura de imoveis_leilao estourou os 8 s
+// ("statement timeout") e a rodada semanal morreu no 1º minuto — sem varredura de contato desde então. Com `id` em
+// ordem e `id=gt.<último>` cada página usa a chave primária, sem reordenar nem pular linhas.
 async function todas(path) {
   const out = [];
-  for (let de = 0; ; de += 1000) {
-    const pag = await sb(`${path}&limit=1000&offset=${de}`);
+  let ultimo = null;
+  for (;;) {
+    const pag = await sb(`${path}&order=id&limit=1000${ultimo ? `&id=gt.${ultimo}` : ''}`);
     out.push(...pag);
     if (pag.length < 1000) return out;
+    ultimo = pag[pag.length - 1].id;
   }
 }
 
@@ -86,8 +91,8 @@ const guardar = (fonte, url) => {
     contagemOrigem.set(fonte, m);
   } catch { /* URL inválida: tenta a próxima linha da fonte */ }
 };
-for (const r of await todas('imoveis_leilao?ativo=eq.true&fonte=not.in.(CEF,caixa)&select=fonte,url_lote,link_edital&order=fonte')) guardar(r.fonte, r.url_lote || r.link_edital);
-for (const r of await todas('veiculos_leilao?ativo=eq.true&select=fonte,link_lote&order=fonte')) guardar(r.fonte, r.link_lote);
+for (const r of await todas('imoveis_leilao?ativo=eq.true&fonte=not.in.(CEF,caixa)&select=id,fonte,url_lote,link_edital')) guardar(r.fonte, r.url_lote || r.link_edital);
+for (const r of await todas('veiculos_leilao?ativo=eq.true&select=id,fonte,link_lote')) guardar(r.fonte, r.link_lote);
 const origemPorFonte = new Map([...contagemOrigem].map(([f, m]) => [f, [...m].sort((a, b) => b[1] - a[1])[0][0]]));
 // Fração dos lotes da fonte que estão na origem dominante. PORTAL de verdade (SUPERBID, SOLD,
 // LEILAOBRASIL) hospeda os lotes no próprio domínio (~100%); SOFTWARE white-label (LEILOTECH, VLANCE,
@@ -171,7 +176,7 @@ async function temMx(dom) {
   return cacheMx.get(dom);
 }
 const ehMulti = new Set(resultado.multi);
-const lotesTenant = await todas('imoveis_leilao?ativo=eq.true&leiloeiro=not.is.null&select=fonte,leiloeiro&order=fonte');
+const lotesTenant = await todas('imoveis_leilao?ativo=eq.true&leiloeiro=not.is.null&select=id,fonte,leiloeiro');
 const porTenant = new Map();
 for (const r of lotesTenant) {
   if (!ehMulti.has(r.fonte) || String(r.leiloeiro).trim().length < 8) continue;
