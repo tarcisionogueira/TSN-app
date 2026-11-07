@@ -6,6 +6,33 @@
 
 
 
+## 07/11 (noite) — INSPEÇÃO DA CAPTAÇÃO: D1 LANCE E COMPREI QUEBRADOS, 91 DUPLICADOS SUPERBID, CLOUDFLARE NOVO
+
+**Baixas reais encontradas e corrigidas (commit 20761d3c):**
+- **D1 Lance** (78 imóveis): o site migrou para **Livewire 3** — estado em `wire:snapshot` (não mais `wire:initial-data`),
+  valores desidratados como `[valor, {s:…}]`. Parser lia 0/41 páginas desde 05/11. `componenteLivewire` lê v2 e v3
+  (`reidratarLw3`); 12/12 páginas reais lidas. (Conferido: é a única fonte Livewire do acervo.)
+- **Comprei/PGFN** (124 anúncios via scraper-globo): o gateway passou a negociar pelo `Accept`; `text/html` → XML/500.
+  `baixarJsonComprei` pede `application/json`, direto.
+
+**Não é baixa (conferido):** leiloesbr (44 fontes) e leilaopro (92) estavam a 51 h por CADÊNCIA (seg/qui e semanal),
+última rodada boa. Veículos: as 15 maiores fontes atualizadas no dia. Lotes ativos com praça vencida: desenho do
+`desativar_leiloes_encerrados` (sem_lance fica 15 dias para proposta). GLOBOLEILOES voltou (366/375) → #426 fechada.
+
+**Zeradas no monitor — explicadas em `fonte_regressao_explicada`:** LUIZLOBATO (site "Em manutenção", 503),
+SBL_PRESOTTO (tudo já no portal), LEJE e SBID9 (**Cloudflare novo**, bloqueia até da rede residencial).
+Também com Cloudflare novo: MGL (mgl.com.br 403). ALLIANCELEIL 403 segue (#427).
+
+**Duplicados:** 91 de 100 lotes `SBL_*` ativos estão também ativos na fonte SUPERBID — o lote gravado pela loja antes de
+aparecer no portal nunca saía (loja enumera 0 ⇒ varredura de sumidos não roda). Função `desativar_sbl_duplicados_portal()`
+criada; a EXECUÇÃO foi barrada pedindo OK do dono (#437). Depois do OK: rodar e ligar no `rpcFinal` de
+`api/desativar-encerrados-cron.js`.
+
+**Leiloeiros faltando integrar:** juntas = 309 `nao_coletado` com site (276 regulares). A triagem de 28–31/10 já
+classificou quase todos (51 DNS morto, não-leilão, só arte, sem imóvel, vazio, NÃO INTEGRAR BomValor/Cloudflare). O que
+resta está nas pendências #321 (177 domínios FENALEI, RS 126), #381 (leiloeiros dos editais DJEN fora do cadastro), #402
+(1ª coleta de 11 tenants novos), #410 (site lista × acervo, leiloeiro a leiloeiro) e #386 (feeds de quem bloqueia robô).
+
 ## 07/11 — PAGAMENTOS: BANDEIRA SEMPRE "MASTER", JUROS EM DOBRO, TAXAS REAIS E PARCELAMENTO POR PRODUTO
 
 **A causa real das recusas do William e do Marcos (commit 4e1b565d).** A tela consultava
