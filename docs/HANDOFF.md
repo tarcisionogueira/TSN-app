@@ -51,6 +51,13 @@ gateways" com formulário para documentar referência (`gateway_taxa_documentar`
 **Pendências:** 434 (1ª venda parcelada real: conferir `total_paid_amount`, taxa no parcelado e baixa pelo `valor_base`),
 435 (renovação diária pela API do MP com o token), e 436 (link Asaas do William, dono).
 
+**Fim do dia (07/11):** o William disse que tenta pagar de novo mais tarde ou em 08/11. Antes disso, o dono cancela o link
+Asaas (436). Orientação passada ao dono: o William abre o link de novo (ou recarrega), completa o endereço da NF (o CEP já
+preenche a rua; falta o número) e escolhe até 12× — total R$ 8.000, sem juros para ele. **Na próxima sessão:** conferir
+`cobrancas_avulsas` c40d33c8 (status `paga`, `gateway_payment_id`) e `gateway_taxas_observadas` do pagamento dele
+(1º parcelado real: valida a pendência 434). Se recusar de novo, o motivo vai no alerta `mp-checkout/cartao-recusado` ou
+`pedido-recusado`; peça o print e localize pelo horário.
+
 ## 05–06/11 — MATRÍCULA E EDITAL VIRAM O MÍNIMO; AVISO QUANDO O DOCUMENTO CHEGA; A SESSÃO APLICA MIGRAÇÃO
 
 **Regra do dono:** edital e matrícula são o básico para avaliar um leilão. O pedido ao leiloeiro leva sempre os dois (e os
