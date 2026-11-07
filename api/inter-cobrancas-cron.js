@@ -10,13 +10,15 @@ import { inter, interConfigurado } from './_inter.js';
 import { atualizar, sb, SITUACOES_MORTAS } from './_inter-cobranca.js';
 
 const ORCAMENTO_MS = 45000;
-const BASE = process.env.APP_BASE_URL || 'https://www.bidprobrasil.com.br';
+// O endereço do webhook vai SEMPRE com www: bidprobrasil.com.br responde 308 para o www, e um aviso bancário que não
+// segue redirecionamento se perderia (07/11). Mudou o valor, a rotina recadastra sozinha.
+const WEBHOOK_URL = 'https://www.bidprobrasil.com.br/api/inter-webhook';
 
 async function registrarWebhookUmaVez() {
   const chave = 'inter_cobranca_webhook';
   const r = await sb(`app_config?key=eq.${chave}&select=value&limit=1`);
   if (!r.ok) return { erro: `leitura app_config HTTP ${r.status}` };
-  const url = `${BASE}/api/inter-webhook`;
+  const url = WEBHOOK_URL;
   const [c] = await r.json();
   if (String(c?.value || '') === url) return { ja: true };
   const w = await inter('PUT', '/cobranca/v3/cobrancas/webhook', { webhookUrl: url });
