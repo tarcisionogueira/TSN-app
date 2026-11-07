@@ -199,6 +199,44 @@ async function handler(req) {
     return { status: 'aviso', detalhe: `${parados.length} pedido(s) de reunião do cliente sem data marcada (${tipos}) — o mais antigo há ${dias} dias. Marcar em Admin → Atendimento.` };
   }));
 
+  // Promessa do termo de assessoria (cláusula de comunicação): resposta do advogado em até 3 dias úteis
+  // e, sem ela, a equipe assume. Sem este aviso o prazo seria só um texto.
+  itens.push(await check('Atendimento — cliente sem resposta do advogado', async () => {
+    const rc = await sb('chamados?tipo=eq.juridico_cliente&status=eq.em_atendimento&select=id,titulo&limit=200');
+    if (!rc.ok) throw new Error(`HTTP ${rc.status}`);
+    const chamados = await rc.json();
+    if (!chamados.length) return { status: 'ok', detalhe: 'Nenhuma conversa com advogado em aberto' };
+    const rm = await sb(`chamados_mensagens?chamado_id=in.(${chamados.map(c => c.id).join(',')})&autor_tipo=in.(cliente,atendente)&select=chamado_id,autor_tipo,criado_em&order=criado_em.desc`);
+    if (!rm.ok) throw new Error(`HTTP ${rm.status} (mensagens)`);
+    const ultima = new Map();
+    for (const m of await rm.json()) if (!ultima.has(m.chamado_id)) ultima.set(m.chamado_id, m);
+    const limite = Date.now() - 3 * 24 * 3600 * 1000;
+    const parados = chamados.filter(c => { const m = ultima.get(c.id); return m?.autor_tipo === 'cliente' && new Date(m.criado_em).getTime() < limite; });
+    if (!parados.length) return { status: 'ok', detalhe: `${chamados.length} conversa(s) com advogado dentro do prazo` };
+    return { status: 'aviso', detalhe: `${parados.length} cliente(s) sem resposta do advogado há mais de 3 dias. Assumir pela tela de Atendimento: ${parados.slice(0, 5).map(c => c.titulo).join(' · ')}` };
+  }));
+
+  // Termo, 8.4: primeira resposta humana em até 3 dias úteis. O chamado que espera a equipe ficava fora dos dois alertas
+  // (o do advogado e o de chamado aberto há 7 dias, que olha status='aberto').
+  itens.push(await check('Atendimento — cliente aguardando a equipe', async () => {
+    const limite = new Date(Date.now() - 3 * 24 * 3600 * 1000).toISOString();
+    const r = await sb(`chamados?status=eq.aguardando_atendente&atualizado_em=lt.${limite}&select=id,titulo,user_nome&order=atualizado_em.asc&limit=50`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const parados = await r.json();
+    if (!parados.length) return { status: 'ok', detalhe: 'Nenhum cliente esperando a equipe há mais de 3 dias' };
+    return { status: 'aviso', detalhe: `${parados.length} cliente(s) esperando a equipe há mais de 3 dias: ${parados.slice(0, 5).map(c => c.user_nome || c.titulo).join(' · ')}` };
+  }));
+
+  // Oportunidade selecionada: a lista nominal do que parou (aprovada sem reunião, aviso que não saiu, sem resposta).
+  itens.push(await check('Assessoria — oportunidade selecionada parada', async () => {
+    const r = await sb('rpc/oportunidades_paradas', { method: 'POST', body: '{}' });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const parados = await r.json();
+    if (!Array.isArray(parados)) throw new Error('resposta inesperada');
+    if (!parados.length) return { status: 'ok', detalhe: 'Nenhuma oportunidade parada' };
+    return { status: 'aviso', detalhe: `${parados.length} parada(s): ${parados.slice(0, 5).map(p => `${p.tipo} (${p.detalhe})`).join(' · ')}` };
+  }));
+
   // ── 3a2. Índice PRÓPRIO de mercado (cidade_indicadores) — base dos filtros revenda/locação ──
   // Coloca sob a saúde o índice criado nesta frente: precisa estar POPULADO e SEM valores
   // absurdos (R$/m² fora de 200–50.000 = contaminação de área total×privativa). Não escala p/

@@ -6,6 +6,7 @@ import { supabase } from '../utils/supabase';
 import { lerCotas, janelaLabel } from '../utils/cotaAnalise';
 import TriagemPerfil from '../components/TriagemPerfil';
 import VitrineMaterial from '../components/VitrineMaterial';
+import OportunidadesDecisao from '../components/OportunidadesDecisao';
 import ConvideAmigo from '../components/ConvideAmigo';
 import { TERMO_PARCEIRO_VERSAO, TERMO_PARCEIRO_PREAMBULO, TERMO_PARCEIRO, DECLARACAO_REPASSE } from '../components/ConviteParceiro';
 import { LATAO } from '../utils/marca';
@@ -64,6 +65,7 @@ let cacheCursoBoasVindas = (() => {
 export default function HomeCliente() {
   const nav = useNavigate();
   const { user, effectiveRole, effectiveUserId, impersonate, roleSimulado, nome: nomePerfil } = useAuth();
+  const [oportunidadesPendentes, setOportunidadesPendentes] = useState(false);
   const info = PLANO_INFO[effectiveRole] || PLANO_INFO.explorador;
   // Modo suporte: a saudação é a do CLIENTE visualizado (a equipe navega como ele).
   const primeiroNome = (impersonate?.nome || nomePerfil || user?.user_metadata?.nome || user?.email || 'Investidor').split(' ')[0].split('@')[0];
@@ -435,8 +437,11 @@ export default function HomeCliente() {
           </div>
         )}
 
+        {/* Oportunidade selecionada pela equipe (termo, 1.3): vem antes de tudo e tira o herói do caminho. */}
+        <OportunidadesDecisao clienteId={impersonate ? effectiveUserId : null} onPendentes={setOportunidadesPendentes} />
+
         {/* HERÓI DA ASSESSORIA (25/10): assessorado sem caso aberto vê o próximo passo, não a grade. */}
-        {assessoradoSemCaso && (
+        {assessoradoSemCaso && !oportunidadesPendentes && (
           <div style={{ background: 'white', border: '2px solid #bfdbfe', borderRadius: 18, padding: '20px 22px' }}>
             <div style={{ fontSize: 11, fontWeight: 800, color: '#0D63DB', textTransform: 'uppercase', letterSpacing: 1 }}>Próximo passo da sua assessoria</div>
             <div style={{ fontSize: 19, fontWeight: 900, color: '#111', margin: '6px 0 6px', lineHeight: 1.25 }}>Escolha o imóvel e abra o seu acompanhamento</div>

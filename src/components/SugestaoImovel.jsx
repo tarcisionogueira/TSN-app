@@ -54,6 +54,9 @@ export default function SugestaoImovel() {
     (async () => {
       try {
         const uid = effectiveUserId;
+        // Oportunidade da equipe esperando resposta: o card automático não compete com ela. Sem leitura, não sugere.
+        const pend = await supabase.from('oportunidades_selecionadas').select('id').eq('cliente_id', uid).eq('status', 'selecionada').limit(1);
+        if (pend.error || pend.data?.length) return;
         // Exclusões (já avaliados / com relatório) + REGIÃO de referência do cliente.
         // A sugestão segue as MESMAS regras do e-mail de oportunidades: filtro salvo
         // mais recente → senão cidade/UF do cadastro. Antes a query não tinha recorte

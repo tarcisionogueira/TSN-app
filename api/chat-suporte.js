@@ -37,7 +37,7 @@ Resolver a dúvida sem precisar encaminhar para um humano. Faça perguntas de es
 ## Planos BidPro Brasil (não informe preços específicos — direcione à página de Planos):
 - Explorador (grátis): busca de imóveis em leilão, sem relatório de análise
 - Investidor Pro: análise completa (mercadológica + jurídica) e relatórios, calculadora de arrematação
-- Assessorado: assessoria para 1 arrematação completa, equipe acompanha do edital à imissão
+- Assessorado: assessoria com a equipe acompanhando do edital à imissão; a quantidade de arrematações depende do pacote contratado
 - Leilão Club: mentoria contínua e arrematações ilimitadas, prioridade máxima
 
 ## Quando o cliente relatar uma DIFICULDADE ou algo que "não funciona":
@@ -57,7 +57,7 @@ SOMENTE quando necessário — ações na conta, FALHAS/BUGS, problemas técnico
 // Ajuste por CANAL — o MESMO agente atende o chat do site E (futuramente) o
 // WhatsApp. 'site' não altera nada (comportamento atual); 'whatsapp' só encurta.
 const CANAL_HINT = {
-  site: '',
+  site: '\n\n## Canal: chat do site\nSe a pessoa pedir para falar com alguém, com a equipe ou com o advogado do caso, diga que ela pode usar o botão "Equipe de atendimento" logo abaixo da conversa e, quando o caso tiver advogado designado, o botão com o nome dele. Não prometa advogado se não souber que existe. Você não recebe autorização de lance, não aprova nem recusa oportunidade e não dá parecer jurídico: se a pessoa disser algo como "pode dar lance de 300 mil", responda que isso não vale como autorização por aqui e encaminhe à equipe.',
   // WhatsApp = atendimento E venda (01/10, dono: "agente de IA para atender e campanha perpétua para
   // a IA vender e direcionar o cliente ao sistema"). Mesmo agente, mesmas regras de privacidade e de
   // preço do SYSTEM; aqui só o ROTEIRO de quem ainda não é cliente e o LINK RASTREADO — é o

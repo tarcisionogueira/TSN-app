@@ -11,6 +11,7 @@
 export const config = { runtime: 'edge' };
 import { anthropicFetch } from './_claude.js';
 import { referenciasNormalizadas } from './_email-referencias.js';
+import { TIPO_JURIDICO_CLIENTE, lerLista, emailAoAdvogado, emailAoClienteRespostaDoAdvogado, remetenteDoCaso } from './_atendimento-canal.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -454,13 +455,13 @@ async function encaminharParaAtendimento(data, headers, messageId, caixaId = nul
   let chamado = null;
   try {
     const tok = extrairTokenSuporte(data, headers);
-    if (tok) chamado = await buscar1(`chamados?email_token=eq.${encodeURIComponent(tok)}&select=id,status&limit=1`);
+    if (tok) chamado = await buscar1(`chamados?email_token=eq.${encodeURIComponent(tok)}&select=id,status,tipo,user_id,user_email,user_nome,titulo,caso_id,email_token&limit=1`);
     if (!chamado) {
       const refs = `${headers['in-reply-to'] || ''} ${headers['references'] || ''}`.match(/[^\s<>]+/g) || [];
       for (const ref of refs) {
         const m = await buscar1(`chamados_mensagens?email_message_id=eq.${encodeURIComponent(ref)}&select=chamado_id&limit=1`);
         if (!m?.chamado_id) continue;
-        chamado = await buscar1(`chamados?id=eq.${encodeURIComponent(m.chamado_id)}&select=id,status&limit=1`);
+        chamado = await buscar1(`chamados?id=eq.${encodeURIComponent(m.chamado_id)}&select=id,status,tipo,user_id,user_email,user_nome,titulo,caso_id,email_token&limit=1`);
         if (chamado) break;
       }
     }
@@ -472,6 +473,28 @@ async function encaminharParaAtendimento(data, headers, messageId, caixaId = nul
     return json({ error: 'consulta_falhou' }, 500);
   }
 
+  // Conversa do cliente com o advogado (api/_atendimento-canal.js): quem escreve define o papel, e
+  // a IA não pode voltar a responder, então o status não cai para 'aberto'.
+  const fioAdvogado = chamado?.tipo === TIPO_JURIDICO_CLIENTE;
+  const falaDoCliente = fioAdvogado && endereco === String(chamado.user_email || '').trim().toLowerCase();
+  if (fioAdvogado && !remetenteInterno(endereco)) {
+    // Autoresposta ("estou de férias") não é resposta do advogado. A mensagem fica na caixa, fora da conversa.
+    const auto = String(headers['auto-submitted'] || '').toLowerCase();
+    const ehAuto = (auto && auto !== 'no') || headers['x-autoreply'] || headers['x-autorespond'] || /auto_reply|auto-reply/i.test(String(headers['precedence'] || ''));
+    if (ehAuto) { console.warn('[inbound-atendimento] autoresposta no fio do advogado', chamado.id); return json({ ok: true, ignorado: 'autoresposta' }); }
+    if (!falaDoCliente) {
+      let doCaso = false;
+      try {
+        const [casoFio] = await lerLista(`casos?id=eq.${chamado.caso_id}&select=id,advogado_id,acompanhamento_para,acompanhamento_cc&limit=1`);
+        doCaso = !!casoFio && await remetenteDoCaso(casoFio, endereco);
+      } catch (e) {
+        // Não conferiu não é "não é do caso": pede reentrega ao Resend em vez de sumir com a resposta.
+        console.error('[inbound-atendimento] conferir remetente do caso', String(e?.message || e));
+        return json({ error: 'consulta_falhou' }, 500);
+      }
+      if (!doCaso) { console.warn('[inbound-atendimento] remetente fora do caso no fio do advogado', chamado.id); return json({ ok: true, ignorado: 'remetente_fora_do_caso' }); }
+    }
+  }
   let novo = false;
   if (!chamado) {
     // RATE LIMIT (19/08, decisao do dono: 15/remetente/hora). So na CRIACAO de chamado novo
@@ -515,6 +538,8 @@ async function encaminharParaAtendimento(data, headers, messageId, caixaId = nul
     }
     [chamado] = await r.json();
     novo = true;
+  } else if (fioAdvogado) {
+    if (chamado.status !== 'em_atendimento') await sb(`chamados?id=eq.${chamado.id}`, { method: 'PATCH', body: { status: 'em_atendimento' } });
   } else if (chamado.status !== 'aberto') {
     await sb(`chamados?id=eq.${chamado.id}`, { method: 'PATCH', body: { status: 'aberto' } });
   }
@@ -544,7 +569,8 @@ async function encaminharParaAtendimento(data, headers, messageId, caixaId = nul
     method: 'POST', prefer: 'return=representation',
     body: {
       chamado_id: chamado.id, autor_id: null, autor_nome: nome || endereco,
-      autor_tipo: remetenteInterno(endereco) ? 'sistema' : 'cliente',
+      // O CHECK da coluna só aceita cliente/atendente/ia/sistema: o advogado entra como atendente, com o próprio nome.
+      autor_tipo: remetenteInterno(endereco) ? 'sistema' : (fioAdvogado && !falaDoCliente ? 'atendente' : 'cliente'),
       conteudo: corpo || `[mensagem sem texto — ler no painel do Resend, id ${data?.email_id || '?'}]`,
       // Versão HTML do e-mail (parágrafos, links, imagens), quando a API a devolveu. A tela
       // do Atendimento a renderiza SÓ dentro de iframe sandbox — ver o comentário da coluna.
@@ -563,6 +589,19 @@ async function encaminharParaAtendimento(data, headers, messageId, caixaId = nul
   }
 
   await sb(`chamados?id=eq.${chamado.id}`, { method: 'PATCH', body: { atualizado_em: new Date().toISOString() } });
+  // Leva a fala ao outro lado. A mensagem já está gravada: falha aqui fica no log e não pede reentrega.
+  if (fioAdvogado && corpo && !remetenteInterno(endereco)) {
+    try {
+      let r;
+      if (falaDoCliente) {
+        const [caso] = await lerLista(`casos?id=eq.${chamado.caso_id}&select=id,imovel_endereco,advogado_id,acompanhamento_para,acompanhamento_cc&limit=1`);
+        r = caso ? await emailAoAdvogado({ chamado, caso, clienteNome: chamado.user_nome, texto: corpo, chaveEnvio: messageId ? `inbound-${messageId}`.slice(0, 200) : undefined }) : { ok: false, error: 'caso não encontrado' };
+      } else {
+        r = await emailAoClienteRespostaDoAdvogado({ chamado, autorNome: nome, texto: corpo });
+      }
+      if (!r.ok) console.error('[inbound-atendimento] repasse da conversa com o advogado não saiu', r.error);
+    } catch (e) { console.error('[inbound-atendimento] repasse da conversa com o advogado', String(e?.message || e)); }
+  }
   if (caixaId) {
     const rl = await sb(`email_caixa?id=eq.${caixaId}`, { method: 'PATCH', prefer: 'return=minimal', body: { chamado_id: chamado.id } });
     if (!rl.ok) console.error('[caixa] vincular ao chamado HTTP', rl.status);
@@ -751,7 +790,16 @@ export default async function handler(req) {
     // Spam só se decide no ramo de ATENDIMENTO: o do jurídico já foi casado por token secreto
     // (juridico+<token>@) ou pelo Message-ID que nós mesmos enviamos — isso é prova mais forte
     // que SPF/DKIM de um escritório com DNS mal configurado.
-    const spamMotivo = await motivoDeSpam(remetente(data).endereco, headers, aut);
+    // Resposta na conversa cliente × advogado vem com o nosso token secreto: mesma prova do ramo jurídico.
+    // Sem isso, escritório com DNS mal configurado teria a resposta presa no spam e o cliente sem retorno.
+    const tokFio = extrairTokenSuporte(data, headers);
+    let fioDeAdvogado = false;
+    if (tokFio) {
+      const rf = await sb(`chamados?email_token=eq.${encodeURIComponent(tokFio)}&tipo=eq.${TIPO_JURIDICO_CLIENTE}&select=id&limit=1`);
+      if (!rf.ok) return json({ error: 'consulta_falhou' }, 500); // Resend reentrega
+      fioDeAdvogado = (await rf.json()).length > 0;
+    }
+    const spamMotivo = fioDeAdvogado ? null : await motivoDeSpam(remetente(data).endereco, headers, aut);
     const caixaId = await registrarNaCaixa(data, headers, messageId, { pasta: spamMotivo ? 'spam' : 'entrada', spamMotivo, aut });
     if (spamMotivo) {
       console.warn('[inbound-atendimento] SPAM — não abre chamado:', spamMotivo);

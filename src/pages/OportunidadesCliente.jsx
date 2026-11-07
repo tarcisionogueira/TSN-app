@@ -25,7 +25,7 @@ export default function OportunidadesCliente() {
         <Target size={22} color="#7c3aed" /> Oportunidades para {nome}
       </h1>
       <div style={{ fontSize: 13, color: '#64748b', marginBottom: 16 }}>
-        Lotes que cabem no perfil de investidor que o cliente preencheu, ordenados pelo encaixe. Abra o lote para conferir e enviar a ele.
+        Lotes que cabem no perfil de investidor que o cliente preencheu, ordenados pelo encaixe. Abra o lote para conferir. Para mandar ao cliente, use Selecionar: ele aprova ou recusa na tela inicial dele.
       </div>
       {valido
         ? <OportunidadesPerfil cliente={{ id: clienteId, nome }} />

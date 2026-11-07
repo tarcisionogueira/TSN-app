@@ -25,13 +25,14 @@ import MUNICIPIOS from './_municipios.js';
 import { encerradoPorDatas } from './_leilao-encerrado.js';
 import { ajustarFiltrosPorIntencao } from '../src/lib/intencao.js';
 import { TIPOS_POR_PERFIL, TETO_FAIXA, PERFIL_ROTULO, FAIXA_ROTULO, pontuarCandidato, resumoComportamento, distanciaKm } from './_curadoria.js';
+import { SEL_LOTE as SEL, proximaPraca, visaoDaOportunidade } from './_oportunidade-selecionada.js';
+import { sb, emailDaConta, emailAoClienteOportunidade } from './_atendimento-canal.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
 const ROLES_EQUIPE = ['analista', 'advogado', 'consultor'];
 const RAIOS = [25000, 50000, 100000, 200000];
 const ALVO_CANDIDATOS = 40;
-const SEL = 'id,titulo,endereco,cidade,estado,tipo,modalidade,valor_minimo,valor_minimo_ref,valor_avaliacao,desconto_percentual,data_leilao,data_leilao_2,data_fim,praca1_fim,praca2_fim,link_foto,fonte,latitude,longitude,score_financeiro,score_localizacao,ocupacao,forma_pagamento';
 
 const json = (o, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { 'Content-Type': 'application/json' } });
 const RE_UUID = /^[0-9a-f-]{36}$/i;
@@ -57,17 +58,6 @@ async function rpc(fn, body) {
   return r.json();
 }
 
-// A data que importa para a equipe é a PRÓXIMA praça, não a 1ª (02/10, print do dono: lotes com
-// 1ª praça em 22/09 e 2ª ainda por vir apareciam como "22/09/2026" — parecia leilão passado).
-function proximaPraca(im) {
-  const agora = Date.now();
-  const pracas = [[im.data_leilao, '1ª praça'], [im.data_leilao_2, '2ª praça']]
-    .map(([d, rot]) => ({ t: Date.parse(d || ''), d, rot })).filter((x) => Number.isFinite(x.t));
-  const futura = pracas.filter((x) => x.t >= agora - 12 * 3600e3).sort((a, b) => a.t - b.t)[0];
-  if (futura) return { dataLeilao: futura.d, praca: pracas.length > 1 ? futura.rot : null };
-  return { dataLeilao: im.data_fim || null, praca: im.data_fim ? 'encerra' : null };
-}
-
 // Mesma cerca para os dois métodos: admin, ou equipe DESIGNADA ao cliente.
 async function autorizar(req, clienteId) {
   const user = await getUser(req);
@@ -82,6 +72,73 @@ async function autorizar(req, clienteId) {
   return { user };
 }
 
+// POST { acao:'selecionar', cliente_id, imovel_id, motivo, confirmar_prazo? } — a equipe manda o lote ao cliente.
+// O retrato (lote, perfil, filtros, motivos) é montado AQUI e congelado: o navegador só escolhe o lote e escreve o motivo.
+// Praça em menos de 7 dias ou lote sem data pedem confirmação gravada, porque o cliente pode não ter tempo de responder.
+async function selecionar(body, user) {
+  const clienteId = body.cliente_id;
+  if (!RE_UUID.test(String(body.imovel_id || ''))) return json({ error: 'imovel_id inválido' }, 400);
+  const motivo = String(body.motivo || '').trim().slice(0, 500);
+  if (motivo.length < 10) return json({ error: 'Escreva em uma linha por que este lote serve para o cliente.' }, 400);
+  const [lote] = await sbGet(`imoveis_leilao?id=eq.${body.imovel_id}&select=${SEL},ativo&limit=1`);
+  if (!lote) return json({ error: 'Lote não encontrado.' }, 404);
+  if (lote.ativo === false || encerradoPorDatas(lote).encerrado) return json({ error: 'Este lote não está mais em disputa.' }, 409);
+  const { dataLeilao } = proximaPraca(lote);
+  const dias = dataLeilao ? (Date.parse(dataLeilao) - Date.now()) / 864e5 : null;
+  const semData = dias == null || !Number.isFinite(dias);
+  const prazoCurto = semData || dias < 7;
+  if (prazoCurto && body.confirmar_prazo !== true) {
+    return json({ error: semData ? 'Este lote não tem data informada. Confirme que quer enviar assim mesmo.' : 'A próxima praça é em menos de 7 dias. Confirme que quer enviar assim mesmo.', precisa_confirmar: true }, 409);
+  }
+  const [[perfil], filtros, [autor]] = await Promise.all([
+    sbGet(`perfis?id=eq.${clienteId}&select=id,nome,perfil_investidor,faixa_capital,forma_pagamento,endereco_cidade,endereco_uf,cidades_interesse,triagem_em&limit=1`),
+    sbGet(`filtros_salvos?user_id=eq.${clienteId}&select=filtros,criado_em&order=criado_em.desc&limit=1`),
+    sbGet(`perfis?id=eq.${user.id}&select=nome&limit=1`),
+  ]);
+  if (!perfil) return json({ error: 'Cliente não encontrado' }, 404);
+  const interesse = (Array.isArray(perfil.cidades_interesse) ? perfil.cidades_interesse : []).map((c) => (c && typeof c === 'object' ? centroide(c.cidade, c.uf) : null)).filter(Boolean);
+  const centros = interesse.length ? interesse : [centroide(perfil.endereco_cidade, perfil.endereco_uf)].filter(Boolean);
+  const pos = lote.latitude != null ? { lat: Number(lote.latitude), lng: Number(lote.longitude) } : null;
+  const centro = centros.map((c) => ({ c, d: distanciaKm(c, pos) })).filter((x) => x.d != null).sort((x, y) => x.d - y.d)[0]?.c || centros[0];
+  const { motivos } = pontuarCandidato(lote, { perfil_investidor: perfil.perfil_investidor, faixa_capital: perfil.faixa_capital, forma_pagamento: perfil.forma_pagamento, tetoPerfil: TETO_FAIXA[perfil.faixa_capital] || null, comportamento: resumoComportamento([]), centro });
+  const ri = await sb('oportunidades_selecionadas', { method: 'POST', prefer: 'return=representation', body: {
+    cliente_id: clienteId, imovel_id: lote.id, motivo_equipe: motivo, selecionada_por: user.id, selecionada_por_nome: autor?.nome || null,
+    prazo_curto_confirmado: prazoCurto,
+    retrato: { lote, perfil, filtros: filtros[0] || null, motivos: (motivos || []).slice(0, 3), capturado_em: new Date().toISOString() },
+  } });
+  if (ri.status === 409) return json({ error: 'Este lote já está selecionado para o cliente.' }, 409);
+  if (!ri.ok) throw new Error(`seleção HTTP ${ri.status}`);
+  const [linha] = await ri.json();
+  if (!linha) throw new Error('seleção não gravada');
+
+  // Aceito pelo Resend não é cliente avisado: guardamos o que aconteceu, e oportunidades_paradas() acusa o resto.
+  let aviso = { ok: false, error: 'sem e-mail do cliente' };
+  try {
+    const email = await emailDaConta(clienteId);
+    if (email) aviso = await emailAoClienteOportunidade({ para: email, nome: perfil.nome, userId: clienteId, cidade: lote.cidade, uf: lote.estado, chaveEnvio: `oportunidade-${linha.id}` });
+  } catch (e) { aviso = { ok: false, error: String(e?.message || e) }; }
+  const avisoStatus = aviso.ok ? 'aceito' : (aviso.enfileirado ? 'enfileirado' : 'falhou');
+  const rv = await sb(`oportunidades_selecionadas?id=eq.${linha.id}&select=id`, { method: 'PATCH', prefer: 'return=representation', body: {
+    aviso_status: avisoStatus, aviso_email_id: aviso.id || null, aviso_em: new Date().toISOString(), aviso_erro: aviso.ok ? null : String(aviso.error || '').slice(0, 300),
+  } });
+  if (!rv.ok || !(await rv.json()).length) console.error('[oportunidades-cliente] situação do aviso não gravada', linha.id, rv.status);
+  await logAtividade(clienteId, 'oportunidade_selecionada', `Equipe selecionou para o cliente: ${String(lote.titulo || lote.id).slice(0, 140)}`, { oportunidade_id: linha.id, imovel_id: lote.id }, user.id);
+  return json({ ok: true, selecionada: visaoDaOportunidade({ ...linha, aviso_status: avisoStatus }, lote), aviso_ok: !!aviso.ok });
+}
+
+// POST { acao:'retirar', cliente_id, id, motivo } — a equipe tira a oportunidade do ar. O registro fica.
+async function retirar(body, user) {
+  if (!RE_UUID.test(String(body.id || ''))) return json({ error: 'id inválido' }, 400);
+  const motivo = String(body.motivo || '').trim().slice(0, 300);
+  if (motivo.length < 5) return json({ error: 'Diga o motivo da retirada.' }, 400);
+  const r = await sb(`oportunidades_selecionadas?id=eq.${body.id}&cliente_id=eq.${body.cliente_id}&status=in.(selecionada,aprovada)&select=id`, {
+    method: 'PATCH', prefer: 'return=representation', body: { status: 'retirada', retirada_por: user.id, retirada_em: new Date().toISOString(), retirada_motivo: motivo } });
+  if (!r.ok) throw new Error(`retirada HTTP ${r.status}`);
+  if (!(await r.json()).length) return json({ error: 'Esta oportunidade não pode mais ser retirada.' }, 409);
+  await logAtividade(body.cliente_id, 'oportunidade_retirada', `Equipe retirou oportunidade: ${motivo}`, { oportunidade_id: body.id }, user.id);
+  return json({ ok: true });
+}
+
 // POST { cliente_id, imovel_id, titulo } — a equipe ABRIU um lote da lista: entra na linha do
 // tempo do cliente (Cliente 360), para se saber o que já foi olhado/oferecido a ele.
 export async function POST(req) {
@@ -90,6 +147,8 @@ export async function POST(req) {
   try {
     const a = await autorizar(req, body.cliente_id);
     if (a.erro) return a.erro;
+    if (body.acao === 'selecionar') return await selecionar(body, a.user);
+    if (body.acao === 'retirar') return await retirar(body, a.user);
     if (!RE_UUID.test(String(body.imovel_id || ''))) return json({ error: 'imovel_id inválido' }, 400);
     await logAtividade(body.cliente_id, 'equipe_abriu_oportunidade',
       `Equipe abriu oportunidade: ${String(body.titulo || body.imovel_id).slice(0, 140)}`,
@@ -108,6 +167,10 @@ async function handler(req) {
     const a = await autorizar(req, clienteId);
     if (a.erro) return a.erro;
     const user = a.user;
+    const linhasSel = await sbGet(`oportunidades_selecionadas?cliente_id=eq.${clienteId}&select=*&order=selecionada_em.desc&limit=50`);
+    const idsSel = [...new Set(linhasSel.map((l) => l.imovel_id))];
+    const vivosSel = new Map((idsSel.length ? await sbGet(`imoveis_leilao?id=in.(${idsSel.join(',')})&select=${SEL},ativo`) : []).map((l) => [l.id, l]));
+    const selecionadas = linhasSel.map((l) => visaoDaOportunidade(l, vivosSel.get(l.imovel_id)));
     const [perfil] = await sbGet(`perfis?id=eq.${clienteId}&select=id,nome,perfil_investidor,faixa_capital,forma_pagamento,endereco_cidade,endereco_uf,cidades_interesse,triagem_em&limit=1`);
     if (!perfil) return json({ error: 'Cliente não encontrado' }, 404);
 
@@ -133,10 +196,10 @@ async function handler(req) {
       raioKm: null,
     };
     if (!perfilInv && !perfil.faixa_capital) {
-      return json({ cliente: { id: perfil.id, nome: perfil.nome }, criterios, oportunidades: [], aviso: 'O cliente ainda não respondeu a triagem de perfil (intenção e faixa de capital). Peça para ele preencher em Perfil — sem isso a busca seria genérica.' });
+      return json({ cliente: { id: perfil.id, nome: perfil.nome }, criterios, selecionadas, oportunidades: [], aviso: 'O cliente ainda não respondeu a triagem de perfil (intenção e faixa de capital). Peça para ele preencher em Perfil — sem isso a busca seria genérica.' });
     }
     if (!centros.length) {
-      return json({ cliente: { id: perfil.id, nome: perfil.nome }, criterios, oportunidades: [], aviso: `Não localizei a cidade do cliente (${perfil.endereco_cidade || 'vazia'}/${perfil.endereco_uf || '—'}). Ajuste a cidade de interesse no Perfil dele.` });
+      return json({ cliente: { id: perfil.id, nome: perfil.nome }, criterios, selecionadas, oportunidades: [], aviso: `Não localizei a cidade do cliente (${perfil.endereco_cidade || 'vazia'}/${perfil.endereco_uf || '—'}). Ajuste a cidade de interesse no Perfil dele.` });
     }
 
     // Já arrematou / sinalizou sem interesse: fora da lista.
@@ -200,7 +263,7 @@ async function handler(req) {
 
     return json({
       cliente: { id: perfil.id, nome: perfil.nome },
-      criterios, oportunidades, totalCandidatos: oportunidades.length,
+      criterios, selecionadas, oportunidades, totalCandidatos: oportunidades.length,
       aviso: oportunidades.length ? null
         : `Nenhum lote ativo cabe no perfil até ${criterios.raioKm} km (${tipos.join('/') || 'qualquer tipo'}, desconto ≥ ${descontoMin}%, até ${tetoFaixa ? `R$ ${tetoFaixa.toLocaleString('pt-BR')}` : 'sem teto'}). Vale revisar a faixa de capital ou as cidades com o cliente.`,
     });

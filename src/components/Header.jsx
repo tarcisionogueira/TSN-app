@@ -412,8 +412,8 @@ export default function Header() {
               de não lidas continua visível ao lado. */}
           {!loading && temChat && (
             <button onClick={() => window.dispatchEvent(new CustomEvent('tsn:open-chat'))}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#94a3b8', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
-              <MessageCircle size={14} /> Assistente
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+              <MessageCircle size={14} /> Atendimento
               {naoLidasChat > 0 && (
                 <span style={{ minWidth: 18, height: 18, padding: '0 5px', borderRadius: 999, background: '#ef4444', color: 'white', fontSize: 10, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
                   {naoLidasChat}
@@ -561,6 +561,17 @@ export default function Header() {
           </button>
         )}
 
+        {/* ATENDIMENTO NO CELULAR (06/11, dono): dentro do hambúrguer o cliente não achava. Fica na barra, como "Criar conta". */}
+        {!loading && temChat && (
+          <button onClick={() => window.dispatchEvent(new CustomEvent('tsn:open-chat'))} className="show-mobile" aria-label="Atendimento"
+            style={{ display: 'none', alignItems: 'center', gap: 5, marginLeft: 'auto', marginRight: 12, padding: '6px 10px', border: 'none', borderRadius: 8, background: '#0D63DB', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+            <MessageCircle size={15} /> Atendimento
+            {naoLidasChat > 0 && (
+              <span style={{ minWidth: 18, height: 18, padding: '0 5px', borderRadius: 999, background: '#ef4444', color: 'white', fontSize: 10, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{naoLidasChat}</span>
+            )}
+          </button>
+        )}
+
         {/* Mobile menu button */}
         <button onClick={() => setOpen(!open)} style={{ display: 'none', background: 'none', border: 'none', color: 'white', cursor: 'pointer' }} className="show-mobile">
           {open ? <X size={22} /> : <Menu size={22} />}
@@ -591,7 +602,7 @@ export default function Header() {
           {!loading && temChat && (
             <button onClick={() => { window.dispatchEvent(new CustomEvent('tsn:open-chat')); setOpen(false); }}
               style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#94a3b8', fontWeight: 600, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>
-              <MessageCircle size={16} /> Falar com o assistente
+              <MessageCircle size={16} /> Atendimento
               {naoLidasChat > 0 && (
                 <span style={{ marginLeft: 'auto', minWidth: 20, height: 20, padding: '0 6px', borderRadius: 999, background: '#ef4444', color: 'white', fontSize: 11, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
                   {naoLidasChat}

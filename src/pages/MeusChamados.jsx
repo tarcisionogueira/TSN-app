@@ -81,6 +81,16 @@ export default function MeusChamados() {
     setMensagens(novaLista);
     setTexto(''); setAnexos([]);
     await supabase.from('chamados').update({ atualizado_em: new Date().toISOString() }).eq('id', chamadoAtivo.id);
+    // Com pessoa na conversa a IA não entra (o widget já fazia isso; esta tela respondia por cima).
+    if (['em_atendimento', 'aguardando_atendente'].includes(chamadoAtivo.status)) {
+      if (chamadoAtivo.tipo === 'juridico_cliente' && msg) {
+        const rc = await apiCall('/api/atendimento-canal', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ acao: 'encaminhar', chamado_id: chamadoAtivo.id, mensagem_id: msg.id }) }).catch(() => null);
+        if (!rc?.ok) alert('A mensagem ficou registrada, mas o e-mail ao advogado não saiu. Peça ajuda à equipe.');
+      }
+      setEnviando(false);
+      return;
+    }
     // Aciona IA
     setLoadingIA(true);
     try {

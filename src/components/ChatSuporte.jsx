@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Send, Paperclip, Bot, Loader2, UserCheck, ArrowLeft, Plus, ChevronRight } from 'lucide-react';
+import { X, Send, Paperclip, Bot, Loader2, UserCheck, ArrowLeft, Plus, ChevronRight, Scale } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { apiCall } from '../utils/apiCall';
@@ -58,6 +58,11 @@ export default function ChatSuporte() {
   const [anexos, setAnexos] = useState([]);
   const [precisaAtendente, setPrecisaAtendente] = useState(false);
   const [memoriaIA, setMemoriaIA] = useState('');
+  // Com quem o cliente pode falar além da IA (06/11): a equipe sempre; o advogado quando o caso tem um.
+  const [advogados, setAdvogados] = useState([]);
+  const [canaisErro, setCanaisErro] = useState(false);
+  const [destinoNovo, setDestinoNovo] = useState('ia'); // 'ia' | 'equipe' | caso_id do advogado
+  const [erroCanal, setErroCanal] = useState('');
   const [naoLidas, setNaoLidas] = useState(0); // respostas de atendente ainda não vistas (badge do FAB)
   const fileRef = useRef();
   const msgEndRef = useRef();
@@ -96,6 +101,19 @@ export default function ChatSuporte() {
       supabase.from('perfis').select('memoria_ia').eq('id', user.id).single()
         .then(({ data }) => { if (data?.memoria_ia) setMemoriaIA(data.memoria_ia); });
     }
+  }, [isOpen, user?.id]);
+
+  useEffect(() => {
+    if (!isOpen || !user?.id) return;
+    let vivo = true;
+    // Falha aqui NÃO é "não tem advogado": a tela avisa, e a equipe continua disponível.
+    apiCall('/api/atendimento-canal').then(async (r) => {
+      const j = await r.json().catch(() => null);
+      if (!vivo) return;
+      if (!r.ok || !Array.isArray(j?.advogados)) { setCanaisErro(true); return; }
+      setCanaisErro(false); setAdvogados(j.advogados);
+    }).catch(() => { if (vivo) setCanaisErro(true); });
+    return () => { vivo = false; };
   }, [isOpen, user?.id]);
 
   useEffect(() => {
@@ -284,8 +302,40 @@ export default function ChatSuporte() {
     await atualizarNaoLidas();
   }
 
+  async function chamarCanal(corpo) {
+    const r = await apiCall('/api/atendimento-canal', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+    return j;
+  }
+
+  async function abrirComPessoa() {
+    setEnviando(true); setErroCanal('');
+    try {
+      const j = await chamarCanal({ acao: 'abrir', mensagem: descricao, anexos,
+        destino: destinoNovo === 'equipe' ? 'equipe' : 'advogado', caso_id: destinoNovo === 'equipe' ? undefined : destinoNovo });
+      setDescricao(''); setAnexos([]); setDestinoNovo('ia');
+      await abrirChamado(j.chamado);
+      if (j.aviso) setErroCanal(j.aviso);
+    } catch (e) { setErroCanal(e.message); }
+    setEnviando(false);
+  }
+
+  async function transferir(destino, casoId) {
+    if (!ticket) return;
+    setEnviando(true); setErroCanal('');
+    try {
+      const j = await chamarCanal({ acao: 'transferir', chamado_id: ticket.id, destino, caso_id: casoId });
+      setPrecisaAtendente(false);
+      await abrirChamado(j.chamado);
+      if (j.aviso) setErroCanal(j.aviso);
+    } catch (e) { setErroCanal(e.message); }
+    setEnviando(false);
+  }
+
   async function criarChamado() {
     if (!descricao.trim()) return;
+    if (destinoNovo !== 'ia') return abrirComPessoa();
     setEnviando(true);
     const { data: novo } = await supabase.from('chamados').insert({
       user_id: user.id, user_email: user.email, user_nome: nomeUsuario, // padrao-ok: chamado do PRÓPRIO logado (chat flutuante), nunca em nome de terceiro
@@ -319,6 +369,11 @@ export default function ChatSuporte() {
     setMensagens(novaLista);
     setTexto(''); setAnexos([]);
     resetTimers();
+    // Conversa com o advogado: a mensagem nova segue por e-mail. Falha precisa aparecer ao cliente.
+    if (ticket.tipo === 'juridico_cliente' && msg) {
+      setErroCanal('');
+      chamarCanal({ acao: 'encaminhar', chamado_id: ticket.id, mensagem_id: msg.id }).catch((e) => setErroCanal(e.message));
+    }
     // Só aciona IA se não houver atendente humano ou solicitação pendente
     if (!['em_atendimento', 'aguardando_atendente'].includes(ticket.status)) {
       await dispararIA(ticket, novaLista);
@@ -357,21 +412,6 @@ export default function ChatSuporte() {
       setPrecisaAtendente(true);
     }
     setLoadingIA(false);
-  }
-
-  async function solicitarAtendente() {
-    if (!ticket) return;
-    await supabase.from('chamados').update({
-      status: 'aguardando_atendente',
-      atualizado_em: new Date().toISOString(),
-    }).eq('id', ticket.id);
-    await supabase.from('chamados_mensagens').insert({
-      chamado_id: ticket.id, autor_tipo: 'ia', autor_nome: 'Sistema',
-      conteudo: '✅ Encaminhamos você para um especialista da nossa equipe. Você será respondido por aqui mesmo o quanto antes (em horário comercial). Pode deixar mais detalhes enquanto isso, que já adiantamos o atendimento.',
-      anexos: [],
-    });
-    setTicket(prev => ({ ...prev, status: 'aguardando_atendente' }));
-    setPrecisaAtendente(false);
   }
 
   async function encerrarAtendimento() {
@@ -521,6 +561,18 @@ export default function ChatSuporte() {
               <p style={{ fontSize: 13, color: '#475569', margin: '0 0 14px', lineHeight: 1.6 }}>
                 Olá, <strong style={{ color: '#111111' }}>{nomeUsuario}</strong>! Como posso ajudar?
               </p>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 6 }}>Falar com</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+                {[{ k: 'ia', rotulo: 'Assistente (resposta imediata)' }, ...advogados.map(a => ({ k: a.caso_id, rotulo: `${a.nome} · ${a.imovel}`.slice(0, 60), adv: true })), { k: 'equipe', rotulo: 'Equipe de atendimento' }].map(o => (
+                  <button key={o.k} onClick={() => setDestinoNovo(o.k)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 10px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                      border: destinoNovo === o.k ? '1px solid #0D63DB' : '1px solid #e2e8f0', background: destinoNovo === o.k ? '#eff6ff' : 'white', color: destinoNovo === o.k ? '#0D63DB' : '#475569' }}>
+                    {o.adv ? <Scale size={12} /> : o.k === 'equipe' ? <UserCheck size={12} /> : <Bot size={12} />} {o.rotulo}
+                  </button>
+                ))}
+              </div>
+              {canaisErro && <p style={{ fontSize: 11, color: '#92400e', margin: '0 0 10px' }}>Não consegui verificar o advogado do seu caso agora. A equipe de atendimento pode ajudar.</p>}
+              {erroCanal && <p style={{ fontSize: 12, color: '#b91c1c', fontWeight: 600, margin: '0 0 10px' }}>{erroCanal}</p>}
               <textarea
                 value={descricao} onChange={e => setDescricao(e.target.value)} onPaste={handlePaste}
                 placeholder="Descreva sua dúvida ou problema..."
@@ -621,18 +673,25 @@ export default function ChatSuporte() {
                 <div ref={msgEndRef} />
               </div>
 
-              {/* Banner "precisa atendente" */}
-              {precisaAtendente && !isFinalizado && (
-                <div style={{ padding: '10px 14px', background: '#fef3c7', borderTop: '1px solid #fde68a', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-                  <span style={{ fontSize: 12, color: '#92400e', flex: 1, lineHeight: 1.4 }}>
-                    Prefere falar com um atendente?
-                  </span>
-                  <button onClick={solicitarAtendente}
-                    style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', background: '#d97706', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                    <UserCheck size={13} /> Sim, quero atendente
-                  </button>
+              {/* Falar com uma pessoa: a qualquer momento depois da resposta da IA (cláusula de comunicação do termo). */}
+              {!isFinalizado && ['aberto', 'saudacao'].includes(ticket?.status) && (precisaAtendente || mensagens.some(m => m.autor_tipo === 'ia')) && (
+                <div style={{ padding: '10px 14px', background: '#fef3c7', borderTop: '1px solid #fde68a', flexShrink: 0 }}>
+                  <div style={{ fontSize: 12, color: '#92400e', marginBottom: 6 }}>Prefere falar com uma pessoa?</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {advogados.map(a => (
+                      <button key={a.caso_id} disabled={enviando} onClick={() => transferir('advogado', a.caso_id)}
+                        style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 10px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                        <Scale size={13} /> {`${a.nome} · ${a.imovel}`.slice(0, 50)}
+                      </button>
+                    ))}
+                    <button disabled={enviando} onClick={() => transferir('equipe')}
+                      style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 10px', background: '#d97706', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                      <UserCheck size={13} /> Equipe de atendimento
+                    </button>
+                  </div>
                 </div>
               )}
+              {erroCanal && <div style={{ padding: '8px 14px', fontSize: 12, color: '#b91c1c', fontWeight: 600, flexShrink: 0 }}>{erroCanal}</div>}
 
               {/* Banner atendimento encerrado */}
               {isFinalizado && (
