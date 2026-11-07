@@ -22,6 +22,7 @@ import { ativarPlanoDireto, eventoJaProcessado, removerEventoProcessado, registr
 import { auditLog } from './_audit.js';
 import { cancelarOutrasRecorrencias } from './_recorrencia-unica.js';
 import { pedidoRepetido, CORPO_REPETIDO } from './_pedido-unico.js';
+import { valorConfereComPreco } from './_gateway-taxas.js';
 
 const MP_BASE = 'https://api.mercadopago.com';
 const SB_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -91,7 +92,9 @@ export default async function handler(req, res) {
   } catch (e) { console.warn('[ativar-pro-anual] preço anual ilegível:', e?.message || e); }
   if (!(precoAnual > 0)) return res.status(503).json({ error: 'preco_anual_indisponivel' });
   const valor = Number(pg.transaction_amount) || 0;
-  if (Math.abs(valor - precoAnual) > Math.max(1, precoAnual * 0.01)) {
+  // 07/11 (dono): no anual parcelado a BidPro absorve os juros — o MP recebe preço ÷ (1 + juros) e o cliente paga o
+  // preço. valorConfereComPreco aceita as duas formas (ver api/_gateway-taxas.js).
+  if (!valorConfereComPreco(pg, precoAnual)) {
     return res.status(409).json({ error: 'valor_incompativel', esperado: precoAnual, recebido: valor });
   }
   // BASE DA COMISSÃO = valor líquido recebido, não o bruto (15/09, pedido do dono).

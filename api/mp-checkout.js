@@ -8,7 +8,7 @@
  *   MP_PUBLIC_KEY    — public_key (usada no frontend para tokenizar cartão)
  */
 import { honorarioComTaxa, gatewayDoBoleto, TETO_BOLETO_MP } from '../src/utils/taxaHonorario.js';
-import { valorAEnviar } from '../src/utils/parcelamento.js';
+import { valorAEnviar, POLITICA_PARCELAMENTO } from '../src/utils/parcelamento.js';
 import { jurosDoPagamentoMp } from './_gateway-taxas.js';
 import { getUser } from './_auth.js';
 import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
@@ -170,8 +170,11 @@ export default async function handler(req, res) {
     if (!arrematacao_id) return res.status(400).json({ error: 'arrematacao_id obrigatório' });
     // Pix saiu dos honorários (30/09, decisão do dono). Cartão aqui; boleto aqui ATÉ o teto do MP
     // (07/10, decisão do dono: mesmo custo, e o MP credita mais rápido que o Asaas) — acima, Asaas.
+    // 07/11 (dono): Pix VOLTA aos honorários — à vista (Pix, boleto ou cartão 1×) sem juros; 2–12× com juros ao cliente.
     const ehBoleto = metodoPagamento === 'bolbradesco';
-    if (metodoPagamento !== 'credit_card' && !ehBoleto) return res.status(400).json({ error: 'Honorários: pague por boleto ou cartão de crédito.' });
+    const ehPixHon = metodoPagamento === 'pix';
+    if (metodoPagamento !== 'credit_card' && !ehBoleto && !ehPixHon) return res.status(400).json({ error: 'Honorários: pague por Pix, boleto ou cartão de crédito.' });
+    if (metodoPagamento === 'credit_card' && Math.floor(Number(dadosCartao?.parcelas) || 1) > POLITICA_PARCELAMENTO.honorario_exito.parcelas_max) return res.status(400).json({ error: 'Honorários: até 12× no cartão.' });
     const SB_URL = process.env.VITE_SUPABASE_URL, SB_KEY = process.env.SUPABASE_SERVICE_KEY;
     try {
       const r = await fetch(`${SB_URL}/rest/v1/arrematacoes?id=eq.${encodeURIComponent(arrematacao_id)}&select=id,arrematante_id,honorarios_valor,honorarios_status,dados_nf`, {
@@ -205,7 +208,7 @@ export default async function handler(req, res) {
       // Boleto acima do teto do MP não é tentado aqui: a tela (mesma regra, gatewayDoBoleto) já manda
       // para o Asaas; 409 com `gateway` é a recusa explícita para quem chamar fora da tela.
       if (ehBoleto && gatewayDoBoleto(saldo) !== 'mp') return res.status(409).json({ error: 'Valor acima do teto do boleto do Mercado Pago — este boleto sai pelo Asaas.', gateway: 'asaas' });
-      const cob = honorarioComTaxa(saldo, ehBoleto ? 'boleto_mp' : 'cartao_mp');
+      const cob = honorarioComTaxa(saldo, ehBoleto ? 'boleto_mp' : ehPixHon ? 'pix_mp' : 'cartao_mp');
       valor = cob.total;
       descricao = jaRecebido > 0 ? 'Honorários de êxito (saldo restante) — BidPro Brasil' : 'Honorários de êxito — BidPro Brasil';
       honorarioCtx = { arrematacaoId: arr.id, arrematanteId: arr.arrematante_id, taxa: cob.taxa, boleto: ehBoleto, nf: arr.dados_nf || null };
@@ -352,6 +355,7 @@ export default async function handler(req, res) {
   // possível: cliente com assessoria em andamento paga R$ 4.800–6.000, vê "Pagamento
   // aprovado" e não recebe contrato, porque o auto-contrato (fail-closed, correto) recusa
   // DEPOIS. Cobrar e não entregar é o pior desfecho possível — o gate vem antes da cobrança.
+  let assessoriaModalidade = null;
   if (proposito === 'assessoria') {
     const SB_URL = process.env.VITE_SUPABASE_URL, SB_KEY = process.env.SUPABASE_SERVICE_KEY;
     const sbGet = (p) => fetch(`${SB_URL}/rest/v1/${p}`, {
@@ -384,11 +388,40 @@ export default async function handler(req, res) {
       if (v < piso - 0.01 || v > teto) {
         return res.status(400).json({ error: 'Valor da assessoria não confere com o preço vigente.' });
       }
+      // 07/11 (dono): R$ 5 mil à vista (Pix ou cartão 1×) · R$ 6 mil em até 12× sem juros. Qual das duas é este
+      // pagamento sai do preço: o de à vista só vale à vista.
+      assessoriaModalidade = Number(cfg?.preco_vista) > 0 && Math.abs(v - Number(cfg.preco_vista)) < 0.01 ? 'vista' : 'parcelada';
     } catch (e) {
       // FAIL-CLOSED: sem conseguir conferir o gate ou o preço, NÃO cobra. Um erro de leitura
       // não pode virar autorização para debitar milhares de reais.
       console.error('[mp-checkout] gate assessoria falhou', e?.message || e);
       return res.status(503).json({ error: 'Não consegui validar a contratação agora. Tente em instantes.' });
+    }
+  }
+
+  // POLÍTICA DE PARCELAMENTO POR PRODUTO (07/11, dono — src/utils/parcelamento.js POLITICA_PARCELAMENTO, espelho de
+  // regra_negocio 'pagamento.parcelamento_por_produto'). Vale no SERVIDOR: a tela só mostra. Cobrança avulsa e
+  // honorário têm o próprio bloco acima (a avulsa lê a negociação; o honorário segue o padrão: cliente assume).
+  // Sem juros (a BidPro absorve) → envia preço ÷ (1 + juros do MP para ESTE cartão); o preço vai em metadata.valor_base,
+  // que é o que a ativação confere (api/_gateway-taxas.js valorConfereComPreco).
+  let valorBaseServico = null;
+  if (metodoPagamento === 'credit_card' && ['plano_anual', 'assessoria', 'produto_bonus'].includes(proposito)) {
+    const pol = proposito === 'plano_anual' ? POLITICA_PARCELAMENTO.plano_anual
+      : proposito === 'produto_bonus' ? POLITICA_PARCELAMENTO.ebook
+        : assessoriaModalidade === 'vista' ? POLITICA_PARCELAMENTO.assessoria_vista : POLITICA_PARCELAMENTO.assessoria_parcelada;
+    const n = Math.max(1, Math.floor(Number(dadosCartao?.parcelas) || 1));
+    if (n > pol.parcelas_max) {
+      return res.status(400).json({ error: pol.parcelas_max === 1 ? 'Este valor é à vista: pague em 1× no cartão ou no Pix.' : `Aceita até ${pol.parcelas_max}× no cartão.` });
+    }
+    if (n > 1 && n <= pol.sem_juros_ate) {
+      let enviar = null;
+      try {
+        const { juros } = await jurosDoPagamentoMp({ valor, metodo: dadosCartao?.metodoPagamentoId, bin: dadosCartao?.bin });
+        enviar = valorAEnviar(valor, n, pol.sem_juros_ate, juros);
+      } catch (e) { console.error('[mp-checkout] sem juros: taxa do MP indisponível', e?.message || e); }
+      if (!(enviar > 0)) return res.status(503).json({ error: 'Não consegui confirmar o parcelamento sem juros agora. Tente em instantes.' });
+      valorBaseServico = Number(valor);
+      valor = enviar;
     }
   }
 
@@ -565,7 +598,7 @@ export default async function handler(req, res) {
           : cobrancaCtx
             // idem: quem paga pode não ter sessão (link repassado a terceiro).
             ? { user_id: user?.id || null, origem: 'tsn-app', tipo: 'cobranca_avulsa', cobranca_id: cobrancaCtx.cobrancaId, valor_base: cobrancaCtx.valorBase }
-            : { user_id: user.id, origem: 'tsn-app', tipo: 'servico', proposito, ...(planoAnualCtx ? { plano: planoAnualCtx.plano } : {}) },
+            : { user_id: user.id, origem: 'tsn-app', tipo: 'servico', proposito, ...(planoAnualCtx ? { plano: planoAnualCtx.plano } : {}), ...(valorBaseServico ? { valor_base: valorBaseServico } : {}) },
       // external_reference sempre presente (score de qualidade da integração MP pede
       // referência externa em toda cobrança). Só o formato do produto (uuid puro) é lido
       // de volta pelo webhook (ehProdutoMp/UUID_RE); os demais levam prefixo — que o

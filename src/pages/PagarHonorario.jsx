@@ -32,7 +32,7 @@ export default function PagarHonorario() {
   const [aceite, setAceite] = useState(false);
   const [pago, setPago] = useState(false);
   const [email, setEmail] = useState('');
-  const [meio, setMeio] = useState(null); // 'boleto' | 'cartao' — Pix saiu dos honorários (30/09)
+  const [meio, setMeio] = useState(null); // 'pix' | 'boleto' | 'cartao' — Pix voltou em 07/11 (dono: à vista sem juros)
   // QUEM PAGA (30/09 → 07/11): agora são os DADOS DA NOTA FISCAL (arr.nf), gravados no servidor — ver DadosNotaFiscal.
   // PROCURAÇÃO JUNTO COM O PAGAMENTO (10/10, pedido do dono): a procuração particular à Nogueira
   // Empreendimentos (e a quem ela delegar) é assinada aqui, antes de pagar — em vez de pedir depois.
@@ -275,6 +275,7 @@ export default function PagarHonorario() {
             {!meio && (
               <div style={{ display: 'grid', gap: 10 }}>
                 {[
+                  { k: 'pix', t: 'Pix', d: 'à vista, sem custo adicional · confirma na hora', v: saldoDevido },
                   { k: 'boleto', t: 'Boleto bancário', d: `${viaBoleto.taxa > 0 ? `taxa do boleto ${fmtBRL(viaBoleto.taxa)} · ` : 'sem custo adicional · '}compensa em 1 a 3 dias úteis`, v: viaBoleto.total },
                   { k: 'cartao', t: 'Cartão de crédito', d: `${viaCartao.taxa > 0 ? `taxa do cartão ${String(TAXA_CARTAO_MP_PCT).replace('.', ',')}% (${fmtBRL(viaCartao.taxa)}) · ` : 'à vista sem custo adicional · '}de 2× em diante com juros do cartão`, v: viaCartao.total },
                 ].map(o => (
@@ -296,6 +297,17 @@ export default function PagarHonorario() {
             )}
             {meio === 'boleto' && (
               <BoletoHonorario arrematacaoId={arr.id} email={email} nome={arr.nf?.nome || ''} documento="" nf={arr.nf} previsto={viaBoleto} saldo={saldoDevido} onGerado={(g) => registrarAceite(g === 'mp' ? 'mercadopago' : 'asaas')} />
+            )}
+            {meio === 'pix' && (
+              <PagamentoServico
+                servico={{ nome: 'Honorários de êxito', valor: saldoDevido, proposito: 'honorario_exito' }}
+                extra={{ arrematacao_id: arr.id, pagador_nome: arr.nf?.nome || '', honorario_saldo: saldoDevido, nf_ok: !!arr.nf?.completo }}
+                email={email}
+                soPix
+                embutido
+                onPago={handlePago}
+                onCancelar={() => setMeio(null)}
+              />
             )}
             {meio === 'cartao' && (
               <>
@@ -320,7 +332,7 @@ export default function PagarHonorario() {
         )}
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center', fontSize: 10.5, color: '#94a3b8' }}>
-          <ShieldCheck size={12} /> {boletoPeloMp ? 'Boleto e cartão processados pelo Mercado Pago' : 'Boleto processado pelo Asaas · cartão pelo Mercado Pago'}
+          <ShieldCheck size={12} /> {boletoPeloMp ? 'Pix, boleto e cartão processados pelo Mercado Pago' : 'Boleto processado pelo Asaas · Pix e cartão pelo Mercado Pago'}
         </div>
       </div>
     </div>

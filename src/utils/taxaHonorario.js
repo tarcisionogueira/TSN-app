@@ -42,8 +42,9 @@ const REPASSAR_TAXA_DO_MEIO = false;
 export function honorarioComTaxa(saldo, meio) {
   const h = r2(Number(saldo) || 0);
   if (!(h > 0)) return { honorario: 0, taxa: 0, total: 0 };
-  if (!['boleto_mp', 'boleto_asaas', 'cartao_mp', 'cartao_asaas'].includes(meio)) throw new Error(`meio de pagamento desconhecido: ${meio}`);
-  if (!REPASSAR_TAXA_DO_MEIO) return { honorario: h, taxa: 0, total: h };
+  if (!['boleto_mp', 'boleto_asaas', 'cartao_mp', 'cartao_asaas', 'pix_mp'].includes(meio)) throw new Error(`meio de pagamento desconhecido: ${meio}`);
+  // Pix (volta em 07/11): à vista, sem custo para o cliente em qualquer regra.
+  if (!REPASSAR_TAXA_DO_MEIO || meio === 'pix_mp') return { honorario: h, taxa: 0, total: h };
   let total;
   if (meio === 'boleto_asaas') total = r2(h + TAXA_BOLETO_ASAAS);
   else if (meio === 'boleto_mp') total = r2(h + TAXA_BOLETO_MP);

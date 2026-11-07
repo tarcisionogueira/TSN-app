@@ -19,6 +19,26 @@ export const TAXAS_MP_REFERENCIA = Object.freeze({
   1: 0, 2: 9.64, 3: 11.23, 4: 11.36, 5: 14.31, 6: 14.32, 7: 16.72, 8: 16.73, 9: 19.69, 10: 20.65, 11: 20.66, 12: 22.11,
 });
 
+// POLÍTICA DE PARCELAMENTO POR PRODUTO (07/11, dono). A fonte é `regra_negocio` chave
+// 'pagamento.parcelamento_por_produto' (função politica_parcelamento() no banco); este espelho é o que a tela usa e o
+// que o servidor usa se o banco não responder. Mudou lá, mude aqui no mesmo commit.
+//  · mensalidade: recorrente à vista, a BidPro absorve a taxa; no ANUAL, até 12× SEM juros (a BidPro absorve);
+//  · assessoria: R$ 5 mil à vista (Pix ou cartão 1×) ou R$ 6 mil em até 12× SEM juros (a BidPro absorve);
+//  · e-book: à vista · curso: à vista ou até 12× sem juros;
+//  · honorário: à vista (Pix, boleto ou cartão 1×) sem juros; 2–12× com juros ao cliente;
+//  · taxa de serviço de registro de imóvel: à vista sem juros; parcelado com juros ao cliente;
+//  · cobrança avulsa: quem gera escolhe se a BidPro absorve ou repassa (sem padrão).
+export const POLITICA_PARCELAMENTO = Object.freeze({
+  assinatura_mensal: { parcelas_max: 1, sem_juros_ate: 1 },
+  plano_anual: { parcelas_max: 12, sem_juros_ate: 12 },
+  assessoria_vista: { parcelas_max: 1, sem_juros_ate: 1 },
+  assessoria_parcelada: { parcelas_max: 12, sem_juros_ate: 12 },
+  ebook: { parcelas_max: 1, sem_juros_ate: 1 },
+  curso: { parcelas_max: 12, sem_juros_ate: 12 },
+  honorario_exito: { parcelas_max: 12, sem_juros_ate: 1 },
+  registro_imovel: { parcelas_max: 12, sem_juros_ate: 1 },
+});
+
 const centavos = (v) => Math.round(Number(v) * 100) / 100;
 const paraCima = (v) => Math.ceil(Math.round(Number(v) * 1000) / 10) / 100;
 

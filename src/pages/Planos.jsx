@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Check, Shield, Zap, Users, ChevronDown, ChevronUp, ArrowRight, Share2 } from 'lucide-react';
-import { parcelamento } from '../utils/parcelamento';
+import { parcelamento, POLITICA_PARCELAMENTO } from '../utils/parcelamento';
 import { useJurosCartao } from '../utils/jurosCartao';
 import { supabase } from '../utils/supabase';
 import { PLANOS as PLANOS_STATIC } from '../data/cursos';
@@ -236,7 +236,7 @@ export default function Planos() {
 
   // Preço comercial: a PARCELA em DESTAQUE (visão de acessibilidade — mais
   // comercial) e o valor à vista com o % OFF em texto secundário. `mensal` mostra
-  // a parcela como /mês (Leilão Club); senão como 12× (Assessoria). Sem juros até 3×.
+  // a parcela como /mês (Leilão Club); senão como 12× (Assessoria, sem juros desde 07/11).
   const PrecoComercial = ({ planoKey, dark, mensal }) => {
     const p = PLANOS[planoKey] || {};
     const vistaLabel = p.precoVistaLabel || p.precoLabel || '';
@@ -250,14 +250,15 @@ export default function Planos() {
     const corDis = dark ? 'rgba(165,180,252,0.85)' : '#94a3b8';
     const badgeBg = dark ? 'rgba(134,239,172,0.16)' : '#dcfce7';
     const badgeFg = dark ? '#86efac' : '#15803d';
-    // 07/11 (dono): o cliente assume os juros a partir da 2ª parcela — a parcela mostrada já vem com juros.
-    const p12 = parcelamento(cheio, 12, 1, jurosMp);
+    // 07/11 (dono): assessoria em até 12× SEM juros (a BidPro absorve); o resto segue a política de cada produto.
+    const semJuros = /^assessorado/.test(planoKey) ? POLITICA_PARCELAMENTO.assessoria_parcelada.sem_juros_ate : 1;
+    const p12 = parcelamento(cheio, 12, semJuros, jurosMp);
     const parcela = fmtR(mensal ? cheio / 12 : p12.parcela); // mensal = mensalidade recorrente, sem juros
     const destaque = mensal ? parcela : `12× ${parcela}`;
     const linhaMeio = mensal
       ? `total ${cheioLabel} em 12× no cartão ou PIX`
-      : `total ${fmtR(p12.total)} em 12× (juros do cartão) · ${cheioLabel} em 1×`;
-    const linhaVista = `ou ${vistaLabel} à vista no PIX${economia ? ` · economize ${fmtR(economia)}` : ''}`;
+      : p12.comJuros ? `total ${fmtR(p12.total)} em 12× (juros do cartão) · ${cheioLabel} em 1×` : `total ${fmtR(p12.total)} em até 12× sem juros no cartão`;
+    const linhaVista = `ou ${vistaLabel} à vista no PIX ou cartão 1×${economia ? ` · economize ${fmtR(economia)}` : ''}`;
     return (
       <div style={{ marginBottom: 18 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>

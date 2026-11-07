@@ -16,6 +16,7 @@ import { ativarPlanoDireto, suspenderPlanoDireto, ehTrilhaVeiculos } from './_we
 import { planoDaAssinaturaAsaas } from './_recorrencia-unica.js';
 import { createClient } from '@supabase/supabase-js';
 import { preencherDocumentosPendentes } from './_signatario.js';
+import { valorConfereComPreco } from './_gateway-taxas.js';
 
 const MP_TOKEN = (process.env.MP_ACCESS_TOKEN || '').trim();
 
@@ -203,7 +204,8 @@ async function handler(req) {
         }
         const precoA = precosAnuais[planoPago];
         if (!(precoA > 0)) continue;                           // sem preço = não sei → não ativa
-        if (Math.abs((Number(pg.valor) || 0) - precoA) > Math.max(1, precoA * 0.01)) continue;
+        // 07/11: aceita também o anual com juros absorvidos pela BidPro (metadata.valor_base + total pago pelo cliente).
+        if (!valorConfereComPreco(pg.dados_mp || { transaction_amount: pg.valor }, precoA)) continue;
         verificados++;
         const { data: perfil } = await supabase.from('perfis')
           .select('role, plano_ciclo, plano_vencimento, inadimplente_desde, acesso_veiculos_ate').eq('id', uid).maybeSingle();

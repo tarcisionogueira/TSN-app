@@ -71,3 +71,21 @@ export async function registrarTaxaObservada({ gateway, meio, parcelas = 1, ref,
     return false;
   }
 }
+
+/**
+ * O pagamento do MP cobre `preco`? (07/11) Duas formas legítimas:
+ *  · cliente assume os juros → transaction_amount = preço (o MP soma os juros por cima);
+ *  · a BidPro absorve (anual, assessoria parcelada) → o checkout envia preço ÷ (1 + juros) e grava o preço em
+ *    metadata.valor_base; o cliente paga, com os juros do MP, o próprio preço (total_paid_amount).
+ * metadata só é escrito pelo nosso servidor (mp-checkout), nunca pelo pagador.
+ */
+export function valorConfereComPreco(pg, preco) {
+  const p = Number(preco) || 0;
+  if (!(p > 0) || !pg) return false;
+  const tol = Math.max(1, p * 0.01);
+  const ta = Number(pg.transaction_amount) || 0;
+  if (Math.abs(ta - p) <= tol) return true;
+  const base = Number(pg.metadata?.valor_base);
+  const pagoCliente = Number(pg.transaction_details?.total_paid_amount) || 0;
+  return Number.isFinite(base) && Math.abs(base - p) <= tol && pagoCliente >= p - tol;
+}

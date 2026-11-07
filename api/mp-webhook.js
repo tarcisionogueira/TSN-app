@@ -11,6 +11,7 @@ import { cancelarOutrasRecorrencias, assinaturasAsaasAtivas } from './_recorrenc
 import { processarConfirmado, processarVencido, processarRecusado, processarChargeback, processarReembolso, eventoJaProcessado, removerEventoProcessado, registrarPagamentoParaConferir, ativarPlanoDireto, suspenderPlanoDireto, registrarConversaoAnuncio, enviarEmailResgateCancelamento, registrarLiberacaoPagamento, ehTrilhaVeiculos, planoDaReferencia } from './_webhook-core.js';
 import { enviarEmail } from './_email.js';
 import { reverterHonorarioEstornado, reverterCobrancaAvulsaEstornada } from './_honorario-estorno.js';
+import { valorConfereComPreco } from './_gateway-taxas.js';
 import { mpSdk } from './_mp-sdk.js';
 
 // 30 s explícitos (24/09): o SDK do MP pode fazer 1 nova tentativa (12 s cada) — a função não pode
@@ -566,7 +567,7 @@ export async function processarEventoMp(req, res) {
           return res.status(500).json({ error: 'plano_anual_preco_indisponivel' });
         }
         const vAnual = Number(pagamento.transaction_amount) || 0;
-        if (Math.abs(vAnual - precoAnual) > Math.max(1, precoAnual * 0.01)) {
+        if (!valorConfereComPreco(pagamento, precoAnual)) { // 07/11: aceita o anual com juros absorvidos (valor_base)
           return res.status(200).json({ ok: true, ignorado: 'plano_anual_valor_incompativel' });
         }
         if (await eventoJaProcessado({ gateway: 'mercadopago', gatewayPaymentId: String(pagamento.id), evento: 'pix_plano_anual' })) {

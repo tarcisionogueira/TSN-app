@@ -34,7 +34,10 @@ export default async function handler(req, res) {
   // PARCELAMENTO DESTA NEGOCIAÇÃO (07/11, dono): até quantas parcelas e até quantas sem juros. Padrão = 12 parcelas,
   // cliente assume os juros a partir da 2ª (sem juros até 1×). A conta dos juros é a de src/utils/parcelamento.js.
   const pMax = Math.max(1, Math.min(12, Math.floor(Number(parcelas_max) || 12)));
-  const pSemJuros = Math.max(1, Math.min(pMax, Math.floor(Number(parcelas_sem_juros) || 1)));
+  // 07/11 (dono): "ao gerar, perguntar se absorve ou repassa os juros" — parcelado exige a escolha explícita.
+  const juros = req.body?.juros;
+  if (pMax > 1 && !['absorve', 'repassa'].includes(juros)) return res.status(400).json({ error: 'Escolha quem paga os juros do parcelado: o cliente (repassa) ou a BidPro (absorve).' });
+  const pSemJuros = juros === 'absorve' ? Math.max(2, Math.min(pMax, Math.floor(Number(parcelas_sem_juros) || pMax))) : 1;
   const qtd = Math.max(1, Math.min(100, Math.floor(Number(quantidade) || 1)));
   const produto = produto_key ? String(produto_key).replace(/[^a-z0-9_]/gi, '').slice(0, 40) || null : null;
 

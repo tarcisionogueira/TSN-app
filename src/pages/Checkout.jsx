@@ -20,7 +20,7 @@ import { salvarRef } from '../utils/ref';
 import { reportarErroCliente } from '../utils/reportarErro';
 import { versaoTermoProduto, termoDoProduto } from '../utils/termos';
 import PagamentoServico, { obterDeviceId } from '../components/PagamentoServico';
-import { parcelamento } from '../utils/parcelamento';
+import { parcelamento, POLITICA_PARCELAMENTO } from '../utils/parcelamento';
 import { useJurosCartao } from '../utils/jurosCartao';
 import { useCartaoSeguroMP } from '../utils/cartaoSeguroMP';
 import EnderecoAutocomplete from '../components/EnderecoAutocomplete';
@@ -1508,7 +1508,7 @@ export default function Checkout() {
                     {descontoAnualPct > 0 && <span style={{ background: '#d1fae5', color: '#065f46', fontSize: 11, fontWeight: 800, padding: '3px 10px', borderRadius: 20 }}>{descontoAnualPct}% off{mesesGratisAnual > 0 ? ` · ${mesesGratisAnual} meses grátis` : ''}</span>}
                   </div>
                   <div style={{ marginTop: 6, fontSize: 12, color: '#64748b', lineHeight: 1.6 }}>
-                    Total de <strong>{plano?.precoAnualLabel || 'R$ 899,00'}/ano</strong>, em até 12× no cartão ou à vista. Renova automaticamente a cada 12 meses pelo valor vigente. Você pode <strong>cancelar a renovação quando quiser</strong>, o acesso continua até o fim do período já pago.
+                    Total de <strong>{plano?.precoAnualLabel || 'R$ 899,00'}/ano</strong>, em até 12× sem juros no cartão ou à vista. Renova automaticamente a cada 12 meses pelo valor vigente. Você pode <strong>cancelar a renovação quando quiser</strong>, o acesso continua até o fim do período já pago.
                   </div>
                 </>
               )}
@@ -1519,9 +1519,9 @@ export default function Checkout() {
             const fmtR = (v) => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             const preco = Number(plano.preco) || 0;
             const precoVista = Number(plano.precoVista) || 0;
-            // 07/11 (dono): padrão = cliente assume os juros a partir da 2ª parcela; a parcela mostrada já vem com juros,
-            // pela mesma conta que o pagamento usa (src/utils/parcelamento.js).
-            const p12 = parcelamento(preco, 12, 1, jurosMp);
+            // 07/11 (dono): assessoria parcelada em até 12× SEM juros (a BidPro absorve, src/utils/parcelamento.js
+            // POLITICA_PARCELAMENTO); à vista só Pix ou cartão 1×.
+            const p12 = parcelamento(preco, 12, POLITICA_PARCELAMENTO.assessoria_parcelada.sem_juros_ate, jurosMp);
             const parcela = p12.parcela;
             const economia = preco - precoVista;
             return (
@@ -1543,7 +1543,7 @@ export default function Checkout() {
                       <strong style={{ color: '#111111', fontSize: 32 }}>12× {fmtR(parcela)}</strong>
                     </div>
                     <div style={{ marginTop: 6, fontSize: 13, color: '#64748b', lineHeight: 1.6 }}>
-                      Total {fmtR(p12.total)} em 12× no cartão, com juros do cartão. Em 1× no cartão: {fmtR(preco)}.
+                      Total {fmtR(p12.total)} em até 12× sem juros no cartão. À vista sai {fmtR(precoVista)} no Pix ou no cartão em 1×.
                     </div>
                   </>
                 )}
@@ -1800,10 +1800,9 @@ export default function Checkout() {
                   proposito: 'plano_anual',
                 }}
                 parcelasMax={12}
-                // 07/11: o servidor envia o preço anual em qualquer nº de parcelas, mas os JUROS do parcelado o próprio
-                // Mercado Pago soma na fatura (payer_costs da conta: 12× = +22,11%). A tela dizia "sem juros" e o
-                // cliente pagava com juros — agora mostra o real. Absorver de verdade é decisão do dono (custo ≈ 22% no 12×).
-                parcelasSemJuros={1}
+                // 07/11 (dono): no anual a BidPro ABSORVE os juros — até 12× sem juros. O servidor envia preço ÷ (1 + juros
+                // do MP para o cartão) e a ativação confere pelo valor_base (api/_gateway-taxas.js valorConfereComPreco).
+                parcelasSemJuros={12}
                 // O PLANO vai no pagamento: o servidor tira dele o preço e o webhook/reconciliação/garantia sabem
                 // se foi Pro, Veículos ou Combo.
                 extra={{ plano: planoKey }}
@@ -1825,8 +1824,9 @@ export default function Checkout() {
                 proposito: 'assessoria',
               }}
               assinatura={false}
-              // 07/11 (dono): o cliente assume os juros a partir da 2ª parcela (padrão do componente) — a tela de preço já
-              // mostra a parcela com juros, pela mesma conta (src/utils/parcelamento.js).
+              // 07/11 (dono): à vista = só 1× no cartão (ou Pix); parcelado = até 12× sem juros (a BidPro absorve).
+              parcelasMax={modalidade === 'vista' ? POLITICA_PARCELAMENTO.assessoria_vista.parcelas_max : POLITICA_PARCELAMENTO.assessoria_parcelada.parcelas_max}
+              parcelasSemJuros={modalidade === 'vista' ? 1 : POLITICA_PARCELAMENTO.assessoria_parcelada.sem_juros_ate}
               onPago={() => confirmarPagamento()}
               onCancelar={() => setShowPagamento(false)}
               // 18/09 (HANDOFF pendência #1): recusa real do MP aqui não caía pro Asaas —
