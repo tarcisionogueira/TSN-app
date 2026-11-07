@@ -296,6 +296,10 @@
       "schedule": "* * * * *"
     },
     {
+      "path": "/api/inter-cobrancas-cron",
+      "schedule": "*/10 * * * *"
+    },
+    {
       "path": "/api/cancelar-nao-pagos-cron",
       "schedule": "0 */6 * * *"
     },

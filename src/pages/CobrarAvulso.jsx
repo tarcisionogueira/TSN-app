@@ -4,6 +4,7 @@ import { CheckCircle2, Loader2, AlertCircle, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import PagamentoServico from '../components/PagamentoServico';
 import BoletoMp from '../components/BoletoMp';
+import PixBoletoInter from '../components/PixBoletoInter';
 import TermoAceiteCobranca from '../components/TermoAceiteCobranca';
 import { AZUL, VERDE } from '../utils/marca';
 
@@ -21,7 +22,8 @@ export default function CobrarAvulso() {
   const [carregando, setCarregando] = useState(true);
   const [pago, setPago] = useState(false);
   const [email, setEmail] = useState('');
-  const [viaBoleto, setViaBoleto] = useState(false);
+  // 'inter' (Pix/boleto do Banco Inter, padrão) · 'cartao' (Mercado Pago) · 'mp' (reserva: Pix/boleto do MP).
+  const [forma, setForma] = useState('inter');
   const [termoAceito, setTermoAceito] = useState(false);
 
   useEffect(() => {
@@ -169,37 +171,57 @@ export default function CobrarAvulso() {
         ) : (
           <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 16 }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: '#334155', marginBottom: 12 }}>{cob.meio === 'boleto' ? 'Pagamento por boleto' : 'Como você quer pagar?'}</div>
-            {/* BOLETO (07/10): cobrança marcada 'boleto' (serviços de cartório) só tem boleto; as demais
-                ganham o boleto como opção ao lado de Pix e cartão. Sem Pix parcial pago antes — o boleto
-                cobra o valor cheio. */}
-            {cob.meio !== 'boleto' && !(cob.valor_pago_pix > 0) && (
+            {/* ORDEM DOS MEIOS (07/11, dono): Pix e boleto vão ao Banco Inter (cai na conta na hora, tarifa mínima);
+                cartão vai ao Mercado Pago (com o Asaas de reserva dentro do próprio fluxo do cartão). O Pix/boleto do
+                Mercado Pago só aparece se o Inter não emitir. Cobrança de cartório (meio='boleto') não tem cartão. */}
+            {cob.meio !== 'boleto' && forma !== 'mp' && (
               <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
-                {[[false, 'Pix ou cartão'], [true, 'Boleto']].map(([v, l]) => (
-                  <button key={l} onClick={() => setViaBoleto(v)}
-                    style={{ flex: 1, minWidth: 0, padding: '8px', borderRadius: 8, border: `1px solid ${viaBoleto === v ? AZUL : '#e2e8f0'}`, background: viaBoleto === v ? AZUL : 'white', color: viaBoleto === v ? 'white' : '#475569', fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}>{l}</button>
+                {[['inter', 'Pix ou boleto'], ['cartao', 'Cartão de crédito']].map(([v, l]) => (
+                  <button key={v} onClick={() => setForma(v)}
+                    style={{ flex: 1, minWidth: 0, padding: '8px', borderRadius: 8, border: `1px solid ${forma === v ? AZUL : '#e2e8f0'}`, background: forma === v ? AZUL : 'white', color: forma === v ? 'white' : '#475569', fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}>{l}</button>
                 ))}
               </div>
             )}
-            {(cob.meio === 'boleto' || viaBoleto) ? (
+            {forma === 'inter' && (
+              <PixBoletoInter cobrancaId={cob.id} email={email} nomeSugerido={cob.nome_sugerido || ''} valor={cob.saldo_restante ?? cob.valor}
+                onPago={() => setPago(true)} onFalha={() => setForma('mp')} />
+            )}
+            {forma === 'mp' && (cob.meio === 'boleto' ? (
               <BoletoMp cobrancaId={cob.id} email={email} nomeSugerido={cob.nome_sugerido || ''} valor={cob.saldo_restante ?? cob.valor} />
             ) : (
-            <PagamentoServico
-              servico={{ nome: cob.descricao, valor: cob.saldo_restante ?? cob.valor, proposito: 'cobranca_avulsa' }}
-              extra={{ cobranca_id: cob.id }}
-              email={email}
-              parcelasSemJuros={cob.parcelas_sem_juros || 1}
-              embutido
-              onPago={() => setPago(true)}
-              permitirSplit
-              recarregarSaldo={recarregarSaldo}
-            />
+              <PagamentoServico
+                servico={{ nome: cob.descricao, valor: cob.saldo_restante ?? cob.valor, proposito: 'cobranca_avulsa' }}
+                extra={{ cobranca_id: cob.id }}
+                email={email}
+                parcelasSemJuros={cob.parcelas_sem_juros || 1}
+                embutido
+                onPago={() => setPago(true)}
+                permitirSplit
+                recarregarSaldo={recarregarSaldo}
+              />
+            ))}
+            {forma === 'cartao' && (
+              <PagamentoServico
+                servico={{ nome: cob.descricao, valor: cob.saldo_restante ?? cob.valor, proposito: 'cobranca_avulsa' }}
+                extra={{ cobranca_id: cob.id }}
+                email={email}
+                parcelasSemJuros={cob.parcelas_sem_juros || 1}
+                embutido
+                soCartao
+                onPago={() => setPago(true)}
+              />
+            )}
+            {forma === 'mp' && cob.meio !== 'boleto' && (
+              <button onClick={() => setForma('inter')} style={{ marginTop: 10, background: 'none', border: 'none', color: AZUL, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', padding: 0 }}>
+                ← Voltar ao Pix/boleto do Banco Inter
+              </button>
             )}
           </div>
         )}
         </>)}
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center', fontSize: 10.5, color: '#94a3b8' }}>
-          <ShieldCheck size={12} /> Pagamento processado pelo Mercado Pago
+          <ShieldCheck size={12} /> {forma === 'inter' ? 'Pix e boleto emitidos pelo Banco Inter' : 'Pagamento processado pelo Mercado Pago'}
         </div>
       </div>
     </div>
