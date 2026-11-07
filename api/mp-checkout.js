@@ -222,7 +222,7 @@ export default async function handler(req, res) {
     if (!cobranca_id) return res.status(400).json({ error: 'cobranca_id obrigatório' });
     const SB_URL = process.env.VITE_SUPABASE_URL, SB_KEY = process.env.SUPABASE_SERVICE_KEY;
     try {
-      const r = await fetch(`${SB_URL}/rest/v1/cobrancas_avulsas?id=eq.${encodeURIComponent(cobranca_id)}&select=id,descricao,valor,valor_pago_pix,status,meio,termo_texto,termo_aceito_em,termo_aceite`, {
+      const r = await fetch(`${SB_URL}/rest/v1/cobrancas_avulsas?id=eq.${encodeURIComponent(cobranca_id)}&select=id,descricao,valor,valor_pago_pix,status,meio,termo_texto,termo_aceito_em,termo_aceite,dados_nf`, {
         headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` }, signal: AbortSignal.timeout(10000),
       });
       const [cob] = r.ok ? await r.json().catch(() => []) : [];
@@ -251,7 +251,7 @@ export default async function handler(req, res) {
         valor = saldo;
       }
       descricao = String(cob.descricao || 'Cobrança avulsa — BidPro Brasil').slice(0, 250);
-      cobrancaCtx = { cobrancaId: cob.id, boleto: ehBoletoAvulso, aceite: cob.termo_aceite || null };
+      cobrancaCtx = { cobrancaId: cob.id, boleto: ehBoletoAvulso, aceite: cob.termo_aceite || null, nf: cob.dados_nf || null };
     } catch (e) {
       console.error('[mp-checkout] cobranca_avulsa: gate falhou', e?.message || e);
       return res.status(503).json({ error: 'Não consegui validar esta cobrança agora. Tente em instantes.' });
@@ -431,6 +431,22 @@ export default async function handler(req, res) {
   // 07/11: COBRANÇA AVULSA NO CARTÃO também. Pelo link, sem conta logada, o MP recebia só o e-mail — e o antifraude
   // recusa valor alto sem documento (William, assessoria R$ 8.000). Ordem: titular do cartão (a tela agora pede) →
   // quem aceitou o termo (cpf, nome, telefone, CEP gravados no aceite) → nada a mais.
+  // Dados da NOTA FISCAL (07/11) vêm antes do termo: são completos (endereço inteiro) e foram confirmados na tela.
+  if (cobrancaCtx && !payerExtra.identification && cobrancaCtx.nf) {
+    const nf = cobrancaCtx.nf;
+    const docNf = validarDocumento(nf.doc);
+    const partesNf = String(nf.nome || '').trim().split(/\s+/).filter(Boolean).slice(0, 12);
+    if (docNf) {
+      payerExtra = {
+        ...payerExtra,
+        identification: { type: docNf.tipo, number: docNf.numero }, _cpfPerfil: docNf.numero,
+        ...(partesNf.length ? { first_name: partesNf[0].slice(0, 60), last_name: (partesNf.slice(1).join(' ') || partesNf[0]).slice(0, 120) } : {}),
+      };
+      if (String(nf.cep || '').length === 8) {
+        payerExtra._info = { ...(payerExtra._info || {}), address: { zip_code: nf.cep, street_name: nf.logradouro || undefined, street_number: nf.numero || undefined } };
+      }
+    }
+  }
   if (cobrancaCtx && !payerExtra.identification && cobrancaCtx.aceite) {
     const ac = cobrancaCtx.aceite;
     const cpfAc = String(ac.cpf || '').replace(/\D/g, '');

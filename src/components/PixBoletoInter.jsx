@@ -29,7 +29,7 @@ function QrPix({ texto }) {
  * banco a cada 8 s; quem dá a baixa é o servidor, com a confirmação do próprio Inter.
  * `onFalha` leva à reserva (Pix/boleto do Mercado Pago) quando o Inter não emite.
  */
-export default function PixBoletoInter({ cobrancaId, email, nomeSugerido = '', valor, onPago, onFalha }) {
+export default function PixBoletoInter({ cobrancaId, email, nomeSugerido = '', valor, onPago, onFalha, dadosProntos = false }) {
   const [doc, setDoc] = useState('');
   const [nome, setNome] = useState(nomeSugerido || '');
   const [end, setEnd] = useState({ cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', uf: '' });
@@ -79,10 +79,11 @@ export default function PixBoletoInter({ cobrancaId, email, nomeSugerido = '', v
     && end.cep && end.logradouro && end.numero && end.bairro && end.cidade && /^[A-Za-z]{2}$/.test(end.uf);
 
   const gerar = async () => {
-    if (!pronto) { setErro('Preencha CPF/CNPJ, nome e o endereço completo de quem paga (o banco exige para emitir).'); return; }
+    if (!pronto && !dadosProntos) { setErro('Preencha CPF/CNPJ, nome e o endereço completo de quem paga (o banco exige para emitir).'); return; }
     setEnviando(true); setErro(''); setFalhaInter(false);
     try {
-      setCob(await chamar({ acao: 'emitir', cobranca_id: cobrancaId, email, pagador: { doc: docLimpo, nome: nome.trim(), endereco: end } }));
+      // Com os dados da nota já completos na cobrança, o servidor usa eles (pagador vazio daqui).
+      setCob(await chamar({ acao: 'emitir', cobranca_id: cobrancaId, email, pagador: dadosProntos ? {} : { doc: docLimpo, nome: nome.trim(), endereco: end } }));
     } catch (e) {
       setErro(e.message || 'Não foi possível gerar agora.');
       setFalhaInter(!!e.falhaInter);
@@ -138,6 +139,26 @@ export default function PixBoletoInter({ cobrancaId, email, nomeSugerido = '', v
           </div>
         </>)}
         <style>{'@keyframes spin{to{transform:rotate(360deg);}}'}</style>
+      </div>
+    );
+  }
+
+  if (dadosProntos) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ fontSize: 12.5, color: '#475569', lineHeight: 1.5 }}>
+          Geramos um <strong>Pix</strong> (cai na hora) e um <strong>boleto</strong> do Banco Inter para <strong>{fmtBRL(valor)}</strong>, em nome de quem está na nota fiscal acima.
+        </div>
+        {erro && <div role="alert" style={{ fontSize: 12.5, color: '#b91c1c', fontWeight: 600 }}>{erro}</div>}
+        <button onClick={gerar} disabled={enviando}
+          style={{ padding: 13, background: AZUL, color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 14.5, cursor: enviando ? 'default' : 'pointer', opacity: enviando ? 0.7 : 1 }}>
+          {enviando ? 'Gerando…' : 'Gerar Pix e boleto'}
+        </button>
+        {falhaInter && onFalha && (
+          <button onClick={onFalha} style={{ padding: 11, background: 'white', color: AZUL, border: `1px solid ${AZUL}`, borderRadius: 10, fontWeight: 700, fontSize: 13.5, cursor: 'pointer' }}>
+            Pagar o Pix pelo Mercado Pago
+          </button>
+        )}
       </div>
     );
   }

@@ -15,6 +15,7 @@
  *    consultando ao mesmo tempo aplicam UMA vez.
  */
 import { inter, interConfigurado } from './_inter.js';
+import { completo, comoPagadorInter } from './_dados-nf.js';
 
 const SB_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -100,7 +101,7 @@ export function lerConsulta(d = {}) {
 
 // Saldo devido agora, sempre do banco.
 export async function saldoDaCobranca(cobrancaId) {
-  const [cob] = await ler(`cobrancas_avulsas?id=eq.${encodeURIComponent(cobrancaId)}&select=id,descricao,valor,valor_pago_pix,status,meio,termo_texto,termo_aceito_em,gateway_payment_id&limit=1`);
+  const [cob] = await ler(`cobrancas_avulsas?id=eq.${encodeURIComponent(cobrancaId)}&select=id,descricao,valor,valor_pago_pix,status,meio,termo_texto,termo_aceito_em,gateway_payment_id,dados_nf&limit=1`);
   if (!cob) return { erro: 'Cobrança não encontrada.', http: 404 };
   if (cob.status !== 'aberta') return { erro: 'Esta cobrança já foi paga ou cancelada.', http: 409, cob };
   if (cob.termo_texto && !cob.termo_aceito_em) return { erro: 'Leia e aceite o termo antes de pagar.', http: 409, cob };
@@ -126,7 +127,7 @@ export const visao = (l) => l && ({
  * Emite (ou reaproveita) a cobrança do Inter para o saldo atual da cobrança avulsa.
  * Reaproveita a última emissão viva do MESMO valor ainda no prazo — clicar duas vezes não gera dois boletos.
  */
-export async function emitir({ cobrancaId, pagador, email }) {
+export async function emitir({ cobrancaId, pagador: pagadorTela, email: emailTela }) {
   if (!interConfigurado()) return { erro: 'Pix e boleto pelo Inter indisponíveis no momento.', http: 503, semInter: true };
   const s = await saldoDaCobranca(cobrancaId);
   if (s.erro) return s;
@@ -138,6 +139,10 @@ export async function emitir({ cobrancaId, pagador, email }) {
     return { linha: (await atualizar(viva)).linha || viva };
   }
 
+  // 07/11: com os dados da NOTA FISCAL já completos na cobrança, o Inter usa eles — a tela não pede de novo.
+  const nfOk = completo(cob.dados_nf);
+  const pagador = validarPagador(pagadorTela).length && nfOk ? comoPagadorInter(cob.dados_nf) : pagadorTela;
+  const email = emailTela || (nfOk ? cob.dados_nf.email : '');
   const faltas = validarPagador(pagador);
   if (faltas.length) return { erro: `Preencha: ${faltas.join(', ')}.`, http: 400 };
 

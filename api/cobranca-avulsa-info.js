@@ -8,6 +8,7 @@
 export const config = { runtime: 'edge' };
 
 import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
+import { visaoPublica, aPartirDoAceite } from './_dados-nf.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SVC = process.env.SUPABASE_SERVICE_KEY;
@@ -24,7 +25,7 @@ export default async function handler(req) {
   const id = new URL(req.url).searchParams.get('id') || '';
   if (!UUID_RE.test(id)) return new Response(JSON.stringify({ error: 'id inválido' }), { status: 400 });
 
-  const r = await fetch(`${SUPABASE_URL}/rest/v1/cobrancas_avulsas?id=eq.${encodeURIComponent(id)}&select=id,descricao,valor,valor_pago_pix,status,destinatario_email,destinatario_nome,meio,parcelas_sem_juros,termo_titulo,termo_texto,termo_aceito_em,subtitulo`, {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/cobrancas_avulsas?id=eq.${encodeURIComponent(id)}&select=id,descricao,valor,valor_pago_pix,status,destinatario_email,destinatario_nome,meio,parcelas_sem_juros,termo_titulo,termo_texto,termo_aceito_em,termo_aceite,dados_nf,subtitulo`, {
     headers: { apikey: SVC, Authorization: `Bearer ${SVC}` }, signal: AbortSignal.timeout(10000),
   });
   const [cob] = r.ok ? await r.json().catch(() => []) : [];
@@ -50,5 +51,8 @@ export default async function handler(req) {
     parcelas_sem_juros: Number(cob.parcelas_sem_juros) || 1,
     subtitulo: cob.subtitulo || null, // faixa de destaque no topo (layout do fechamento tradicional)
     termo: cob.termo_texto ? { titulo: cob.termo_titulo || 'Termo de contratação', texto: cob.termo_texto, aceito: !!cob.termo_aceito_em } : null,
+    // 07/11: dados para a nota fiscal. Completos → a tela vai direto ao pagamento; faltando → pede só o que falta.
+    // Sem dados_nf ainda, parte do que a pessoa informou ao aceitar o termo. Documento só mascarado.
+    nf: visaoPublica(cob.dados_nf || (cob.termo_aceito_em ? aPartirDoAceite(cob.termo_aceite) : null)),
   }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 }

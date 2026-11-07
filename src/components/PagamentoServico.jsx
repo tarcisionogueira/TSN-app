@@ -467,7 +467,8 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
       return;
     }
     const docTitular = String(form.cpf || '').replace(/\D/g, '');
-    if (pedeCpfTitular && ![11, 14].includes(docTitular.length)) {
+    // Com os dados da nota fiscal já completos na cobrança (extra.nf_ok), em branco = o titular é quem está na nota.
+    if (pedeCpfTitular && !(extra.nf_ok && !docTitular) && ![11, 14].includes(docTitular.length)) {
       setErro('Informe o CPF ou CNPJ do titular do cartão — o banco usa para aprovar a compra.');
       return;
     }
@@ -551,7 +552,7 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
           email,
           metodoPagamento: 'credit_card',
           dadosCartao: { token: token.id, parcelas, metodoPagamentoId },
-          ...(pedeCpfTitular ? { pagador_doc: docTitular, pagador_nome: form.nome.trim() } : {}),
+          ...(pedeCpfTitular && docTitular ? { pagador_doc: docTitular, pagador_nome: form.nome.trim() } : {}),
           deviceId,
           // Marca a INTENÇÃO (recarga vs. serviço) para o confirmador correto aceitar.
           proposito: servico.proposito || 'servico',
@@ -702,7 +703,7 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
       </div>
       {pedeCpfTitular && (
         <div>
-          <label style={lbl}>CPF ou CNPJ do titular do cartão</label>
+          <label style={lbl}>CPF ou CNPJ do titular do cartão{extra.nf_ok ? ' (em branco = o mesmo da nota fiscal)' : ''}</label>
           <input style={inp} placeholder="000.000.000-00" inputMode="numeric" name="cpf_titular"
             value={form.cpf} onChange={e => setForm(p => ({ ...p, cpf: mascaraCpfCnpj(e.target.value) }))} />
         </div>

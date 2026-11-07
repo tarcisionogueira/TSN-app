@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import PagamentoServico from '../components/PagamentoServico';
 import BoletoMp from '../components/BoletoMp';
 import PixBoletoInter from '../components/PixBoletoInter';
+import DadosNotaFiscal from '../components/DadosNotaFiscal';
 import TermoAceiteCobranca from '../components/TermoAceiteCobranca';
 import { AZUL, VERDE } from '../utils/marca';
 
@@ -41,6 +42,7 @@ export default function CobrarAvulso() {
         setCob(data);
         // Pré-preenche com o e-mail do destinatário informado pelo admin ao criar a
         // cobrança, se houver — continua editável (repasse a outra pessoa pagar).
+        if (data.nf?.email) setEmail(e => e || data.nf.email);
         if (data.email_sugerido) setEmail(e => e || data.email_sugerido);
         setCarregando(false);
       } catch (e) {
@@ -149,26 +151,23 @@ export default function CobrarAvulso() {
 
         {/* TERMO DE ACEITE (05/11): cobrança com termo só mostra o pagamento depois do aceite registrado no servidor. */}
         {cob.termo && !cob.termo.aceito && !termoAceito ? (
-          <TermoAceiteCobranca cobrancaId={cob.id} termo={cob.termo} onAceito={(em) => { setEmail(em); setTermoAceito(true); }} />
+          <TermoAceiteCobranca cobrancaId={cob.id} termo={cob.termo} onAceito={(em) => {
+            setEmail(em); setTermoAceito(true);
+            // Relê a cobrança: os dados da nota partem do que a pessoa acabou de informar no aceite.
+            recarregarSaldo().catch((e) => console.error('[CobrarAvulso] recarregar após aceite', e?.message));
+          }} />
         ) : (<>
         {cob.termo && (
           <div style={{ fontSize: 12, color: '#166534', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '8px 10px', textAlign: 'center' }}>
             ✓ Termo aceito. Agora é só concluir o pagamento{cob.parcelas_sem_juros > 1 ? ` — em até ${cob.parcelas_sem_juros}x sem juros no cartão` : ''}.
           </div>
         )}
-        <div>
-          <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-            E-mail de quem está pagando
-          </label>
-          <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="seuemail@exemplo.com"
-            style={{ width: '100%', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }} />
-        </div>
+        {/* DADOS DA NOTA FISCAL (07/11, dono): completos → resumo e o pagamento aparece direto; faltando → a pessoa
+            completa antes. O e-mail da nota é o e-mail do pagamento. */}
+        <DadosNotaFiscal key={cob.nf?.completo ? 'ok' : 'falta'} cobrancaId={cob.id} nf={cob.nf} emailSugerido={email} nomeSugerido={cob.nome_sugerido || ''}
+          onSalvo={(nf) => { setCob((c) => ({ ...c, nf })); if (nf?.email) setEmail(nf.email); }} />
 
-        {!/\S+@\S+\.\S+/.test(email) ? (
-          <div style={{ textAlign: 'center', fontSize: 12, color: '#94a3b8', padding: '8px 0' }}>
-            Informe um e-mail válido para continuar com o pagamento.
-          </div>
-        ) : (
+        {!cob.nf?.completo ? null : (
           <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 16 }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: '#334155', marginBottom: 12 }}>{cob.meio === 'boleto' ? 'Pagamento por boleto' : 'Como você quer pagar?'}</div>
             {/* ORDEM DOS MEIOS (07/11, dono): Pix e boleto vão ao Banco Inter (cai na conta na hora, tarifa mínima);
@@ -184,6 +183,7 @@ export default function CobrarAvulso() {
             )}
             {forma === 'inter' && (
               <PixBoletoInter cobrancaId={cob.id} email={email} nomeSugerido={cob.nome_sugerido || ''} valor={cob.saldo_restante ?? cob.valor}
+                dadosProntos={!!cob.nf?.completo}
                 onPago={() => setPago(true)} onFalha={() => setForma('mp')} />
             )}
             {forma === 'mp' && (cob.meio === 'boleto' ? (
@@ -191,7 +191,7 @@ export default function CobrarAvulso() {
             ) : (
               <PagamentoServico
                 servico={{ nome: cob.descricao, valor: cob.saldo_restante ?? cob.valor, proposito: 'cobranca_avulsa' }}
-                extra={{ cobranca_id: cob.id }}
+                extra={{ cobranca_id: cob.id, nf_ok: !!cob.nf?.completo }}
                 email={email}
                 parcelasSemJuros={cob.parcelas_sem_juros || 1}
                 embutido
@@ -203,7 +203,7 @@ export default function CobrarAvulso() {
             {forma === 'cartao' && (
               <PagamentoServico
                 servico={{ nome: cob.descricao, valor: cob.saldo_restante ?? cob.valor, proposito: 'cobranca_avulsa' }}
-                extra={{ cobranca_id: cob.id }}
+                extra={{ cobranca_id: cob.id, nf_ok: !!cob.nf?.completo }}
                 email={email}
                 parcelasSemJuros={cob.parcelas_sem_juros || 1}
                 embutido
