@@ -380,7 +380,12 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
   const email = emailProp || user?.email;
   const [parcelas, setParcelas] = useState(1);
   // Número/validade/CVV são Secure Fields do MP (24/09) — só o nome no cartão fica em estado nosso.
-  const [form, setForm] = useState({ nome: '' });
+  const [form, setForm] = useState({ nome: '', cpf: '' });
+  const [ofertaReserva, setOfertaReserva] = useState(false);
+  // 07/11 (William, assessoria R$ 8.000 parcelada): em cobrança avulsa e honorário o pagamento costuma vir pelo
+  // link, sem conta logada — o Mercado Pago recebia só o e-mail do pagador, e o antifraude recusa valor alto sem
+  // documento. O CPF/CNPJ do TITULAR vai no token do cartão e no `payer` (quem paga pode não ser o cliente).
+  const pedeCpfTitular = !assinatura && !!(extra.cobranca_id || extra.arrematacao_id);
   const cartao = useCartaoSeguroMP(true, `svc${useId().replace(/:/g, '')}`);
   const [processando, setProcessando] = useState(false);
   const [erro, setErro] = useState('');
@@ -461,12 +466,17 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
       setErro('Chave pública MP não configurada (VITE_MP_PUBLIC_KEY).');
       return;
     }
+    const docTitular = String(form.cpf || '').replace(/\D/g, '');
+    if (pedeCpfTitular && ![11, 14].includes(docTitular.length)) {
+      setErro('Informe o CPF ou CNPJ do titular do cartão — o banco usa para aprovar a compra.');
+      return;
+    }
     setProcessando(true);
     try {
       // Secure Fields (24/09): o token sai dos campos do MP montados no formulário — o número do
       // cartão não passa pelo nosso código. Bloqueio do SDK chega aqui com `sdkBloqueado`,
       // exatamente como antes (cai no Asaas quando o fluxo permite).
-      const token = await cartao.tokenizar({ cardholderName: form.nome.trim() });
+      const token = await cartao.tokenizar({ cardholderName: form.nome.trim(), cpf: docTitular });
       const deviceId = await obterDeviceId();
 
       // ── Assinatura recorrente transparente (preapproval) ──────────────────
@@ -541,6 +551,7 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
           email,
           metodoPagamento: 'credit_card',
           dadosCartao: { token: token.id, parcelas, metodoPagamentoId },
+          ...(pedeCpfTitular ? { pagador_doc: docTitular, pagador_nome: form.nome.trim() } : {}),
           deviceId,
           // Marca a INTENÇÃO (recarga vs. serviço) para o confirmador correto aceitar.
           proposito: servico.proposito || 'servico',
@@ -581,7 +592,22 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
         setErro('Pagamento em análise. Aguarde...');
         return;
       }
-      setErro('Pagamento não aprovado. Verifique os dados ou tente outro cartão.');
+      // 07/11: o motivo do banco muda o que a pessoa deve fazer — em valor alto o mais comum é o banco pedir
+      // autorização por telefone, e isso se resolve em minutos, sem trocar de cartão nem de meio de pagamento.
+      const MOTIVOS = {
+        cc_rejected_call_for_authorize: 'O banco do cartão pediu sua autorização para este valor. Ligue para o número no verso do cartão, autorize a compra e tente de novo aqui.',
+        cc_rejected_insufficient_amount: 'O cartão não tem limite disponível para este valor. Tente outro cartão ou peça aumento de limite ao banco.',
+        cc_rejected_bad_filled_security_code: 'O código de segurança (CVV) não confere. Confira e tente de novo.',
+        cc_rejected_bad_filled_date: 'A validade do cartão não confere. Confira e tente de novo.',
+        cc_rejected_bad_filled_card_number: 'O número do cartão não confere. Confira e tente de novo.',
+        cc_rejected_bad_filled_other: 'Algum dado do cartão não confere (nome, CPF ou número). Confira e tente de novo.',
+        cc_rejected_high_risk: 'A análise de segurança do Mercado Pago não aprovou esta compra. Tente outro cartão ou pague por Pix.',
+        cc_rejected_blacklist: 'Este cartão não pode ser usado. Tente outro cartão ou pague por Pix.',
+        cc_rejected_card_disabled: 'O cartão está bloqueado para compras. Ligue para o banco para ativar ou use outro cartão.',
+        cc_rejected_max_attempts: 'Foram muitas tentativas com este cartão. Aguarde alguns minutos ou use outro cartão.',
+        cc_rejected_duplicated_payment: 'Já existe um pagamento igual em análise. Aguarde alguns minutos antes de tentar de novo.',
+      };
+      setErro(MOTIVOS[data?.statusDetalhe] || 'O banco do cartão não aprovou. Confira os dados ou tente outro cartão.');
       // 18/09 (HANDOFF pendência #1): recusa real no pagamento AVULSO com cartão embutido
       // (ex.: assessoria à vista/parcelado — `assinatura=false`) tinha o mesmo beco sem saída
       // do preapproval: sem `arrematacao_id`/`cobranca_id` (que só honorário/cobrança avulsa
@@ -589,8 +615,10 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
       // chamador passa `onGatewayBloqueado` (Checkout.jsx faz isso pra assessoria, mesma
       // função `pagarAsaas` já usada pra assinatura), usa o MESMO caminho — troca de gateway
       // com os dados que o Checkout já tem, sem pedir CPF/endereço de novo aqui.
+      // 07/11 (dono): a troca para o Asaas deixou de ser AUTOMÁTICA — o cartão lá leva ~30 dias para cair.
+      // A pessoa vê a recusa, pode tentar outro cartão no Mercado Pago e só vai ao Asaas se escolher.
       if (propositoFallback) setMostrarAsaas(true);
-      else if (onGatewayBloqueado) onGatewayBloqueado();
+      else if (onGatewayBloqueado) setOfertaReserva(true);
     } catch (e) {
       // Achado 04/09: mesma classe de falha do assinarComCadastro (Checkout.jsx) - SDK barrado
       // ou createCardToken bloqueado (adblock/privacidade) -, so que aqui a assinatura nao tem
@@ -612,7 +640,10 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
         : (m || 'Erro ao processar pagamento.'));
       // Recusa real (não bloqueio de SDK) num fluxo com fallback Asaas disponível — oferece
       // na hora, sem precisar de alguém gerar um link à parte manualmente.
-      if (!bloqueado && propositoFallback && e?.codigoMp !== '3028') setMostrarAsaas(true);
+      // 07/11 (dono: "isso não pode ficar acontecendo" — Marcos em 17/09, William em 07/11): ERRO aqui é o
+      // Mercado Pago recusando o PEDIDO (dado nosso errado, bandeira, rede), não o banco recusando o cartão.
+      // Mandar ao Asaas escondia o defeito e custava ~30 dias de recebimento. Agora o Asaas só aparece na recusa
+      // do BANCO (status 'rejected', ramo "Pagamento não aprovado" acima); o erro vai para a equipe pelo servidor.
     } finally {
       setProcessando(false);
     }
@@ -669,6 +700,13 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
         <input style={inp} placeholder="COMO ESTÁ NO CARTÃO" name="nome"
           value={form.nome} onChange={e => setForm(p => ({ ...p, nome: e.target.value.toUpperCase() }))} />
       </div>
+      {pedeCpfTitular && (
+        <div>
+          <label style={lbl}>CPF ou CNPJ do titular do cartão</label>
+          <input style={inp} placeholder="000.000.000-00" inputMode="numeric" name="cpf_titular"
+            value={form.cpf} onChange={e => setForm(p => ({ ...p, cpf: mascaraCpfCnpj(e.target.value) }))} />
+        </div>
+      )}
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 12 }}>
         <div>
           <label style={lbl}>Validade</label>
@@ -690,6 +728,15 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
         </div>
       )}
 
+      {ofertaReserva && onGatewayBloqueado && (
+        <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '12px 14px', fontSize: 12.5, color: '#1e40af', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div>O banco do cartão não aprovou pelo Mercado Pago. Tente outro cartão acima ou, se preferir, continue pelo Asaas (o pagamento é o mesmo).</div>
+          <button onClick={() => { setOfertaReserva(false); onGatewayBloqueado(); }}
+            style={{ padding: '9px', background: 'white', color: '#1e40af', border: '1px solid #93c5fd', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}>
+            Continuar pelo Asaas
+          </button>
+        </div>
+      )}
       {/* Fallback Asaas — cartão recusado no MP, mesma tela oferece continuar pelo backup
           (18/09, pedido do dono: transparente, sem precisar gerar um segundo link). */}
       {mostrarAsaas && !linkAsaasGerado && (

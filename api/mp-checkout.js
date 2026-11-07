@@ -15,6 +15,7 @@ import { cpfDoRegistro, validarCPF, validarDocumento } from './_cpf.js';
 import { mpSdk } from './_mp-sdk.js';
 import { DIAS_BOLETO, vencimentoBoleto } from './_boleto-vencimento.js';
 import { pedidoRepetido, CORPO_REPETIDO } from './_pedido-unico.js';
+import { alertarErro } from './_error-alert.js';
 
 // 30 s explícitos (24/09): o SDK do MP pode fazer 1 nova tentativa (12 s cada) — a função não pode
 // morrer no meio de uma cobrança.
@@ -221,7 +222,7 @@ export default async function handler(req, res) {
     if (!cobranca_id) return res.status(400).json({ error: 'cobranca_id obrigatório' });
     const SB_URL = process.env.VITE_SUPABASE_URL, SB_KEY = process.env.SUPABASE_SERVICE_KEY;
     try {
-      const r = await fetch(`${SB_URL}/rest/v1/cobrancas_avulsas?id=eq.${encodeURIComponent(cobranca_id)}&select=id,descricao,valor,valor_pago_pix,status,meio,termo_texto,termo_aceito_em`, {
+      const r = await fetch(`${SB_URL}/rest/v1/cobrancas_avulsas?id=eq.${encodeURIComponent(cobranca_id)}&select=id,descricao,valor,valor_pago_pix,status,meio,termo_texto,termo_aceito_em,termo_aceite`, {
         headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` }, signal: AbortSignal.timeout(10000),
       });
       const [cob] = r.ok ? await r.json().catch(() => []) : [];
@@ -250,7 +251,7 @@ export default async function handler(req, res) {
         valor = saldo;
       }
       descricao = String(cob.descricao || 'Cobrança avulsa — BidPro Brasil').slice(0, 250);
-      cobrancaCtx = { cobrancaId: cob.id, boleto: ehBoletoAvulso };
+      cobrancaCtx = { cobrancaId: cob.id, boleto: ehBoletoAvulso, aceite: cob.termo_aceite || null };
     } catch (e) {
       console.error('[mp-checkout] cobranca_avulsa: gate falhou', e?.message || e);
       return res.status(503).json({ error: 'Não consegui validar esta cobrança agora. Tente em instantes.' });
@@ -427,7 +428,28 @@ export default async function handler(req, res) {
   // HONORÁRIO PAGO POR TERCEIRO/EMPRESA (30/09): a tela pede o documento e o nome de QUEM PAGA; quando
   // vêm válidos, substituem os do perfil do assessorado (senão o MP receberia o CPF do assessorado com
   // o cartão de outra pessoa — dado trocado para o antifraude). Sem documento, fica como estava.
-  if (honorarioCtx || cobrancaCtx?.boleto) {
+  // 07/11: COBRANÇA AVULSA NO CARTÃO também. Pelo link, sem conta logada, o MP recebia só o e-mail — e o antifraude
+  // recusa valor alto sem documento (William, assessoria R$ 8.000). Ordem: titular do cartão (a tela agora pede) →
+  // quem aceitou o termo (cpf, nome, telefone, CEP gravados no aceite) → nada a mais.
+  if (cobrancaCtx && !payerExtra.identification && cobrancaCtx.aceite) {
+    const ac = cobrancaCtx.aceite;
+    const cpfAc = String(ac.cpf || '').replace(/\D/g, '');
+    const partesAc = String(ac.nome || '').trim().split(/\s+/).filter(Boolean).slice(0, 12);
+    const telAc = String(ac.telefone || '').replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, '');
+    const cepAc = (String(ac.endereco || '').match(/(\d{5})-?(\d{3})(?!.*\d{5}-?\d{3})/) || []).slice(1).join('');
+    payerExtra = {
+      ...payerExtra,
+      ...(cpfAc.length === 11 && validarCPF(cpfAc) ? { identification: { type: 'CPF', number: cpfAc }, _cpfPerfil: cpfAc } : {}),
+      ...(partesAc.length && !payerExtra.first_name ? { first_name: partesAc[0].slice(0, 60), last_name: (partesAc.slice(1).join(' ') || partesAc[0]).slice(0, 120) } : {}),
+    };
+    if (!payerExtra._info && (telAc.length >= 10 || cepAc.length === 8)) {
+      payerExtra._info = {
+        ...(telAc.length >= 10 ? { phone: { area_code: telAc.slice(0, 2), number: telAc.slice(2) } } : {}),
+        ...(cepAc.length === 8 ? { address: { zip_code: cepAc } } : {}),
+      };
+    }
+  }
+  if (honorarioCtx || cobrancaCtx) {
     const docPag = validarDocumento(req.body?.pagador_doc);
     if (docPag) {
       const partesPag = String(req.body?.pagador_nome || '').trim().split(/\s+/).filter(Boolean).slice(0, 12);
@@ -564,6 +586,12 @@ export default async function handler(req, res) {
       // 3028/Invalid payment_method_id = a BANDEIRA que mandamos não confere com o cartão — falha nossa, não
       // recusa do banco. Dizer "cartão recusado" fazia o cliente achar que o banco negou (William, 07/11).
       const bandeiraErrada = String(codigoMp) === '3028' || /payment_method_id/i.test(String(data?.message || ''));
+      // 07/11: o MP recusar o PEDIDO (não o banco recusar o cartão) é defeito nosso ou de integração. Em honorário
+      // e cobrança avulsa (valores altos, cliente de assessoria) a equipe fica sabendo na hora — antes o cliente
+      // ia ao Asaas e o defeito sumia (Marcos 17/09, William 07/11).
+      if (honorarioCtx || cobrancaCtx) {
+        alertarErro({ rota: 'mp-checkout/pedido-recusado', erro: `Mercado Pago recusou o pedido (${codigoMp}: ${String(data?.message || '').slice(0, 120)}) — ${cobrancaCtx ? `cobrança ${cobrancaCtx.cobrancaId}` : `honorário ${honorarioCtx.arrematacaoId}`}, bandeira ${dadosCartao?.metodoPagamentoId || metodoPagamento}, ${dadosCartao?.parcelas || 1}x`, extra: { codigoMp: String(codigoMp) } });
+      }
       return res.status(422).json({
         error: bandeiraErrada
           ? 'Não conseguimos identificar a bandeira do cartão. Nada foi cobrado. Atualize a página e tente de novo; se repetir, fale com o Atendimento.'
@@ -596,6 +624,13 @@ export default async function handler(req, res) {
         });
         if (!patch.ok) console.error('[mp-checkout] produto_bonus: gravar cartão salvo devolveu', patch.status);
       } catch (e) { console.error('[mp-checkout] produto_bonus: gravar cartão salvo falhou:', e?.message || e); }
+    }
+
+    // 07/11: recusa do BANCO em honorário/cobrança avulsa também avisa a equipe, com o motivo do MP
+    // (cc_rejected_high_risk = antifraude; insufficient_amount = limite) — é cliente de assessoria tentando pagar.
+    if (data.status === 'rejected' && (honorarioCtx || cobrancaCtx)) {
+      console.error('[mp-checkout] cartão recusado pelo banco', data.id, data.status_detail, cobrancaCtx?.cobrancaId || honorarioCtx?.arrematacaoId);
+      alertarErro({ rota: 'mp-checkout/cartao-recusado', erro: `Cartão recusado no Mercado Pago (${data.status_detail}) — ${cobrancaCtx ? `cobrança ${cobrancaCtx.cobrancaId}` : `honorário ${honorarioCtx.arrematacaoId}`}, pagamento ${data.id}, ${dadosCartao?.parcelas || 1}x`, extra: { statusDetail: data.status_detail } });
     }
 
     return res.status(200).json({
