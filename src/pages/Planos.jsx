@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Check, Shield, Zap, Users, ChevronDown, ChevronUp, ArrowRight, Share2 } from 'lucide-react';
 import { parcelamento } from '../utils/parcelamento';
+import { useJurosCartao } from '../utils/jurosCartao';
 import { supabase } from '../utils/supabase';
 import { PLANOS as PLANOS_STATIC } from '../data/cursos';
 import { acessoAssessoria } from '../lib/assessoria-acesso';
@@ -37,6 +38,7 @@ const buildFAQS = ({ precoMesLabel, mesAnualLabel, anoLabel, economiaPctLabel, l
 
 export default function Planos() {
   const nav = useNavigate();
+  const { juros: jurosMp } = useJurosCartao(); // juros reais do 12× (gateway_taxas), 07/11
   const { user, role, effectiveUserId } = useAuth();
   // 02/09 — POR QUE O PREÇO NÃO CHEGAVA AQUI DEPOIS DE MUDAR NO /admin.
   // Esta tela buscava o planos_config UMA vez, no mount (deps []). Quem deixa a página
@@ -249,7 +251,7 @@ export default function Planos() {
     const badgeBg = dark ? 'rgba(134,239,172,0.16)' : '#dcfce7';
     const badgeFg = dark ? '#86efac' : '#15803d';
     // 07/11 (dono): o cliente assume os juros a partir da 2ª parcela — a parcela mostrada já vem com juros.
-    const p12 = parcelamento(cheio, 12, 1);
+    const p12 = parcelamento(cheio, 12, 1, jurosMp);
     const parcela = fmtR(mensal ? cheio / 12 : p12.parcela); // mensal = mensalidade recorrente, sem juros
     const destaque = mensal ? parcela : `12× ${parcela}`;
     const linhaMeio = mensal

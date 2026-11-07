@@ -18,6 +18,7 @@ import { QrCode, CreditCard, CheckCircle2, Loader2, Copy, AlertCircle, ChevronLe
 import { useAuth } from '../contexts/AuthContext';
 import { apiCall } from '../utils/apiCall';
 import { parcelamento } from '../utils/parcelamento';
+import { useJurosCartao } from '../utils/jurosCartao';
 
 const mascaraCpfCnpj = (v) => {
   const d = String(v || '').replace(/\D/g, '').slice(0, 14);
@@ -49,9 +50,9 @@ export function obterDeviceId() {
 }
 
 // 07/11 (dono): o PADRÃO é o cliente assumir os juros a partir da 2ª parcela (semJurosAte = 1). Quem quiser
-// absorver passa `parcelasSemJuros` (ex.: cobrança avulsa negociada, plano anual). A conta mora em
-// src/utils/parcelamento.js, a MESMA que o servidor usa para cobrar (api/mp-checkout.js).
-const calcParcelaMaisJuros = (valor, n, semJurosAte = 1) => parcelamento(valor, n, semJurosAte).parcela;
+// absorver passa `parcelasSemJuros` (ex.: cobrança avulsa negociada). Os juros são os REAIS do Mercado Pago
+// (src/utils/jurosCartao.js: do cartão digitado, senão da tabela gateway_taxas) — é o MP quem os soma na fatura.
+const calcParcelaMaisJuros = (valor, n, semJurosAte = 1, juros = null) => parcelamento(valor, n, semJurosAte, juros).parcela;
 
 const PARCELAS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 
@@ -389,9 +390,9 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
   const [erro, setErro] = useState('');
   const pollingRef = useRef(null);
 
-  const parcelaValor = assinatura ? servico.valor : calcParcelaMaisJuros(servico.valor, parcelas, parcelasSemJuros);
-  // Total pela MESMA conta do servidor (centavos iguais aos cobrados), não parcela × n arredondado.
-  const totalFinal = assinatura ? servico.valor : parcelamento(servico.valor, parcelas, parcelasSemJuros).total;
+  const { juros: jurosMp, fonte: fonteJuros } = useJurosCartao({ valor: servico.valor, bin: cartao.bin });
+  const parcelaValor = assinatura ? servico.valor : calcParcelaMaisJuros(servico.valor, parcelas, parcelasSemJuros, jurosMp);
+  const totalFinal = assinatura ? servico.valor : parcelamento(servico.valor, parcelas, parcelasSemJuros, jurosMp).total;
 
   // Fallback Asaas (18/09, pedido do dono) — MESMO padrão que Checkout.jsx já usa pra
   // assinatura de plano ("Continuar pelo Asaas" com 1 clique), estendido aqui pros dois
@@ -546,11 +547,14 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
       const res = await apiCall('/api/mp-checkout', {
         method: 'POST',
         body: JSON.stringify({
-          valor: totalFinal,
+          // O PREÇO, nunca o total com juros (07/11): quem soma os juros do parcelado é o próprio Mercado Pago, na
+          // fatura. Mandar `totalFinal` fazia o MP cobrar juros sobre um valor que já tinha juros (juros em dobro).
+          valor: servico.valor,
           descricao: `${servico.nome} (${parcelas}x)`,
           email,
           metodoPagamento: 'credit_card',
-          dadosCartao: { token: token.id, parcelas, metodoPagamentoId },
+          // bin (6 primeiros dígitos, não é dado sensível): o servidor pergunta ao MP os juros DESTE cartão para o "sem juros".
+          dadosCartao: { token: token.id, parcelas, metodoPagamentoId, bin: /^\d{6,8}$/.test(bin) ? bin : undefined },
           ...(pedeCpfTitular && docTitular ? { pagador_doc: docTitular, pagador_nome: form.nome.trim() } : {}),
           deviceId,
           // Marca a INTENÇÃO (recarga vs. serviço) para o confirmador correto aceitar.
@@ -674,8 +678,7 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
           <label style={lbl}>Parcelas</label>
           <select value={parcelas} onChange={e => setParcelas(Number(e.target.value))} style={inp}>
             {PARCELAS.filter(n => n <= parcelasMax).map(n => {
-              const pv = calcParcelaMaisJuros(servico.valor, n, parcelasSemJuros);
-              const total = pv * n;
+              const { parcela: pv, total } = parcelamento(servico.valor, n, parcelasSemJuros, jurosMp);
               return (
                 <option key={n} value={n}>
                   {n}× de {fmtBRL(pv)}{n <= parcelasSemJuros ? ', sem juros' : ` (total ${fmtBRL(total)})`}
@@ -685,7 +688,7 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
           </select>
           {parcelas > parcelasSemJuros && (
             <div style={{ fontSize: 11, color: '#f59e0b', marginTop: 4 }}>
-              ⚠️ Taxas de {((parcelaValor * parcelas / servico.valor - 1) * 100).toFixed(2)}% assumidas pelo cliente.
+              ⚠️ Juros do cartão de {((totalFinal / servico.valor - 1) * 100).toFixed(2).replace('.', ',')}%, somados pelo Mercado Pago na fatura{fonteJuros === 'cartao' ? ' (taxa do seu cartão)' : ''}.
             </div>
           )}
         </div>

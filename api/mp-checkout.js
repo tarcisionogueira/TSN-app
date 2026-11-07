@@ -8,7 +8,8 @@
  *   MP_PUBLIC_KEY    — public_key (usada no frontend para tokenizar cartão)
  */
 import { honorarioComTaxa, gatewayDoBoleto, TETO_BOLETO_MP } from '../src/utils/taxaHonorario.js';
-import { parcelamento } from '../src/utils/parcelamento.js';
+import { valorAEnviar } from '../src/utils/parcelamento.js';
+import { jurosDoPagamentoMp } from './_gateway-taxas.js';
 import { getUser } from './_auth.js';
 import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
 import { auditLog } from './_audit.js';
@@ -252,14 +253,28 @@ export default async function handler(req, res) {
         valor = saldo;
       }
       // PARCELAMENTO DA NEGOCIAÇÃO (07/11, dono): a cobrança define até quantas parcelas e até quantas sem juros.
-      // Acima do "sem juros", o CLIENTE paga os juros — o total é calculado AQUI pela mesma conta da tela
-      // (src/utils/parcelamento.js). Antes a tela mostrava juros e este servidor cobrava o saldo puro.
+      // Quem soma os juros do parcelado é o PRÓPRIO Mercado Pago, por cima do valor enviado (payer_costs da nossa
+      // conta: 12× = +22,11%). Então: cliente assume → envia o saldo cheio; sem juros → envia saldo ÷ (1 + juros
+      // do MP para ESTE cartão), para o cliente pagar exatamente o saldo. (Entre 07/11 de manhã e a correção, este
+      // ponto somava a nossa tabela ao saldo E o MP somava os juros dele — juros em dobro.)
       let valorBase = valor;
       if (metodoPagamento === 'credit_card') {
         const n = Math.max(1, Math.floor(Number(dadosCartao?.parcelas) || 1));
         const pMax = Number(cob.parcelas_max) || 12;
         if (n > pMax) return res.status(400).json({ error: `Esta cobrança aceita até ${pMax}× no cartão.` });
-        valor = parcelamento(valor, n, Number(cob.parcelas_sem_juros) || 1).total;
+        const semJuros = Number(cob.parcelas_sem_juros) || 1;
+        if (n > 1 && n <= semJuros) {
+          let juros;
+          try {
+            ({ juros } = await jurosDoPagamentoMp({ valor, metodo: dadosCartao?.metodoPagamentoId, bin: dadosCartao?.bin }));
+          } catch (e) {
+            console.error('[mp-checkout] cobranca_avulsa: sem taxa de juros do MP', e?.message || e);
+            return res.status(503).json({ error: 'Não consegui confirmar o parcelamento sem juros agora. Tente em instantes ou escolha 1×.' });
+          }
+          const enviar = valorAEnviar(valor, n, semJuros, juros);
+          if (!(enviar > 0)) return res.status(503).json({ error: 'Não consegui confirmar o parcelamento sem juros agora. Tente em instantes ou escolha 1×.' });
+          valor = enviar;
+        }
       }
       descricao = String(cob.descricao || 'Cobrança avulsa — BidPro Brasil').slice(0, 250);
       cobrancaCtx = { cobrancaId: cob.id, boleto: ehBoletoAvulso, aceite: cob.termo_aceite || null, nf: cob.dados_nf || null, valorBase };
@@ -351,11 +366,10 @@ export default async function handler(req, res) {
       }
       // PREÇO DO SERVIDOR. `transaction_amount` vinha do body do cliente, sem nenhum confronto
       // com `planos_config` — o mesmo cuidado que /api/mp já tem para a assinatura.
-      // NÃO é igualdade: de 4x em diante o cliente assume os juros (PagamentoServico
-      // `calcParcelaMaisJuros`), então o total legítimo passa do preço de tabela. O que precisa
-      // ser barrado é pagar MENOS que o preço vigente e receber o serviço. Piso = o menor preço
-      // vigente (à vista, quando existe); teto de 2× como sanidade contra valor absurdo — a
-      // maior taxa é 3,49% a.a. em 12x, muito abaixo disso.
+      // NÃO é igualdade: o que precisa ser barrado é pagar MENOS que o preço vigente e receber o
+      // serviço. Piso = o menor preço vigente (à vista, quando existe); teto de 2× como sanidade.
+      // 07/11: a tela passa a enviar o PREÇO (os juros do parcelado são somados pelo próprio MP na
+      // fatura — payer_costs); antes enviava preço + juros da tabela nossa e o MP somava os dele por cima.
       const [cfg] = await (await sbGet(`planos_config?plano_key=eq.assessorado&select=preco,preco_vista&limit=1`)).json();
       const vigentes = [cfg?.preco, cfg?.preco_vista].map(Number).filter((n) => n > 0);
       // FAIL-CLOSED: se o preço vigente não veio (linha ausente/renomeada em planos_config),

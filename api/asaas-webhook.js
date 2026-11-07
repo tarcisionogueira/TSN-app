@@ -19,6 +19,7 @@ import {
 } from './_webhook-core.js';
 import { cancelarOutrasRecorrencias, assinaturaAsaasNuncaPaga, apagarAssinaturaAsaas, temOutraRecorrenciaAtiva } from './_recorrencia-unica.js';
 import { reverterHonorarioEstornado, reverterCobrancaAvulsaEstornada } from './_honorario-estorno.js';
+import { registrarTaxaObservada } from './_gateway-taxas.js';
 
 const EVENTOS_CHARGEBACK = [
   'PAYMENT_CHARGEBACK_REQUESTED',
@@ -135,6 +136,12 @@ export default async function handler(req, res) {
   // BASE DA COMISSÃO = valor líquido recebido, não o bruto cobrado do cliente (15/09, pedido do
   // dono). `netValue` é o que o Asaas efetivamente repassa após a taxa; cai pro bruto se ausente.
   const valorLiquido = Number(pagReal.netValue ?? valor) > 0 ? Number(pagReal.netValue ?? valor) : valor;
+  // TAXA REAL (07/11, dono): cada cobrança paga ensina a taxa do Asaas para aquele meio/parcela (gateway_taxas).
+  // Só com o pagamento confirmado pela API e netValue presente; nunca derruba o webhook (registrarTaxaObservada loga).
+  if (STATUS_PAGO.has(pagReal.status) && pagReal.netValue != null) {
+    const meioAsaas = { CREDIT_CARD: 'cartao', PIX: 'pix', BOLETO: 'boleto' }[pagReal.billingType];
+    if (meioAsaas) await registrarTaxaObservada({ gateway: 'asaas', meio: meioAsaas, parcelas: Number(pagReal.installmentCount) || 1, ref: `asaas:${pagReal.id}`, valor, liquido: Number(pagReal.netValue) });
+  }
   // Quando o dinheiro chega (cartão ~D+32; Pix/boleto na hora) — prende a comissão até lá.
   await registrarLiberacaoPagamento({ gatewayPaymentId: pagReal.id, liberarEm: pagReal.creditDate || pagReal.estimatedCreditDate, gateway: 'asaas' });
   const contexto  = {

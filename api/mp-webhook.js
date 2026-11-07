@@ -720,9 +720,13 @@ export async function processarEventoMp(req, res) {
         const esperado = Math.max(0, Math.round((total - jaPagoPix) * 100) / 100);
         // 07/11: no cartão parcelado COM JUROS (cliente assume), o MP recebe saldo + juros. O checkout grava o saldo
         // que a parcela cobre em metadata.valor_base; é ele que abate a cobrança (os juros não são "dinheiro a mais").
+        // Parcelado SEM JUROS (a BidPro absorve): o checkout envia saldo ÷ (1 + juros do MP) e o cliente paga, com os
+        // juros que o MP soma, o próprio saldo — então o teto para aceitar o valor_base é o que o CLIENTE pagou
+        // (total_paid_amount), não o transaction_amount.
         const pagoBruto = Number(pagamento.transaction_amount) || 0;
+        const pagoCliente = Math.max(pagoBruto, Number(pagamento.transaction_details?.total_paid_amount) || 0);
         const base = Number(pagamento.metadata?.valor_base);
-        const pago = Number.isFinite(base) && base > 0 && base <= pagoBruto + 0.01 ? base : pagoBruto;
+        const pago = Number.isFinite(base) && base > 0 && base <= pagoCliente + 0.15 ? base : pagoBruto;
         // PIX + CARTÃO COMBINADO (17/09): mesmo raciocínio do honorário — o pagamento pode
         // ser uma PARTE do saldo (Pix parcial), não precisa bater exato com o que falta.
         if (esperado <= 0 || pago <= 0 || pago > esperado + Math.max(1, esperado * 0.01)) {

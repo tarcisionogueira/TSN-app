@@ -3,7 +3,8 @@ import { Loader2, Copy, Check, ExternalLink, Plus } from 'lucide-react';
 import { apiCall } from '../utils/apiCall';
 import { supabase } from '../utils/supabase';
 import { maskMoedaDigitando } from '../utils/moeda';
-import { textoParcelamento } from '../utils/parcelamento';
+import { textoParcelamento, parcelamento, valorAEnviar } from '../utils/parcelamento';
+import TaxasGateways from './TaxasGateways';
 
 const fmt = (v) => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
@@ -58,6 +59,25 @@ export default function CobrancaAvulsaAdmin() {
     }));
   };
   const [linkCopiado, setLinkCopiado] = useState('');
+  // TAXAS REAIS do cartão MP (07/11): para a simulação "cliente paga × BidPro recebe" da negociação.
+  const [taxasMp, setTaxasMp] = useState(null);
+  useEffect(() => {
+    supabase.from('gateway_taxas').select('parcelas,pct_recebedor,fixo_recebedor,pct_cliente').eq('gateway', 'mercadopago').eq('meio', 'cartao')
+      .then(({ data, error }) => {
+        if (error) { console.error('[CobrancaAvulsaAdmin] gateway_taxas', error.message); return; }
+        setTaxasMp(Object.fromEntries((data || []).map((l) => [l.parcelas, l])));
+      });
+  }, []);
+  const simular = (v, n, sj) => {
+    if (!taxasMp || !(v > 0)) return null;
+    const juros = Object.fromEntries(Object.entries(taxasMp).map(([k, l]) => [k, Number(l.pct_cliente)]));
+    const l = taxasMp[n] || taxasMp[1];
+    const enviado = valorAEnviar(v, n, sj, juros);
+    if (enviado == null || !l) return null;
+    const cliente = parcelamento(v, n, sj, juros).total;
+    const recebe = enviado * (1 - (Number(l.pct_recebedor) || 0) / 100) - (Number(l.fixo_recebedor) || 0);
+    return { cliente, recebe: Math.round(recebe * 100) / 100, pctRec: Number(l.pct_recebedor) || 0 };
+  };
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -169,6 +189,21 @@ export default function CobrancaAvulsaAdmin() {
             <div style={{ fontSize: 11.5, color: '#64748b' }}>
               O cliente verá: <strong>{textoParcelamento(form.parcelado ? form.parcelas_max : 1, form.parcelado ? form.parcelas_sem_juros : 1)}</strong>. Pix e boleto são sempre à vista.
             </div>
+            {(() => {
+              // Simulação com as TAXAS REAIS (gateway_taxas): o que o cliente paga e o que entra para a BidPro.
+              const v = parseFloat(String(form.valor).replace(/\./g, '').replace(',', '.')) || 0;
+              const nMax = form.parcelado ? Number(form.parcelas_max) : 1;
+              const sj = form.parcelado ? Math.min(Number(form.parcelas_sem_juros), nMax) : 1;
+              const linhasSim = [...new Set([1, nMax])].map((n) => [n, simular(v, n, sj)]).filter(([, s]) => s);
+              if (!linhasSim.length) return null;
+              return (
+                <div style={{ fontSize: 11.5, color: '#334155', background: '#f8fafc', borderRadius: 8, padding: '7px 10px', lineHeight: 1.6 }}>
+                  {linhasSim.map(([n, s]) => (
+                    <div key={n}>{n}×: cliente paga <b>{fmt(s.cliente)}</b> · BidPro recebe ≈ <b>{fmt(s.recebe)}</b> <span style={{ color: '#94a3b8' }}>(taxa MP {s.pctRec.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%{n > 1 && n <= sj ? ' + juros absorvidos' : ''})</span></div>
+                  ))}
+                </div>
+              );
+            })()}
           </div>
           {erro && <div style={{ fontSize: 12, color: '#dc2626', fontWeight: 600 }}>{erro}</div>}
           <button type="submit" disabled={criando} style={{ ...btn('#0D63DB'), display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center', opacity: criando ? 0.7 : 1 }}>
@@ -219,6 +254,8 @@ export default function CobrancaAvulsaAdmin() {
           </div>
         )}
       </div>
+
+      <TaxasGateways />
     </div>
   );
 }

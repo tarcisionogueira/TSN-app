@@ -21,6 +21,7 @@ import { reportarErroCliente } from '../utils/reportarErro';
 import { versaoTermoProduto, termoDoProduto } from '../utils/termos';
 import PagamentoServico, { obterDeviceId } from '../components/PagamentoServico';
 import { parcelamento } from '../utils/parcelamento';
+import { useJurosCartao } from '../utils/jurosCartao';
 import { useCartaoSeguroMP } from '../utils/cartaoSeguroMP';
 import EnderecoAutocomplete from '../components/EnderecoAutocomplete';
 import { ESTADOS_UF } from '../data/cidades';
@@ -171,6 +172,7 @@ function IdentificacaoCpfAssessoria({ nav, refCode }) {
 
 export default function Checkout() {
   const nav = useNavigate();
+  const { juros: jurosMp } = useJurosCartao(); // juros reais do 12× (gateway_taxas), 07/11
   const [params] = useSearchParams();
   const { user, role, refreshPerfil, nome: nomePerfil, loading: authCarregando } = useAuth();
   const planoKey = params.get('plano');
@@ -1519,7 +1521,7 @@ export default function Checkout() {
             const precoVista = Number(plano.precoVista) || 0;
             // 07/11 (dono): padrão = cliente assume os juros a partir da 2ª parcela; a parcela mostrada já vem com juros,
             // pela mesma conta que o pagamento usa (src/utils/parcelamento.js).
-            const p12 = parcelamento(preco, 12, 1);
+            const p12 = parcelamento(preco, 12, 1, jurosMp);
             const parcela = p12.parcela;
             const economia = preco - precoVista;
             return (
@@ -1798,9 +1800,10 @@ export default function Checkout() {
                   proposito: 'plano_anual',
                 }}
                 parcelasMax={12}
-                // Taxa do parcelado fica com a plataforma: o servidor cobra o preço anual em qualquer nº de parcelas
-                // (antes de 5× a tela somava juros, o MP cobrava a mais e a ativação recusava o valor).
-                parcelasSemJuros={12}
+                // 07/11: o servidor envia o preço anual em qualquer nº de parcelas, mas os JUROS do parcelado o próprio
+                // Mercado Pago soma na fatura (payer_costs da conta: 12× = +22,11%). A tela dizia "sem juros" e o
+                // cliente pagava com juros — agora mostra o real. Absorver de verdade é decisão do dono (custo ≈ 22% no 12×).
+                parcelasSemJuros={1}
                 // O PLANO vai no pagamento: o servidor tira dele o preço e o webhook/reconciliação/garantia sabem
                 // se foi Pro, Veículos ou Combo.
                 extra={{ plano: planoKey }}
