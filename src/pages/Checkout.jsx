@@ -1411,10 +1411,10 @@ export default function Checkout() {
           <div style={{ marginTop: 22, display: 'flex', gap: 10, alignItems: 'center', background: 'rgba(16,185,129,0.10)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: 12, padding: '12px 14px' }}>
             <CheckCircle2 size={18} color="#34d399" style={{ flexShrink: 0 }} />
             <div style={{ fontSize: 12.5, color: '#a7f3d0', lineHeight: 1.5 }}>
-              <strong style={{ color: '#fff' }}>Método dos 30%:</strong> só recomendamos operações com margem de segurança, você dá o lance certo, no valor certo.
+              <strong style={{ color: '#fff' }}>Método dos 30%:</strong> a análise só aponta como oportunidade o imóvel com margem de segurança sobre o valor de mercado. A decisão do lance é sempre sua.
             </div>
           </div>
-          <p style={{ fontSize: 11, color: '#64748b', marginTop: 16 }}>Cancele quando quiser · Sem fidelidade · Pagamento seguro</p>
+          <p style={{ fontSize: 11, color: '#64748b', marginTop: 16 }}>{planoKey === 'assessorado' ? 'Contrato de 12 meses · 7 dias para desistir · Pagamento seguro' : 'Cancele quando quiser · Sem fidelidade · Pagamento seguro'}</p>
         </div>
 
         {/* Coluna direita, card de checkout */}
@@ -1424,12 +1424,6 @@ export default function Checkout() {
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: ehUpgrade ? '#eff6ff' : '#fef3c7', color: ehUpgrade ? '#084BA6' : '#92400e', fontSize: 12, fontWeight: 800, padding: '5px 12px', borderRadius: 20, marginBottom: 16 }}>
               {ehUpgrade ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
               {ehUpgrade ? 'Upgrade de plano' : 'Downgrade de plano'}
-            </div>
-          )}
-
-          {planoKey === 'top2' && (
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#fef3c7', color: '#92400e', fontSize: 11, fontWeight: 800, padding: '4px 12px', borderRadius: 20, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-              ★ Mais popular
             </div>
           )}
           <h2 style={{ margin: '0 0 4px', fontWeight: 900, fontSize: 22, color: '#111111' }}>
@@ -1534,7 +1528,7 @@ export default function Checkout() {
                       <span style={{ background: '#d1fae5', color: '#065f46', fontSize: 11, fontWeight: 800, padding: '3px 10px', borderRadius: 20 }}>20% OFF</span>
                     </div>
                     <div style={{ marginTop: 6, fontSize: 13, color: '#64748b', lineHeight: 1.6 }}>
-                      No <strong>PIX (sem taxa)</strong> ou <strong>cartão de crédito à vista</strong>.{economia > 0 ? ` Economize ${fmtR(economia)} em relação ao parcelado.` : ''}
+                      No <strong>PIX</strong> ou <strong>cartão de crédito à vista</strong>.{economia > 0 ? ` Economize ${fmtR(economia)} em relação ao parcelado.` : ''}
                     </div>
                   </>
                 ) : (
@@ -1543,7 +1537,7 @@ export default function Checkout() {
                       <strong style={{ color: '#111111', fontSize: 32 }}>12× {fmtR(parcela)}</strong>
                     </div>
                     <div style={{ marginTop: 6, fontSize: 13, color: '#64748b', lineHeight: 1.6 }}>
-                      Total {fmtR(preco)} no cartão de crédito{planoKey === 'assessorado' ? ' · sem juros até 3×' : ''}.
+                      Total {fmtR(preco)} no cartão de crédito{planoKey === 'assessorado' ? ', em até 12× sem juros' : ''}.
                     </div>
                   </>
                 )}
@@ -1765,7 +1759,7 @@ export default function Checkout() {
                     Já tenho conta, Entrar
                   </button>
                   <p style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', margin: 0 }}>
-                    {planoKey === 'top2' ? 'Cartão de crédito · Cancele quando quiser' : 'Pague via PIX ou cartão de crédito · Cancele quando quiser'}
+                    {planoKey === 'top2' ? 'Cartão de crédito · Cancele quando quiser' : planoKey === 'assessorado' ? 'Pague via PIX ou cartão de crédito em até 12× sem juros · Contrato de 12 meses' : 'Pague via PIX ou cartão de crédito · Cancele quando quiser'}
                   </p>
                 </>
               )}
@@ -1824,6 +1818,9 @@ export default function Checkout() {
                 proposito: 'assessoria',
               }}
               assinatura={false}
+              // 07/11 (arena do checkout, dono: "pode fazer como sugerido"): a tela anuncia "12× R$ 500" — sem isto o
+              // componente somava juros a partir da 4ª parcela e o cliente via outra parcela na etapa seguinte.
+              parcelasSemJuros={12}
               onPago={() => confirmarPagamento()}
               onCancelar={() => setShowPagamento(false)}
               // 18/09 (HANDOFF pendência #1): recusa real do MP aqui não caía pro Asaas —
@@ -1953,7 +1950,7 @@ export default function Checkout() {
               )}
               <p style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', marginTop: 12 }}>
                 {planoKey === 'assessorado'
-                  ? 'Pague via PIX (sem taxa) ou cartão de crédito em até 12×'
+                  ? 'Pague via PIX ou cartão de crédito em até 12× sem juros · Contrato de 12 meses · 7 dias para desistir'
                   : temToggleAnual && modalidade === 'anual'
                     ? `Cobrança anual recorrente (${plano?.precoAnualLabel || 'R$ 899,00'}) · Renova a cada 12 meses · Cancele a renovação quando quiser`
                     : 'Somente cartão de crédito · Cancele quando quiser'}

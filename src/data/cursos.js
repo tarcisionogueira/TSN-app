@@ -386,7 +386,8 @@ export const PLANOS = {
     precoVistaLabel: 'R$ 4.800,00',
     desconto_vista_pct: 20,
     periodicidade: 'por arrematação',
-    honorarios: '+10% de honorários sobre o valor arrematado',
+    // 07/11 (arena do checkout): a tela mostra o MESMO mínimo do termo (termos.js, cláusula 7), com exemplo em reais.
+    honorarios: '+10% de honorários sobre o valor arrematado, com mínimo de R$ 7.000 por imóvel (ex.: arremate de R$ 50 mil → R$ 7.000; de R$ 200 mil → R$ 20.000)',
     cor: '#d97706',
     bg: '#fef3c7',
     homepage: false,

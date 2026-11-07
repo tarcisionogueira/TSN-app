@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Check, Shield, Zap, Users, ChevronDown, ChevronUp, Star, ArrowRight, Share2 } from 'lucide-react';
+import { Check, Shield, Zap, Users, ChevronDown, ChevronUp, ArrowRight, Share2 } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { PLANOS as PLANOS_STATIC } from '../data/cursos';
 import { acessoAssessoria } from '../lib/assessoria-acesso';
@@ -251,7 +251,7 @@ export default function Planos() {
     const destaque = mensal ? parcela : `12× ${parcela}`;
     const linhaMeio = mensal
       ? `total ${cheioLabel} em 12× no cartão ou PIX`
-      : `em até 12× no cartão · sem juros até 3×`;
+      : `em até 12× sem juros no cartão`;
     const linhaVista = `ou ${vistaLabel} à vista no PIX${economia ? ` · economize ${fmtR(economia)}` : ''}`;
     return (
       <div style={{ marginBottom: 18 }}>
@@ -373,9 +373,6 @@ export default function Planos() {
           {/* Investidor Pro */}
           <div id="plano-top2" className="card-pro" style={{ background: 'linear-gradient(145deg, #084BA6 0%, #0a3d8f 100%)', borderRadius: 20, border: '2px solid #3b82f6', padding: '32px 28px', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', boxShadow: '0 12px 40px rgba(37,99,235,0.35)' }}>
             <div style={{ position: 'absolute', top: -40, right: -40, width: 160, height: 160, borderRadius: '50%', background: 'rgba(255,255,255,0.04)' }} />
-            <div style={{ position: 'absolute', top: 20, right: 20, background: '#fbbf24', color: '#78350f', fontSize: 10, fontWeight: 800, padding: '4px 14px', borderRadius: 20, textTransform: 'uppercase', letterSpacing: 0.5, display: 'flex', alignItems: 'center', gap: 4 }}>
-              <Star size={9} fill="#78350f" /> Mais popular
-            </div>
             <div style={{ display: 'inline-block', alignSelf: 'flex-start', background: 'rgba(255,255,255,0.2)', color: '#ffffff', fontSize: 12.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1.2, padding: '5px 12px', borderRadius: 8, marginBottom: 12 }}>Investidor Pro</div>
             <div style={CABECALHO}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6 }}>
