@@ -124,6 +124,11 @@ function ContaInativa() {
           style={{ display: 'inline-block', padding: '12px 28px', background: '#0D63DB', color: 'white', borderRadius: 10, fontWeight: 700, fontSize: 15, border: 'none', cursor: 'pointer' }}>
           Falar com suporte
         </button>
+        {/* 07/11: o botão acima disparava `tsn:open-chat` sem ninguém ouvindo — esta tela sai antes de montar o
+            ChatSuporte. Agora o chat é montado junto, e o e-mail fica como saída que não depende de nada. */}
+        <div style={{ marginTop: 14, fontSize: 14, color: '#475569' }}>
+          ou escreva para <a href="mailto:contato@bidprobrasil.com.br" style={{ color: '#0D63DB', fontWeight: 700 }}>contato@bidprobrasil.com.br</a>
+        </div>
         <div style={{ marginTop: 20, fontSize: 13, color: '#94a3b8' }}>
           Logado como: {user?.email}
         </div>
@@ -330,7 +335,7 @@ function MainLayout() {
   // — SIGNED_IN/INITIAL_SESSION — independente da rota, cobrindo /admin e o PWA. Antes vivia
   // aqui num useEffect do MainLayout, que não monta em /admin, então não disparava.)
 
-  if (isLoggedIn && !loading && !ativo) return <ContaInativa />;
+  if (isLoggedIn && !loading && !ativo) return <><ContaInativa /><Suspense fallback={null}><ChatSuporte /></Suspense></>;
   if (isLoggedIn && !loading) {
     // O admin/dono entra pela HOME normal (como um cliente) e acessa o painel pelo botão
     // "⚙️ Admin" do menu (→ /admin). Antes havia um redirect forçado de "/" → "/admin".

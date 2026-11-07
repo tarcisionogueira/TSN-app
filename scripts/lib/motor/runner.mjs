@@ -359,7 +359,9 @@ export async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLote
       // A releitura é um EXTRA que só existe enquanto for grátis: no primeiro detalhe que vier
       // pela via paga, para. Sem isto, a folga do orçamento viraria gasto de Bright Data em
       // lote que já temos — o oposto de "usar a sobra".
-      if (i >= iReleitura && r?.via === 'bd') {
+      // 07/11: comparava só `'bd'`, mas fetch-fonte devolve `'brightdata'` (e o Firecrawl também é pago) —
+      // a regra "releitura nunca paga" nunca disparou, e a releitura gastava cota até o teto recusar.
+      if (i >= iReleitura && ['bd', 'brightdata', 'firecrawl'].includes(r?.via)) {
         pararReleitura = true;
         console.log(`💰 [${tenant.fonte}] releitura caiu na via paga no ${i - iReleitura + 1}º lote — abortada (releitura nunca paga).`);
         break;

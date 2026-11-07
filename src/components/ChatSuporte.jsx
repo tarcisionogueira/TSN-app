@@ -213,11 +213,14 @@ export default function ChatSuporte() {
 
     fecharTimer.current = setTimeout(async () => {
       // Só fecha se ainda estiver 'aberto' — nunca interrompe atendente humano
-      const { error: errFim } = await supabase.from('chamados').update({
+      // `.select()` prova o que mudou (forma 3): se o chamado já saiu de aberto/saudacao (ex.: foi para a
+      // equipe e o realtime perdeu o evento), nada é fechado e nada de "encerrado" é dito ao cliente.
+      // Chamado marcado como bug nunca fecha sozinho: é falha nossa à espera de correção.
+      const { data: fechou } = await supabase.from('chamados').update({
         status: 'finalizado', atendente_nome: 'Sistema (inatividade)',
         atualizado_em: new Date().toISOString(),
-      }).eq('id', ticket.id).in('status', ['aberto', 'saudacao']);
-      if (!errFim) {
+      }).eq('id', ticket.id).in('status', ['aberto', 'saudacao']).or('tipo.is.null,tipo.neq.bug').select('id');
+      if (fechou?.length) {
         await supabase.from('chamados_mensagens').insert({
           chamado_id: ticket.id, autor_tipo: 'ia', autor_nome: 'BidPro Assistente',
           conteudo: 'Este atendimento foi encerrado por inatividade. Se precisar de mais ajuda, abra um novo chamado.',
@@ -336,18 +339,28 @@ export default function ChatSuporte() {
   async function criarChamado() {
     if (!descricao.trim()) return;
     if (destinoNovo !== 'ia') return abrirComPessoa();
-    setEnviando(true);
-    const { data: novo } = await supabase.from('chamados').insert({
+    setEnviando(true); setErroCanal('');
+    const { data: novo, error: eNovo } = await supabase.from('chamados').insert({
       user_id: user.id, user_email: user.email, user_nome: nomeUsuario, // padrao-ok: chamado do PRÓPRIO logado (chat flutuante), nunca em nome de terceiro
       titulo: descricao.slice(0, 80), segmento: segmentoDoRole(effectiveRole),
     }).select().single();
-    if (!novo) { setEnviando(false); return; }
+    // 07/11: falha aqui era silenciosa — o botão parava de girar e nada acontecia. O texto fica no campo.
+    if (!novo) {
+      console.error('[chat] chamado não criado', eNovo?.message);
+      setErroCanal('Não consegui registrar sua mensagem agora. Ela continua no campo: tente enviar de novo.');
+      setEnviando(false); return;
+    }
     setTicket(novo);
-    const { data: msg } = await supabase.from('chamados_mensagens').insert({
+    const { data: msg, error: eMsg } = await supabase.from('chamados_mensagens').insert({
       chamado_id: novo.id, autor_id: user.id, autor_nome: nomeUsuario,
       autor_tipo: 'cliente', conteudo: descricao, anexos,
     }).select().single();
-    const msgs = msg ? [msg] : [];
+    if (!msg) {
+      console.error('[chat] mensagem não gravada', eMsg?.message);
+      setErroCanal('Não consegui registrar sua mensagem agora. Ela continua no campo: tente enviar de novo.');
+      setEnviando(false); return;
+    }
+    const msgs = [msg];
     setMensagens(msgs);
     setView('conversa');
     setDescricao(''); setAnexos([]);
@@ -359,13 +372,19 @@ export default function ChatSuporte() {
   async function enviarMensagem() {
     if ((!texto.trim() && !anexos.length) || !ticket) return;
     if (ticket.status === 'finalizado') return;
-    setEnviando(true);
+    setEnviando(true); setErroCanal('');
     setPrecisaAtendente(false);
-    const { data: msg } = await supabase.from('chamados_mensagens').insert({
+    const { data: msg, error: eMsg } = await supabase.from('chamados_mensagens').insert({
       chamado_id: ticket.id, autor_id: user.id, autor_nome: nomeUsuario,
       autor_tipo: 'cliente', conteudo: texto || '[anexo]', anexos,
     }).select().single();
-    const novaLista = msg ? [...mensagens, msg] : mensagens;
+    // 07/11: sem isto o texto era apagado e a IA chamada com a conversa velha, sem aviso nenhum.
+    if (!msg) {
+      console.error('[chat] mensagem não gravada', eMsg?.message);
+      setErroCanal('Não consegui enviar sua mensagem. Ela continua no campo: tente de novo.');
+      setEnviando(false); return;
+    }
+    const novaLista = [...mensagens, msg];
     setMensagens(novaLista);
     setTexto(''); setAnexos([]);
     resetTimers();
@@ -388,30 +407,50 @@ export default function ChatSuporte() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mensagens: msgs, memoria: memoriaIA }),
       });
+      // 07/11: resposta de erro (429, 401, 500) chegava como `resposta` indefinida e o cliente ficava sem nada.
+      if (!res.ok) throw new Error(`chat-suporte HTTP ${res.status}`);
       const { resposta, escalar, bug } = await res.json();
-      if (resposta) {
-        await supabase.from('chamados_mensagens').insert({
-          chamado_id: tk.id, autor_tipo: 'ia',
-          autor_nome: 'BidPro Assistente', conteudo: resposta, anexos: [],
-        });
-        if (escalar) {
-          setPrecisaAtendente(true);
-          // Falha detectada → marca o chamado como 'bug' (aparece sinalizado no Atendimento p/
-          // correção); caso contrário só atualiza para reordenar a fila.
-          await supabase.from('chamados').update({
-            ...(bug ? { tipo: 'bug' } : {}), atualizado_em: new Date().toISOString(),
-          }).eq('id', tk.id);
+      if (!resposta) throw new Error('IA sem resposta');
+      const { error: eIa } = await supabase.from('chamados_mensagens').insert({
+        chamado_id: tk.id, autor_tipo: 'ia',
+        autor_nome: 'BidPro Assistente', conteudo: resposta, anexos: [],
+      });
+      if (eIa) console.error('[chat] resposta da IA não gravada', eIa.message);
+      if (escalar) {
+        // Falha detectada → marca o chamado como 'bug' ANTES de passar à equipe (paraEquipe preserva o tipo).
+        if (bug) {
+          const { error: eB } = await supabase.from('chamados').update({ tipo: 'bug', atualizado_em: new Date().toISOString() }).eq('id', tk.id);
+          if (eB) console.error('[chat] marca de bug não gravada', eB.message);
         }
+        await passarParaEquipe(tk);
       }
-    } catch (_) {
+    } catch (e) {
+      console.error('[chat] IA falhou', e?.message);
       await supabase.from('chamados_mensagens').insert({
         chamado_id: tk.id, autor_tipo: 'ia', autor_nome: 'BidPro Assistente',
-        conteudo: 'Não consegui processar sua mensagem no momento. Um membro da equipe irá atendê-lo em breve.',
+        conteudo: 'Não consegui processar sua mensagem no momento. Passei a sua conversa para a nossa equipe.',
         anexos: [],
       });
-      setPrecisaAtendente(true);
+      await passarParaEquipe(tk);
     }
     setLoadingIA(false);
+  }
+
+  // ESCALADA DE VERDADE (07/11). Antes, `[[ESCALAR]]`/`[[BUG]]` e a falha da IA só ligavam o botão "Equipe":
+  // a IA dizia "um especialista vai responder", ninguém era avisado, e em 30 min o timer de inatividade
+  // fechava o chamado. Agora a passagem é feita no servidor (status `aguardando_atendente` + e-mail à equipe),
+  // que é o mesmo caminho do botão. Se o servidor falhar, o botão continua aceso e o erro aparece.
+  async function passarParaEquipe(tk) {
+    try {
+      const j = await chamarCanal({ acao: 'transferir', chamado_id: tk.id, destino: 'equipe' });
+      setPrecisaAtendente(false);
+      if (j?.chamado) setTicket(j.chamado);
+      clearTimeout(avisoTimer.current); clearTimeout(fecharTimer.current);
+    } catch (e) {
+      console.error('[chat] passagem automática à equipe falhou', e?.message);
+      setPrecisaAtendente(true);
+      setErroCanal('Não consegui chamar a equipe automaticamente. Toque em "Equipe de atendimento" para tentar de novo.');
+    }
   }
 
   async function encerrarAtendimento() {
@@ -445,6 +484,11 @@ export default function ChatSuporte() {
 
   function handleFile(e) {
     const file = e.target.files?.[0]; if (!file) return;
+    // O anexo vai em base64 dentro da própria mensagem: arquivo grande derrubava o envio inteiro (07/11).
+    if (file.size > 3 * 1024 * 1024) {
+      setErroCanal('Arquivo acima de 3 MB. Mande um print da tela ou um arquivo menor.');
+      e.target.value = ''; return;
+    }
     const reader = new FileReader();
     reader.onload = ev => setAnexos(p => [...p, { tipo: file.type.startsWith('image/') ? 'imagem' : 'arquivo', url: ev.target.result, nome: file.name }]);
     reader.readAsDataURL(file);

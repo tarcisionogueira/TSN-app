@@ -47,8 +47,11 @@ export default async function handler(req, res) {
 
   // dateCreated do Asaas é DATA (YYYY-MM-DD). Cortamos por (hoje - 24h): só cobranças
   // criadas ATÉ essa data entram (garante ≥24h — nunca cancela cobrança do dia).
-  const cutoff = new Date(Date.now() - HORAS_LIMITE * 3600 * 1000);
+  // 07/11: `<= ontem` NÃO garantia 24 h — `dateCreated` é só a data, e às 00h UTC (21h em Brasília) pegava
+  // cobrança criada minutos antes. Com `<= anteontem`, a mais nova que entra tem pelo menos 24 h.
+  const cutoff = new Date(Date.now() - (HORAS_LIMITE + 24) * 3600 * 1000);
   const cutoffData = cutoff.toISOString().slice(0, 10);
+  const hojeData = new Date().toISOString().slice(0, 10);
 
   const subCache = new Map();     // subId → tem pagamento pago?
   const subCanceladas = new Set();
@@ -116,7 +119,12 @@ export default async function handler(req, res) {
             const pd = await asaas(`/payments/${p.id}`, { method: 'DELETE' });
             if (pd.ok) cobrancasRemovidas++;
           } else {
-            // Cobrança avulsa (à vista) abandonada há mais de 24h → remove.
+            // Cobrança avulsa (à vista) abandonada → remove. 07/11: só DEPOIS do vencimento. Boleto de plano à
+            // vista vence em +12 dias e o de honorário em +3: apagá-lo com 24 h derrubava cobrança no prazo,
+            // às vezes já paga e ainda compensando. Honorário e cobrança avulsa da equipe nunca são apagados aqui.
+            const ref = String(p.externalReference || '');
+            if (/^(honorario|cobranca_avulsa)\|/.test(ref)) continue;
+            if (!p.dueDate || String(p.dueDate).slice(0, 10) >= hojeData) continue;
             const pd = await asaas(`/payments/${p.id}`, { method: 'DELETE' });
             if (pd.ok) avulsasRemovidas++;
             else erros.push(`avulsa ${p.id}: HTTP ${pd.status}`);

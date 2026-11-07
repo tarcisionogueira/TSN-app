@@ -97,6 +97,9 @@ async function handler(req) {
           {
             const extRef = String(p.externalReference || '').trim();
             if (/^servico[|:]/i.test(extRef) || /^\[servico\]/i.test(p.description || '')) continue;
+            // 07/11: honorário de êxito e cobrança avulsa da equipe também não são plano — com valor
+            // batendo numa faixa do mapearPlano (ex.: 5.000), o explorador virava assessorado com comissão.
+            if (/^(honorario|cobranca_avulsa)\|/i.test(extRef)) continue;
           }
           verificados++;
 

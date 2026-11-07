@@ -10,6 +10,7 @@ export default function ContratoObrigatorio({ userId }) {
   const [pendentes, setPendentes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dismissed, setDismissed] = useState(() => sessionStorage.getItem(SESSION_KEY) === '1');
+  const [erroLink, setErroLink] = useState('');
 
   useEffect(() => {
     if (!userId) { setLoading(false); return; }
@@ -41,13 +42,26 @@ export default function ContratoObrigatorio({ userId }) {
   const minhaVez = useVezDoModal('contrato', quer);
   if (!minhaVez) return null;
 
+  // 07/11: "Ir para assinatura" levava a /contratos — tela da equipe, sob o MESMO bloqueio. O cliente ficava preso.
+  // Agora abre o link de assinatura dele (/c/<token>, fora do MainLayout). Sem link, o erro aparece e o
+  // atendimento fica ao alcance (o bloqueio fica ABAIXO do painel do chat, z-index 9990).
+  async function irParaAssinatura() {
+    setErroLink('');
+    const { data: token, error } = await supabase.rpc('meu_link_contrato_pendente');
+    if (error || !token) {
+      setErroLink('Não encontrei o link do seu contrato. Fale com o atendimento que enviamos de novo.');
+      return;
+    }
+    navigate(`/c/${token}`);
+  }
+
   if (expired) {
     // Full-screen blocker — cannot be dismissed
     return (
       <div style={{
         position: 'fixed', inset: 0,
         background: 'rgba(15,23,42,0.95)',
-        zIndex: 10000,
+        zIndex: 9985,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         padding: 20,
       }}>
@@ -64,13 +78,19 @@ export default function ContratoObrigatorio({ userId }) {
             Seu prazo de 30 dias para assinar o contrato encerrou. Para continuar usando a plataforma, assine o contrato pendente.
           </p>
           <button
-            onClick={() => navigate('/contratos')}
+            onClick={irParaAssinatura}
             style={{
               width: '100%', padding: '14px', background: '#0D63DB',
               color: 'white', border: 'none', borderRadius: 10,
               fontWeight: 800, fontSize: 15, cursor: 'pointer',
             }}>
             Ir para assinatura →
+          </button>
+          {erroLink && <p role="alert" style={{ fontSize: 13, color: '#b91c1c', fontWeight: 600, margin: '12px 0 0' }}>{erroLink}</p>}
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent('tsn:open-chat'))}
+            style={{ width: '100%', marginTop: 10, padding: '12px', background: 'white', color: '#0D63DB', border: '2px solid #0D63DB', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+            Falar com o atendimento
           </button>
         </div>
       </div>

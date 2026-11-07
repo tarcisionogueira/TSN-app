@@ -3711,7 +3711,8 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
           ? areaCorroborada({ texto: `${imDb?.titulo || ''} ${descricaoImovel || ''}`, areaPrivImplicita: areaPrivTeste })
           : { corroborada: false, motivos: [] };
         if (corr.corroborada) {
-          const areaComp = areaMedianaComparaveis([...(mercado.nivel1?.vendas || []), ...(mercado.nivel2?.vendas || [])]);
+          // Só os níveis 1 e 2 (os comparáveis próximos), pela régua única — a soma à mão reprovava testar:niveis.
+          const areaComp = areaMedianaComparaveis(vendasDe({ nivel1: mercado.nivel1, nivel2: mercado.nivel2 }));
           const fa = fatorArea(areaComp, areaM2);
           valorMercado = Math.round(precoM2 * fa * areaM2);
           mercado.avaliacaoDefasada = { avalM2: Math.round(avalM2), compM2: Math.round(precoM2), areaUsada: areaM2, areaMediaComparaveis: areaComp || null, fatorArea: fa, motivos: corr.motivos };

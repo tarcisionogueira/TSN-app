@@ -8,6 +8,7 @@ import { ACEITA_DOCUMENTO } from '../utils/arquivo';
 const STATUS = {
   aberto: { label: 'Aberto', cor: '#10b981', bg: '#d1fae5' },
   em_atendimento: { label: 'Em atendimento', cor: '#0D63DB', bg: '#dbeafe' },
+  aguardando_atendente: { label: 'Com a equipe', cor: '#b45309', bg: '#fef3c7' },
   finalizado: { label: 'Finalizado', cor: '#64748b', bg: '#f1f5f9' },
 };
 
@@ -44,7 +45,9 @@ export default function MeusChamados() {
     // 'saudacao' entra AQUI de propósito: para o atendimento ela não é fila, mas para o
     // cliente é uma conversa que existe e espera resposta dele — sumir da lista dele
     // esconderia a mensagem que a IA mandou.
-    const statusFiltro = aba === 'abertos' ? ['saudacao', 'aberto', 'em_atendimento'] : ['finalizado'];
+    // 07/11: `aguardando_atendente` (enviado à equipe) não estava em nenhuma aba — a conversa sumia
+    // justamente quando o cliente vinha acompanhar a resposta da equipe.
+    const statusFiltro = aba === 'abertos' ? ['saudacao', 'aberto', 'em_atendimento', 'aguardando_atendente'] : ['finalizado'];
     // Sob suporte a lista é a do CLIENTE visto — user.id cru mostrava os chamados do admin.
     const { data } = await supabase.from('chamados').select('*').eq('user_id', effectiveUserId || user.id)
       .in('status', statusFiltro).order('atualizado_em', { ascending: false });
@@ -98,16 +101,40 @@ export default function MeusChamados() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mensagens: novaLista }),
       });
-      const { resposta } = await res.json();
-      if (resposta) {
-        await supabase.from('chamados_mensagens').insert({
-          chamado_id: chamadoAtivo.id, autor_tipo: 'ia',
-          autor_nome: 'BidPro Assistente', conteudo: resposta, anexos: [],
-        });
-      }
-    } catch (_) {}
+      if (!res.ok) throw new Error(`chat-suporte HTTP ${res.status}`);
+      const { resposta, escalar, bug } = await res.json();
+      if (!resposta) throw new Error('IA sem resposta');
+      await supabase.from('chamados_mensagens').insert({
+        chamado_id: chamadoAtivo.id, autor_tipo: 'ia',
+        autor_nome: 'BidPro Assistente', conteudo: resposta, anexos: [],
+      });
+      if (escalar) await passarParaEquipe(bug);
+    } catch (e) {
+      // 07/11: o `catch` era vazio — IA fora do ar = cliente sem resposta e sem aviso. Agora vai para a equipe.
+      console.error('[meus-chamados] IA falhou', e?.message);
+      await supabase.from('chamados_mensagens').insert({
+        chamado_id: chamadoAtivo.id, autor_tipo: 'ia', autor_nome: 'BidPro Assistente',
+        conteudo: 'Não consegui processar sua mensagem no momento. Passei a sua conversa para a nossa equipe.', anexos: [],
+      });
+      await passarParaEquipe(false);
+    }
     setLoadingIA(false);
     setEnviando(false);
+  }
+
+  // Mesma passagem do widget (ChatSuporte): status `aguardando_atendente` + e-mail à equipe, no servidor.
+  async function passarParaEquipe(bug) {
+    try {
+      if (bug) await supabase.from('chamados').update({ tipo: 'bug' }).eq('id', chamadoAtivo.id);
+      const r = await apiCall('/api/atendimento-canal', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ acao: 'transferir', chamado_id: chamadoAtivo.id, destino: 'equipe' }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+      if (j.chamado) setChamadoAtivo(j.chamado);
+    } catch (e) {
+      console.error('[meus-chamados] passagem à equipe falhou', e?.message);
+      alert('Não consegui chamar a equipe automaticamente. Abra o Atendimento e toque em "Equipe de atendimento".');
+    }
   }
 
   function handlePaste(e) {

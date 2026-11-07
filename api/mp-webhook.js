@@ -209,7 +209,14 @@ export async function processarEventoMp(req, res) {
         ap = await mpGet(`/authorized_payments/${dataId}`);
         const st = ap?.status;
         if (st !== 'processed' && st !== 'rejected') return res.status(200).json({ ok: true, status: st || null });
-        cobrancaRecusada = (st === 'rejected');
+        // 07/11: o DESFECHO do dinheiro está em `ap.payment.status`, não em `ap.status` (caso Erik, 16/08:
+        // `processed` + `payment.status: rejected`). Antes só o espelho financeiro lia o campo certo; o ramo de
+        // ativação lia `ap.status` e REATIVAVA o plano e pagava comissão sobre cobrança recusada.
+        const pst = String(ap?.payment?.status || '').toLowerCase();
+        if (st === 'processed' && ['pending', 'in_process', 'authorized'].includes(pst)) {
+          return res.status(200).json({ ok: true, status: st, pagamento: pst, aguardando: true });
+        }
+        cobrancaRecusada = st === 'rejected' || ['rejected', 'cancelled', 'refunded', 'charged_back'].includes(pst);
         if (ap?.preapproval_id) preapproval = await mpGet(`/preapproval/${ap.preapproval_id}`);
       }
       if (!preapproval) return res.status(200).json({ ok: true, erro: 'preapproval não encontrado' });
@@ -288,9 +295,11 @@ export async function processarEventoMp(req, res) {
       // cancelamento/pausa ser descartado como "duplicado" após o de ativação →
       // acesso pago vitalício. Incluir o status na chave separa as transições.
       // (authorized_payment tem id único por cobrança, então basta o tipo.)
+      // 07/11: a cobrança recorrente entra com o DESFECHO na chave — a retentativa aprovada do mesmo
+      // authorized_payment, depois de uma recusa, não pode ser descartada como duplicada.
       const idemEvento = tipo === 'subscription_preapproval'
         ? `subscription_preapproval:${preapproval.status}`
-        : tipo;
+        : (cobrancaRecusada ? `${tipo}:recusada` : tipo);   // a paga mantém a chave antiga: marcas já gravadas seguem valendo
       if (await eventoJaProcessado({ gateway: 'mercadopago', gatewayPaymentId: dataId, evento: idemEvento })) {
         return res.status(200).json({ ok: true, duplicado: true });
       }
@@ -399,7 +408,7 @@ export async function processarEventoMp(req, res) {
         // mandato (subscription_preapproval, sem ap) passa cobranca=null → ativa sem comissão.
         // Usa ap.payment.id (não ap.id) p/ idempotência e alinhamento com o estorno.
         let cobranca = null;
-        if (tipo === 'subscription_authorized_payment' && ap?.status === 'processed' && ap?.payment?.id) {
+        if (tipo === 'subscription_authorized_payment' && ap?.status === 'processed' && !cobrancaRecusada && ap?.payment?.id) {
           const valorBrutoAp = ap.transaction_amount ?? ap.payment?.transaction_amount;
           // O corpo do webhook de assinatura não traz transaction_details (só a API de
           // pagamento traz) — busca o pagamento completo só para achar o valor LÍQUIDO que

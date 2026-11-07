@@ -121,7 +121,11 @@ rodar() {
     # (tentativa_em renovado, ultima_em parado) sem nenhum rastro legível de fora. Agora a saída vai também para
     # um arquivo temporário e, na falha, as últimas linhas viram sistema_heartbeat `runner_falha_<FONTE>`.
     local _out; _out="$(mktemp 2>/dev/null || echo "/tmp/bidpro-$fonte.out")"
-    "$@" 2>&1 | tee "$_out"; local _rc=${PIPESTATUS[0]}
+    # TETO POR FONTE (07/11): a rodada de 03/11 16h ficou 4 DIAS presa num Chromium que não respondia
+    # (recon-triagem-jucemg) e a trava de instância única (flock) fez TODAS as rodadas seguintes saírem com
+    # "já há um runner em execução". PW, FREITAS, PECINI, SUBLIME, VENDASGOV, RJ… ficaram sem leitura desde
+    # 01–02/11 sem nenhum erro. `timeout` devolve 124: cai no ramo de falha abaixo e o gate retenta.
+    timeout --kill-after=2m "${RUNNER_TETO_FONTE:-90m}" "$@" 2>&1 | tee "$_out"; local _rc=${PIPESTATUS[0]}
     if [ "$_rc" -eq 0 ]; then
       node scripts/coleta-gate.mjs concluir "$fonte" \
         || { echo "  ⚠️ ($fonte saiu com sucesso mas NÃO gravou no acervo — janela segue aberta; investigue o scraper)"
@@ -249,7 +253,8 @@ quer RADAR && { node scripts/radar-leiloeiros-residencial.mjs \
 # em TODA rodada. Alarme falso recorrente é o que treina o dono a ignorar o log (lição da
 # CREPALDI). Descoberta tem contrato diferente de coleta, então roda direto.
 # Falha aqui não derruba a rodada: o acervo do dia já entrou nos passos acima.
-quer TRIAGEM && { env TRIAGEM_HEADLESS=1 TRIAGEM_BLOQUEADOS=1 node scripts/recon-triagem-jucemg.mjs \
+# 07/11: com teto. Foi ESTE passo que prendeu a máquina de 03 a 07/11 (ver `rodar`).
+quer TRIAGEM && { timeout --kill-after=2m 40m env TRIAGEM_HEADLESS=1 TRIAGEM_BLOQUEADOS=1 node scripts/recon-triagem-jucemg.mjs \
   || echo "  (triagem residencial falhou — sem efeito no acervo; roda de novo na próxima janela)"; }
 
 # VENDASGOV — Imóveis da União (SPU/SERPRO). Veio do GitHub Actions em 29/08 sob a hipótese de
