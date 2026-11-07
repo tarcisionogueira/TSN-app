@@ -182,7 +182,7 @@ export default function EducacaoPublico() {
                     <div style={{ fontSize: 15.5, fontWeight: 700, color: '#111', lineHeight: 1.35 }}>{it.titulo}</div>
                     {temBonus && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700, color: '#7a5a13', background: corSuave(LATAO, '1f'), border: `1px solid ${corSuave(LATAO, '55')}`, borderRadius: 8, padding: '4px 8px', width: 'fit-content' }}>
-                        <Gift size={11} /> +{it.concede_meses || 1} {(it.concede_meses || 1) > 1 ? 'meses' : 'mês'} Investidor Pro
+                        <Gift size={11} /> +{it.concede_meses || 1} {(it.concede_meses || 1) > 1 ? 'meses' : 'mês'} Investidor Pro, ativado na hora
                       </div>
                     )}
                     <div style={{ marginTop: 'auto', paddingTop: 6, display: 'flex', alignItems: 'baseline', gap: 8 }}>

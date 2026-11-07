@@ -8,6 +8,7 @@ import CidadeAutocomplete from './CidadeAutocomplete';
 import LogoB from './LogoB';
 import { validarNome, normalizarNome } from '../lib/nome';
 import { validarTelefone } from '../lib/telefone';
+import { reportarErroCliente } from '../utils/reportarErro';
 
 // Popup pós-login que completa o cadastro pedindo UM campo por vez (só o que falta).
 // Base do explorador grátis: nome, cidade+UF, telefone e aceite LGPD. O CPF NÃO entra
@@ -46,10 +47,20 @@ export default function CompletarCadastroModal() {
     let vivo = true;
     (async () => {
       setCarregando(true);
-      const { data, error } = await supabase.from('perfis')
+      // LEITURA QUE NÃO VOLTA (07/11, print do dono): quando a sessão do Supabase engasga no navegador, a
+      // consulta fica pendurada sem erro e o modal mostrava "Carregando…" para sempre, sem saída, por cima
+      // do app. 10 s e desiste: sai da frente (o gate de verdade é o servidor) e deixa rastro no Cliente 360.
+      // O pedido volta no próximo acesso.
+      const leitura = supabase.from('perfis')
         .select('nome, telefone, endereco_cidade, endereco_uf, lgpd_aceito')
         .eq('id', user.id).single();
+      const prazo = new Promise((ok) => setTimeout(() => ok({ data: null, error: { message: 'leitura do perfil sem resposta em 10 s' } }), 10000));
+      const { data, error } = await Promise.race([leitura, prazo]);
       if (!vivo) return;
+      if (error) console.error('[completar-cadastro] perfil ilegível — modal não bloqueia', error.message);
+      if (error && /sem resposta/.test(error.message)) {
+        reportarErroCliente({ msg: 'completar-cadastro: leitura do perfil sem resposta em 10 s (modal liberado)' });
+      }
       // FALHA DE LEITURA NÃO É "CADASTRO INCOMPLETO" (10/08). O postgrest-js não lança em
       // não-2xx: devolve `{data:null,error}`. Com `data` nulo, todo campo virava "faltando" e
       // o app ficava atrás de um popup por causa de um 500 transitório. Some-se a isto o fato

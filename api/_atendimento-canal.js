@@ -6,6 +6,7 @@
 // suporte+<token>@ e a resposta volta para o MESMO chamado pelo api/inbound-juridico.js.
 // O e-mail do advogado nunca vai para o navegador do cliente: só o servidor resolve o destino.
 import { enviarEmail } from './_email.js';
+import { textoPrazo } from './_prazo-atendimento.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -152,11 +153,12 @@ export function emailAEquipeOportunidade({ decisao, titulo, clienteEmail, motivo
   });
 }
 
-export async function emailAEquipe({ chamado, clienteNome, texto, motivo }) {
+export async function emailAEquipe({ chamado, clienteNome, texto, motivo, prazo }) {
   const { html, text } = carta([
     'Olá,',
     `${clienteNome || chamado.user_nome || 'Um cliente'} pediu atendimento humano. ${motivo || ''}`.trim(),
     `Mensagem do cliente:\n${texto}`,
+    ...(prazo ? [`Prometemos ao cliente resposta ${prazo}.`] : []),
     `Responda pela tela de Atendimento: ${APP_URL}/#/atendimento`,
   ]);
   return enviarEmail({
@@ -164,6 +166,54 @@ export async function emailAEquipe({ chamado, clienteNome, texto, motivo }) {
     subject: `Cliente pediu atendimento — ${chamado.titulo || chamado.user_nome || 'chamado'}`, html, text,
     meta: { tipo: 'atendimento_equipe' },
   });
+}
+
+// ── PASSAGEM À EQUIPE (07/11) ─────────────────────────────────────────────────────────────────────────
+// Um caminho só para o botão "Equipe de atendimento" (api/atendimento-canal.js) e para a escalada da IA
+// (api/chat-suporte.js). Antes a escalada da IA dependia do navegador do cliente chamar a transferência
+// depois da resposta: fechou a aba no meio, ninguém era avisado.
+export async function mensagemSistema(chamadoId, conteudo) {
+  const r = await sb('chamados_mensagens', { method: 'POST', prefer: 'return=minimal',
+    body: { chamado_id: chamadoId, autor_tipo: 'ia', autor_nome: 'Sistema', conteudo, anexos: [] } });
+  if (!r.ok) console.error('[atendimento] mensagem de sistema HTTP', r.status);
+  return r.ok;
+}
+
+export async function atualizarChamado(id, campos) {
+  const r = await sb(`chamados?id=eq.${id}`, { method: 'PATCH', prefer: 'return=representation', body: { ...campos, atualizado_em: new Date().toISOString() } });
+  if (!r.ok) throw new Error(`chamado não atualizado (HTTP ${r.status})`);
+  const [linha] = await r.json();
+  if (!linha) throw new Error('chamado não atualizado');
+  return linha;
+}
+
+// Horas do prazo pela regra do banco; `null` (banco fora) faz textoPrazo usar a conta local, que é a mesma régua.
+export async function horasPrazoEquipe(desde = new Date()) {
+  try {
+    const r = await sb('rpc/atendimento_prazo_horas', { method: 'POST', body: { p_desde: new Date(desde).toISOString() } });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const h = Number(await r.json());
+    return h > 0 ? h : null;
+  } catch (e) { console.error('[atendimento] prazo pelo banco falhou — conta local', e.message); return null; }
+}
+
+export async function catalogoAssessoria() {
+  try {
+    const r = await sb('rpc/catalogo_assessoria_texto', { method: 'POST', body: {} });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return String((await r.json()) || '');
+  } catch (e) { console.error('[atendimento] catálogo da assessoria indisponível', e.message); return ''; }
+}
+
+export async function paraEquipe(chamado, nome, texto, { avisoCliente = '', motivoInterno = '' } = {}) {
+  const prazo = textoPrazo(Date.now(), await horasPrazoEquipe());
+  const linha = await atualizarChamado(chamado.id, { status: 'aguardando_atendente', tipo: chamado.tipo === TIPO_JURIDICO_CLIENTE ? null : chamado.tipo });
+  await mensagemSistema(chamado.id, avisoCliente
+    || `✅ Encaminhamos você para a nossa equipe. A resposta chega aqui ${prazo} (atendemos em até 24 h em dia útil e em até 48 h em fim de semana e feriado). Pode deixar mais detalhes enquanto isso.`);
+  // O chamado já está no topo da fila; se o aviso falhar, ele continua visível, mas fica no log.
+  const r = await emailAEquipe({ chamado: linha, clienteNome: nome, texto, motivo: motivoInterno, prazo });
+  if (!r.ok) console.error('[atendimento] aviso à equipe não saiu', r.error);
+  return linha;
 }
 
 export async function emailAoClienteRespostaDoAdvogado({ chamado, autorNome, texto }) {

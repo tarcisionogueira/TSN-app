@@ -857,7 +857,8 @@ export default function ProdutoPublico({ tipo }) {
                 {produto?.requer_cartao_bonus && (
                   <>
                     <div style={{ background: corSuave(LATAO, '14'), border: `1px solid ${corSuave(LATAO, '55')}`, borderRadius: 10, padding: '12px 14px', marginBottom: 12, fontSize: 12.5, color: '#7a5a13', lineHeight: 1.6 }}>
-                      🎁 Inclui <strong>{produto.concede_meses || 1} {(produto.concede_meses || 1) > 1 ? 'meses' : 'mês'} de Investidor Pro</strong> de cortesia.
+                      {/* 07/11, dono: o mês do Pro entra NA HORA e isso tem de estar escrito, não implícito. */}
+                      🎁 Inclui <strong>{produto.concede_meses || 1} {(produto.concede_meses || 1) > 1 ? 'meses' : 'mês'} de Investidor Pro</strong> de cortesia, <strong>ativado na hora</strong>, assim que o pagamento é confirmado.
                     </div>
                     <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12, color: '#475569', cursor: 'pointer', marginBottom: 10, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 12px' }}>
                       <input type="checkbox" checked={cienteRenovacao} onChange={(e) => setCienteRenovacao(e.target.checked)} style={{ marginTop: 2, flexShrink: 0 }} />
@@ -866,7 +867,9 @@ export default function ProdutoPublico({ tipo }) {
                         {precoTop2Cheio ? ` (R$ ${precoTop2Cheio.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}/mês)` : ''} depois da cortesia,
                         cobrada no mesmo cartão. Cancele quando quiser.
                         <strong style={{ display: 'block', marginTop: 3, color: AZUL }}>
-                          {cienteRenovacao ? 'Marcado: sua assinatura continua sozinha depois.' : `Desmarcado: você só leva o ${tipo === 'curso' ? 'curso' : 'eBook'}, sem renovação automática.`}
+                          {cienteRenovacao
+                            ? 'Marcado: sua assinatura continua sozinha depois da cortesia.'
+                            : `Desmarcado: você leva o ${tipo === 'curso' ? 'curso' : 'eBook'} e a cortesia; ao fim dela a conta volta ao plano grátis, sem nenhuma cobrança.`}
                         </strong>
                       </span>
                     </label>

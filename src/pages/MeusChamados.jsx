@@ -99,10 +99,18 @@ export default function MeusChamados() {
     try {
       const res = await apiCall('/api/chat-suporte', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mensagens: novaLista }),
+        body: JSON.stringify({ chamado_id: chamadoAtivo.id, mensagens: novaLista }),
       });
       if (!res.ok) throw new Error(`chat-suporte HTTP ${res.status}`);
-      const { resposta, escalar, bug } = await res.json();
+      const j = await res.json();
+      // 07/11: o servidor grava a resposta e escala sozinho quando recebe o chamado (ver api/chat-suporte.js).
+      if (j.gravado || j.chamado) {
+        if (j.chamado) setChamadoAtivo(j.chamado);
+        await abrirChamado(j.chamado || chamadoAtivo);
+        setLoadingIA(false); setEnviando(false);
+        return;
+      }
+      const { resposta, escalar, bug } = j;
       if (!resposta) throw new Error('IA sem resposta');
       const { error: eIa } = await supabase.from('chamados_mensagens').insert({
         chamado_id: chamadoAtivo.id, autor_tipo: 'ia',

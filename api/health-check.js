@@ -4,6 +4,7 @@
 // default` vira assinatura Express e o Response retornado seria ignorado.
 export const config = { runtime: 'nodejs', maxDuration: 120 };
 import { getUser, getUserRoleById, unauthorized, forbidden } from './_auth.js';
+import { prazoRespostaEquipe } from './_prazo-atendimento.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -218,13 +219,22 @@ async function handler(req) {
 
   // Termo, 8.4: primeira resposta humana em até 3 dias úteis. O chamado que espera a equipe ficava fora dos dois alertas
   // (o do advogado e o de chamado aberto há 7 dias, que olha status='aberto').
+  // 07/11: o prazo comercial é 24 h quando o pedido chega em dia útil e 48 h em fim de semana/feriado (dono).
+  // A conta é a MESMA que o cliente vê no chat (api/_prazo-atendimento.js).
   itens.push(await check('Atendimento — cliente aguardando a equipe', async () => {
-    const limite = new Date(Date.now() - 3 * 24 * 3600 * 1000).toISOString();
-    const r = await sb(`chamados?status=eq.aguardando_atendente&atualizado_em=lt.${limite}&select=id,titulo,user_nome&order=atualizado_em.asc&limit=50`);
+    const limite = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+    const r = await sb(`chamados?status=eq.aguardando_atendente&atualizado_em=lt.${limite}&select=id,titulo,user_nome,atualizado_em&order=atualizado_em.asc&limit=50`);
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const parados = await r.json();
-    if (!parados.length) return { status: 'ok', detalhe: 'Nenhum cliente esperando a equipe há mais de 3 dias' };
-    return { status: 'aviso', detalhe: `${parados.length} cliente(s) esperando a equipe há mais de 3 dias: ${parados.slice(0, 5).map(c => c.user_nome || c.titulo).join(' · ')}` };
+    const candidatos = await r.json();
+    const parados = [];
+    for (const c of candidatos) {
+      // Horas pela regra do banco (atendimento_prazo_horas); sem resposta, a conta local é a mesma régua.
+      const rh = await sb('rpc/atendimento_prazo_horas', { method: 'POST', body: JSON.stringify({ p_desde: c.atualizado_em }) }).catch(() => null);
+      const h = rh?.ok ? Number(await rh.json().catch(() => 0)) || null : null;
+      if (prazoRespostaEquipe(c.atualizado_em, h).getTime() < Date.now()) parados.push(c);
+    }
+    if (!parados.length) return { status: 'ok', detalhe: 'Nenhum cliente esperando a equipe além do prazo (24 h úteis / 48 h fim de semana)' };
+    return { status: 'aviso', detalhe: `${parados.length} cliente(s) esperando a equipe além do prazo: ${parados.slice(0, 5).map(c => c.user_nome || c.titulo).join(' · ')}` };
   }));
 
   // Oportunidade selecionada: a lista nominal do que parou (aprovada sem reunião, aviso que não saiu, sem resposta).

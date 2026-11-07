@@ -10,33 +10,11 @@ export const config = { runtime: 'edge' };
 
 import { getAuthUser } from './_auth.js';
 import { checkRateLimit, rateLimitedResponse } from './_rate-limit.js';
-import { sb, lerLista, advogadosDoCliente, casoDoCliente, canalAdvogadoLigado, emailAoAdvogado, emailAEquipe, TIPO_JURIDICO_CLIENTE } from './_atendimento-canal.js';
+import { sb, lerLista, advogadosDoCliente, casoDoCliente, canalAdvogadoLigado, emailAoAdvogado, TIPO_JURIDICO_CLIENTE,
+  mensagemSistema, atualizarChamado, paraEquipe } from './_atendimento-canal.js';
 
 const json = (o, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { 'Content-Type': 'application/json' } });
 const SEGMENTO = { explorador: 'explorador', top2: 'investidor', assessorado: 'assessorado', clube: 'clube' };
-
-async function mensagemSistema(chamadoId, conteudo) {
-  const r = await sb('chamados_mensagens', { method: 'POST', prefer: 'return=minimal',
-    body: { chamado_id: chamadoId, autor_tipo: 'ia', autor_nome: 'Sistema', conteudo, anexos: [] } });
-  if (!r.ok) console.error('[atendimento-canal] mensagem de sistema HTTP', r.status);
-}
-
-async function atualizarChamado(id, campos) {
-  const r = await sb(`chamados?id=eq.${id}`, { method: 'PATCH', prefer: 'return=representation', body: { ...campos, atualizado_em: new Date().toISOString() } });
-  if (!r.ok) throw new Error(`chamado não atualizado (HTTP ${r.status})`);
-  const [linha] = await r.json();
-  if (!linha) throw new Error('chamado não atualizado');
-  return linha;
-}
-
-async function paraEquipe(chamado, nome, texto, motivo = '') {
-  const linha = await atualizarChamado(chamado.id, { status: 'aguardando_atendente', tipo: chamado.tipo === TIPO_JURIDICO_CLIENTE ? null : chamado.tipo });
-  await mensagemSistema(chamado.id, motivo || '✅ Encaminhamos você para a nossa equipe. Você será respondido por aqui em até 3 dias úteis. Pode deixar mais detalhes enquanto isso.');
-  // O chamado já está no topo da fila; se o aviso falhar, ele continua visível, mas fica no log.
-  const r = await emailAEquipe({ chamado: linha, clienteNome: nome, texto, motivo: motivo ? 'O envio ao advogado falhou.' : '' });
-  if (!r.ok) console.error('[atendimento-canal] aviso à equipe não saiu', r.error);
-  return linha;
-}
 
 async function paraAdvogado(chamado, caso, nome, texto) {
   const token = chamado.email_token || crypto.randomUUID().replace(/-/g, '').slice(0, 20);
@@ -49,7 +27,10 @@ async function paraAdvogado(chamado, caso, nome, texto) {
   }
   if (!r.ok) {
     console.error('[atendimento-canal] e-mail ao advogado não saiu', r.error);
-    const fallback = await paraEquipe(linha, nome, texto, 'Não consegui entregar sua mensagem ao advogado agora. Nossa equipe assumiu e responderá por aqui em até 3 dias úteis.');
+    const fallback = await paraEquipe(linha, nome, texto, {
+      avisoCliente: 'Não consegui entregar sua mensagem ao advogado agora. Nossa equipe assumiu e responde por aqui em até 24 h em dia útil (48 h em fim de semana e feriado).',
+      motivoInterno: 'O envio ao advogado falhou.',
+    });
     return { chamado: fallback, aviso: 'Não consegui falar com o advogado agora. Sua mensagem foi para a equipe.' };
   }
   await mensagemSistema(chamado.id, '✅ Sua mensagem foi enviada ao advogado do seu caso. A resposta aparece aqui, e o prazo é de até 3 dias úteis.');
@@ -97,6 +78,8 @@ export default async function handler(req) {
 
     if (b.acao === 'transferir') {
       if (!['equipe', 'advogado'].includes(b.destino)) return json({ error: 'Destino inválido.' }, 400);
+      // Já está com a equipe (a IA escalou no servidor): não repete aviso nem e-mail.
+      if (b.destino === 'equipe' && chamado.status === 'aguardando_atendente') return json({ chamado });
       const falas = await lerLista(`chamados_mensagens?chamado_id=eq.${chamado.id}&autor_tipo=eq.cliente&select=conteudo&order=criado_em.desc&limit=5`);
       const texto = falas.reverse().map((m) => m.conteudo).join('\n\n') || chamado.titulo || '(sem texto)';
       if (b.destino === 'equipe') return json({ chamado: await paraEquipe(chamado, nome, texto) });

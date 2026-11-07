@@ -7,7 +7,7 @@ import { chatDisponivelPara } from '../utils/chatDisponivel';
 import { ACEITA_DOCUMENTO } from '../utils/arquivo';
 
 // Inatividade: avisar após 2min, fechar após 30min (em ms)
-const AVISO_MS = 2 * 60 * 1000;
+const AVISO_MS = 15 * 60 * 1000; // 07/11 (arena): 2 min era pressa — o cliente lendo um relatório levava "Ainda está por aqui?"
 const FECHAR_MS = 30 * 60 * 1000;
 
 // WhatsApp da empresa — PREENCHIDO SÓ quando a integração gerar o número (env
@@ -206,7 +206,7 @@ export default function ChatSuporte() {
       avisouInatividade.current = true;
       await supabase.from('chamados_mensagens').insert({
         chamado_id: ticket.id, autor_tipo: 'ia', autor_nome: 'BidPro Assistente',
-        conteudo: 'Ainda está por aqui? Estou disponível para continuar ajudando. Caso não haja resposta nos próximos 28 minutos, este atendimento será encerrado automaticamente.',
+        conteudo: 'Ainda está por aqui? Estou disponível para continuar ajudando. Se não houver resposta em 15 minutos, encerro este atendimento — é só me chamar de novo pelo botão Atendimento quando quiser.',
         anexos: [],
       });
     }, AVISO_MS);
@@ -223,7 +223,7 @@ export default function ChatSuporte() {
       if (fechou?.length) {
         await supabase.from('chamados_mensagens').insert({
           chamado_id: ticket.id, autor_tipo: 'ia', autor_nome: 'BidPro Assistente',
-          conteudo: 'Este atendimento foi encerrado por inatividade. Se precisar de mais ajuda, abra um novo chamado.',
+          conteudo: 'Este atendimento foi encerrado por falta de resposta. Quando precisar, é só me chamar de novo pelo botão Atendimento.',
           anexos: [],
         });
         setTicket(p => p ? { ...p, status: 'finalizado' } : p);
@@ -403,13 +403,29 @@ export default function ChatSuporte() {
   async function dispararIA(tk, msgs) {
     setLoadingIA(true);
     try {
+      // 07/11: com `chamado_id` o SERVIDOR grava a resposta e, se a IA escalar ou falhar, passa o chamado à
+      // equipe na mesma requisição — não depende mais desta aba continuar aberta.
       const res = await apiCall('/api/chat-suporte', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mensagens: msgs, memoria: memoriaIA }),
+        body: JSON.stringify({ chamado_id: tk.id, mensagens: msgs, memoria: memoriaIA }),
       });
-      // 07/11: resposta de erro (429, 401, 500) chegava como `resposta` indefinida e o cliente ficava sem nada.
+      // Resposta de erro (429, 401, 500) chegava como `resposta` indefinida e o cliente ficava sem nada.
       if (!res.ok) throw new Error(`chat-suporte HTTP ${res.status}`);
-      const { resposta, escalar, bug } = await res.json();
+      const j = await res.json();
+      if (j.gravado || j.chamado) {
+        if (j.chamado) setTicket(j.chamado);
+        if (j.chamado?.status === 'aguardando_atendente') {
+          setPrecisaAtendente(false);
+          clearTimeout(avisoTimer.current); clearTimeout(fecharTimer.current);
+        }
+        // A resposta também chega pelo realtime; reler aqui é a garantia. Falha de leitura não apaga a conversa na tela.
+        const { data: atuais, error: eLer } = await supabase.from('chamados_mensagens').select('*').eq('chamado_id', tk.id).order('criado_em', { ascending: true });
+        if (eLer) console.error('[chat] releitura da conversa falhou', eLer.message);
+        else if (atuais) setMensagens(atuais);
+        setLoadingIA(false);
+        return;
+      }
+      const { resposta, escalar, bug } = j;
       if (!resposta) throw new Error('IA sem resposta');
       const { error: eIa } = await supabase.from('chamados_mensagens').insert({
         chamado_id: tk.id, autor_tipo: 'ia',

@@ -3,6 +3,7 @@ export const config = { runtime: 'edge' };
 import { getAuthUser, unauthorized } from './_auth.js';
 import { iaGeminiPrimary } from './_claude.js';
 import { checkRateLimit, rateLimitedResponse } from './_rate-limit.js';
+import { sb, lerLista, paraEquipe, catalogoAssessoria } from './_atendimento-canal.js';
 
 const SYSTEM = `Você é o assistente virtual de suporte da BidPro Brasil, plataforma especializada em análise de imóveis em leilão judicial e extrajudicial no Brasil.
 
@@ -57,7 +58,7 @@ SOMENTE quando necessário — ações na conta, FALHAS/BUGS, problemas técnico
 // Ajuste por CANAL — o MESMO agente atende o chat do site E (futuramente) o
 // WhatsApp. 'site' não altera nada (comportamento atual); 'whatsapp' só encurta.
 const CANAL_HINT = {
-  site: '\n\n## Canal: chat do site\nSe a pessoa pedir para falar com alguém, com a equipe ou com o advogado do caso, diga que ela pode usar o botão "Equipe de atendimento" logo abaixo da conversa e, quando o caso tiver advogado designado, o botão com o nome dele. Não prometa advogado se não souber que existe. Você não recebe autorização de lance, não aprova nem recusa oportunidade e não dá parecer jurídico: se a pessoa disser algo como "pode dar lance de 300 mil", responda que isso não vale como autorização por aqui e encaminhe à equipe.',
+  site: '\n\n## Canal: chat do site\nSe a pessoa pedir para falar com alguém ou com a equipe, NÃO tente resolver antes: diga em uma frase que vai passar para a equipe e encerre com [[ESCALAR]] — o sistema avisa a equipe e informa ao cliente o prazo (até 24 h em dia útil e até 48 h em fim de semana e feriado). Não prometa outro prazo. Se pedir o advogado do caso, diga que pode usar o botão com o nome dele logo abaixo da conversa, quando existir; não prometa advogado se não souber que existe. Você não recebe autorização de lance, não aprova nem recusa oportunidade e não dá parecer jurídico: se a pessoa disser algo como "pode dar lance de 300 mil", responda que isso não vale como autorização por aqui e encaminhe à equipe.',
   // WhatsApp = atendimento E venda (01/10, dono: "agente de IA para atender e campanha perpétua para
   // a IA vender e direcionar o cliente ao sistema"). Mesmo agente, mesmas regras de privacidade e de
   // preço do SYSTEM; aqui só o ROTEIRO de quem ainda não é cliente e o LINK RASTREADO — é o
@@ -104,8 +105,9 @@ export async function responderSuporte({ mensagens, memoria, canal = 'site', api
     body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 1024, system, messages }),
   });
   const data = await res.json();
-  let resposta = data?.content?.[0]?.text
-    || 'Desculpe, não consegui processar sua mensagem no momento. Nossa equipe irá atendê-lo em breve. [[ESCALAR]]';
+  const textoIa = data?.content?.[0]?.text;
+  let resposta = textoIa
+    || 'Não consegui processar sua mensagem no momento. Passei a sua conversa para a nossa equipe. [[ESCALAR]]';
   // [[BUG]] = falha de plataforma (registra p/ correção) — também aciona um humano (escalar).
   const bug = resposta.includes('[[BUG]]');
   const escalar = resposta.includes('[[ESCALAR]]') || bug;
@@ -113,7 +115,7 @@ export async function responderSuporte({ mensagens, memoria, canal = 'site', api
   const mPerfil = resposta.match(/\[\[PERFIL:([^\]]*)\]\]/);
   const perfilLead = mPerfil ? mPerfil[1].trim().slice(0, 400) : null;
   resposta = resposta.replace(/\[\[PERFIL:[^\]]*\]\]/g, '').replace('[[ESCALAR]]', '').replace('[[BUG]]', '').trim();
-  return { resposta, escalar, bug, perfilLead };
+  return { resposta, escalar, bug, perfilLead, falhaIa: !textoIa };
 }
 
 export default async function handler(req) {
@@ -141,15 +143,65 @@ export default async function handler(req) {
     return new Response(JSON.stringify({ error: 'JSON inválido' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
   }
   const { mensagens, memoria, canal } = reqBody;
-  if (!mensagens?.length) return new Response(JSON.stringify({ error: 'mensagens obrigatório' }), {
+  if (!reqBody.chamado_id && !mensagens?.length) return new Response(JSON.stringify({ error: 'mensagens obrigatório' }), {
     status: 400, headers: { 'Content-Type': 'application/json' },
   });
 
   const CORS = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': process.env.APP_ORIGIN || 'https://bidprobrasil.com.br' };
+
+  // ESCALADA NO SERVIDOR (07/11, 1º passo da arena). Com `chamado_id`, o servidor grava a resposta da IA e,
+  // se ela escalar (ou falhar), passa o chamado à equipe NESTA requisição: status `aguardando_atendente`,
+  // aviso ao cliente com o prazo calculado e e-mail à equipe. Antes isso dependia do navegador do cliente
+  // chamar a transferência depois — fechou a aba no meio, ninguém era avisado.
+  if (reqBody.chamado_id) {
+    try {
+      return new Response(JSON.stringify(await responderNoChamado({ authUser, chamadoId: reqBody.chamado_id, memoria, apiKey })), { status: 200, headers: CORS });
+    } catch (e) {
+      console.error('[chat-suporte] chamado', String(e?.message || e));
+      return new Response(JSON.stringify({ error: 'Não consegui responder agora.' }), { status: 502, headers: CORS });
+    }
+  }
+
   try {
     const out = await responderSuporte({ mensagens, memoria, canal: canal || 'site', apiKey });
     return new Response(JSON.stringify(out), { status: 200, headers: CORS });
   } catch (_) {
     return new Response(JSON.stringify({ resposta: 'Desculpe, não consegui processar sua mensagem no momento. Nossa equipe irá atendê-lo em breve.', escalar: true }), { status: 200, headers: CORS });
   }
+}
+
+const RE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function responderNoChamado({ authUser, chamadoId, memoria, apiKey }) {
+  if (!RE_UUID.test(String(chamadoId))) throw new Error('chamado_id inválido');
+  // Posse conferida com a service key; a conversa vem do BANCO, não do corpo da requisição.
+  const [chamado] = await lerLista(`chamados?id=eq.${chamadoId}&user_id=eq.${authUser.id}&select=*&limit=1`);
+  if (!chamado) throw new Error('chamado não encontrado');
+  // Com pessoa na conversa a IA não entra.
+  if (['em_atendimento', 'aguardando_atendente', 'finalizado'].includes(chamado.status)) return { resposta: null, gravado: false, chamado };
+  const mensagens = await lerLista(`chamados_mensagens?chamado_id=eq.${chamadoId}&select=autor_tipo,conteudo&order=criado_em.asc&limit=60`);
+
+  let out;
+  try {
+    // Assessoria no CATÁLOGO pela regra assessoria.preco_independe_do_imovel (preço fixo + êxito).
+    out = await responderSuporte({ mensagens, memoria, canal: 'site', apiKey, catalogo: await catalogoAssessoria() });
+  } catch (e) {
+    console.error('[chat-suporte] IA falhou', String(e?.message || e));
+    out = { resposta: 'Não consegui processar sua mensagem no momento. Passei a sua conversa para a nossa equipe.', escalar: true, falhaIa: true };
+  }
+  if (!out.resposta) return { resposta: null, gravado: false, chamado };
+
+  const ri = await sb('chamados_mensagens', { method: 'POST', prefer: 'return=minimal',
+    body: { chamado_id: chamado.id, autor_tipo: 'ia', autor_nome: 'BidPro Assistente', conteudo: out.resposta, anexos: [] } });
+  if (!ri.ok) console.error('[chat-suporte] resposta da IA não gravada', ri.status);
+
+  let atual = chamado;
+  if (out.escalar) {
+    const falas = mensagens.filter((m) => m.autor_tipo === 'cliente').slice(-5).map((m) => m.conteudo).join('\n\n') || chamado.titulo || '(sem texto)';
+    const [perfil] = await lerLista(`perfis?id=eq.${authUser.id}&select=nome&limit=1`);
+    atual = await paraEquipe({ ...chamado, tipo: out.bug ? 'bug' : chamado.tipo }, perfil?.nome || authUser.email, falas, {
+      motivoInterno: out.falhaIa ? 'A IA falhou ao responder.' : out.bug ? 'A IA identificou uma FALHA da plataforma.' : 'A IA encaminhou para uma pessoa.',
+    });
+  }
+  return { resposta: out.resposta, escalar: !!out.escalar, bug: !!out.bug, gravado: ri.ok, chamado: atual };
 }

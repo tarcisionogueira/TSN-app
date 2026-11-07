@@ -39559,3 +39559,16 @@ Relatório saiu com mercado = avaliação (R$ 4,6 mi) e o aviso "área provável
 
 ### 04/11 (noite) — trava de lote com várias matrículas (Porto Trapiche, 5e8f4d8d)
 O dono obteve com o leiloeiro parte das matrículas do lote (4 apartamentos unificados). Elas trazem a área privativa de UMA unidade (92,80 m²). Em três pontos do mercadológico (pré-busca, ficha do documental, 2ª chance) a área de uma matrícula lida substituía a do lote inteiro → o lote de ~700 m² seria avaliado como um apartamento só. Nova `matriculaParcial` (api/_area-coerencia.js): lote que cita 2+ matrículas e matrícula lida < 70% da área do lote ⇒ mantém a área do lote + anomalia `matricula_parcial_multi`. Testes em `scripts/testes/avaliacao-defasada-nao-encolhe-area.mjs`. Os fatos jurídicos lidos (titularidade, ônus) ficam no relatório documental do lote, não aqui (repo público).
+
+## 07/11 — Inspeção geral, arena do atendimento e decisões do dono
+
+**Decisões do dono (07/11):**
+- Resposta da equipe ao cliente: **até 24 h quando o pedido chega em dia útil e até 48 h em fim de semana e feriado**. Regra `atendimento.prazo_resposta_equipe`, aplicada por `atendimento_prazo_horas()`; o cliente vê data e hora calculadas; o health-check usa a mesma régua.
+- Assessoria é para **arrematar o imóvel**, preço fixo + honorário de êxito em percentual: o preço não depende do valor do imóvel. Regra `assessoria.preco_independe_do_imovel`, texto em `catalogo_assessoria_texto()` (vai para a IA do site).
+- E-book: o mês do Investidor Pro é **ativado na hora** (agora escrito na página e no card); a caixa "continuar com a assinatura" deixa levar só o e-book, sem cobrança depois.
+- **Sem template pago da Meta** no WhatsApp. Contato de reserva é e-mail.
+- Matheus Barros e Rafael da Silva Pereira seguem com assessoria ATIVA (arremataram em julho, sem posse/registro): o encerramento é pela regra `assessoria.encerramento`. O bloqueio que viam vem do "Termo de Contratação da Assessoria" gerado em lote em 30/09 e não assinado (pendência 425).
+
+**Escalada no servidor (1º passo da arena):** `api/chat-suporte.js` com `chamado_id` lê a conversa do banco, grava a resposta da IA e, em `[[ESCALAR]]`/`[[BUG]]`/falha da IA, chama `paraEquipe()` (agora em `api/_atendimento-canal.js`, o mesmo do botão "Equipe"). Antes dependia da aba do cliente.
+
+**Arena (30 especialistas, 3 juízes), ordem recomendada:** 1) contato garantido (feito em parte hoje); 2) contexto do cliente lido no servidor + preço do catálogo liberado + prompt por plano; 3) travas (sem oferta em bug/cobrança/pedido de pessoa, 1 oferta por conversa, nada vale como lance); 4) resgate de checkout abandonado; 5) ponte Pro→Assessoria por sinais do banco; 6) amostra guiada para o Explorador; 7) perfil progressivo (1 pergunta por conversa, chips, só campo nulo).
