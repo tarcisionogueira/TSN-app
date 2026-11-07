@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Loader2, FileText, Pencil } from 'lucide-react';
 import { AZUL } from '../utils/marca';
 
@@ -40,6 +40,12 @@ export default function DadosNotaFiscal({ cobrancaId, nf, emailSugerido = '', no
     } catch (e) { console.error('[DadosNotaFiscal] CEP', e?.message || e); } // padrao-ok: CEP offline, preenche à mão
     setBuscandoCep(false);
   };
+
+  // CEP que já veio preenchido (do aceite do termo) com a rua vazia: completa o endereço ao abrir, em vez de a
+  // pessoa redigitar o que já informou (visto na cobrança do William, 07/11 — a busca só disparava ao digitar).
+  useEffect(() => {
+    if (editando && so(d.cep).length === 8 && !String(d.logradouro || '').trim()) buscarCep(d.cep);
+  }, [editando]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const salvar = async () => {
     setSalvando(true); setErro('');
