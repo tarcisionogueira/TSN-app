@@ -6,6 +6,7 @@ import PagamentoServico from '../components/PagamentoServico';
 import BoletoMp from '../components/BoletoMp';
 import PixBoletoInter from '../components/PixBoletoInter';
 import DadosNotaFiscal from '../components/DadosNotaFiscal';
+import { textoParcelamento } from '../utils/parcelamento';
 import TermoAceiteCobranca from '../components/TermoAceiteCobranca';
 import { AZUL, VERDE } from '../utils/marca';
 
@@ -124,7 +125,7 @@ export default function CobrarAvulso() {
             <h2 style={{ margin: '0 0 4px', fontWeight: 900, fontSize: 22, color: '#111111' }}>{cob.termo.titulo}</h2>
             <p style={{ margin: '0 0 12px', color: '#64748b', fontSize: 15 }}>
               <strong style={{ color: '#111111', fontSize: 28 }}>{fmtBRL(cob.saldo_restante ?? cob.valor)}</strong>
-              {cob.parcelas_sem_juros > 1 ? ` em até ${cob.parcelas_sem_juros}x sem juros` : ''}
+              {(cob.parcelas_max || 12) > 1 ? ` ${textoParcelamento(cob.parcelas_max, cob.parcelas_sem_juros)} no cartão` : ''}
             </p>
             {cob.subtitulo && (
               <div style={{ background: '#fef3c7', color: '#d97706', fontSize: 13, fontWeight: 700, padding: '8px 12px', borderRadius: 8 }}>{cob.subtitulo}</div>
@@ -159,7 +160,7 @@ export default function CobrarAvulso() {
         ) : (<>
         {cob.termo && (
           <div style={{ fontSize: 12, color: '#166534', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '8px 10px', textAlign: 'center' }}>
-            ✓ Termo aceito. Agora é só concluir o pagamento{cob.parcelas_sem_juros > 1 ? ` — em até ${cob.parcelas_sem_juros}x sem juros no cartão` : ''}.
+            ✓ Termo aceito. Agora é só concluir o pagamento{(cob.parcelas_max || 12) > 1 ? ` — ${textoParcelamento(cob.parcelas_max, cob.parcelas_sem_juros)} no cartão` : ''}.
           </div>
         )}
         {/* DADOS DA NOTA FISCAL (07/11, dono): completos → resumo e o pagamento aparece direto; faltando → a pessoa
@@ -194,6 +195,7 @@ export default function CobrarAvulso() {
                 extra={{ cobranca_id: cob.id, nf_ok: !!cob.nf?.completo }}
                 email={email}
                 parcelasSemJuros={cob.parcelas_sem_juros || 1}
+                parcelasMax={cob.parcelas_max || 12}
                 embutido
                 onPago={() => setPago(true)}
                 permitirSplit
@@ -206,6 +208,7 @@ export default function CobrarAvulso() {
                 extra={{ cobranca_id: cob.id, nf_ok: !!cob.nf?.completo }}
                 email={email}
                 parcelasSemJuros={cob.parcelas_sem_juros || 1}
+                parcelasMax={cob.parcelas_max || 12}
                 embutido
                 soCartao
                 onPago={() => setPago(true)}

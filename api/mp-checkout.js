@@ -8,6 +8,7 @@
  *   MP_PUBLIC_KEY    — public_key (usada no frontend para tokenizar cartão)
  */
 import { honorarioComTaxa, gatewayDoBoleto, TETO_BOLETO_MP } from '../src/utils/taxaHonorario.js';
+import { parcelamento } from '../src/utils/parcelamento.js';
 import { getUser } from './_auth.js';
 import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
 import { auditLog } from './_audit.js';
@@ -222,7 +223,7 @@ export default async function handler(req, res) {
     if (!cobranca_id) return res.status(400).json({ error: 'cobranca_id obrigatório' });
     const SB_URL = process.env.VITE_SUPABASE_URL, SB_KEY = process.env.SUPABASE_SERVICE_KEY;
     try {
-      const r = await fetch(`${SB_URL}/rest/v1/cobrancas_avulsas?id=eq.${encodeURIComponent(cobranca_id)}&select=id,descricao,valor,valor_pago_pix,status,meio,termo_texto,termo_aceito_em,termo_aceite,dados_nf`, {
+      const r = await fetch(`${SB_URL}/rest/v1/cobrancas_avulsas?id=eq.${encodeURIComponent(cobranca_id)}&select=id,descricao,valor,valor_pago_pix,status,meio,termo_texto,termo_aceito_em,termo_aceite,dados_nf,parcelas_max,parcelas_sem_juros`, {
         headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` }, signal: AbortSignal.timeout(10000),
       });
       const [cob] = r.ok ? await r.json().catch(() => []) : [];
@@ -250,8 +251,18 @@ export default async function handler(req, res) {
       } else {
         valor = saldo;
       }
+      // PARCELAMENTO DA NEGOCIAÇÃO (07/11, dono): a cobrança define até quantas parcelas e até quantas sem juros.
+      // Acima do "sem juros", o CLIENTE paga os juros — o total é calculado AQUI pela mesma conta da tela
+      // (src/utils/parcelamento.js). Antes a tela mostrava juros e este servidor cobrava o saldo puro.
+      let valorBase = valor;
+      if (metodoPagamento === 'credit_card') {
+        const n = Math.max(1, Math.floor(Number(dadosCartao?.parcelas) || 1));
+        const pMax = Number(cob.parcelas_max) || 12;
+        if (n > pMax) return res.status(400).json({ error: `Esta cobrança aceita até ${pMax}× no cartão.` });
+        valor = parcelamento(valor, n, Number(cob.parcelas_sem_juros) || 1).total;
+      }
       descricao = String(cob.descricao || 'Cobrança avulsa — BidPro Brasil').slice(0, 250);
-      cobrancaCtx = { cobrancaId: cob.id, boleto: ehBoletoAvulso, aceite: cob.termo_aceite || null, nf: cob.dados_nf || null };
+      cobrancaCtx = { cobrancaId: cob.id, boleto: ehBoletoAvulso, aceite: cob.termo_aceite || null, nf: cob.dados_nf || null, valorBase };
     } catch (e) {
       console.error('[mp-checkout] cobranca_avulsa: gate falhou', e?.message || e);
       return res.status(503).json({ error: 'Não consegui validar esta cobrança agora. Tente em instantes.' });
@@ -539,7 +550,7 @@ export default async function handler(req, res) {
           ? { user_id: honorarioCtx.arrematanteId, origem: 'tsn-app', tipo: 'honorario_exito', arrematacao_id: honorarioCtx.arrematacaoId, arrematante_id: honorarioCtx.arrematanteId, taxa_repassada: honorarioCtx.taxa }
           : cobrancaCtx
             // idem: quem paga pode não ter sessão (link repassado a terceiro).
-            ? { user_id: user?.id || null, origem: 'tsn-app', tipo: 'cobranca_avulsa', cobranca_id: cobrancaCtx.cobrancaId }
+            ? { user_id: user?.id || null, origem: 'tsn-app', tipo: 'cobranca_avulsa', cobranca_id: cobrancaCtx.cobrancaId, valor_base: cobrancaCtx.valorBase }
             : { user_id: user.id, origem: 'tsn-app', tipo: 'servico', proposito, ...(planoAnualCtx ? { plano: planoAnualCtx.plano } : {}) },
       // external_reference sempre presente (score de qualidade da integração MP pede
       // referência externa em toda cobrança). Só o formato do produto (uuid puro) é lido

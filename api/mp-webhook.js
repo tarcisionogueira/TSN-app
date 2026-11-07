@@ -718,7 +718,11 @@ export async function processarEventoMp(req, res) {
         const total = Number(cob.valor) || 0;
         const jaPagoPix = Number(cob.valor_pago_pix) || 0;
         const esperado = Math.max(0, Math.round((total - jaPagoPix) * 100) / 100);
-        const pago = Number(pagamento.transaction_amount) || 0;
+        // 07/11: no cartão parcelado COM JUROS (cliente assume), o MP recebe saldo + juros. O checkout grava o saldo
+        // que a parcela cobre em metadata.valor_base; é ele que abate a cobrança (os juros não são "dinheiro a mais").
+        const pagoBruto = Number(pagamento.transaction_amount) || 0;
+        const base = Number(pagamento.metadata?.valor_base);
+        const pago = Number.isFinite(base) && base > 0 && base <= pagoBruto + 0.01 ? base : pagoBruto;
         // PIX + CARTÃO COMBINADO (17/09): mesmo raciocínio do honorário — o pagamento pode
         // ser uma PARTE do saldo (Pix parcial), não precisa bater exato com o que falta.
         if (esperado <= 0 || pago <= 0 || pago > esperado + Math.max(1, esperado * 0.01)) {

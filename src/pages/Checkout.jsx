@@ -20,6 +20,7 @@ import { salvarRef } from '../utils/ref';
 import { reportarErroCliente } from '../utils/reportarErro';
 import { versaoTermoProduto, termoDoProduto } from '../utils/termos';
 import PagamentoServico, { obterDeviceId } from '../components/PagamentoServico';
+import { parcelamento } from '../utils/parcelamento';
 import { useCartaoSeguroMP } from '../utils/cartaoSeguroMP';
 import EnderecoAutocomplete from '../components/EnderecoAutocomplete';
 import { ESTADOS_UF } from '../data/cidades';
@@ -1516,7 +1517,10 @@ export default function Checkout() {
             const fmtR = (v) => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             const preco = Number(plano.preco) || 0;
             const precoVista = Number(plano.precoVista) || 0;
-            const parcela = preco / 12;
+            // 07/11 (dono): padrão = cliente assume os juros a partir da 2ª parcela; a parcela mostrada já vem com juros,
+            // pela mesma conta que o pagamento usa (src/utils/parcelamento.js).
+            const p12 = parcelamento(preco, 12, 1);
+            const parcela = p12.parcela;
             const economia = preco - precoVista;
             return (
               <div style={{ marginBottom: 20 }}>
@@ -1537,7 +1541,7 @@ export default function Checkout() {
                       <strong style={{ color: '#111111', fontSize: 32 }}>12× {fmtR(parcela)}</strong>
                     </div>
                     <div style={{ marginTop: 6, fontSize: 13, color: '#64748b', lineHeight: 1.6 }}>
-                      Total {fmtR(preco)} no cartão de crédito{planoKey === 'assessorado' ? ', em até 12× sem juros' : ''}.
+                      Total {fmtR(p12.total)} em 12× no cartão, com juros do cartão. Em 1× no cartão: {fmtR(preco)}.
                     </div>
                   </>
                 )}
@@ -1759,7 +1763,7 @@ export default function Checkout() {
                     Já tenho conta, Entrar
                   </button>
                   <p style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', margin: 0 }}>
-                    {planoKey === 'top2' ? 'Cartão de crédito · Cancele quando quiser' : planoKey === 'assessorado' ? 'Pague via PIX ou cartão de crédito em até 12× sem juros · Contrato de 12 meses' : 'Pague via PIX ou cartão de crédito · Cancele quando quiser'}
+                    {planoKey === 'top2' ? 'Cartão de crédito · Cancele quando quiser' : planoKey === 'assessorado' ? 'Pague via PIX ou cartão em até 12× (com juros do cartão) · Contrato de 12 meses' : 'Pague via PIX ou cartão de crédito · Cancele quando quiser'}
                   </p>
                 </>
               )}
@@ -1818,9 +1822,8 @@ export default function Checkout() {
                 proposito: 'assessoria',
               }}
               assinatura={false}
-              // 07/11 (arena do checkout, dono: "pode fazer como sugerido"): a tela anuncia "12× R$ 500" — sem isto o
-              // componente somava juros a partir da 4ª parcela e o cliente via outra parcela na etapa seguinte.
-              parcelasSemJuros={12}
+              // 07/11 (dono): o cliente assume os juros a partir da 2ª parcela (padrão do componente) — a tela de preço já
+              // mostra a parcela com juros, pela mesma conta (src/utils/parcelamento.js).
               onPago={() => confirmarPagamento()}
               onCancelar={() => setShowPagamento(false)}
               // 18/09 (HANDOFF pendência #1): recusa real do MP aqui não caía pro Asaas —
@@ -1950,7 +1953,7 @@ export default function Checkout() {
               )}
               <p style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', marginTop: 12 }}>
                 {planoKey === 'assessorado'
-                  ? 'Pague via PIX ou cartão de crédito em até 12× sem juros · Contrato de 12 meses · 7 dias para desistir'
+                  ? 'Pague via PIX ou cartão em até 12× (com juros do cartão) · Contrato de 12 meses · 7 dias para desistir'
                   : temToggleAnual && modalidade === 'anual'
                     ? `Cobrança anual recorrente (${plano?.precoAnualLabel || 'R$ 899,00'}) · Renova a cada 12 meses · Cancele a renovação quando quiser`
                     : 'Somente cartão de crédito · Cancele quando quiser'}

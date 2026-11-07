@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Check, Shield, Zap, Users, ChevronDown, ChevronUp, ArrowRight, Share2 } from 'lucide-react';
+import { parcelamento } from '../utils/parcelamento';
 import { supabase } from '../utils/supabase';
 import { PLANOS as PLANOS_STATIC } from '../data/cursos';
 import { acessoAssessoria } from '../lib/assessoria-acesso';
@@ -247,11 +248,13 @@ export default function Planos() {
     const corDis = dark ? 'rgba(165,180,252,0.85)' : '#94a3b8';
     const badgeBg = dark ? 'rgba(134,239,172,0.16)' : '#dcfce7';
     const badgeFg = dark ? '#86efac' : '#15803d';
-    const parcela = fmtR(cheio / 12);
+    // 07/11 (dono): o cliente assume os juros a partir da 2ª parcela — a parcela mostrada já vem com juros.
+    const p12 = parcelamento(cheio, 12, 1);
+    const parcela = fmtR(mensal ? cheio / 12 : p12.parcela); // mensal = mensalidade recorrente, sem juros
     const destaque = mensal ? parcela : `12× ${parcela}`;
     const linhaMeio = mensal
       ? `total ${cheioLabel} em 12× no cartão ou PIX`
-      : `em até 12× sem juros no cartão`;
+      : `total ${fmtR(p12.total)} em 12× (juros do cartão) · ${cheioLabel} em 1×`;
     const linhaVista = `ou ${vistaLabel} à vista no PIX${economia ? ` · economize ${fmtR(economia)}` : ''}`;
     return (
       <div style={{ marginBottom: 18 }}>

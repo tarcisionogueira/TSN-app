@@ -17,6 +17,7 @@ import { useCartaoSeguroMP } from '../utils/cartaoSeguroMP';
 import { QrCode, CreditCard, CheckCircle2, Loader2, Copy, AlertCircle, ChevronLeft, ArrowRight } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { apiCall } from '../utils/apiCall';
+import { parcelamento } from '../utils/parcelamento';
 
 const mascaraCpfCnpj = (v) => {
   const d = String(v || '').replace(/\D/g, '').slice(0, 14);
@@ -47,13 +48,10 @@ export function obterDeviceId() {
   });
 }
 
-// `semJurosAte` é 3 por padrão (assessoria, Leilão Club, etc. — decisão do dono de 16/09);
-// os honorários de êxito passam 1 (18/09): só PIX ou 1x sem juros, 2x em diante já assume.
-const calcParcelaMaisJuros = (valor, n, semJurosAte = 3) => {
-  if (n <= semJurosAte) return valor / n;
-  const taxa = n <= 6 ? 0.0249 : n <= 9 ? 0.0299 : 0.0349;
-  return (valor * Math.pow(1 + taxa, n / 12)) / n;
-};
+// 07/11 (dono): o PADRÃO é o cliente assumir os juros a partir da 2ª parcela (semJurosAte = 1). Quem quiser
+// absorver passa `parcelasSemJuros` (ex.: cobrança avulsa negociada, plano anual). A conta mora em
+// src/utils/parcelamento.js, a MESMA que o servidor usa para cobrar (api/mp-checkout.js).
+const calcParcelaMaisJuros = (valor, n, semJurosAte = 1) => parcelamento(valor, n, semJurosAte).parcela;
 
 const PARCELAS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 
@@ -375,7 +373,7 @@ function PagamentoPIX({ servico, onConfirmado, onVoltar, extra = {}, email: emai
 // assinatura=true → cria uma assinatura recorrente TRANSPARENTE (preapproval do MP)
 // via /api/mp; sem parcelas (cobrança mensal do valor cheio). Caso contrário, é o
 // pagamento único via /api/mp-checkout (parcelável).
-function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, onGatewayBloqueado = null, parcelasMax = 12, parcelasSemJuros = 3, extra = {}, email: emailProp }) {
+function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, onGatewayBloqueado = null, parcelasMax = 12, parcelasSemJuros = 1, extra = {}, email: emailProp }) {
   const { user } = useAuth();
   const email = emailProp || user?.email;
   const [parcelas, setParcelas] = useState(1);
@@ -392,7 +390,8 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
   const pollingRef = useRef(null);
 
   const parcelaValor = assinatura ? servico.valor : calcParcelaMaisJuros(servico.valor, parcelas, parcelasSemJuros);
-  const totalFinal = assinatura ? servico.valor : parcelaValor * parcelas;
+  // Total pela MESMA conta do servidor (centavos iguais aos cobrados), não parcela × n arredondado.
+  const totalFinal = assinatura ? servico.valor : parcelamento(servico.valor, parcelas, parcelasSemJuros).total;
 
   // Fallback Asaas (18/09, pedido do dono) — MESMO padrão que Checkout.jsx já usa pra
   // assinatura de plano ("Continuar pelo Asaas" com 1 clique), estendido aqui pros dois
@@ -808,7 +807,7 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
 // (recarregarSaldo — nunca calcula na mão: o servidor é quem sabe o saldo real, e evita
 // arredondamento/corrida) e mostra o cartão pra esse valor. onPago só é chamado no fim da
 // fase 3 — a fase 1/2 sozinha não fecha a cobrança.
-function PagamentoSplit({ servico, onPago, onVoltar, extra = {}, email, parcelasMax = 12, parcelasSemJuros = 3, recarregarSaldo, ocultarResumo = false }) {
+function PagamentoSplit({ servico, onPago, onVoltar, extra = {}, email, parcelasMax = 12, parcelasSemJuros = 1, recarregarSaldo, ocultarResumo = false }) {
   const [fase, setFase] = useState('valor'); // valor | pix | cartao | erro_saldo
   const [valorPix, setValorPix] = useState('');
   const [erroValor, setErroValor] = useState('');
@@ -933,7 +932,7 @@ function PagamentoSplit({ servico, onPago, onVoltar, extra = {}, email, parcelas
 /* ── Componente principal ── */
 // assinatura=true → somente cartão (Investidor Pro, Leilão Club recorrente)
 // assinatura=false (padrão) → escolha entre PIX (sem taxa) e cartão
-export default function PagamentoServico({ servico, onPago, onCancelar, assinatura = false, soCartao = false, soPix = false, onGatewayBloqueado = null, parcelasMax = 12, parcelasSemJuros = 3, extra = {}, email, embutido = false, permitirSplit = false, recarregarSaldo = null }) {
+export default function PagamentoServico({ servico, onPago, onCancelar, assinatura = false, soCartao = false, soPix = false, onGatewayBloqueado = null, parcelasMax = 12, parcelasSemJuros = 1, extra = {}, email, embutido = false, permitirSplit = false, recarregarSaldo = null }) {
   // soCartao: fluxos cujo pagamento PRECISA carregar metadata (ex.: recarga de crédito,
   // confirmada por metadata.proposito) — só cartão.
   // soPix: fluxo que é PIX por definição (ex.: Investidor Pro ANUIDADE à vista — cartão é a

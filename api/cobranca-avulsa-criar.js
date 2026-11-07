@@ -26,11 +26,17 @@ export default async function handler(req, res) {
   const role = await getUserRoleById(user.id);
   if (role !== 'admin') return res.status(403).json({ error: 'Só admin cria cobrança avulsa.' });
 
-  const { descricao, valor, destinatario_nome, destinatario_email } = req.body || {};
+  const { descricao, valor, destinatario_nome, destinatario_email, produto_key, quantidade, parcelas_max, parcelas_sem_juros } = req.body || {};
   const desc = String(descricao || '').trim();
   const v = Number(valor);
   if (desc.length < 5) return res.status(400).json({ error: 'Descrição obrigatória (mín. 5 caracteres) — explique o motivo da cobrança.' });
   if (!(v > 0)) return res.status(400).json({ error: 'Valor deve ser maior que zero.' });
+  // PARCELAMENTO DESTA NEGOCIAÇÃO (07/11, dono): até quantas parcelas e até quantas sem juros. Padrão = 12 parcelas,
+  // cliente assume os juros a partir da 2ª (sem juros até 1×). A conta dos juros é a de src/utils/parcelamento.js.
+  const pMax = Math.max(1, Math.min(12, Math.floor(Number(parcelas_max) || 12)));
+  const pSemJuros = Math.max(1, Math.min(pMax, Math.floor(Number(parcelas_sem_juros) || 1)));
+  const qtd = Math.max(1, Math.min(100, Math.floor(Number(quantidade) || 1)));
+  const produto = produto_key ? String(produto_key).replace(/[^a-z0-9_]/gi, '').slice(0, 40) || null : null;
 
   try {
     const ins = await fetch(`${SB_URL}/rest/v1/cobrancas_avulsas`, {
@@ -41,6 +47,7 @@ export default async function handler(req, res) {
         destinatario_nome: destinatario_nome ? String(destinatario_nome).slice(0, 200) : null,
         destinatario_email: destinatario_email ? String(destinatario_email).slice(0, 200) : null,
         criado_por: user.id,
+        parcelas_max: pMax, parcelas_sem_juros: pSemJuros, produto_key: produto, quantidade: qtd,
       }),
       signal: AbortSignal.timeout(10000),
     });
@@ -49,7 +56,7 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: detalhe?.message || 'Não foi possível criar a cobrança.' });
     }
     const [criada] = await ins.json();
-    await auditLog({ acao: 'cobranca_avulsa_criada', user_id: user.id, ip, detalhes: { id: criada.id, valor: v, descricao: desc }, sucesso: true });
+    await auditLog({ acao: 'cobranca_avulsa_criada', user_id: user.id, ip, detalhes: { id: criada.id, valor: v, descricao: desc, produto, quantidade: qtd, parcelas_max: pMax, parcelas_sem_juros: pSemJuros }, sucesso: true });
     const base = process.env.APP_BASE_URL || 'https://bidprobrasil.com.br';
     return res.status(200).json({ ok: true, cobranca: criada, link: `${base}/#/cobranca/${criada.id}` });
   } catch (e) {
