@@ -518,10 +518,16 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
       try {
         const pmRes = await fetch(`https://api.mercadopago.com/v1/payment_methods/search?bin=${bin}&public_key=${MP_PUBLIC_KEY}`);
         const pmData = await pmRes.json();
-        metodoPagamentoId = pmData.results?.[0]?.id;
+        // 07/11 (William, assessoria R$ 8.000): o 1º resultado nem sempre é o CRÉDITO. Cartão múltiplo
+        // (crédito + débito no mesmo BIN) volta com as duas bandeiras — ex.: 'master' e 'debmaster' — e
+        // mandar a de débito num pagamento parcelado no crédito dá o mesmo 400 "Invalid payment_method_id".
+        const lista = Array.isArray(pmData.results) ? pmData.results : [];
+        const credito = lista.find((r) => r?.payment_type_id === 'credit_card' && (r?.status || 'active') === 'active');
+        metodoPagamentoId = credito?.id;
+        if (!metodoPagamentoId && lista.length) console.warn('[pagamento] BIN sem opção de crédito', lista.map((r) => `${r.id}:${r.payment_type_id}`).join(','));
       } catch { /* padrao-ok: segue para o erro explícito abaixo — nunca chuta bandeira */ }
       if (!metodoPagamentoId) {
-        throw new Error('Não conseguimos reconhecer a bandeira deste cartão. Confira o número digitado ou tente outro cartão.');
+        throw new Error('Não conseguimos reconhecer este cartão como cartão de CRÉDITO. Confira o número digitado ou use outro cartão de crédito.');
       }
 
       // apiCall devolve o Response CRU: checar res.ok e ler o JSON. Antes o código lia

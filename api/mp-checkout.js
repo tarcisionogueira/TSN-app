@@ -557,12 +557,19 @@ export default async function handler(req, res) {
     }
 
     if (erroMp) {
-      console.error('[mp-checkout] erro MP:', data);
-      // "Pagamento recusado" sozinho é beco sem saída pro cliente (achado 17/09: 3 tentativas
-      // seguidas do mesmo usuário, mesmo erro, sem indicação do que fazer). As outras respostas
-      // de pagamento recusado no app (não-aprovado, PIX indisponível) já orientam o próximo
-      // passo — esta ficava para trás.
-      return res.status(422).json({ error: 'Pagamento recusado. Verifique os dados do cartão ou tente outro cartão.', codigo: data?.cause?.[0]?.code || 'unknown' });
+      // 07/11: registra a bandeira enviada e a cobrança — no caso do William só havia o "Invalid payment_method_id",
+      // sem como saber que bandeira foi mandada nem de qual cobrança era.
+      console.error('[mp-checkout] erro MP:', data, '| bandeira enviada:', dadosCartao?.metodoPagamentoId || metodoPagamento, '| parcelas:', dadosCartao?.parcelas, '| cobranca:', cobrancaCtx?.cobrancaId || null);
+      const codigoMp = data?.cause?.[0]?.code || 'unknown';
+      // 3028/Invalid payment_method_id = a BANDEIRA que mandamos não confere com o cartão — falha nossa, não
+      // recusa do banco. Dizer "cartão recusado" fazia o cliente achar que o banco negou (William, 07/11).
+      const bandeiraErrada = String(codigoMp) === '3028' || /payment_method_id/i.test(String(data?.message || ''));
+      return res.status(422).json({
+        error: bandeiraErrada
+          ? 'Não conseguimos identificar a bandeira do cartão. Nada foi cobrado. Atualize a página e tente de novo; se repetir, fale com o Atendimento.'
+          : 'Pagamento recusado. Verifique os dados do cartão ou tente outro cartão.',
+        codigo: codigoMp,
+      });
     }
 
     // user_id da auditoria é uuid de USUÁRIO — payerAnchor pode ser um prefixo sintético
