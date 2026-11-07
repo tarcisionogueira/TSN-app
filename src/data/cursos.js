@@ -407,7 +407,7 @@ export const PLANOS = {
       '✅ Acompanhamento do processo de leilão pela equipe BidPro Brasil',
       '✅ Análise jurídica pelo escritório parceiro',
       '✅ Orientação pós-arrematação + registro ONR Digital',
-      '✅ + 10% de honorários sobre o valor arrematado',
+      '✅ + 10% de honorários sobre o valor arrematado (mínimo de R$ 7.000 por imóvel)',
     ],
     limite_analises: 10,
     relatorio: true,
