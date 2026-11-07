@@ -25,8 +25,9 @@ Também com Cloudflare novo: MGL (mgl.com.br 403). ALLIANCELEIL 403 segue (#427)
 
 **Duplicados:** 91 de 100 lotes `SBL_*` ativos estão também ativos na fonte SUPERBID — o lote gravado pela loja antes de
 aparecer no portal nunca saía (loja enumera 0 ⇒ varredura de sumidos não roda). Função `desativar_sbl_duplicados_portal()`
-criada; a EXECUÇÃO foi barrada pedindo OK do dono (#437). Depois do OK: rodar e ligar no `rpcFinal` de
-`api/desativar-encerrados-cron.js`.
+criada e, com o OK do dono, executada: **91 desligados** (`suprimido_motivo = duplicata_portal_superbid`), 0 duplicados
+restantes, os 91 seguem ativos pela fonte SUPERBID. Ligada na limpeza horária (`api/desativar-encerrados-cron.js`, campo
+`duplicados_superbid` na resposta).
 
 **Leiloeiros faltando integrar:** juntas = 309 `nao_coletado` com site (276 regulares). A triagem de 28–31/10 já
 classificou quase todos (51 DNS morto, não-leilão, só arte, sem imóvel, vazio, NÃO INTEGRAR BomValor/Cloudflare). O que

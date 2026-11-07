@@ -99,6 +99,9 @@ export default async function handler(req, res) {
   // DISPONÍVEL, e "ainda disponível" muda com o relógio sem ninguém escrever na linha. Quando a
   // 2ª praça vence, o desconto tem de voltar a ser o da praça que sobrou — senão o card anuncia
   // um abatimento que não existe mais.
+  // 07/11 (inspeção da captação, OK do dono): lote de loja Superbid (SBL_*) que o portal SUPERBID passou a trazer
+  // ficava ativo nas duas fontes — a loja enumera 0 e a varredura de sumidos dela não roda. 91 duplicados no dia.
+  const dupSuperbid = await rpcFinal('desativar_sbl_duplicados_portal');
   const descontos = await rpcFinal('recalcular_desconto_praca');
   // 29/08: e os NÚMEROS DA VITRINE da aula ao vivo, pelo mesmo motivo — quem muda a conta é esta
   // varredura, ao ligar/desligar `ativo`. Eles eram calculados na hora e a página do tráfego pago
@@ -109,7 +112,7 @@ export default async function handler(req, res) {
 
   // Log sempre, inclusive o zero: é o que permite ver que a varredura RODOU num dia sem baixas
   // (silêncio total não distingue "nada a fazer" de "cron parou").
-  const falhou = [desativados, relistados, descontos, numeros].some(v => v && typeof v === 'object' && v.erro);
-  (falhou ? console.error : console.log)('[desativar-encerrados]', JSON.stringify({ desativados, relistados, descontos, numeros }));
-  res.status(falhou ? 500 : 200).json({ ok: !falhou, desativados, relistados, descontos_recalculados: descontos, numeros_vitrine: numeros });
+  const falhou = [desativados, relistados, dupSuperbid, descontos, numeros].some(v => v && typeof v === 'object' && v.erro);
+  (falhou ? console.error : console.log)('[desativar-encerrados]', JSON.stringify({ desativados, relistados, dupSuperbid, descontos, numeros }));
+  res.status(falhou ? 500 : 200).json({ ok: !falhou, desativados, relistados, duplicados_superbid: dupSuperbid, descontos_recalculados: descontos, numeros_vitrine: numeros });
 }
