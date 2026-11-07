@@ -15,7 +15,10 @@ const fmtBRL = v => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFrac
 // só mostra a mesma conta (src/utils/taxaHonorario.js). A baixa é automática quando o boleto
 // compensa (api/asaas-webhook.js), registrando o honorário sem a taxa.
 // nome/documento = QUEM PAGA (CPF ou CNPJ), pedidos uma vez em PagarHonorario — pode não ser o assessorado.
-export default function BoletoHonorario({ arrematacaoId, email, nome, documento, previsto, saldo, onGerado }) {
+// nf (07/11): dados da NOTA FISCAL já completos na arrematação — o boleto sai em nome deles e o servidor (MP e Asaas)
+// busca documento e endereço lá; a tela não pede o endereço de novo nem precisa do documento inteiro.
+export default function BoletoHonorario({ arrematacaoId, email, nome, documento, previsto, saldo, onGerado, nf = null }) {
+  const nfPronto = !!nf?.completo;
   const [end, setEnd] = useState({ cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', uf: '' });
   const [buscandoCep, setBuscandoCep] = useState(false);
   const [enviando, setEnviando] = useState(false);
@@ -35,16 +38,16 @@ export default function BoletoHonorario({ arrematacaoId, email, nome, documento,
     setBuscandoCep(false);
   };
 
-  const enderecoOk = !!(end.cep && end.logradouro && end.numero && end.bairro && end.cidade && end.uf);
+  const enderecoOk = nfPronto || !!(end.cep && end.logradouro && end.numero && end.bairro && end.cidade && end.uf);
 
   const gerar = async () => {
-    if (![11, 14].includes(String(documento || '').length)) { setErro('Informe o CPF ou CNPJ de quem paga, lá em cima.'); return; }
+    if (!nfPronto && ![11, 14].includes(String(documento || '').length)) { setErro('Informe o CPF ou CNPJ de quem paga, lá em cima.'); return; }
     if (!enderecoOk) { setErro('Informe o endereço completo (CEP, logradouro, número, bairro, cidade e UF).'); return; }
     setEnviando(true); setErro('');
     const viaAsaas = async () => {
       const res = await apiCall('/api/asaas', {
         method: 'POST',
-        body: JSON.stringify({ action: 'criar_cobranca_fallback', proposito: 'honorario_exito', meio: 'boleto', arrematacao_id: arrematacaoId, nome: nome || email, email, documento, endereco: end }),
+        body: JSON.stringify({ action: 'criar_cobranca_fallback', proposito: 'honorario_exito', meio: 'boleto', arrematacao_id: arrematacaoId, nome: nome || email, email, documento: nfPronto ? '' : documento, endereco: nfPronto ? {} : end }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data?.linkPagamento) throw new Error(data?.mensagem || data?.error || 'Não foi possível gerar o boleto agora.');
@@ -53,7 +56,7 @@ export default function BoletoHonorario({ arrematacaoId, email, nome, documento,
     const viaMp = async () => {
       const res = await apiCall('/api/mp-checkout', {
         method: 'POST',
-        body: JSON.stringify({ proposito: 'honorario_exito', metodoPagamento: 'bolbradesco', arrematacao_id: arrematacaoId, email, pagador_doc: documento, pagador_nome: nome, endereco: end, descricao: 'Honorários de êxito — BidPro Brasil', valor: 1 }),
+        body: JSON.stringify({ proposito: 'honorario_exito', metodoPagamento: 'bolbradesco', arrematacao_id: arrematacaoId, email, pagador_doc: nfPronto ? '' : documento, pagador_nome: nome, endereco: nfPronto ? {} : end, descricao: 'Honorários de êxito — BidPro Brasil', valor: 1 }),
       });
       const data = await res.json().catch(() => ({}));
       // 429 = boleto recém-gerado: NÃO cai no Asaas (seria um segundo boleto vivo do mesmo saldo).
@@ -124,6 +127,9 @@ export default function BoletoHonorario({ arrematacaoId, email, nome, documento,
           ? <>Honorário {fmtBRL(previsto.honorario)} + taxa do boleto {fmtBRL(previsto.taxa)} = <strong>{fmtBRL(previsto.total)}</strong></>
           : <>Honorário <strong>{fmtBRL(previsto.total)}</strong> — boleto sem custo adicional</>}
       </div>
+      {nfPronto ? (
+        <div style={{ fontSize: 11.5, color: '#64748b' }}>Boleto em nome de <strong>{nf.nome}</strong> ({nf.tipo === 'PJ' ? 'CNPJ' : 'CPF'} {nf.doc_mascarado}), com o endereço dos dados da nota fiscal.</div>
+      ) : (<>
       <div style={{ fontSize: 11.5, color: '#64748b' }}>Boleto em nome de <strong>{nome}</strong> ({documento?.length === 14 ? 'CNPJ' : 'CPF'} {documento}). Endereço de quem paga:</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 2fr)', gap: 8 }}>
         <div>
@@ -159,6 +165,7 @@ export default function BoletoHonorario({ arrematacaoId, email, nome, documento,
           <input value={end.uf} maxLength={2} onChange={e => setEnd(p => ({ ...p, uf: e.target.value.toUpperCase() }))} style={inp} />
         </div>
       </div>
+      </>)}
       {erro && <div style={{ color: '#dc2626', fontSize: 12.5, fontWeight: 600 }}>{erro}</div>}
       <button onClick={gerar} disabled={enviando}
         style={{ padding: '12px', background: enviando ? '#94a3b8' : AZUL, color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 14, cursor: enviando ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>

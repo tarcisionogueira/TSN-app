@@ -11,6 +11,7 @@ import { termoDoProduto, versaoTermoProduto } from '../utils/termos';
 import { senhaForte, requisitosSenha } from '../lib/senha.js';
 import { validarNome, normalizarNome } from '../lib/nome.js';
 import PagamentoServico from '../components/PagamentoServico';
+import DadosNotaFiscal from '../components/DadosNotaFiscal';
 import { trackProdutoVisualizado, trackCheckoutIniciado, trackPlanContratado } from '../utils/gtag';
 import { pedirComprovanteEmail, esquecerComprovanteEmail } from '../lib/comprovanteEmail.jsx';
 
@@ -34,6 +35,7 @@ export default function ProdutoPublico({ tipo }) {
   const [aguardando, setAguardando] = useState(false);
   const [erroCompra, setErroCompra] = useState('');
   const [aceitouTermo, setAceitouTermo] = useState(false); // termo próprio de curso/ebook
+  const [nfPerfil, setNfPerfil] = useState(null); // dados da nota fiscal do comprador logado (visão mascarada)
   // Cadastro inline (11/09, pedido do dono): visitante compra sem sair desta tela — antes
   // era redirecionado para /login e precisava voltar e clicar em Comprar de novo. Usa o
   // MESMO endpoint que o checkout de plano grátis já usa (/api/criar-conta-checkout, conta
@@ -60,6 +62,16 @@ export default function ProdutoPublico({ tipo }) {
   // pode desmarcar e levar só o produto — ver o bloco `requer_cartao_bonus` mais abaixo.
   const [cienteRenovacao, setCienteRenovacao] = useState(true);
   const [precoTop2Cheio, setPrecoTop2Cheio] = useState(null);
+
+  // Dados da nota fiscal do comprador logado (07/11). Falha de leitura deixa null: a tela não trava a compra por isso.
+  useEffect(() => {
+    if (!user?.id) { setNfPerfil(null); return undefined; }
+    let vivo = true;
+    apiCall('/api/dados-nota-fiscal?perfil=1')
+      .then(async (r) => { const j = await r.json().catch(() => ({})); if (vivo) setNfPerfil(r.ok ? j.nf || null : null); if (!r.ok) console.warn('[ProdutoPublico] dados da nota', r.status); })
+      .catch((e) => console.warn('[ProdutoPublico] dados da nota', e?.message));
+    return () => { vivo = false; };
+  }, [user?.id]);
 
   // Persiste código de referência do consultor
   useEffect(() => {
@@ -434,6 +446,9 @@ export default function ProdutoPublico({ tipo }) {
     : ['top2', 'assessorado', 'clube', 'analista', 'advogado', 'admin'].includes(role));
   const temAcesso = temPlano || comprouAvulso;
   const isPago = precoBase > 0;
+  // Pagar exige o termo aceito e, para produto pago, os dados da nota completos. Se a leitura dos dados falhou
+  // (nfPerfil null), não trava a venda: o servidor segue com o que tiver do perfil.
+  const termoOk = aceitouTermo && (!isPago || !nfPerfil || nfPerfil.completo);
 
   // ── GATILHO 4: INTENÇÃO DE SAÍDA ───────────────────────────────────────────
   // Dispara UMA vez por sessão, só para quem não tem acesso e tem downsell configurado.
@@ -890,6 +905,13 @@ export default function ProdutoPublico({ tipo }) {
                 )}
                 {user ? (
                   <>
+                    {/* DADOS DA NOTA FISCAL (07/11, dono): pelo perfil. Completos → resumo e segue; faltando → completar. */}
+                    {isPago && nfPerfil && (
+                      <div style={{ marginBottom: 10 }}>
+                        <DadosNotaFiscal key={nfPerfil.completo ? 'ok' : 'falta'} alvo={{ perfil: true }} nf={nfPerfil} soCpf
+                          emailSugerido={user.email || ''} onSalvo={setNfPerfil} />
+                      </div>
+                    )}
                     {isPago && (
                       /* Termo PRÓPRIO de curso/ebook (conteúdo digital, acesso imediato, CDC art. 49) */
                       <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12, color: '#475569', cursor: 'pointer', marginBottom: 10 }}>
@@ -907,9 +929,9 @@ export default function ProdutoPublico({ tipo }) {
                     )}
                     {produto?.requer_cartao_bonus ? (
                       !mostrarPagamentoBonus ? (
-                        <button className="bp-btn-hover" onClick={() => { trackCheckoutIniciado(produto?.titulo || `${tipo} ${id}`, precoBase); setMostrarPagamentoBonus(true); }} disabled={!aceitouTermo || aguardando}
-                          title={!aceitouTermo ? 'Marque o aceite do termo para continuar' : undefined}
-                          style={{ width: '100%', padding: '15px', background: cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: (aceitouTermo && !aguardando) ? 'pointer' : 'default', marginBottom: 10, opacity: (aceitouTermo && !aguardando) ? 1 : 0.7, boxShadow: (aceitouTermo && !aguardando) ? `0 4px 14px ${corSuave(AZUL, '35')}` : 'none' }}>
+                        <button className="bp-btn-hover" onClick={() => { trackCheckoutIniciado(produto?.titulo || `${tipo} ${id}`, precoBase); setMostrarPagamentoBonus(true); }} disabled={!termoOk || aguardando}
+                          title={!termoOk ? (aceitouTermo ? 'Complete os dados da nota fiscal para continuar' : 'Marque o aceite do termo para continuar') : undefined}
+                          style={{ width: '100%', padding: '15px', background: cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: (termoOk && !aguardando) ? 'pointer' : 'default', marginBottom: 10, opacity: (termoOk && !aguardando) ? 1 : 0.7, boxShadow: (termoOk && !aguardando) ? `0 4px 14px ${corSuave(AZUL, '35')}` : 'none' }}>
                           {aguardando ? 'Aguardando pagamento…' : `Pagar R$ ${precoBase.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} com cartão →`}
                         </button>
                       ) : (
@@ -933,9 +955,9 @@ export default function ProdutoPublico({ tipo }) {
                       )
                     ) : isPago ? (
                       /* Compra AVULSA do item (não precisa assinar) */
-                      <button className="bp-btn-hover" onClick={comprar} disabled={comprando || aguardando || !aceitouTermo}
-                        title={!aceitouTermo ? 'Marque o aceite do termo para continuar' : undefined}
-                        style={{ width: '100%', padding: '15px', background: cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: (comprando || aguardando || !aceitouTermo) ? 'default' : 'pointer', marginBottom: 10, opacity: (comprando || aguardando || !aceitouTermo) ? 0.7 : 1, boxShadow: (comprando || aguardando || !aceitouTermo) ? 'none' : `0 4px 14px ${corSuave(AZUL, '35')}` }}>
+                      <button className="bp-btn-hover" onClick={comprar} disabled={comprando || aguardando || !termoOk}
+                        title={!termoOk ? (aceitouTermo ? 'Complete os dados da nota fiscal para continuar' : 'Marque o aceite do termo para continuar') : undefined}
+                        style={{ width: '100%', padding: '15px', background: cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: (comprando || aguardando || !termoOk) ? 'default' : 'pointer', marginBottom: 10, opacity: (comprando || aguardando || !termoOk) ? 0.7 : 1, boxShadow: (comprando || aguardando || !termoOk) ? 'none' : `0 4px 14px ${corSuave(AZUL, '35')}` }}>
                         {comprando ? 'Abrindo pagamento…' : aguardando ? 'Aguardando pagamento…' : `Comprar por R$ ${precoBase.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                       </button>
                     ) : (

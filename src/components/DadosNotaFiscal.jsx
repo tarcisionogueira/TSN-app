@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Loader2, FileText, Pencil } from 'lucide-react';
 import { AZUL } from '../utils/marca';
+import { apiCall } from '../utils/apiCall';
 
 const so = (v) => String(v || '').replace(/\D/g, '');
 const mascaraDoc = (v) => {
@@ -16,7 +17,9 @@ const UFS = ['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', '
  * com o que se sabe (o aceite do termo). O documento chega MASCARADO: em branco = manter o já informado.
  * Quem grava é o servidor (api/dados-nota-fiscal.js), que valida tudo de novo.
  */
-export default function DadosNotaFiscal({ cobrancaId, nf, emailSugerido = '', nomeSugerido = '', onSalvo }) {
+// alvo: { cobranca_id } (link de cobrança) · { arrematacao_id } (honorário) · { perfil: true } (compras com login).
+export default function DadosNotaFiscal({ cobrancaId, alvo: alvoProp, nf, emailSugerido = '', nomeSugerido = '', onSalvo, soCpf = false }) {
+  const alvo = alvoProp || { cobranca_id: cobrancaId };
   const [editando, setEditando] = useState(!nf?.completo);
   const [trocarDoc, setTrocarDoc] = useState(!nf?.tem_doc);
   const [d, setD] = useState({
@@ -50,9 +53,10 @@ export default function DadosNotaFiscal({ cobrancaId, nf, emailSugerido = '', no
   const salvar = async () => {
     setSalvando(true); setErro('');
     try {
-      const r = await fetch('/api/dados-nota-fiscal', {
+      // apiCall leva o login quando há (o modo perfil exige); a cobrança e o honorário funcionam sem conta.
+      const r = await apiCall('/api/dados-nota-fiscal', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cobranca_id: cobrancaId, dados: { ...d, doc: trocarDoc ? so(d.doc) : '' } }),
+        body: JSON.stringify({ ...alvo, dados: { ...d, doc: trocarDoc ? so(d.doc) : '' } }),
       });
       const j = await r.json().catch(() => ({}));
       if (!r.ok || !j.nf) throw new Error(j.error || 'Não consegui salvar agora.');
@@ -91,7 +95,7 @@ export default function DadosNotaFiscal({ cobrancaId, nf, emailSugerido = '', no
         {nf?.faltando?.length && nf?.tem_doc ? `Falta completar: ${nf.faltando.join(', ')}.` : 'A nota sai em nome de quem paga — pode ser você, outra pessoa ou uma empresa.'}
       </div>
       {trocarDoc ? (
-        <div><label style={lbl}>CPF ou CNPJ</label><input style={inp} value={d.doc} inputMode="numeric" placeholder="000.000.000-00" onChange={(e) => setD((p) => ({ ...p, doc: mascaraDoc(e.target.value) }))} /></div>
+        <div><label style={lbl}>{soCpf ? 'CPF' : 'CPF ou CNPJ'}</label><input style={inp} value={d.doc} inputMode="numeric" placeholder="000.000.000-00" onChange={(e) => setD((p) => ({ ...p, doc: mascaraDoc(e.target.value) }))} /></div>
       ) : (
         <div style={{ fontSize: 13, color: '#334155' }}>
           {nf?.tipo === 'PJ' ? 'CNPJ' : 'CPF'} {nf?.doc_mascarado} <button onClick={() => setTrocarDoc(true)} style={{ background: 'none', border: 'none', color: AZUL, fontWeight: 700, cursor: 'pointer', fontSize: 12.5 }}>trocar</button>

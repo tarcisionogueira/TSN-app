@@ -67,6 +67,17 @@ export function aPartirDoAceite(aceite) {
   return normalizar({ doc: aceite.cpf, nome: aceite.nome, email: aceite.email, cep });
 }
 
+// Ponto de partida a partir do PERFIL (honorário do arrematante, e-book do logado). `cpf` já decifrado pelo chamador.
+export function aPartirDoPerfil(perfil, { cpf = '', email = '' } = {}) {
+  if (!perfil) return null;
+  return normalizar({
+    doc: cpf, nome: perfil.nome, email: email || perfil.email,
+    cep: perfil.endereco_cep, logradouro: perfil.endereco_logradouro, numero: perfil.endereco_numero,
+    complemento: perfil.endereco_complemento, bairro: perfil.endereco_bairro, cidade: perfil.endereco_cidade, uf: perfil.endereco_uf,
+  });
+}
+export const COLUNAS_PERFIL_NF = 'nome,cpf,cpf_enc,endereco_cep,endereco_logradouro,endereco_numero,endereco_complemento,endereco_bairro,endereco_cidade,endereco_uf';
+
 const mascaraDoc = (doc) => {
   const d = so(doc);
   if (d.length === 11) return `•••.${d.slice(3, 6)}.${d.slice(6, 9)}-••`;

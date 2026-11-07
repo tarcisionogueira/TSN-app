@@ -172,7 +172,7 @@ export default async function handler(req, res) {
     if (metodoPagamento !== 'credit_card' && !ehBoleto) return res.status(400).json({ error: 'Honorários: pague por boleto ou cartão de crédito.' });
     const SB_URL = process.env.VITE_SUPABASE_URL, SB_KEY = process.env.SUPABASE_SERVICE_KEY;
     try {
-      const r = await fetch(`${SB_URL}/rest/v1/arrematacoes?id=eq.${encodeURIComponent(arrematacao_id)}&select=id,arrematante_id,honorarios_valor,honorarios_status`, {
+      const r = await fetch(`${SB_URL}/rest/v1/arrematacoes?id=eq.${encodeURIComponent(arrematacao_id)}&select=id,arrematante_id,honorarios_valor,honorarios_status,dados_nf`, {
         headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` }, signal: AbortSignal.timeout(10000),
       });
       const [arr] = r.ok ? await r.json().catch(() => []) : [];
@@ -206,7 +206,7 @@ export default async function handler(req, res) {
       const cob = honorarioComTaxa(saldo, ehBoleto ? 'boleto_mp' : 'cartao_mp');
       valor = cob.total;
       descricao = jaRecebido > 0 ? 'Honorários de êxito (saldo restante) — BidPro Brasil' : 'Honorários de êxito — BidPro Brasil';
-      honorarioCtx = { arrematacaoId: arr.id, arrematanteId: arr.arrematante_id, taxa: cob.taxa, boleto: ehBoleto };
+      honorarioCtx = { arrematacaoId: arr.id, arrematanteId: arr.arrematante_id, taxa: cob.taxa, boleto: ehBoleto, nf: arr.dados_nf || null };
     } catch (e) {
       console.error('[mp-checkout] honorario_exito: gate falhou', e?.message || e);
       return res.status(503).json({ error: 'Não consegui validar esta cobrança agora. Tente em instantes.' });
@@ -465,10 +465,15 @@ export default async function handler(req, res) {
       };
     }
   }
+  // 07/11: a página do honorário/cobrança só vê o documento MASCARADO dos dados da nota — sem documento no corpo,
+  // valem os dados da nota gravados no servidor (documento, nome e endereço de quem paga).
+  const nfPag = honorarioCtx?.nf || cobrancaCtx?.nf || null;
+  const docCorpo = req.body?.pagador_doc || nfPag?.doc || '';
+  const nomeCorpo = req.body?.pagador_doc ? req.body?.pagador_nome : (req.body?.pagador_nome || nfPag?.nome || '');
   if (honorarioCtx || cobrancaCtx) {
-    const docPag = validarDocumento(req.body?.pagador_doc);
+    const docPag = validarDocumento(docCorpo);
     if (docPag) {
-      const partesPag = String(req.body?.pagador_nome || '').trim().split(/\s+/).filter(Boolean).slice(0, 12);
+      const partesPag = String(nomeCorpo || '').trim().split(/\s+/).filter(Boolean).slice(0, 12);
       payerExtra = {
         ...payerExtra,
         identification: { type: docPag.tipo, number: docPag.numero },
@@ -481,8 +486,9 @@ export default async function handler(req, res) {
   // BOLETO MP (07/10): o MP exige documento, nome e endereço COMPLETO do pagador no próprio `payer`
   // (sem isso recusa a emissão). Vêm do body — é quem paga, que pode não ser o assessorado.
   if (honorarioCtx?.boleto || cobrancaCtx?.boleto) {
-    const docPag = validarDocumento(req.body?.pagador_doc);
-    const e = req.body?.endereco || {};
+    const docPag = validarDocumento(docCorpo);
+    const eCorpo = req.body?.endereco || {};
+    const e = (eCorpo.cep && eCorpo.logradouro) || !nfPag ? eCorpo : { cep: nfPag.cep, logradouro: nfPag.logradouro, numero: nfPag.numero, bairro: nfPag.bairro, cidade: nfPag.cidade, uf: nfPag.uf };
     const limpa = (v, n) => String(v || '').trim().slice(0, n);
     const cep = String(e.cep || '').replace(/\D/g, '');
     if (!docPag || !payerExtra.first_name || cep.length !== 8 || !e.logradouro || !e.numero || !e.bairro || !e.cidade || !/^[A-Za-z]{2}$/.test(String(e.uf || ''))) {

@@ -19,6 +19,8 @@
 export const config = { runtime: 'edge' };
 
 import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
+import { cpfDoRegistro } from './_cpf.js';
+import { visaoPublica, aPartirDoPerfil, COLUNAS_PERFIL_NF } from './_dados-nf.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SVC = process.env.SUPABASE_SERVICE_KEY;
@@ -36,7 +38,7 @@ export default async function handler(req) {
   if (!UUID_RE.test(id)) return new Response(JSON.stringify({ error: 'id inválido' }), { status: 400 });
 
   const [arrR, recR] = await Promise.all([
-    fetch(`${SUPABASE_URL}/rest/v1/arrematacoes?id=eq.${encodeURIComponent(id)}&select=id,valor_arrematado,honorarios_valor,honorarios_status,arrematante_id`, {
+    fetch(`${SUPABASE_URL}/rest/v1/arrematacoes?id=eq.${encodeURIComponent(id)}&select=id,valor_arrematado,honorarios_valor,honorarios_status,arrematante_id,dados_nf`, {
       headers: { apikey: SVC, Authorization: `Bearer ${SVC}` }, signal: AbortSignal.timeout(10000),
     }),
     // 17/09 (honorário em partes): a tela precisa saber o SALDO RESTANTE, não só o valor
@@ -69,6 +71,18 @@ export default async function handler(req) {
     } catch { /* padrao-ok: e-mail sugerido é só conveniência de UX — sem ele o campo fica vazio e editável, não trava o pagamento */ }
   }
 
+  let nf = arr.dados_nf || null;
+  if (!nf && arr.arrematante_id) {
+    try {
+      const pr = await fetch(`${SUPABASE_URL}/rest/v1/perfis?id=eq.${arr.arrematante_id}&select=${COLUNAS_PERFIL_NF}&limit=1`, {
+        headers: { apikey: SVC, Authorization: `Bearer ${SVC}` }, signal: AbortSignal.timeout(8000),
+      });
+      const [p] = pr.ok ? await pr.json() : [];
+      if (!pr.ok) console.error("[honorario-info] perfil do arrematante HTTP", pr.status);
+      if (p) nf = aPartirDoPerfil(p, { cpf: await cpfDoRegistro(p), email: emailSugerido || "" });
+    } catch (e) { console.error("[honorario-info] dados da nota a partir do perfil", e?.message); } // padrao-ok: sem o perfil a tela pede os dados
+  }
+
   return new Response(JSON.stringify({
     id: arr.id,
     valor_arrematado: arr.valor_arrematado,
@@ -78,5 +92,7 @@ export default async function handler(req) {
     honorarios_status: arr.honorarios_status,
     honorarios_partes: confirmados.map(c => ({ metodo: c.metodo, valor: c.valor, banco: c.banco || null, numero_cheque: c.numero_cheque || null })),
     email_sugerido: emailSugerido,
+    // 07/11: dados para a nota fiscal (documento só mascarado). Sem registro próprio, parte do perfil do arrematante.
+    nf: visaoPublica(nf),
   }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 }

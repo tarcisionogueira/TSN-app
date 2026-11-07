@@ -200,16 +200,17 @@ export default async function handler(req, res) {
       if (!email) return res.status(400).json({ error: 'email obrigatório' });
       // 18/09, pedido do dono: pagamento exige endereço completo (dados pra emissão de NF),
       // não só CPF. Mesma checagem de completude do Checkout.jsx (enderecoOk).
-      const end = endereco || {};
-      const enderecoOk = !!(end.cep && end.logradouro && end.numero && end.bairro && end.cidade && end.uf);
-      if (!enderecoOk) return res.status(400).json({ error: 'endereco_necessario', mensagem: 'Informe o endereço completo (CEP, logradouro, número, bairro, cidade e UF) para gerar a cobrança.' });
+      // 07/11: sem endereço/documento na tela, valem os dados da NOTA FISCAL gravados no servidor (a página só vê o
+      // documento mascarado). A checagem de endereço completo foi para depois da leitura da cobrança.
+      let end = endereco || {};
+      let nfFallback = null;
       const SB = process.env.VITE_SUPABASE_URL, SVC = process.env.SUPABASE_SERVICE_KEY;
       let saldo, descricao, externalReference, arrematanteId = null, refsIrmas = [];
       let billingType = 'UNDEFINED', valorCobrado = null, taxaHon = 0;
 
       if (propFallback === 'honorario_exito') {
         if (!arrematacao_id) return res.status(400).json({ error: 'arrematacao_id obrigatório' });
-        const r = await fetch(`${SB}/rest/v1/arrematacoes?id=eq.${encodeURIComponent(arrematacao_id)}&select=id,arrematante_id,honorarios_valor,honorarios_status`, {
+        const r = await fetch(`${SB}/rest/v1/arrematacoes?id=eq.${encodeURIComponent(arrematacao_id)}&select=id,arrematante_id,honorarios_valor,honorarios_status,dados_nf`, {
           headers: { apikey: SVC, Authorization: `Bearer ${SVC}` }, signal: AbortSignal.timeout(10000),
         });
         const [arr] = r.ok ? await r.json().catch(() => []) : [];
@@ -239,9 +240,10 @@ export default async function handler(req, res) {
         // pendente de clique anterior — ver "UMA COBRANÇA VÁLIDA" abaixo.
         refsIrmas = ['boleto_asaas', 'cartao_asaas'].map((m) => `honorario|${arr.id}|taxa:${honorarioComTaxa(saldo, m).taxa.toFixed(2)}`);
         arrematanteId = arr.arrematante_id;
+        nfFallback = arr.dados_nf || null;
       } else if (propFallback === 'cobranca_avulsa') {
         if (!cobranca_id) return res.status(400).json({ error: 'cobranca_id obrigatório' });
-        const r = await fetch(`${SB}/rest/v1/cobrancas_avulsas?id=eq.${encodeURIComponent(cobranca_id)}&select=id,descricao,valor,valor_pago_pix,status,termo_texto,termo_aceito_em`, {
+        const r = await fetch(`${SB}/rest/v1/cobrancas_avulsas?id=eq.${encodeURIComponent(cobranca_id)}&select=id,descricao,valor,valor_pago_pix,status,termo_texto,termo_aceito_em,dados_nf`, {
           headers: { apikey: SVC, Authorization: `Bearer ${SVC}` }, signal: AbortSignal.timeout(10000),
         });
         const [cob] = r.ok ? await r.json().catch(() => []) : [];
@@ -256,6 +258,7 @@ export default async function handler(req, res) {
         if (saldo <= 0) return res.status(409).json({ error: 'Esta cobrança já foi coberta.' });
         descricao = String(cob.descricao || 'Cobrança avulsa — BidPro Brasil').slice(0, 250);
         externalReference = `cobranca_avulsa|${cob.id}`;
+        nfFallback = cob.dados_nf || null;
       } else {
         return res.status(400).json({ error: 'proposito inválido para fallback (honorario_exito ou cobranca_avulsa)' });
       }
@@ -268,8 +271,13 @@ export default async function handler(req, res) {
       // uma EMPRESA — o documento digitado (CPF ou CNPJ) vence o cadastro do assessorado. Antes o
       // CPF do cadastro tinha prioridade: um terceiro pagando geraria o boleto no nome do assessorado.
       // O cadastro só entra quando a tela não mandou documento nenhum.
+      if (!(end.cep && end.logradouro && end.numero && end.bairro && end.cidade && end.uf) && nfFallback?.cep) {
+        end = { cep: nfFallback.cep, logradouro: nfFallback.logradouro, numero: nfFallback.numero, complemento: nfFallback.complemento, bairro: nfFallback.bairro, cidade: nfFallback.cidade, uf: nfFallback.uf };
+      }
+      const enderecoOk = !!(end.cep && end.logradouro && end.numero && end.bairro && end.cidade && end.uf);
+      if (!enderecoOk) return res.status(400).json({ error: 'endereco_necessario', mensagem: 'Informe o endereço completo (CEP, logradouro, número, bairro, cidade e UF) para gerar a cobrança.' });
       const cpfCadastro = arrematanteId ? await cpfAutenticado(arrematanteId, null) : null;
-      const docPagador = validarDocumento(docBody || cpfBody) || (cpfCadastro && validarCPF(cpfCadastro) ? { tipo: 'CPF', numero: cpfCadastro } : null);
+      const docPagador = validarDocumento(docBody || cpfBody) || validarDocumento(nfFallback?.doc) || (cpfCadastro && validarCPF(cpfCadastro) ? { tipo: 'CPF', numero: cpfCadastro } : null);
       if (!docPagador) return res.status(400).json({ error: 'cpf_necessario', mensagem: 'Informe um CPF ou CNPJ válido de quem vai pagar — o Asaas exige pra gerar a cobrança.' });
       const cpf = docPagador.numero; // CPF ou CNPJ — o Asaas aceita os dois em cpfCnpj
       const pagadorEhTitular = !!cpfCadastro && cpf === cpfCadastro;
