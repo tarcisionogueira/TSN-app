@@ -23,6 +23,27 @@ export async function taxasDaApiMp({ valor = 1000, metodo = 'visa', bin = null }
     .map((c) => ({ parcelas: Number(c.installments), pct_cliente: Number(c.installment_rate) }));
 }
 
+/**
+ * Bandeira de CRÉDITO deste BIN pela API do MP (com o token da conta). 07/11: segunda barreira contra a tela mandar
+ * a bandeira errada (com `bin=` a busca ignorava o filtro e todo cartão virava 'master'). null = não deu para saber.
+ */
+export async function bandeiraDoBinMp(bin, valor = 1000) {
+  const token = (process.env.MP_ACCESS_TOKEN || '').trim();
+  if (!token || !/^\d{6,8}$/.test(String(bin || ''))) return null;
+  try {
+    const r = await fetch(`https://api.mercadopago.com/v1/payment_methods/installments?${new URLSearchParams({ amount: String(valor), bin: String(bin) })}`, {
+      headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(6000),
+    });
+    if (!r.ok) { console.error('[gateway-taxas] bandeira do BIN: HTTP', r.status); return null; }
+    const j = await r.json();
+    const cred = Array.isArray(j) ? j.find((x) => x?.payment_type_id === 'credit_card') : null;
+    return cred?.payment_method_id || null;
+  } catch (e) {
+    console.error('[gateway-taxas] bandeira do BIN falhou', e?.message || e);
+    return null;
+  }
+}
+
 /** Linhas de `gateway_taxas` do cartão MP. Lança em erro de leitura. */
 export async function lerTaxasCartaoMp() {
   const r = await fetch(`${SB_URL}/rest/v1/gateway_taxas?gateway=eq.mercadopago&meio=eq.cartao&select=parcelas,pct_cliente,fonte_cliente,cliente_em&order=parcelas`, {

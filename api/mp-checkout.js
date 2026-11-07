@@ -9,7 +9,7 @@
  */
 import { honorarioComTaxa, gatewayDoBoleto, TETO_BOLETO_MP } from '../src/utils/taxaHonorario.js';
 import { valorAEnviar, POLITICA_PARCELAMENTO } from '../src/utils/parcelamento.js';
-import { jurosDoPagamentoMp } from './_gateway-taxas.js';
+import { jurosDoPagamentoMp, bandeiraDoBinMp } from './_gateway-taxas.js';
 import { getUser } from './_auth.js';
 import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
 import { auditLog } from './_audit.js';
@@ -626,6 +626,14 @@ export default async function handler(req, res) {
       payload.token = dadosCartao.token;
       payload.installments = dadosCartao.parcelas || 1;
       payload.payment_method_id = dadosCartao.metodoPagamentoId;
+      // SEGUNDA BARREIRA (07/11): a bandeira que a tela mandou é conferida pelo BIN na API do MP. Até 07/11 a tela
+      // consultava com `bin=` (filtro ignorado) e todo cartão ia como 'master' — Visa/Elo recebiam 400 "Invalid
+      // payment_method_id" (William, Marcos). Front antigo em cache ainda pode mandar errado; o servidor corrige.
+      const bandeira = await bandeiraDoBinMp(dadosCartao.bin, payload.transaction_amount);
+      if (bandeira && bandeira !== payload.payment_method_id) {
+        console.warn('[mp-checkout] bandeira corrigida pelo BIN', payload.payment_method_id, '→', bandeira);
+        payload.payment_method_id = bandeira;
+      }
     }
 
     // Chave idempotente.

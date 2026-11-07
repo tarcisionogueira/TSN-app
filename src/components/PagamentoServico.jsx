@@ -527,7 +527,11 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
       const bin = cartao.bin || token?.first_six_digits || '';
       let metodoPagamentoId;
       try {
-        const pmRes = await fetch(`https://api.mercadopago.com/v1/payment_methods/search?bin=${bin}&public_key=${MP_PUBLIC_KEY}`);
+        // `bins=` (PLURAL) — 07/11: com `bin=` a API IGNORA o filtro e devolve as ~30 formas de pagamento da conta;
+        // o 1º crédito da lista é sempre 'master', então Visa/Elo/Amex iam como Mastercard e o MP recusava com
+        // "Invalid payment_method_id" (a causa real das recusas do William e do Marcos). Medido na API: bins=453211 → visa.
+        const pmRes = await fetch(`https://api.mercadopago.com/v1/payment_methods/search?bins=${bin}&processing_mode=aggregator&public_key=${MP_PUBLIC_KEY}`);
+        if (!pmRes.ok) throw new Error(`payment_methods/search HTTP ${pmRes.status}`);
         const pmData = await pmRes.json();
         // 07/11 (William, assessoria R$ 8.000): o 1º resultado nem sempre é o CRÉDITO. Cartão múltiplo
         // (crédito + débito no mesmo BIN) volta com as duas bandeiras — ex.: 'master' e 'debmaster' — e
