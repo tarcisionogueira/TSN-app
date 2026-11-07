@@ -87,9 +87,7 @@ export default function OportunidadesPerfil({ cliente }) {
         </div>
       )}
       {(res.oportunidades || []).map((o) => (<div key={o.id} style={{ marginBottom: 6 }}>
-        // Mesma aba, pela navegação do app (02/10): `target="_blank"` no app instalado do iPhone abre
-        // FORA do app, sem a sessão — o dono clicou e caiu na tela inicial. `href` fica para o
-        // clique do meio/Ctrl no computador; o clique normal navega por dentro e "Voltar" retorna.
+        {/* Mesma aba, pela navegação do app (02/10): target="_blank" no app instalado do iPhone abre FORA do app, sem a sessão. O href fica para o clique do meio/Ctrl; o clique normal navega por dentro e Voltar retorna. */}
         <a href={`#/imovel/${o.id}`} onClick={(e) => { if (e.ctrlKey || e.metaKey || e.button === 1) return; e.preventDefault();
           // Registro no Cliente 360 do cliente (best-effort: falha aqui nunca impede abrir o lote).
           apiCall('/api/oportunidades-cliente', { method: 'POST', body: JSON.stringify({ cliente_id: cliente.id, imovel_id: o.id, titulo: o.titulo }) })
