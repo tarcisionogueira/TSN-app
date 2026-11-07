@@ -104,18 +104,20 @@ export default function MeusChamados() {
       if (!res.ok) throw new Error(`chat-suporte HTTP ${res.status}`);
       const { resposta, escalar, bug } = await res.json();
       if (!resposta) throw new Error('IA sem resposta');
-      await supabase.from('chamados_mensagens').insert({
+      const { error: eIa } = await supabase.from('chamados_mensagens').insert({
         chamado_id: chamadoAtivo.id, autor_tipo: 'ia',
         autor_nome: 'BidPro Assistente', conteudo: resposta, anexos: [],
       });
+      if (eIa) console.error('[meus-chamados] resposta da IA não gravada', eIa.message);
       if (escalar) await passarParaEquipe(bug);
     } catch (e) {
       // 07/11: o `catch` era vazio — IA fora do ar = cliente sem resposta e sem aviso. Agora vai para a equipe.
       console.error('[meus-chamados] IA falhou', e?.message);
-      await supabase.from('chamados_mensagens').insert({
+      const { error: eAviso } = await supabase.from('chamados_mensagens').insert({
         chamado_id: chamadoAtivo.id, autor_tipo: 'ia', autor_nome: 'BidPro Assistente',
         conteudo: 'Não consegui processar sua mensagem no momento. Passei a sua conversa para a nossa equipe.', anexos: [],
       });
+      if (eAviso) console.error('[meus-chamados] aviso de falha não gravado', eAviso.message);
       await passarParaEquipe(false);
     }
     setLoadingIA(false);
@@ -125,7 +127,10 @@ export default function MeusChamados() {
   // Mesma passagem do widget (ChatSuporte): status `aguardando_atendente` + e-mail à equipe, no servidor.
   async function passarParaEquipe(bug) {
     try {
-      if (bug) await supabase.from('chamados').update({ tipo: 'bug' }).eq('id', chamadoAtivo.id);
+      if (bug) {
+        const { error: eB } = await supabase.from('chamados').update({ tipo: 'bug' }).eq('id', chamadoAtivo.id);
+        if (eB) console.error('[meus-chamados] marca de bug não gravada', eB.message);
+      }
       const r = await apiCall('/api/atendimento-canal', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ acao: 'transferir', chamado_id: chamadoAtivo.id, destino: 'equipe' }) });
       const j = await r.json().catch(() => ({}));
