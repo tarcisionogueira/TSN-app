@@ -51,12 +51,32 @@ export function extrairUrlsDeEvento() { return new Map(); }
 
 // Atributo `wire:initial-data` → JSON. Só as 5 entidades que o Blade usa ao escapar atributo (&amp; por último).
 const desescapar = (s) => s.replace(/&quot;/g, '"').replace(/&#0?39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
-/** Dados (`serverMemo.data`) do 1º componente Livewire com esse nome, ou null. */
+// LIVEWIRE 3 (site migrou entre 05 e 07/11): o estado saiu de `wire:initial-data` (`serverMemo.data`) para
+// `wire:snapshot` (`data` + `memo.name`), e cada valor não-escalar vem "desidratado" como par `[valor, {s: 'arr'|…}]`,
+// recursivamente. Sem isto o parser via 0 de 41 páginas ("parser não leu a página") com o site respondendo 200.
+export function reidratarLw3(v) {
+  if (Array.isArray(v)) {
+    if (v.length === 2 && v[1] && typeof v[1] === 'object' && !Array.isArray(v[1]) && 's' in v[1]) return reidratarLw3(v[0]);
+    return v.map(reidratarLw3);
+  }
+  if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, reidratarLw3(x)]));
+  return v;
+}
+/** Dados do 1º componente Livewire com esse nome (v2 `wire:initial-data` ou v3 `wire:snapshot`), ou null. */
 export function componenteLivewire(html, nome) {
-  for (const m of String(html || '').matchAll(/wire:initial-data="([^"]+)"/g)) {
+  const s = String(html || '');
+  for (const m of s.matchAll(/wire:initial-data="([^"]+)"/g)) {
     if (!m[1].includes(`&quot;name&quot;:&quot;${nome}&quot;`)) continue;
     try { return JSON.parse(desescapar(m[1]))?.serverMemo?.data || null; }
     catch (e) { console.warn(`[d1lance] componente ${nome} ilegível: ${String(e?.message || e).slice(0, 80)}`); return null; }
+  }
+  for (const m of s.matchAll(/wire:snapshot="([^"]+)"/g)) {
+    if (!m[1].includes(`&quot;name&quot;:&quot;${nome}&quot;`)) continue;
+    try {
+      const j = JSON.parse(desescapar(m[1]));
+      if (j?.memo?.name !== nome) continue;
+      return reidratarLw3(j.data || null);
+    } catch (e) { console.warn(`[d1lance] componente ${nome} (v3) ilegível: ${String(e?.message || e).slice(0, 80)}`); return null; }
   }
   return null;
 }

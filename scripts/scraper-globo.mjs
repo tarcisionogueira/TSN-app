@@ -44,6 +44,21 @@ async function baixar(url) {
   throw new Error(`${motivo} · banco: ${b.motivo}`);
 }
 
+// API do Comprei (PGFN). 07/11: o gateway passou a negociar pelo `Accept` — com `text/html` (o de `baixar`) ele
+// responde XML `<AnuncioDe…>` (ou 500), e o JSON.parse quebrava nos 124 anúncios. Pede JSON e vai direto: o 403
+// que liga `diretoBarrado` é do site da Globo, não do gov.br.
+async function baixarJsonComprei(url) {
+  let motivo;
+  try {
+    const r = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/json' }, signal: AbortSignal.timeout(30000) });
+    if (r.ok) return await r.text();
+    motivo = `HTTP ${r.status}`;
+  } catch (e) { motivo = String(e?.message || e).slice(0, 60); }
+  const b = await viaBanco(url, { json: true });
+  if (b.html) return b.html;
+  throw new Error(`${motivo} · banco: ${b.motivo}`);
+}
+
 async function enumerar() {
   const porId = new Map();
   let completa = true, motivo = null;
@@ -171,7 +186,7 @@ async function main() {
     const idComprei = idAnuncioComprei(row.url_lote);
     if (idComprei && comprei.lidos < MAX_COMPREI) {
       try {
-        const ficha = fichaComprei(JSON.parse(await baixar(urlVisitarComprei(idComprei))));
+        const ficha = fichaComprei(JSON.parse(await baixarJsonComprei(urlVisitarComprei(idComprei))));
         comprei.lidos++;
         if (ficha) {
           if (ficha.endereco && !row.endereco) row.endereco = ficha.endereco;
