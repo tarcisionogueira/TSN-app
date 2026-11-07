@@ -6,6 +6,51 @@
 
 
 
+## 07/11 — PAGAMENTOS: BANDEIRA SEMPRE "MASTER", JUROS EM DOBRO, TAXAS REAIS E PARCELAMENTO POR PRODUTO
+
+**A causa real das recusas do William e do Marcos (commit 4e1b565d).** A tela consultava
+`/v1/payment_methods/search?bin=…`, mas o parâmetro do MP é **`bins`** (plural). Com `bin`, o filtro é IGNORADO e a API
+devolve as ~30 formas de pagamento da conta; a tela pegava o 1º crédito, sempre `master`. Visa/Elo/Amex iam como
+Mastercard → 400 `Invalid payment_method_id`. O diagnóstico anterior ("cartão múltiplo, débito vinha primeiro") consertou
+a escolha dentro da lista, mas a lista nunca foi do cartão. Medido: `bin=453211` → 30 resultados; `bins=453211` → visa.
+Agora a tela usa `bins=` e o **servidor confere a bandeira pelo BIN** (`bandeiraDoBinMp`, `api/_gateway-taxas.js`) e
+corrige antes de cobrar, o que cobre também a tela antiga em cache. Rodado o handler REAL com a cobrança do William
+(c40d33c8, R$ 8.000, 12× sem juros): Visa 12× chegando como "master" saiu `visa`, R$ 6.551,47 enviados e R$ 8.000,00
+pagos pelo cliente com os juros do MP; 6×/1× certos; 13× recusado. Harness: o MP real responde juros/bandeira, e só o
+"criar pagamento" e o banco são simulados.
+⚠️ **Link Asaas aberto para o William**: 07/11 03:43 (`audit_logs` `asaas_cobranca_fallback`, R$ 8.000, billingType
+UNDEFINED, cliente `cus_000215507776`). Se ele pagar lá, entra pelo Asaas (crédito em ~30 dias). Cancelar no painel do
+Asaas é tarefa do dono (pendência aberta).
+
+**Juros em dobro (efa8c4c9).** Quem soma os juros do parcelado é o PRÓPRIO Mercado Pago, por cima do `transaction_amount`
+(payer_costs da conta: 2× +9,64% … 12× +22,11%; nenhum pagamento parcelado existia até 07/11). A tela mandava preço +
+juros da tabela nossa (2,49–3,49% AO ANO, que mostrava 12× de R$ 6.000 = R$ 6.209,40; o real é R$ 7.326,60) e o MP somava
+os dele. Agora: **cliente assume** → envia o preço; **BidPro absorve** → envia `preço ÷ (1 + juros do MP para aquele
+cartão)` e grava o preço em `metadata.valor_base` (`valorAEnviar`, `src/utils/parcelamento.js`). Quem confere:
+cobrança avulsa no `mp-webhook` (aceita `valor_base` até o `total_paid_amount`); anual em `ativar-pro-anual`,
+`mp-webhook` e `reconciliar-assinaturas-cron` via `valorConfereComPreco` (exige `valor_base` E cliente ter pago o preço).
+
+**Taxas reais por gateway (efa8c4c9).** Tabela `gateway_taxas` (MP/Asaas/Inter × cartão/Pix/boleto × parcelas), cada ponta
+com origem `referencia` → `api` → `observada`. O gatilho `trg_mp_pagamento_ensina_taxa` (mp_pagamentos aprovado, origem
+≠ terceiro) e o `asaas-webhook` (`registrarTaxaObservada`) gravam em `gateway_taxas_observadas` e ADOTAM a taxa medida.
+Medido no retroativo: **cartão 1× MP = 4,98%** (2,49% tarifa + 2,49% `financed_advance_fee`), boleto MP R$ 3,49. Inter
+não informa a tarifa na cobrança: fica referência (0,99% teto R$ 1,99 no Pix). `/api/gateway-taxas` devolve os juros do
+cliente e renova pela API do MP a cada 24 h; a tela de pagamento pergunta ao MP os juros do cartão digitado
+(`src/utils/jurosCartao.js`). Admin → Cobrança avulsa: simulação "cliente paga × BidPro recebe" e painel "Taxas reais dos
+gateways" com formulário para documentar referência (`gateway_taxa_documentar`).
+
+**Parcelamento por produto (e25a2dbf), decisão do dono.** `regra_negocio` `pagamento.parcelamento_por_produto` (função
+`politica_parcelamento`; espelho `POLITICA_PARCELAMENTO`):
+- mensalidade: recorrente à vista, BidPro absorve; **anual: até 12× sem juros** (BidPro absorve);
+- assessoria: R$ 5 mil à vista (Pix/cartão 1×) ou R$ 6 mil em até 12× sem juros;
+- e-book: à vista · curso: à vista ou 12× sem juros;
+- **honorário: Pix VOLTOU**; à vista (Pix, boleto, cartão 1×) sem juros, 2–12× com juros ao cliente;
+- taxa de serviço de registro: à vista sem juros, parcelado com juros (item no catálogo da avulsa);
+- cobrança avulsa: escolha "cliente paga" × "BidPro absorve" OBRIGATÓRIA ao gerar (tela e `cobranca-avulsa-criar`).
+
+**Pendências:** 434 (1ª venda parcelada real: conferir `total_paid_amount`, taxa no parcelado e baixa pelo `valor_base`),
+435 (renovação diária pela API do MP com o token), e 436 (link Asaas do William, dono).
+
 ## 05–06/11 — MATRÍCULA E EDITAL VIRAM O MÍNIMO; AVISO QUANDO O DOCUMENTO CHEGA; A SESSÃO APLICA MIGRAÇÃO
 
 **Regra do dono:** edital e matrícula são o básico para avaliar um leilão. O pedido ao leiloeiro leva sempre os dois (e os
