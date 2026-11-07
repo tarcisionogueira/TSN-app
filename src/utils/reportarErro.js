@@ -93,9 +93,16 @@ const FETCH_DE_TERCEIRO = /failed to fetch \((?:[a-z0-9-]+\.)*(?:google-analytic
 const ANALYTICS_PROPRIO = /posthog request timed out/i;
 export function ehFetchDeTerceiro(msg = '') { return FETCH_DE_TERCEIRO.test(String(msg)) || ANALYTICS_PROPRIO.test(String(msg)); }
 
+// ROBÔ DE AUTOMAÇÃO NÃO É CLIENTE (07/11). Em 23/10 entraram 11 "Refused to evaluate a string as JavaScript
+// ('unsafe-eval')" de um único visitante em 50 min. O stack trazia `eval at evaluate (:234:30)`: é o
+// `page.evaluate()` de Puppeteer/Playwright injetando código na nossa página, e a CSP recusando. O CSP fez o
+// trabalho dele; não há o que corrigir no app, e a linha ocupava a fila do Cliente 360.
+const AUTOMACAO = /eval at evaluate \(|__puppeteer_evaluation_script__|__playwright_evaluation_script__/;
+export function ehAutomacao(stack = '') { return AUTOMACAO.test(String(stack)); }
+
 export async function reportarErroCliente({ msg, stack = '', url } = {}) {
   try {
-    if (contador >= TETO || ehRuido(msg) || ehStackDeTerceiro(stack) || ehFetchDeTerceiro(msg)) return;
+    if (contador >= TETO || ehRuido(msg) || ehStackDeTerceiro(stack) || ehFetchDeTerceiro(msg) || ehAutomacao(stack)) return;
     const href = url || (typeof location !== 'undefined' ? location.href : '');
     if (!ehProducao(href)) return;   // preview/localhost: não é erro que um cliente viu
     const rota = (href.split('#')[1] || (typeof location !== 'undefined' ? location.pathname : '')).split('?')[0];
