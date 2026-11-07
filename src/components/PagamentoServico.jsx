@@ -554,7 +554,9 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
         }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || 'Não foi possível processar o pagamento. Tente novamente.');
+      // 07/11: o código do MP segue junto — 3028 (bandeira que NÓS mandamos errada) não é recusa do banco
+      // e não deve empurrar o cliente para o Asaas (D+30); é tentar de novo no Mercado Pago.
+      if (!res.ok) throw Object.assign(new Error(data.error || 'Não foi possível processar o pagamento. Tente novamente.'), { codigoMp: String(data.codigo || '') });
 
       // O MESMO ERRO NO PAGAMENTO AVULSO — assessoria, Clube, produtos e recarga (16/08).
       // Em pagamento simples, `authorized` significa valor AUTORIZADO E NÃO CAPTURADO:
@@ -610,7 +612,7 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, 
         : (m || 'Erro ao processar pagamento.'));
       // Recusa real (não bloqueio de SDK) num fluxo com fallback Asaas disponível — oferece
       // na hora, sem precisar de alguém gerar um link à parte manualmente.
-      if (!bloqueado && propositoFallback) setMostrarAsaas(true);
+      if (!bloqueado && propositoFallback && e?.codigoMp !== '3028') setMostrarAsaas(true);
     } finally {
       setProcessando(false);
     }
