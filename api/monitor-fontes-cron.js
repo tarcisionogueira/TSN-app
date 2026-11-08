@@ -20,6 +20,7 @@ export const config = { runtime: 'nodejs', maxDuration: 300 };
 import { isCronAuthorized } from './_auth.js';
 import { createClient } from '@supabase/supabase-js';
 import MUNICIPIOS from './_municipios.js';
+import { repetirSeTimeout } from './_nova-tentativa.js';
 
 const RESEND_KEY  = process.env.RESEND_API_KEY;
 const FROM_EMAIL  = process.env.APP_FROM_EMAIL || 'noreply@bidprobrasil.com.br';
@@ -165,23 +166,26 @@ async function handler(req) {
   // precisa rodar TODO DIA porque o importador CEF upserta ativo:true (um trigger
   // segura a ressurreição até esta rodada). `error` conferido: falha aqui não derruba
   // o monitor, mas aparece no relatório (silêncio esconderia a dedup parada).
+  // 08/11 (#305): estas RPCs varrem o acervo em sequência e estouravam os 8 s com o cache frio (3 em 18:10 de 08/11).
+  // São idempotentes e o timeout desfaz a transação, então podem repetir.
+  const rpcComNovaTentativa = (nome, args) => repetirSeTimeout(() => supabase.rpc(nome, args), (r) => r.error?.code === '57014');
   let gemeos = null;
   {
-    const { data, error: eGem } = await supabase.rpc('reconciliar_gemeos_hasta_cef');
+    const { data, error: eGem } = await rpcComNovaTentativa('reconciliar_gemeos_hasta_cef');
     gemeos = eGem ? { erro: eGem.message } : data;
   }
   // GÊMEOS CAIXA × LEILOEIRO (24/09, "lotes repetidos"): mesmo imóvel pelo portal CEF e pela
   // leiloeira da Caixa (3 Torres, K Leilões). Mesma regra acima: fica o do leiloeiro.
   let gemeosLeiloeiro = null;
   {
-    const { data, error: eGl } = await supabase.rpc('reconciliar_gemeos_leiloeiro_cef');
+    const { data, error: eGl } = await rpcComNovaTentativa('reconciliar_gemeos_leiloeiro_cef');
     gemeosLeiloeiro = eGl ? { erro: eGl.message } : data;
   }
   // GÊMEOS VLANCE × LJUD (27/09): mesmo backend, mesmo lote_id — 48 de 84 VLANCE eram cópia
   // de lote LJUD ativo. Fica o LJUD. Ver supabase/migrations/gemeos_vlance_ljud.sql.
   let gemeosVlance = null;
   {
-    const { data, error: eGv } = await supabase.rpc('reconciliar_gemeos_vlance_ljud');
+    const { data, error: eGv } = await rpcComNovaTentativa('reconciliar_gemeos_vlance_ljud');
     gemeosVlance = eGv ? { erro: eGv.message } : data;
   }
   // GÊMEOS NA MESMA FONTE (10/10, dono: "vários imóveis iguais"): a mesma matrícula 2-5× na mesma
@@ -190,7 +194,7 @@ async function handler(req) {
   // Ver supabase/migrations/20261010_gemeos_mesma_fonte.sql.
   let gemeosMesmaFonte = null;
   {
-    const { data, error: eGm } = await supabase.rpc('reconciliar_gemeos_mesma_fonte');
+    const { data, error: eGm } = await rpcComNovaTentativa('reconciliar_gemeos_mesma_fonte');
     gemeosMesmaFonte = eGm ? { erro: eGm.message } : data;
   }
   // GÊMEOS ENTRE LEILOEIROS (20/10, dono: "vários lotes iguais em leiloeiros diferentes"): o mesmo lote
@@ -198,7 +202,7 @@ async function handler(req) {
   // `anunciado_em` dele. Ver supabase/migrations/20261020_gemeos_entre_leiloeiros.sql.
   let gemeosEntreLeiloeiros = null;
   {
-    const { data, error: eGe } = await supabase.rpc('reconciliar_gemeos_entre_leiloeiros');
+    const { data, error: eGe } = await rpcComNovaTentativa('reconciliar_gemeos_entre_leiloeiros');
     gemeosEntreLeiloeiros = eGe ? { erro: eGe.message } : data;
   }
   // GÊMEOS POR MATRÍCULA (22/10): mesmo nº de matrícula na mesma cidade em leiloeiros diferentes — o
@@ -206,17 +210,19 @@ async function handler(req) {
   // Ver supabase/migrations/20261022_gemeos_imoveis_furos.sql.
   let gemeosMatricula = null;
   {
-    const { data, error: eGmat } = await supabase.rpc('reconciliar_gemeos_matricula');
+    const { data, error: eGmat } = await rpcComNovaTentativa('reconciliar_gemeos_matricula');
     gemeosMatricula = eGmat ? { erro: eGmat.message } : data;
   }
   // CO-ANÚNCIO (22/10, dono: o mesmo prédio de Salvador 5× na busca): no LJUD cada leiloeiro do pool publica o
   // MESMO lote no próprio leilão, sem matrícula. Mesma fonte + título + descrição + preço + cidade + data, cada
   // cópia de um leiloeiro diferente → fica 1. Ver supabase/migrations/20261022_gemeos_coanuncio.sql.
   // NÚMEROS DA PÁGINA INICIAL (23/10): imóveis/veículos/leiloeiros do acervo, 1x/dia — contar na hora da
-  // visita custa ~9 s. A página lê o resultado guardado (landing_numeros). Falha só deixa o de ontem.
-  {
-    const { error: eLn } = await supabase.rpc('landing_numeros_atualizar');
-    if (eLn) console.error('[monitor-fontes] landing_numeros_atualizar:', eLn.message);
+  // visita custa ~9 s. A página lê o resultado guardado (landing_numeros). Falha só deixa o valor anterior.
+  // 08/11 (#305): uma chamada por parte, cada uma com os seus 8 s. Numa só, qualquer estouro desfazia tudo: os números
+  // ficaram parados de 04/11 a 08/11, e o cache de cidades junto, o que derrubou a busca pública.
+  for (const nome of ['acervo_cidades_atualizar', 'landing_contagens_atualizar', 'landing_leiloeiros_atualizar', 'landing_vitrine_atualizar']) {
+    const { error: eLn } = await rpcComNovaTentativa(nome);
+    if (eLn) console.error(`[monitor-fontes] ${nome}:`, eLn.message);
   }
   // COBERTURA DAS JUNTAS (26/10, dono): leiloeiro_junta re-cruzada com o acervo 1x/dia — sem isto o status
   // "coletado/falta" envelhecia a cada integração (a tabela dizia 151 coletados com 392 de fato). Sem lista
@@ -227,7 +233,7 @@ async function handler(req) {
   }
   let gemeosCoanuncio = null;
   {
-    const { data, error: eGco } = await supabase.rpc('reconciliar_gemeos_coanuncio');
+    const { data, error: eGco } = await rpcComNovaTentativa('reconciliar_gemeos_coanuncio');
     gemeosCoanuncio = eGco ? { erro: eGco.message } : data;
   }
   // GÊMEOS DE VEÍCULO (22/10, dono: "os carros parecem repetidos"): mesma placa/chassi em 2+ lotes — 1ª e 2ª
@@ -235,7 +241,7 @@ async function handler(req) {
   // Ver supabase/migrations/20261022_veiculos_gemeos.sql.
   let gemeosVeiculos = null;
   {
-    const { data, error: eGv2 } = await supabase.rpc('reconciliar_gemeos_veiculos');
+    const { data, error: eGv2 } = await rpcComNovaTentativa('reconciliar_gemeos_veiculos');
     gemeosVeiculos = eGv2 ? { erro: eGv2.message } : data;
   }
 

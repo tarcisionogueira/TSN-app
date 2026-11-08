@@ -6,6 +6,25 @@
 
 
 
+## 08/11 (noite) — #305: TIMEOUTS DO BANCO, O CACHE FRIO E A BUSCA QUE CAIU POR TABELA
+
+- **Medido em 24 h:** 26 estouros de 8 s. As consultas leem ~23 mil páginas do acervo para achar poucas linhas: 0,2-5 s com
+  o cache quente, mais de 8 s com ele frio. Rota por rota em `edge_logs` com status 500.
+- **Encadeamento:** `landing_numeros_atualizar` falhava desde 04/11 e era ela que renovava `acervo_cidades`. Com o cache
+  acima de 3 dias, `acervo_busca_cidade` recontava o acervo e estourava: a busca pública deu 500 em 08/11.
+- **Índices parciais (CONCURRENTLY), páginas lidas antes → depois:** duplicados SBL 24.294 → 1.269; fila de proximidades
+  23.033 → 14; fotos da Caixa 23.731 → 1. Medidos com o cache quente, porque não dá para esfriar o cache de propósito.
+- **Página inicial em 4 RPCs** (`acervo_cidades_atualizar`, `landing_contagens_`, `landing_leiloeiros_`, `landing_vitrine_`),
+  cada uma com os seus 8 s e o próprio carimbo. O health-check passou a vigiar também leiloeiros e cidades.
+- **Busca** usa o cache de qualquer idade; só reconta se ele não existir.
+- **Nova tentativa só em 57014** (`api/_nova-tentativa.js`): gêmeos, página inicial e seleção de fotos órfãs.
+- **Atualizado na mão às 23:58:** números e vitrine estavam parados desde 04/11 (41.650 imóveis, 9.962 veículos, 1.243
+  leiloeiros, 6 na vitrine).
+- **Fica de fora, de propósito:** `leiloeiro_dominios_do_acervo`, `acervo_por_fonte`, `enfileirar_docs_*`,
+  `registrar_fontes_locais`, consulta de edital da CEF e upserts em colisão: 1 a 4 falhas por dia cada. Subir o limite do
+  `service_role` esconderia as causas e tira uma proteção, então é decisão do dono.
+- **#305 segue aberta:** a prova é a janela de 48 h em `get_runtime_errors`, com o cron diário das 18:10 UTC.
+
 ## 08/11 — PREVENÇÃO: PESQUISA FRACA, PAGAMENTO SEM BAIXA E ALERTA QUE SEPARA O URGENTE
 
 **Por quê.** O aviso de Carpina existia e se perdeu: anomalias amarelas em 60 de 60 rodadas e "ERRO" em 21 de 60.

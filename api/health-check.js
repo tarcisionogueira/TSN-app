@@ -312,10 +312,17 @@ async function handler(req) {
     const problemas = [];
     if (hNum == null || hNum > 36) problemas.push(`números com ${hNum == null ? 'carimbo ilegível' : `${Math.round(hNum)} h`} (faixa do acervo some aos 48 h)`);
     if (hVit == null || hVit > 36) problemas.push(`vitrine com ${hVit == null ? 'carimbo ausente' : `${Math.round(hVit)} h`}`);
+    // 08/11: cada parte tem o próprio carimbo, e a busca pública responde com o cache de cidades mesmo velho.
+    const hLei = idadeH(v?.leiloeiros_em);
+    if (hLei == null || hLei > 36) problemas.push(`leiloeiros com ${hLei == null ? 'carimbo ausente' : `${Math.round(hLei)} h`}`);
+    const rCid = await sb(`app_config?key=eq.acervo_cidades&select=updated_at&limit=1`);
+    if (!rCid.ok) throw new Error(`leitura de acervo_cidades HTTP ${rCid.status}`);
+    const hCid = idadeH((await rCid.json())[0]?.updated_at);
+    if (hCid == null || hCid > 36) problemas.push(`cidades da busca com ${hCid == null ? 'carimbo ausente' : `${Math.round(hCid)} h`}`);
     if (nVit < 4) problemas.push(`vitrine com ${nVit} lote(s) (mínimo 4)`);
     if (v?.vitrine_erro) problemas.push(`última seleção falhou: ${String(v.vitrine_erro).slice(0, 120)}`);
     if (!(Number(v?.imoveis) > 0) || !(Number(v?.veiculos) > 0)) problemas.push(`acervo sem contagem (imóveis ${v?.imoveis ?? '—'}, veículos ${v?.veiculos ?? '—'})`);
-    if (problemas.length) return { status: 'aviso', detalhe: `Landing: ${problemas.join(' · ')}. Conferir landing_numeros_atualizar no monitor-fontes-cron.` };
+    if (problemas.length) return { status: 'aviso', detalhe: `Landing: ${problemas.join(' · ')}. Conferir as 4 RPCs da página inicial no monitor-fontes-cron.` };
     return { status: 'ok', detalhe: `Retrato de ${Math.round(hNum)} h · vitrine com ${nVit} lotes` };
   }));
 

@@ -21,6 +21,7 @@
 export const config = { runtime: 'nodejs', maxDuration: 60 };
 
 import { isCronAuthorized } from './_auth.js';
+import { repetirSeTimeout } from './_nova-tentativa.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -68,10 +69,14 @@ export default async function handler(req, res) {
 
   try {
     for (let i = 0; i < LOTES_POR_RUN; i++) {
-      const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/fotos_orfas_para_limpeza`, {
-        method: 'POST', headers: hdr, body: JSON.stringify({ p_limite: LOTE }),
-        signal: AbortSignal.timeout(15000),
-      });
+      // 08/11 (#305): às 04:20 o cache está frio e a 1ª leitura pode estourar os 8 s. A seleção só lê, pode repetir.
+      const r = await repetirSeTimeout(
+        () => fetch(`${SUPABASE_URL}/rest/v1/rpc/fotos_orfas_para_limpeza`, {
+          method: 'POST', headers: hdr, body: JSON.stringify({ p_limite: LOTE }),
+          signal: AbortSignal.timeout(15000),
+        }),
+        async (resp) => resp.status === 500 && (await resp.clone().text().catch(() => '')).includes('57014'),
+      );
       if (!r.ok) {
         falhou = true;
         console.error('[fotos-orfas] RPC falhou:', r.status, (await r.text().catch(() => '')).slice(0, 200));
