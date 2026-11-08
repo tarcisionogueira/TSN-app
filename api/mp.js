@@ -15,6 +15,7 @@ export const config = { runtime: 'nodejs', maxDuration: 30 };
 
 import { getUser } from './_auth.js';
 import { mpSdk } from './_mp-sdk.js';
+import { urlWebhookMp } from './_mp-webhook-url.js';
 import { podeContratarAssessoria } from './_assessoria.js';
 import { cpfDoRegistro } from './_cpf.js';
 import { deveAncorarGarantia } from './_ancora-cdc.js';
@@ -24,7 +25,7 @@ import { pedidoRepetido, CORPO_REPETIDO } from './_pedido-unico.js';
 const MP_URL    = 'https://api.mercadopago.com';
 const TOKEN     = (process.env.MP_ACCESS_TOKEN || '').trim();
 const BASE_URL  = process.env.APP_BASE_URL || 'https://bidprobrasil.com.br';
-const WEBHOOK   = `${BASE_URL}/api/mp-webhook`;
+const WEBHOOK   = urlWebhookMp();
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 

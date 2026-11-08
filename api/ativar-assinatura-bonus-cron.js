@@ -39,12 +39,13 @@
 export const config = { runtime: 'nodejs', maxDuration: 120 };
 
 import { isCronAuthorized } from './_auth.js';
+import { urlWebhookMp } from './_mp-webhook-url.js';
 
 const MP_BASE = 'https://api.mercadopago.com';
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
 const BASE = process.env.APP_BASE_URL || 'https://bidprobrasil.com.br';
-const WEBHOOK = `${BASE}/api/mp-webhook`;
+const WEBHOOK = urlWebhookMp();
 const DIA = 86400000;
 const JANELA_ANTES_DIAS = 2;   // converte até 2 dias antes do vencimento
 const JANELA_DEPOIS_DIAS = 4;  // desiste 4 dias depois (reconciliação já rebaixou)

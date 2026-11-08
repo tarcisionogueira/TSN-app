@@ -22,6 +22,7 @@ import { erroNome, normalizarNome } from './_nome.js';
 import { hashCpf, encryptCpf } from './_cpf.js';
 import { comprovanteValido, ERRO_SEM_COMPROVANTE } from './_comprovante-email.js';
 import { pedidoRepetido, CORPO_REPETIDO } from './_pedido-unico.js';
+import { urlWebhookMp } from './_mp-webhook-url.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -137,7 +138,7 @@ export default async function handler(req, res) {
       card_token_id: cardTokenId,
       status: 'authorized',
       back_url: `${BASE_URL}/#/checkout?plano=${plano}&status=assinatura`,
-      notification_url: `${BASE_URL}/api/mp-webhook`,
+      notification_url: urlWebhookMp(),
       auto_recurring: { frequency: 1, frequency_type: 'months', transaction_amount: Number(cfg.valor), currency_id: 'BRL' },
     }),
     signal: AbortSignal.timeout(25000),

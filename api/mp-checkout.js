@@ -15,6 +15,7 @@ import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
 import { auditLog } from './_audit.js';
 import { cpfDoRegistro, validarCPF, validarDocumento } from './_cpf.js';
 import { mpSdk } from './_mp-sdk.js';
+import { urlWebhookMp } from './_mp-webhook-url.js';
 import { DIAS_BOLETO, vencimentoBoleto } from './_boleto-vencimento.js';
 import { pedidoRepetido, CORPO_REPETIDO } from './_pedido-unico.js';
 import { alertarErro } from './_error-alert.js';
@@ -611,7 +612,7 @@ export default async function handler(req, res) {
           : cobrancaCtx
             ? `cobranca:${cobrancaCtx.cobrancaId}`
             : `servico:${user.id}:${proposito}`,
-      notification_url: `${process.env.APP_BASE_URL || 'https://bidprobrasil.com.br'}/api/mp-webhook`,
+      notification_url: urlWebhookMp(),
       statement_descriptor: 'BIDPRO BRASIL',
       // VENCIMENTO DO BOLETO: 7 DIAS (07/10, decisão do dono). Sem este campo o MP aplica o padrão
       // dele (3 dias), que é curto para a parcela "para dar entrada no registro" — a regra é o

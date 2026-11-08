@@ -6,6 +6,30 @@
 
 
 
+## 08/11 — PAGAMENTO DO WILLIAM SEM BAIXA: O AVISO DO MP SE PERDIA NO REDIRECT DO DOMÍNIO SEM WWW
+
+**O que aconteceu.** O MP aprovou o pagamento 187379238351 em 07/11 22:30 (12× Visa: cliente R$ 8.000,00, enviado R$ 6.551,47,
+líquido R$ 6.225,21), e a cobrança c40d33c8 seguiu `aberta`. Sem linha em `mp_webhook_fila` nem em `webhook_eventos_processados`.
+O espelho das 00:00 gravou o pagamento em `mp_pagamentos`, mas ele não dá baixa.
+
+**Causa.** `mp-checkout` mandava `notification_url` com `bidprobrasil.com.br`, que responde 308 para o `www`. Medido nos pagamentos
+desde 21/09: os 7 sem `notification_url` (vêm pela URL do painel) chegaram à fila; os com a URL sem www, não. O que não foi medido:
+se o MP desiste no 308 ou se outra coisa barra antes da fila; a prova final é a pendência do próximo pagamento real.
+
+**Feito.** `api/_mp-webhook-url.js` (`urlWebhookMp`) entrega a URL já no destino final, usada em `mp-checkout`, `mp`,
+`assinar-com-cadastro` e `ativar-assinatura-bonus-cron`. Baixa do William pela fila real (insert em `mp_webhook_fila`, id 26): o cron
+releu o pagamento no MP e aplicou as conferências; resultado `paga`, com `gateway_payment_id`. #434 fechada.
+
+**Reprocessar aviso perdido (receita):** inserir em `mp_webhook_fila` com `mp_topic='payment'`, `mp_data_id=<id>` e payload
+`{"type":"payment","data":{"id":"<id>"}}`. Não exige assinatura porque o processamento consulta o pagamento direto no MP.
+
+**Abertos (`pendencias_abertas()`):** ativar a assessoria do William e responder as 4 observações (a cobrança avulsa não ativa
+plano nem caso); boleto de R$ 1.000 do Marcos de 07/10, mesma causa, sem baixa aguardando OK do dono; link Asaas do William (#436);
+prova com o próximo pagamento; vigia de aprovado com cobrança aberta.
+
+**Armadilha local:** `npm run build` no Windows reprova em `verificar:csp`, porque o checkout tem CRLF e o hash muda. Os bytes do git
+(LF) batem com a CSP; é alarme local, não mexa nos hashes. Rode as outras travas e `npx vite build`.
+
 ## 07/11 (noite) — INSPEÇÃO DA CAPTAÇÃO: D1 LANCE E COMPREI QUEBRADOS, 91 DUPLICADOS SUPERBID, CLOUDFLARE NOVO
 
 **Baixas reais encontradas e corrigidas (commit 20761d3c):**
