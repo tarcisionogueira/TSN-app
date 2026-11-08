@@ -24,7 +24,8 @@ releu o pagamento no MP e aplicou as conferências; resultado `paga`, com `gatew
 `{"type":"payment","data":{"id":"<id>"}}`. Não exige assinatura porque o processamento consulta o pagamento direto no MP.
 
 **Abertos (`pendencias_abertas()`):** ativar a assessoria do William e responder as 4 observações (a cobrança avulsa não ativa
-plano nem caso); boleto de R$ 1.000 do Marcos de 07/10, mesma causa, sem baixa aguardando OK do dono; link Asaas do William (#436);
+plano nem caso); boleto de R$ 1.000 do Marcos de 07/10, mesma causa, baixado pela fila com OK do dono (id 27; serviço foi a `em_preparo`), mas com
+data de hoje e `origem=terceiro`, a decidir com o contador; link Asaas do William (#436);
 prova com o próximo pagamento; vigia de aprovado com cobrança aberta.
 
 **Armadilha local:** `npm run build` no Windows reprova em `verificar:csp`, porque o checkout tem CRLF e o hash muda. Os bytes do git
