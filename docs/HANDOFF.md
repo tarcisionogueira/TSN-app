@@ -6,6 +6,17 @@
 
 
 
+## 08/11 — PREVENÇÃO: PESQUISA FRACA, PAGAMENTO SEM BAIXA E ALERTA QUE SEPARA O URGENTE
+
+**Por quê.** O aviso de Carpina existia e se perdeu: anomalias amarelas em 60 de 60 rodadas e "ERRO" em 21 de 60.
+- **Pesquisa fraca:** `motivoBuscaFraca` marca `mercado.buscaFraca` (sem venda com preço, ou IA apontando leilão). O cron `?so=qualidade` (a cada 30 min) busca de novo
+  uma vez, sem cota; se continuar fraca, o dono recebe e-mail na hora. **Não retém o relatório:** essa decisão segue com o dono.
+- **Pagamento × sistema:** `pagamentos_sem_baixa()` entra como erro no health check: aviso não processado, cobrança aberta com pagamento aprovado, assessoria paga sem ativação.
+- **Alerta:** e-mail com "Agir hoje" e "Para saber". `health_check_explicado` rebaixa problema conhecido, com prazo, como `fonte_regressao_explicada`. Anomalias: só 7 dias contam.
+- **Arquivadas:** anomalias sem atividade desde antes de 01/11 foram marcadas como resolvidas sem revisão individual. Nada foi corrigido nos relatórios delas.
+- **IBGE:** explicado por 30 dias; o erro agora registra a causa de rede. `documentos_aguardando` e `oportunidades_selecionadas` foram para a allowlist de RLS (só servidor).
+**Falta:** itens 4 (timeouts), 5 e 6 do plano; a retentativa só será vista em produção quando surgir uma pesquisa fraca real.
+
 ## 08/11 — RELATÓRIO SEM COMPARATIVO EM CARPINA: AMOSTRA COM VALOR 0 CONTAVA COMO AMOSTRA
 
 **Caso 4b9f76ef.** A IA devolveu 5 vendas, 4 com `valor: 0` e 1 sem metragem. Três defeitos em cadeia: `contarVendas` contava as 5, bateu o alvo de 4

@@ -48,9 +48,50 @@ function sb(path, opts = {}) {
   });
 }
 
+// PESQUISA FRACA (08/11): o gerador marcou `mercado.buscaFraca` (sem venda com preço, ou a IA apontou leilão). Busca de
+// novo UMA vez, sem cota e sem reaproveitar a pesquisa. Na retentativa o gerador grava `tentativas: 1`, e a linha sai
+// daqui; se continuar fraca, ele avisa o dono. O teto de regen_tentativas segura o caso de a geração nem começar.
+async function retentarBuscaFraca() {
+  const agora = Date.now();
+  const assentou = new Date(agora - 10 * 60 * 1000).toISOString(); // não atropela quem acabou de gerar e está lendo
+  const janela = new Date(agora - JANELA_H * 3600 * 1000).toISOString();
+  const q = `analises_mercado?status=eq.concluida&result->mercado->buscaFraca->>tentativas=eq.0&result->>mercadoVazio=eq.false&regen_tentativas=lt.${MAX_TENT}`
+    + `&updated_at=lt.${encodeURIComponent(assentou)}&updated_at=gt.${encodeURIComponent(janela)}`
+    + `&order=updated_at.asc&limit=${LOTE}&select=user_id,imovel_id,titulo,cidade,estado,imovel,inputs,regen_tentativas`;
+  const r = await sb(q);
+  if (!r.ok) throw new Error(`leitura da pesquisa fraca HTTP ${r.status}`);
+  const rows = await r.json();
+  let disparados = 0;
+  await Promise.allSettled(rows.map(async (row) => {
+    if (!row?.inputs?.mercadoInputs) return;
+    const marca = await sb(`analises_mercado?user_id=eq.${encodeURIComponent(String(row.user_id))}&imovel_id=eq.${encodeURIComponent(String(row.imovel_id))}&select=id`, {
+      method: 'PATCH', headers: { Prefer: 'return=representation' },
+      body: JSON.stringify({ regen_tentativas: (row.regen_tentativas || 0) + 1, regen_em: new Date().toISOString() }),
+    });
+    if (!marca.ok || !(await marca.json()).length) { console.error('[busca-fraca] tentativa não marcada', row.imovel_id, marca.status); return; }
+    await fetch(`${BASE}/api/gerar-analise`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'x-cron-secret': CRON_SECRET },
+      body: JSON.stringify({
+        imovelId: row.imovel_id, paraUserId: row.user_id, titulo: row.titulo, cidade: row.cidade, estado: row.estado,
+        imovel: row.imovel || null, mercadoInputs: row.inputs.mercadoInputs, parecerInputs: row.inputs.parecerInputs,
+        semCache: true, retentativaQualidade: true,
+      }),
+      signal: AbortSignal.timeout(9000),
+    }).catch((e) => console.log('[busca-fraca] disparado', row.imovel_id, String(e?.name || e))); // a geração segue na própria função
+    disparados++;
+  }));
+  return disparados;
+}
+
 export default async function handler(req, res) {
   if (!isCronAuthorized(req)) { res.status(401).json({ error: 'Não autorizado' }); return; }
   if (!SUPABASE_URL || !SERVICE_KEY || !CRON_SECRET) { res.status(500).json({ error: 'env ausente' }); return; }
+
+  if (req.query?.so === 'qualidade') {
+    try { res.status(200).json({ ok: true, buscaFraca: await retentarBuscaFraca() }); }
+    catch (e) { console.error('[busca-fraca]', e?.message || e); res.status(502).json({ ok: false, erro: String(e?.message || e).slice(0, 200) }); }
+    return;
+  }
 
   // REGERAR SOB DEMANDA (28/09): `?mercado=<id>,<id>` regera AGORA esses relatórios mercadológicos
   // com os inputs gravados (corrija-os antes, se o vício estava neles), sem esperar a janela de

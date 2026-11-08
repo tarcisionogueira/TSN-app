@@ -352,6 +352,10 @@
       "schedule": "0 */6 * * *"
     },
     {
+      "path": "/api/regenerar-relatorios-cron?so=qualidade",
+      "schedule": "*/30 * * * *"
+    },
+    {
       "path": "/api/juridico-retry-cron",
       "schedule": "*/15 * * * *"
     },

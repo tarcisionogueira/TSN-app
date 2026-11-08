@@ -22,6 +22,19 @@
  * gravados (a revisão do acervo) sem tocar em nada.
  */
 
+import { vendasDe, vendaComPreco } from '../src/lib/niveis-mercado.js';
+
+// A pesquisa saiu fraca e vale buscar de novo? Carpina (08/11): nenhuma venda com preço. Presidente Prudente
+// (08/11): a própria IA escreveu que as amostras eram de leilão. Rural e vaga são precificadas por unidade.
+export function motivoBuscaFraca(result, { porUnidade = false } = {}) {
+  const m = result?.mercado;
+  if (!m || result?.mercadoVazio === true) return null; // mercado vazio tem autoconserto próprio
+  const util = (v) => vendaComPreco(v) || (porUnidade && Number(v?.valor) > 0);
+  if (!vendasDe(m).some(util)) return 'sem_comparavel_com_preco';
+  if (m.comentarioCitouLeilao === true) return 'ia_apontou_leilao';
+  return null;
+}
+
 const n = (v) => { const x = Number(v); return Number.isFinite(x) ? x : 0; };
 const perto = (a, b, tol) => (a === 0 && b === 0) || (Math.abs(a - b) / Math.max(Math.abs(a), Math.abs(b), 1e-9) <= tol);
 

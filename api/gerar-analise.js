@@ -20,7 +20,8 @@ import { composicaoTemporal, avisoFrescor } from './_indice-composicao.js';
 import { referenciaPonderada } from './_indice-ponderacao.js';
 import { geocodificarCascata, rankNivel, coordValida } from './_geo.js';
 import { extratoEdital, extratoMatricula } from './_edital-extrato.js';
-import { auditarMercadologico } from './_auditoria-relatorio.js';
+import { auditarMercadologico, motivoBuscaFraca } from './_auditoria-relatorio.js';
+import { enviarEmail } from './_email.js';
 import { resolverPagamentoDoc, extrairPagamentoTexto } from './_doc-extracao.js';
 import { pagamentoPrior, pagamentoAprender } from './_doc-extracao.js';
 // MESMA função pura que a tela usa para ROI/ROE/capital/teto. Importada aqui para o
@@ -2821,7 +2822,7 @@ export default async function handler(req, res) {
       // Só conta o que dá para precificar. Anúncio com `valor: 0` não é amostra: em Carpina (08/11) 5 vendas,
       // 4 sem preço, bateram o alvo e a 2ª busca não rodou, mesmo com tempo sobrando. Rural e vaga vão por unidade.
       const porUnidade = baseReuso === 'rural' || baseReuso === 'unidade';
-      const vendaUtil = (v) => vendaComPreco(v) || (porUnidade && Number(v?.valor) > 0);
+      const vendaUtil = (v) => !ehAmostraDeLeilao(v) && (vendaComPreco(v) || (porUnidade && Number(v?.valor) > 0));
       const contarVendas = (m) => vendasDe(m).filter(vendaUtil).length;
 
       // FUNDIR, NUNCA SUBSTITUIR. O retry antigo fazia `compar = await buscarEtapa(...)`: se a
@@ -3545,7 +3546,11 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
             area: Number(mercadoInputs?.areaM2) || Number(imDb?.area_m2) || 0,
             cidade: cidade || imovel?.cidade || imDb?.cidade || '' },
         });
-        if (mercado?.comentario) mercado.comentario = limparComentarioDeLeilao(mercado.comentario);
+        if (mercado?.comentario) {
+          const comentarioLimpo = limparComentarioDeLeilao(mercado.comentario);
+          if (comentarioLimpo !== mercado.comentario) mercado.comentarioCitouLeilao = true;
+          mercado.comentario = comentarioLimpo;
+        }
         // BASE LOCAL (03/11, caso Peruíbe): quantos comparáveis da PRÓPRIA cidade sustentam o valor. Abaixo
         // de MIN_COMPARAVEIS_LOCAIS a tela não carimba "viável, vale avançar" e o texto diz a origem real.
         if (mercado) {
@@ -4426,6 +4431,26 @@ COMO USAR (obrigatório): dedique um parágrafo aos CUSTOS DA OPERAÇÃO segundo
       // a ressalva sumir justamente onde ela precisa aparecer.
       result.auditoria = { ...aud, em: new Date().toISOString() };
       if (result.mercado) result.mercado.auditoria = result.auditoria;
+      // PESQUISA FRACA (08/11): 1ª vez, o cron busca de novo em até 30 min. Continuou fraca, o dono recebe e-mail na hora.
+      // O relatório não é retido: decisão pendente do dono. Falha no e-mail não derruba a entrega.
+      const motivoFraca = motivoBuscaFraca(result, { porUnidade: ['rural', 'unidade'].includes(baseAvaliacaoPorTipo(mercadoInputs.tipoImovel || imovel?.tipo)) });
+      if (motivoFraca && result.mercado) {
+        const retentativa = isCron && body.retentativaQualidade === true;
+        result.mercado.buscaFraca = { motivo: motivoFraca, tentativas: retentativa ? 1 : 0 };
+        if (retentativa) {
+          const rotulo = motivoFraca === 'sem_comparavel_com_preco' ? 'nenhum comparável de venda com preço' : 'a pesquisa apontou anúncios de leilão';
+          const destino = process.env.ADMIN_EMAIL || 'tarcisioaraujo@reimob.com.br';
+          const link = `https://www.bidprobrasil.com.br/#/imovel/${encodeURIComponent(String(imovelId))}`;
+          const envio = await enviarEmail({
+            to: destino, subject: `Relatório fraco depois de nova busca: ${String(titulo || cidade || imovelId).slice(0, 80)}`,
+            text: `O relatório continua com ${rotulo}, mesmo depois de uma nova busca.\n\nCidade: ${cidade || 'não informada'}\nValor no relatório: R$ ${Math.round(Number(result.valorMercado) || 0).toLocaleString('pt-BR')}\nImóvel: ${link}`,
+            html: `<p>O relatório continua com ${rotulo}, mesmo depois de uma nova busca.</p><p>Cidade: ${cidade || 'não informada'}<br>Valor no relatório: R$ ${Math.round(Number(result.valorMercado) || 0).toLocaleString('pt-BR')}</p><p><a href="${link}">Abrir o imóvel</a></p>`,
+            idempotencyKey: `busca-fraca-${String(imovelId)}-${new Date().toISOString().slice(0, 10)}`,
+            semFila: true,
+          }).catch((e) => ({ ok: false, error: e?.message || e }));
+          if (!envio?.ok) console.error('[busca-fraca] aviso ao dono não saiu', String(imovelId), envio?.error);
+        }
+      }
       if (aud.criticos.length || aud.faltando.length || aud.avisos.length) {
         console.log('[auditoria-relatorio]', JSON.stringify({ imovel: String(imovelId), criticos: aud.criticos.map((c) => c.chave), faltando: aud.faltando.map((f) => f.chave), avisos: aud.avisos.map((a) => a.chave) }));
       }

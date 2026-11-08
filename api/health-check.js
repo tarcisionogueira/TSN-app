@@ -14,24 +14,44 @@ const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const FROM_EMAIL = process.env.APP_FROM_EMAIL || 'noreply@bidprobrasil.com.br';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'tarcisioaraujo@reimob.com.br';
 
+// E-mail em dois blocos (08/11): antes, tudo vinha na mesma tabela, com "ERRO" em 21 de 60 rodadas, e o urgente se perdia.
+// "Agir hoje" é erro sem explicação válida; o resto é "Para saber".
+export function blocosDoAlerta(itens) {
+  const linha = (i) => `<tr><td style="padding:8px;border-bottom:1px solid #f1f5f9;font-weight:600">${i.nome}</td><td style="padding:8px;border-bottom:1px solid #f1f5f9;color:#64748b">${i.detalhe}</td></tr>`;
+  const bloco = (titulo, cor, lista) => (lista.length
+    ? `<h3 style="margin:0 0 8px;color:${cor}">${titulo} (${lista.length})</h3><table style="width:100%;border-collapse:collapse;margin-bottom:20px"><tbody>${lista.map(linha).join('')}</tbody></table>`
+    : '');
+  const agir = itens.filter((i) => i.status === 'erro');
+  const saber = itens.filter((i) => i.status === 'aviso');
+  return { agir: agir.length, saber: saber.length, html: bloco('Agir hoje', '#dc2626', agir) + bloco('Para saber', '#d97706', saber) };
+}
+
+// Problema conhecido sai de "agir hoje" enquanto a explicação valer; vencido o prazo, volta sozinho a ser erro.
+// Sem conseguir ler a tabela, nada é rebaixado: "não consegui ler" não pode esconder um erro.
+export function aplicarExplicacoes(itens, explicacoes) {
+  for (const i of itens) {
+    const ex = explicacoes.find((e) => e.nome === i.nome);
+    if (!ex || i.status === 'ok') continue;
+    const ate = new Date(ex.explicado_ate).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    i.detalhe = `Ciente até ${ate}: ${ex.explicacao} Situação agora: ${i.detalhe}`;
+    i.status = 'aviso';
+  }
+  return itens;
+}
+
 async function enviarAlertaEmail(statusGeral, resumo, itens) {
   if (!RESEND_API_KEY || statusGeral === 'ok') return;
   const cor = statusGeral === 'erro' ? '#dc2626' : '#d97706';
   const emoji = statusGeral === 'erro' ? '🔴' : '⚠️';
-  const linhas = itens
-    .filter(i => i.status !== 'ok')
-    .map(i => `<tr><td style="padding:8px;border-bottom:1px solid #f1f5f9;font-weight:600">${i.nome}</td><td style="padding:8px;border-bottom:1px solid #f1f5f9;color:${i.status==='erro'?'#dc2626':'#d97706'}">${i.status.toUpperCase()}</td><td style="padding:8px;border-bottom:1px solid #f1f5f9;color:#64748b">${i.detalhe}</td></tr>`)
-    .join('');
+  const blocos = blocosDoAlerta(itens);
+  const titulo = blocos.agir ? `Agir hoje: ${blocos.agir}` : `Para saber: ${blocos.saber}`;
   const html = `<div style="font-family:sans-serif;max-width:600px;margin:0 auto">
     <div style="background:${cor};color:white;padding:20px;border-radius:8px 8px 0 0">
-      <h2 style="margin:0">${emoji} Health Check — ${statusGeral.toUpperCase()}</h2>
+      <h2 style="margin:0">${emoji} ${titulo}</h2>
       <p style="margin:8px 0 0;opacity:.9">${resumo}</p>
     </div>
     <div style="background:#fff;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px;padding:20px">
-      <table style="width:100%;border-collapse:collapse">
-        <thead><tr style="background:#f8fafc"><th style="padding:8px;text-align:left;color:#64748b;font-size:12px">VERIFICAÇÃO</th><th style="padding:8px;text-align:left;color:#64748b;font-size:12px">STATUS</th><th style="padding:8px;text-align:left;color:#64748b;font-size:12px">DETALHE</th></tr></thead>
-        <tbody>${linhas}</tbody>
-      </table>
+      ${blocos.html}
       <div style="margin-top:16px;padding-top:16px;border-top:1px solid #f1f5f9">
         <a href="${APP_URL}/#/admin" style="display:inline-block;background:#0D63DB;color:white;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:700">Ver no Admin →</a>
       </div>
@@ -40,7 +60,7 @@ async function enviarAlertaEmail(statusGeral, resumo, itens) {
   await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: FROM_EMAIL, to: ADMIN_EMAIL, subject: `${emoji} BidPro Health Check — ${statusGeral.toUpperCase()}`, html }),
+    body: JSON.stringify({ from: FROM_EMAIL, to: ADMIN_EMAIL, subject: `${emoji} BidPro — ${titulo}`, html }),
   });
 }
 
@@ -302,10 +322,12 @@ async function handler(req) {
   // Ex.: avaliação ausente no leiloeiro (desconto sai zerado), CNJ sem retorno no
   // documental. Só SINALIZA para revisão — não gera relatório (custo zero).
   itens.push(await check('Relatórios — anomalias detectadas', async () => {
-    const r = await sb(`relatorio_anomalias?select=tipo,fonte&resolvido=eq.false&limit=200`);
+    // Só os últimos 7 dias (08/11): contando a fila inteira, o aviso ficou amarelo em 60 de 60 rodadas e não dizia nada de novo.
+    const seteDias = new Date(Date.now() - 7 * 864e5).toISOString();
+    const r = await sb(`relatorio_anomalias?select=tipo,fonte&resolvido=eq.false&atualizado_em=gte.${encodeURIComponent(seteDias)}&limit=200`);
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const an = await r.json();
-    if (!Array.isArray(an) || an.length === 0) return { status: 'ok', detalhe: 'Nenhuma anomalia em relatórios' };
+    if (!Array.isArray(an) || an.length === 0) return { status: 'ok', detalhe: 'Nenhuma anomalia nova em relatórios nos últimos 7 dias' };
     const porTipo = {};
     for (const a of an) porTipo[a.tipo] = (porTipo[a.tipo] || 0) + 1;
     const resumo = Object.entries(porTipo).sort((x, y) => y[1] - x[1]).map(([t, n]) => `${t}: ${n}`).join(' · ');
@@ -315,6 +337,18 @@ async function handler(req) {
       status: critico ? 'erro' : 'aviso',
       detalhe: `${an.length} anomalia(s) — ${resumo}.${critico ? ' CRÍTICO: valor sentinela — confirmar o valor no edital antes de exibir.' : ' Revisar (sinalizado automaticamente pelo gerador).'}`,
     };
+  }));
+
+  // PAGAMENTO × SISTEMA (08/11): o boleto do Marcos passou 32 dias aprovado com a cobrança aberta, e o espelho diário via.
+  itens.push(await check('Pagamentos — aprovado sem baixa', async () => {
+    const r = await sb('rpc/pagamentos_sem_baixa', { method: 'POST', body: '{}' });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const casos = await r.json();
+    if (!Array.isArray(casos)) throw new Error('resposta inesperada');
+    if (!casos.length) return { status: 'ok', detalhe: 'Nenhum pagamento aprovado sem baixa ou sem ativação' };
+    const ROTULO = { aviso_nao_processado: 'aviso do gateway não processado', cobranca_aberta: 'cobrança aberta com pagamento aprovado', pagou_falta_ativar: 'pagou, falta ativar' };
+    const lista = casos.slice(0, 6).map((c) => `${ROTULO[c.tipo] || c.tipo}: R$ ${Number(c.valor || 0).toLocaleString('pt-BR')} · ${c.detalhe || c.referencia}`).join(' | ');
+    return { status: 'erro', detalhe: `${casos.length} caso(s) — ${lista}` };
   }));
 
   // ── 3b-bis. CLIENTE TRAVADO — quem tentou usar o produto e não saiu nada (10/09) ──
@@ -720,6 +754,13 @@ async function handler(req) {
     if (nunca.length) return { status: 'aviso', detalhe: `${base} Ainda nunca carregada(s): ${nunca.map(f => f.chave).join(', ')} — o cron diário pega uma por dia.` };
     return { status: 'ok', detalhe: `${base} Mais atrasada: ${fontes[0].chave} há ${dias(fontes[0]).toFixed(0)}d.` };
   }));
+
+  try {
+    const agoraIso = new Date().toISOString();
+    const rEx = await sb(`health_check_explicado?explicado_ate=gt.${encodeURIComponent(agoraIso)}&select=nome,explicacao,explicado_ate`);
+    if (!rEx.ok) throw new Error(`HTTP ${rEx.status}`);
+    aplicarExplicacoes(itens, await rEx.json());
+  } catch (e) { console.error('[health-check] explicações não lidas; nenhum erro foi rebaixado:', e?.message || e); }
 
   // ── Compila resultado ──
   const temErro  = itens.some(i => i.status === 'erro');
