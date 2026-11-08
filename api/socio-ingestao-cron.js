@@ -74,7 +74,7 @@ async function jsonIBGE(url, ms = 60000) {
     r = await fetch(url, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(ms) });
   } catch (e) {
     // "fetch failed" não diz nada: desde 29/10 o IBGE falha só a partir da Vercel, e a causa fica em `cause`.
-    throw new Error(`IBGE inacessível (${e?.cause?.code || e?.cause?.message || e?.name || 'erro de rede'}): ${e?.message || e}`);
+    throw new Error(`IBGE inacessível (${e?.cause?.code || e?.cause?.message || e?.name || 'erro de rede'}): ${e?.message || e}`, { cause: e });
   }
   if (!r.ok) throw new Error(`IBGE ${r.status} em ${url.replace(IBGE, '')}`);
   return r.json();
