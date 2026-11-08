@@ -33,6 +33,25 @@ export const niveisDe = (m) => NIVEIS.map((k) => m?.[k]).filter(Boolean);
 export const vendasDe = (m) => niveisDe(m).flatMap((n) => arr(n?.vendas));
 export const locacoesDe = (m) => niveisDe(m).flatMap((n) => arr(n?.locacoes));
 
+// Venda que dá para precificar: traz o R$/m², ou o preço e a metragem. A IA às vezes acha o anúncio e
+// devolve `valor: 0` (Carpina, 08/11: 4 de 5). Contar essas como amostra travava a 2ª busca.
+export const vendaComPreco = (v) => Number(v?.valorM2) > 0 || (Number(v?.valor) > 0 && Number(v?.m2) > 0);
+
+// Anúncio sem preço nenhum não vai para a tela do cliente como "R$ 0,00". Preço sem metragem fica, porque
+// vaga e área rural são precificadas por unidade. Devolve quantas amostras saíram.
+export function limparAmostrasSemPreco(m) {
+  let removidas = 0;
+  for (const n of niveisDe(m)) {
+    const vendas = arr(n.vendas).filter((v) => Number(v?.valor) > 0 || Number(v?.valorM2) > 0);
+    const locacoes = arr(n.locacoes).filter((l) => Number(l?.valorMensal) > 0 || Number(l?.aluguelM2) > 0);
+    const saiu = arr(n.vendas).length + arr(n.locacoes).length - vendas.length - locacoes.length;
+    if (!saiu) continue;
+    n.vendas = vendas; n.locacoes = locacoes; n.totalAmostras = vendas.length + locacoes.length;
+    removidas += saiu;
+  }
+  return removidas;
+}
+
 // Conta o que o nível DECLARA (totalAmostras); se não declarou, conta o que ele trouxe.
 export const totalAmostrasDe = (m) => niveisDe(m).reduce((s, n) => {
   const declarado = Number(n?.totalAmostras) || 0;

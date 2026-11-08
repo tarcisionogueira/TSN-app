@@ -27,7 +27,7 @@ import { pagamentoPrior, pagamentoAprender } from './_doc-extracao.js';
 // servidor RECALCULAR a viabilidade depois de descobrir o valor de mercado (ver o bloco
 // "MÉTRICAS RECALCULADAS NO SERVIDOR" no parecer) — parecer e tela param de divergir.
 import { calcularMetricasCenario, calcularTetoLance } from '../src/utils/calculos.js';
-import { NIVEIS, vendasDe, locacoesDe, totalAmostrasDe, MIN_AMOSTRAS_ANTES_DO_NIVEL3, dedupVendasEntreNiveis } from '../src/lib/niveis-mercado.js';
+import { NIVEIS, vendasDe, locacoesDe, totalAmostrasDe, MIN_AMOSTRAS_ANTES_DO_NIVEL3, dedupVendasEntreNiveis, vendaComPreco, limparAmostrasSemPreco } from '../src/lib/niveis-mercado.js';
 import { aplicarCondicoesEdital } from '../src/lib/condicoes-pagamento.js';
 import { MIN_COMPARAVEIS_LOCAIS, cidadeEscritaDaAmostra } from '../src/lib/origem-amostras.js';
 import { avaliarTerrenoExcedente, fraseTerrenoExcedente } from '../src/lib/terreno-excedente.js';
@@ -1410,6 +1410,11 @@ function mercadoReutilizavel(row) {
   const mkt = row?.result?.mercado;
   if (!mkt || !row?.updated_at) return null;
   if (Date.now() - new Date(row.updated_at).getTime() > REUSE_DIAS * 24 * 3600 * 1000) return null;
+  // Pesquisa que não trouxe venda com preço não é base: gerar de novo precisa buscar de novo (Carpina, 08/11).
+  // O R$/m² dela pode ser só o Índice, que não prova que houve comparável.
+  if (mkt.fonteEstimativa === 'indice_bidpro') return null;
+  const vendasCache = vendasDe(mkt);
+  if (vendasCache.length && !vendasCache.some((v) => Number(v?.valor) > 0 || Number(v?.valorM2) > 0)) return null;
   if (((mkt.vendas?.length || 0) + (mkt.locacoes?.length || 0)) > 0 || mkt.precoMedioM2 > 0) {
     return { mercado: mkt, em: row.updated_at };
   }
@@ -2813,7 +2818,11 @@ export default async function handler(req, res) {
       // sobrevive aos descartes e chega às 3 — abaixo disso o relatório sai com o número da IA
       // e o aviso de base fina, que é exatamente o que o cliente reclamou.
       const MIN_VENDAS_ALVO = 4;
-      const contarVendas = (m) => vendasDe(m).length;
+      // Só conta o que dá para precificar. Anúncio com `valor: 0` não é amostra: em Carpina (08/11) 5 vendas,
+      // 4 sem preço, bateram o alvo e a 2ª busca não rodou, mesmo com tempo sobrando. Rural e vaga vão por unidade.
+      const porUnidade = baseReuso === 'rural' || baseReuso === 'unidade';
+      const vendaUtil = (v) => vendaComPreco(v) || (porUnidade && Number(v?.valor) > 0);
+      const contarVendas = (m) => vendasDe(m).filter(vendaUtil).length;
 
       // FUNDIR, NUNCA SUBSTITUIR. O retry antigo fazia `compar = await buscarEtapa(...)`: se a
       // segunda passada voltasse MAIS POBRE que a primeira, o cliente perdia o que já tinha —
@@ -2869,11 +2878,11 @@ export default async function handler(req, res) {
         // anúncios e a união não soma nada — gastar a busca para redescobrir o que já se tem é o
         // mesmo que não tentar. Locação é dito explicitamente porque a 1ª passada às vezes volta
         // cheia de aluguel e vazia de venda (Santana: 1 × 4).
-        const jaTem = vendasDe(compar)
+        const jaTem = vendasDe(compar).filter(vendaUtil)
           .map(v => String(v?.endereco || v?.condominio || v?.bairro || '').trim()).filter(Boolean).slice(0, 8);
         const reforco = compar.__falhou ? '' : `
 
-SEGUNDA PASSADA — FOCO EXCLUSIVO EM VENDA. A primeira busca trouxe ${vendas1} comparável(is) de VENDA, e a precificação exige pelo menos ${MIN_VENDAS_ALVO}. Traga anúncios NOVOS de VENDA do mesmo tipo (${mercadoInputs.tipoImovel}), priorizando a MENOR distância. Locação não substitui venda aqui: se só houver aluguel, devolva vendas vazias em vez de preencher com locação.${jaTem.length ? `
+SEGUNDA PASSADA — FOCO EXCLUSIVO EM VENDA. A primeira busca trouxe ${vendas1} comparável(is) de VENDA com preço e metragem, e a precificação exige pelo menos ${MIN_VENDAS_ALVO}. Traga anúncios de VENDA do mesmo tipo (${mercadoInputs.tipoImovel}), priorizando a MENOR distância. Abra o anúncio para ler o preço e a área: amostra sem preço não serve, não a devolva com valor 0. Locação não substitui venda aqui: se só houver aluguel, devolva vendas vazias em vez de preencher com locação.${jaTem.length ? `
 JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
         diagBusca.orcamentoB = Math.min(100000, restante() - RESERVA_PARECER - 30000);
         diagBusca.webB = usos;
@@ -3599,6 +3608,11 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
             .map(d => ({ fonte: d.fonte, valor: d.valor, m2: d.m2, distanciaKm: d.distanciaKm, motivo: d._motivo }));
           mercado.valorPonderado = { aplicado: false, amostras: 0, motivo: 'nenhum comparável local válido' };
           mercado.baseFina = true;
+          // O que não sustenta a conta não aparece como comparável; o motivo fica em amostrasDescartadas.
+          for (const nv of NIVEIS.map((k) => mercado[k]).filter(Boolean)) {
+            nv.vendas = [];
+            nv.totalAmostras = Array.isArray(nv.locacoes) ? nv.locacoes.length : 0;
+          }
         }
       }
     } catch (e) {
@@ -3845,7 +3859,12 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
       const aluIdx = Number(mercado.indiceBidPro?.aluguel_m2) || 0;
       if (aluIdx > 0) { mercado.aluguelMedio = Math.round(aluIdx * areaSeg); valorLocacao = mercado.aluguelMedio; }
       mercado.fonteEstimativa = 'indice_bidpro';
-      const rotSeg = { apartamento: 'apartamento', casa: 'casa', terreno: 'terreno', comercial: 'imóvel comercial' }[segIdx] || segIdx;
+      // O bloco do cálculo acompanha o valor; antes seguia com o texto da IA ("não foi possível calcular") ao lado de um valor.
+      mercado.consolidado = {
+        ...(mercado.consolidado || {}), precoMedioM2: indiceVenda, valorEstimadoImovel: valorMercado, areaConsiderada: areaSeg,
+        baseCalculo: `Índice BidPro: R$ ${Math.round(indiceVenda).toLocaleString('pt-BR')}/m² × ${areaSeg.toLocaleString('pt-BR')} m² × 0,9 (redução de anúncio para fechamento) = R$ ${valorMercado.toLocaleString('pt-BR')}. Sem comparável ativo com preço.`,
+      };
+      const rotSeg ={ apartamento: 'apartamento', casa: 'casa', terreno: 'terreno', comercial: 'imóvel comercial' }[segIdx] || segIdx;
       mercado.comentario = `Não encontramos anúncios comparáveis ATIVOS de ${rotSeg} para ${mercadoInputs.cidade || 'esta localidade'} no momento; a estimativa usa o Índice BidPro (base própria por microrregião e segmento, R$ ${Math.round(indiceVenda).toLocaleString('pt-BR')}/m²${mercado.indiceBidPro?.nivel ? `, nível ${mercado.indiceBidPro.nivel}` : ''}) como referência. É uma referência interna consolidada das análises da plataforma, não um comparativo de anúncio ao vivo.`;
 
       // DE ONDE VEIO A MÉDIA, QUANDO O BAIRRO DO IMÓVEL NÃO ESTÁ NELA (09/09, achado do dono:
@@ -4446,6 +4465,7 @@ COMO USAR (obrigatório): dedique um parágrafo aos CUSTOS DA OPERAÇÃO segundo
     if (result.mercado) {
       // Desde 03/11 a mesma função roda ANTES da conta ponderada; aqui pega o que etapas posteriores trouxeram.
       dedupVendasEntreNiveis(result.mercado);
+      limparAmostrasSemPreco(result.mercado);
       for (const nv of NIVEIS.map((k) => result.mercado[k]).filter(Boolean)) {
         nv.totalAmostras = (nv.vendas?.length || 0) + (nv.locacoes?.length || 0);
       }

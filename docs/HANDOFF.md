@@ -6,6 +6,17 @@
 
 
 
+## 08/11 — RELATÓRIO SEM COMPARATIVO EM CARPINA: AMOSTRA COM VALOR 0 CONTAVA COMO AMOSTRA
+
+**Caso 4b9f76ef.** A IA devolveu 5 vendas, 4 com `valor: 0` e 1 sem metragem. Três defeitos em cadeia: `contarVendas` contava as 5, bateu o alvo de 4
+e a 2ª busca não rodou com tempo sobrando; a tela mostrou "R$ 0,00"; o valor do Índice (R$ 152.437) saiu ao lado do bloco "não foi possível
+calcular". E gerar de novo reaproveitaria a mesma pesquisa por 7 dias. Não é regressão do deploy do dia: mesma assinatura em 23/10 e 27/10; em
+30 dias, 3 relatórios saíram sem valor consolidado.
+
+**Feito.** A contagem usa `vendaComPreco`; `limparAmostrasSemPreco` tira da tela o que não tem preço; o `consolidado` acompanha o Índice; pesquisa sem
+venda com preço, ou resolvida pelo Índice, não é reaproveitada. Teste: `scripts/testes/amostra-sem-preco-nao-conta.mjs`.
+**Não validado com geração real:** depende de o dono gerar o relatório de novo.
+
 ## 08/11 — AMOSTRA DE LEILÃO NO MERCADOLÓGICO: O PRÓPRIO LOTE REPUBLICADO EM PORTAL
 
 **Caso ac777832 (Presidente Prudente, Caixa, venda online).** As 4 amostras do nível 1 eram o próprio apartamento, em Imovelweb,
