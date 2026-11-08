@@ -6,13 +6,14 @@
  * gerador ao vivo e nunca divergir.
  */
 
+import { ehAmostraDeLeilao } from './_valor-mercado.js';
+
 export const SEG_TIPOS = ['apartamento', 'casa', 'terreno', 'comercial'];
 
 export const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
 
-// Guarda DETERMINÍSTICA anti-leilão (o LLM às vezes inclui um comparável de leilão/Caixa apesar
-// do prompt; o preço fica 30–60% abaixo e contamina o índice). Barra pela fonte.
-export const FONTE_LEILAO = /leil[ãa]o|arremat|hasta.?p[uú]bl|\bcef\b|caixa\s*econ|aliena[çc]|extrajud|retomad|venda\s*direta|megaleil|zukerman|foreclos/i;
+// A guarda anti-leilão é a mesma do relatório (api/_valor-mercado.js): o LLM às vezes inclui um
+// comparável de leilão/Caixa apesar do prompt, e o preço 30–60% abaixo contamina o índice.
 
 export function extractText(data) {
   try { return (data?.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n'); } catch { return ''; }
@@ -120,7 +121,7 @@ export function montarAmostras(mercado, ctx) {
       const vmDeclarado = Number(v?.valorM2 ?? v?.valor_m2 ?? v?.precoM2) || 0;
       const vm = vmDeclarado > 0 ? vmDeclarado : (areaV > 0 && total > 0 ? Math.round(total / areaV) : 0);
       const tp = tipoDe(v); const brr = bairroDe(v) || '';
-      if (tp && vm > 0 && !FONTE_LEILAO.test(String(v?.fonte || ''))) out.push({ ...linha(v, 'venda', vm), nivel, data_anuncio: dataOk(v?.data),
+      if (tp && vm > 0 && !ehAmostraDeLeilao(v)) out.push({ ...linha(v, 'venda', vm), nivel, data_anuncio: dataOk(v?.data),
         fonte_ref: `web|${ctx.cidadeNorm}|${brr}|${tp}|venda|${Math.round(vm)}|${Math.round(Number(v?.area) || 0)}|${dataOk(v?.data) || ''}` });
     }
     for (const l of (bloco.locacoes || [])) {
@@ -143,7 +144,7 @@ export function montarAmostras(mercado, ctx) {
       // ESTE coletor (botão "Gerar índice") não — e por aqui entrou "locação de terreno a
       // R$ 4/m²·mês" em Barueri, puxando a média do tipo para baixo. Mesma regra nos dois.
       if (tp === 'terreno') continue;
-      if (tp && am > 0 && am < 500 && !FONTE_LEILAO.test(String(l?.fonte || ''))) out.push({ ...linha(l, 'locacao', am), nivel, data_anuncio: dataOk(l?.data),
+      if (tp && am > 0 && am < 500 && !ehAmostraDeLeilao(l)) out.push({ ...linha(l, 'locacao', am), nivel, data_anuncio: dataOk(l?.data),
         fonte_ref: `web|${ctx.cidadeNorm}|${brr}|${tp}|locacao|${am}|${Math.round(area)}|${dataOk(l?.data) || ''}` });
     }
   }

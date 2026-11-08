@@ -15,7 +15,7 @@ import { custoRespostaClaude, registrarCustoGeracao } from './_uso.js';
 import { groundingGemini } from './_grounding.js';
 import { resumoAprendizadoTexto, recalcularArremate } from './_arremate-aprendizado.js';
 import { ehCidadeTemporada, motivoTemporada } from './_temporada.js';
-import { avaliarMercado, explicarCalculo } from './_valor-mercado.js';
+import { avaliarMercado, explicarCalculo, ehAmostraDeLeilao, limparComentarioDeLeilao } from './_valor-mercado.js';
 import { composicaoTemporal, avisoFrescor } from './_indice-composicao.js';
 import { referenciaPonderada } from './_indice-ponderacao.js';
 import { geocodificarCascata, rankNivel, coordValida } from './_geo.js';
@@ -486,7 +486,7 @@ async function centralIndiceRegiao(imDb, segmento = 'apartamento') {
     const r = await sb(`indice_amostra?cidade_norm=eq.${encodeURIComponent(imDb.cidade_norm)}&uf=eq.${uf}&tipo=eq.${encodeURIComponent(segmento)}&especie=eq.venda&${faixaVendaQ(segmento)}&select=valor_m2,fonte,lat,lng,bairro_norm&limit=800`);
     if (!r.ok) return null;
     const j = await r.json().catch(() => []);
-    const limpas = (Array.isArray(j) ? j : []).filter(a => Number(a.valor_m2) > 0 && !ehFonteLeilao(a.fonte));
+    const limpas = (Array.isArray(j) ? j : []).filter(a => Number(a.valor_m2) > 0 && !ehFonteLeilao(a));
     const vals = limpas.map(a => Number(a.valor_m2)).sort((x, y) => x - y);
     if (vals.length < 4) return null;
     const pct = (p) => vals[Math.min(vals.length - 1, Math.floor(p * vals.length))];
@@ -580,9 +580,8 @@ async function lerSocioRegiao(imDb) {
 // Guarda DETERMINÍSTICA anti-leilão: mesmo o prompt mandando descartar leilão, o LLM às
 // vezes inclui um comparável de leilão/Caixa (ex.: "LeilaoImovel / CEF", "... / CEF"),
 // cujo preço fica 30–60% abaixo e CONTAMINA o índice (derruba o R$/m² da região). Aqui
-// barramos pela FONTE antes de gravar — não confia só no prompt.
-const FONTE_LEILAO = /leil[ãa]o|arremat|hasta.?p[uú]bl|\bcef\b|caixa\s*econ|aliena[çc]|extrajud|retomad|venda\s*direta|megaleil|zukerman|foreclos/i;
-const ehFonteLeilao = (f) => FONTE_LEILAO.test(String(f || ''));
+// barramos pela fonte, URL e descrição antes de gravar — não confia só no prompt.
+const ehFonteLeilao = ehAmostraDeLeilao;
 
 // Faixa PLAUSÍVEL de R$/m² de VENDA por TIPO — espelha public.indice_plausivel. Barra outlier E
 // não descarta TERRENO legítimo (R$/m² baixo, ex.: R$150), que o piso plano de 200 rejeitava.
@@ -740,7 +739,7 @@ async function gravarAmostrasIndice(imDb, mercado, imovelId, segmento = 'apartam
       const m2 = Number(s?.valorM2);
       if (s?.origemBase) continue; // veio DA base (amostrasBaseParaValor): regravar seria a base se auto-alimentar
       if (!perto(s)) continue;
-      if (!vendaPlausivelTipo(segmento, m2) || ehFonteLeilao(s?.fonte)) continue; // faixa por tipo (terreno não é cortado)
+      if (!vendaPlausivelTipo(segmento, m2) || ehFonteLeilao(s)) continue; // faixa por tipo (terreno não é cortado)
       rows.push({ cidade_norm: imDb.cidade_norm, uf, bairro_norm: bDe(s), ...coordDe(s), tipo: segmento,
         especie: 'venda', valor_m2: Math.round(m2), valor_total: Number(s?.valor) || null, area_m2: Number(s?.m2) || null,
         data_ref: dref(s?.data), fonte: (s?.fonte ? String(s.fonte).slice(0, 200) : null), ...refDe(s), origem: 'relatorio', imovel_id: String(imovelId || '') });
@@ -758,7 +757,7 @@ async function gravarAmostrasIndice(imDb, mercado, imovelId, segmento = 'apartam
       // Melhor não ter o número do que ter o número errado.
       if (segmento === 'terreno') continue;
       if (!perto(s)) continue;
-      if (!locacaoPlausivel(segmento, mensal) || ehFonteLeilao(s?.fonte)) continue;
+      if (!locacaoPlausivel(segmento, mensal) || ehFonteLeilao(s)) continue;
       const vm2 = area > 0 ? Math.round((mensal / area) * 100) / 100 : null;
       if (vm2 !== null && !locacaoM2Plausivel(vm2)) continue;
       rows.push({ cidade_norm: imDb.cidade_norm, uf, bairro_norm: bDe(s), ...coordDe(s), tipo: segmento,
@@ -771,7 +770,7 @@ async function gravarAmostrasIndice(imDb, mercado, imovelId, segmento = 'apartam
     // depois pelo bairro (cron gratuito). NUNCA entra no valor do imóvel-alvo, só no Índice.
     for (const s of (mercado.outrosBairros || [])) {
       const m2 = Number(s?.valorM2); const b = _norm(s?.bairro);
-      if (!b || !vendaPlausivelTipo(segmento, m2) || ehFonteLeilao(s?.fonte)) continue;
+      if (!b || !vendaPlausivelTipo(segmento, m2) || ehFonteLeilao(s)) continue;
       rows.push({ cidade_norm: imDb.cidade_norm, uf, bairro_norm: b, geo_grid: '', lat: null, lng: null, tipo: segmento,
         especie: 'venda', valor_m2: Math.round(m2), valor_total: Number(s?.valor) || null, area_m2: Number(s?.m2) || null,
         data_ref: dref(s?.data), fonte: (s?.fonte ? String(s.fonte).slice(0, 200) : null), ...refDe(s), origem: 'relatorio_regiao', imovel_id: String(imovelId || '') });
@@ -823,7 +822,7 @@ async function gravarOutrasTipologias(imDb, outras, imovelId, segAlvo = '') {
       const lista = Array.isArray(outras[seg]) ? outras[seg].slice(0, TETO_OUTRA_SEG) : [];
       for (const s of lista) {
         const m2 = Number(s?.valorM2);
-        if (!vendaPlausivelTipo(seg, m2) || ehFonteLeilao(s?.fonte)) continue; // só venda de mercado, faixa por tipo
+        if (!vendaPlausivelTipo(seg, m2) || ehFonteLeilao(s)) continue; // só venda de mercado, faixa por tipo
         rows.push({ cidade_norm: imDb.cidade_norm, uf, bairro_norm: '', geo_grid: '', tipo: seg,
           especie: 'venda', valor_m2: Math.round(m2), valor_total: Number(s?.valor) || null, area_m2: Number(s?.m2) || null,
           data_ref: dref(s?.data), fonte: (s?.fonte ? String(s.fonte).slice(0, 200) : null), origem: 'relatorio_regiao', imovel_id: String(imovelId || '') });
@@ -868,7 +867,7 @@ async function amostrasRegiaoCache(imDb, segmento = 'apartamento') {
         const r = await sb(`indice_amostra?${baseFiltro}${extra}&${cols}`);
         if (!r.ok) return [];
         const j = await r.json().catch(() => []);
-        return (Array.isArray(j) ? j : []).filter(a => Number(a.valor_m2) > 0 && !ehFonteLeilao(a.fonte));
+        return (Array.isArray(j) ? j : []).filter(a => Number(a.valor_m2) > 0 && !ehFonteLeilao(a));
       } catch { return []; }
     };
     // MAIS FINO → mais amplo; para no 1º nível com densidade suficiente.
@@ -917,7 +916,7 @@ async function amostrasBaseParaValor(imDb, segmento, existentes = []) {
   const vistos = new Set((existentes || []).map(chave));
   const out = { 1: [], 2: [], 3: [] };
   for (const a of (Array.isArray(rows) ? rows : [])) {
-    if (!(Number(a.valor_m2) > 0) || ehFonteLeilao(a.fonte)) continue;
+    if (!(Number(a.valor_m2) > 0) || ehFonteLeilao(a)) continue;
     let nivel = null, dist;
     if (latA !== null && coordNum(a.lat) && coordNum(a.lng)) {
       const rad = Math.PI / 180, dLat = (a.lat - latA) * rad, dLng = (a.lng - lngA) * rad;
@@ -981,7 +980,7 @@ async function locacoesDaBase(imDb, segmento, nivel) {
     const r = await sb(`indice_amostra?cidade_norm=eq.${encodeURIComponent(imDb.cidade_norm)}&uf=eq.${uf}&tipo=eq.${encodeURIComponent(segmento)}&especie=eq.locacao&data_ref=gte.${desde}${recorte}&select=valor_m2,valor_total,area_m2,data_ref,fonte,url,endereco,condominio,bairro_norm&order=data_ref.desc&limit=60`);
     if (!r.ok) return [];
     const j = await r.json().catch(() => []);
-    return (Array.isArray(j) ? j : []).filter(a => Number(a.valor_total) > 0 && Number(a.area_m2) > 0 && !ehFonteLeilao(a.fonte));
+    return (Array.isArray(j) ? j : []).filter(a => Number(a.valor_total) > 0 && Number(a.area_m2) > 0 && !ehFonteLeilao(a));
   } catch { return []; }
 }
 async function mercadoDaBase(cacheReg, segmento, imDb) {
@@ -1074,7 +1073,7 @@ async function lerComposicaoRegiao(imDb, segmento = 'apartamento') {
     const r = await sb(`indice_amostra?${filtro}&select=valor_m2,data_ref,fonte&order=data_ref.desc&limit=600`);
     if (!r.ok) return null;
     const j = await r.json().catch(() => []);
-    const rows = (Array.isArray(j) ? j : []).filter(a => Number(a.valor_m2) > 0 && !ehFonteLeilao(a.fonte));
+    const rows = (Array.isArray(j) ? j : []).filter(a => Number(a.valor_m2) > 0 && !ehFonteLeilao(a));
     if (rows.length < 4) return null; // sem base suficiente na região
     // Curva por ano (mediana R$/m² de venda) para a taxa de projeção.
     const porAno = {};
@@ -1474,7 +1473,9 @@ REGRA OBRIGATÓRIA — NADA DE LEILÃO NA AMOSTRA: descarte QUALQUER anúncio de
 hasta pública, venda direta bancária/Caixa, alienação fiduciária, extrajudicial/judicial ou
 imóvel retomado. Esses preços ficam 30–60% abaixo do mercado e CONTAMINAM a média e o mínimo
 (R$/m²). Compare só com o MERCADO LIVRE de venda normal. Outlier muito abaixo dos demais, sem
-justificativa, também deve ser descartado como provável leilão disfarçado.
+justificativa, também deve ser descartado como provável leilão disfarçado. O PRÓPRIO imóvel avaliado
+republicado em portal (mesmo endereço e unidade) também é leilão: não é amostra. Identificou leilão?
+Retire a amostra da lista e não comente isso em "comentario". Em dúvida, mantenha com "ehLeilao": true.
 
 REGRA OBRIGATÓRIA — PADRÃO DO IMÓVEL (comparar SEMELHANTE com SEMELHANTE): identifique o
 PADRÃO do imóvel avaliado — popular/econômico, médio, médio-alto, alto padrão ou luxo — a
@@ -1678,7 +1679,9 @@ REGRA OBRIGATÓRIA — NADA DE LEILÃO NA AMOSTRA: descarte QUALQUER anúncio de
 hasta pública, venda direta bancária/Caixa, alienação fiduciária, extrajudicial/judicial ou
 imóvel retomado. Esses preços ficam 30–60% abaixo do mercado e CONTAMINAM a média e o mínimo
 (R$/m²). Compare só com o MERCADO LIVRE de venda normal. Outlier muito abaixo dos demais, sem
-justificativa, também deve ser descartado como provável leilão disfarçado.
+justificativa, também deve ser descartado como provável leilão disfarçado. O PRÓPRIO imóvel avaliado
+republicado em portal (mesmo endereço e unidade) também é leilão: não é amostra. Identificou leilão?
+Retire a amostra da lista e não comente isso em "comentario". Em dúvida, mantenha com "ehLeilao": true.
 
 REGRA OBRIGATÓRIA — PADRÃO DO IMÓVEL (comparar SEMELHANTE com SEMELHANTE): identifique o
 PADRÃO do imóvel avaliado — popular/econômico, médio, médio-alto, alto padrão ou luxo — a
@@ -3530,8 +3533,10 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
           // daria ReferenceError engolido pelo catch, desligando a trava de auto-referência EM
           // SILÊNCIO. Lê direto do acervo, que é a mesma origem daquela variável.
           lote: { valorMinimo: Number(imDb?.valor_minimo) || 0, valorAvaliacao: avalDb, endereco: imovel?.endereco,
+            area: Number(mercadoInputs?.areaM2) || Number(imDb?.area_m2) || 0,
             cidade: cidade || imovel?.cidade || imDb?.cidade || '' },
         });
+        if (mercado?.comentario) mercado.comentario = limparComentarioDeLeilao(mercado.comentario);
         // BASE LOCAL (03/11, caso Peruíbe): quantos comparáveis da PRÓPRIA cidade sustentam o valor. Abaixo
         // de MIN_COMPARAVEIS_LOCAIS a tela não carimba "viável, vale avançar" e o texto diz a origem real.
         if (mercado) {

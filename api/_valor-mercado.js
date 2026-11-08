@@ -64,29 +64,77 @@ export function pesoRecencia(data) {
   return 1 / (1 + Math.max(0, anos));
 }
 
-// Fonte que é LEILÃO não é comparável de mercado — é o mesmo mercado que estamos avaliando.
-const FONTE_LEILAO = /leil[aã]o|leiloeir|hasta p[uú]blica|pra[cç]a p[uú]blica|preg[aã]o/i;
+// Anúncio de leilão não é comparável: aqui se projeta por quanto o imóvel será VENDIDO no mercado (dono, 08/11).
+// A fonte usa a régua larga. Na descrição, ela erraria: "financiamento Caixa Econômica" e "venda direta com o
+// proprietário" são anúncios normais, por isso o texto usa só termos que não aparecem nesses casos.
+export const FONTE_LEILAO = /leil[ãa]o|leiloeir|arremat|hasta.?p[uú]bl|pra[cç]a p[uú]blica|preg[aã]o|\bcef\b|caixa\s*econ|aliena[çc]|extrajud|retomad|venda\s*direta|megaleil|zukerman|foreclos/i;
+const TEXTO_LEILAO = /leil[aã]o|leiloeir|leil[oõ]es|hasta\s*p[uú]bl|pra[cç]a\s*p[uú]blica|arremata|venda\s*online|desconsiderad|avaliad[oa]\s+em\s+r\$|im[oó]vel\s+retomado/i;
+const TEXTO_NAO_E_LEILAO = /n[aã]o\s+(é|e)\s+(de\s+)?leil/i;
+const URL_LEILAO = /leil[aã]o|leiloes|leiloeir|caixa\.gov|hasta-publica|arremat/i;
+
+/** A amostra se declara leilão em algum campo? Aceita a amostra inteira ou só o nome da fonte. */
+export function ehAmostraDeLeilao(amostra) {
+  if (!amostra) return false;
+  const a = typeof amostra === 'string' ? { fonte: amostra } : amostra;
+  if (a.ehLeilao === true) return true;
+  if (FONTE_LEILAO.test(String(a.fonte || ''))) return true;
+  if (URL_LEILAO.test(String(a.url || ''))) return true;
+  const texto = `${a.descricao || ''} ${a.titulo || ''}`;
+  return TEXTO_LEILAO.test(texto) && !TEXTO_NAO_E_LEILAO.test(texto);
+}
+
+const semAcento = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+const numerosDe = (s) => (semAcento(s).match(/\d+/g) || []).map(Number).sort((x, y) => x - y).join(',');
+const TEM_UNIDADE = /\b(apto?|apartamento|unidade|bloco|bl|casa|sala|conj|lote)\b\.?\s*\d/;
+const nomeDaRua = (s) => semAcento(s).split(/\d/)[0].split(/\s+/).filter((p) => p.length > 3 && !['rua', 'avenida', 'alameda', 'travessa', 'estrada'].includes(p));
+
+// Mesma rua, mesmo número e mesma unidade: é o próprio lote republicado por um portal.
+function ehMesmaUnidade(amostra, lote) {
+  const a = amostra?.endereco, l = lote?.endereco;
+  if (!a || !l || !TEM_UNIDADE.test(semAcento(a)) || !TEM_UNIDADE.test(semAcento(l))) return false;
+  if (numerosDe(a) !== numerosDe(l)) return false;
+  const ruaLote = new Set(nomeDaRua(l));
+  return nomeDaRua(a).some((p) => ruaLote.has(p));
+}
+
+// Preço com centavos, na metragem exata do lote e bem abaixo da avaliação: é preço de leilão repassado a portal.
+// Anúncio de mercado não pede R$ 96.592,92. Medido em 08/11: 3 casos em 1.076 amostras.
+function ehPrecoDeLeilaoRepassado(amostra, lote) {
+  const v = Number(amostra?.valor), m2 = Number(amostra?.m2 ?? amostra?.area);
+  const areaLote = Number(lote?.area), aval = Number(lote?.valorAvaliacao);
+  if (!(v > 0 && m2 > 0 && areaLote > 0 && aval > 0)) return false;
+  return Math.abs(v - Math.round(v)) > 0.004 && Math.abs(m2 - areaLote) / areaLote < 0.01 && v < aval * 0.8;
+}
 
 /**
- * A amostra é o PRÓPRIO imóvel (ou o leilão dele) disfarçado de anúncio de mercado?
- * Duas assinaturas, qualquer uma basta:
- *   (a) a FONTE é um leilão — leilão nunca é comparável de mercado aberto, seja de qual
- *       imóvel for: é o mesmo mercado com desconto que estamos tentando medir;
- *   (b) o VALOR bate, ao centavo, com o lance mínimo ou a avaliação do próprio lote.
+ * A amostra é leilão, ou o PRÓPRIO lote disfarçado de anúncio de mercado? Qualquer assinatura basta:
+ *   (a) ela se declara leilão na fonte, na URL ou na descrição;
+ *   (b) o VALOR bate, ao centavo, com o lance mínimo ou a avaliação do próprio lote;
+ *   (c) o endereço traz a mesma unidade do lote (rua, número e apartamento);
+ *   (d) preço com centavos, na metragem exata do lote, abaixo de 80% da avaliação.
  *
- * O ENDEREÇO deliberadamente NÃO entra como critério de descarte. Um anúncio real no mesmo
- * prédio é o comparável mais valioso que existe — descartá-lo por coincidência de endereço
- * jogaria fora justamente o melhor dado. Quem denuncia a auto-referência é o valor idêntico
- * ao centavo, que não acontece por acaso.
+ * Endereço igual SEM unidade não descarta: outro anúncio no mesmo prédio é o melhor comparável
+ * que existe. Caso de 08/11 (ac777832): portais repetiam o apartamento da Caixa, a mesma amostra
+ * escapava de (a) e (b), entrava com o maior peso e derrubava o valor do relatório.
  */
 export function ehAutoReferencia(amostra, lote) {
   if (!amostra) return false;
-  if (FONTE_LEILAO.test(String(amostra.fonte || ''))) return true;
+  if (ehAmostraDeLeilao(amostra)) return true;
+  if (ehMesmaUnidade(amostra, lote) || ehPrecoDeLeilaoRepassado(amostra, lote)) return true;
   const v = Number(amostra.valor);
   if (!Number.isFinite(v) || v <= 0) return false;
   const vmin = Number(lote?.valorMinimo), vaval = Number(lote?.valorAvaliacao);
   return (Number.isFinite(vmin) && vmin > 0 && Math.abs(v - vmin) < 1)
       || (Number.isFinite(vaval) && vaval > 0 && Math.abs(v - vaval) < 1);
+}
+
+// O comentário vem da IA e foi escrito ANTES do descarte: dizer ao cliente que há anúncio de leilão
+// "contaminando a média" descreve uma conta que não existe. Sai só a frase que fala disso.
+const FRASE_DE_LEILAO_NA_AMOSTRA = /(leil[aã]o|venda online|contamin)/i;
+export function limparComentarioDeLeilao(comentario) {
+  const txt = String(comentario || '');
+  if (!/amostra|an[uú]ncio|m[eé]dia|contamin/i.test(txt) || !FRASE_DE_LEILAO_NA_AMOSTRA.test(txt)) return comentario;
+  return txt.split(/(?<=[.!?])\s+/).filter((f) => !FRASE_DE_LEILAO_NA_AMOSTRA.test(f)).join(' ').trim();
 }
 
 // `3: 2.0` (10/09) — nível 3 é o balde 1km-2km que o prompt já entrega direto (regra do dono,

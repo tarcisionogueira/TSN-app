@@ -6,6 +6,21 @@
 
 
 
+## 08/11 — AMOSTRA DE LEILÃO NO MERCADOLÓGICO: O PRÓPRIO LOTE REPUBLICADO EM PORTAL
+
+**Caso ac777832 (Presidente Prudente, Caixa, venda online).** As 4 amostras do nível 1 eram o próprio apartamento, em Imovelweb,
+Wimoveis e Loft. A IA percebeu e escreveu no comentário que elas "contaminam a média", mas deixou as amostras na lista, e o comentário
+ainda diz que o nível 2 pesou mais; a conta é do código, e o nível 1 pesou mais. Resultado: R$ 2.835/m² e R$ 111.436; sem elas, R$ 4.201/m²
+(cerca de R$ 165 mil na mesma área).
+
+**Por que escapou.** `ehAutoReferencia` só via o nome da fonte e valor igual ao centavo; as outras guardas só viam `fonte`.
+Agora `ehAmostraDeLeilao` (`api/_valor-mercado.js`) é a guarda única de relatório e Índice: fonte, URL, descrição e `ehLeilao`. O descarte
+também pega a mesma unidade do lote e preço com centavos na metragem exata abaixo de 80% da avaliação. Outra unidade do mesmo prédio segue
+valendo como comparável. O comentário perde a frase que fala de leilão na amostra.
+
+**Teste em seco (90 dias, 1.076 amostras com preço, 65 relatórios):** 4 relatórios atingidos, todos da conta do dono; nenhum de cliente.
+Teste: `scripts/testes/amostra-de-leilao-nao-e-mercado.mjs`. Relatórios antigos não foram refeitos.
+
 ## 08/11 — PAGAMENTO DO WILLIAM SEM BAIXA: O AVISO DO MP SE PERDIA NO REDIRECT DO DOMÍNIO SEM WWW
 
 **O que aconteceu.** O MP aprovou o pagamento 187379238351 em 07/11 22:30 (12× Visa: cliente R$ 8.000,00, enviado R$ 6.551,47,

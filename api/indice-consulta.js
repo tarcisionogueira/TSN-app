@@ -11,6 +11,7 @@ import { getUser, unauthorized } from './_auth.js';
 import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
 import { composicaoTemporal, avisoFrescor } from './_indice-composicao.js';
 import { referenciaPonderada } from './_indice-ponderacao.js';
+import { ehAmostraDeLeilao } from './_valor-mercado.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -80,8 +81,7 @@ export default async function handler(req) {
       } catch { return []; }
     };
     // Defesa em LEITURA anti-leilão (a base já é limpa na gravação; cobre legado).
-    const FONTE_LEILAO = /leil[ãa]o|arremat|hasta.?p[uú]bl|\bcef\b|caixa\s*econ|aliena[çc]|extrajud|retomad|venda\s*direta|megaleil|zukerman|foreclos/i;
-    const semLeilao = (arr) => (Array.isArray(arr) ? arr : []).filter(a => !FONTE_LEILAO.test(String(a.fonte || '')));
+    const semLeilao = (arr) => (Array.isArray(arr) ? arr : []).filter(a => !ehAmostraDeLeilao(a));
     // Fontes SINTÉTICAS/agregadas (não são um anúncio real): FipeZAP, "média (da) cidade", índice,
     // valor estimado. Entravam como uma amostra na composição por período e distorciam a mediana.
     const FONTE_SINTETICA = /fipezap|m[ée]dia\s*(da\s*)?cidade|[íi]ndice\s*bidpro|valor\s*estimad|sint[ée]tic/i;
