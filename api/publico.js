@@ -490,7 +490,10 @@ ${corpo}
 <footer><div class="in">
   <p><strong>BidPro Brasil</strong> — leilões de imóveis com análise de viabilidade, parecer jurídico e assessoria para arrematar com segurança.
   Também escrito como <em>Bid Pro Brasil</em>.</p>
-  <p><a href="${SITE}/leiloes">Imóveis em leilão por estado</a> · <a href="${SITE}/#/planos">Planos</a> · <a href="${SITE}/#/termos">Termos</a> · <a href="${SITE}/#/privacidade">Privacidade</a></p>
+  <p><a href="${SITE}/leiloes">Imóveis em leilão por estado</a> · <a href="${SITE}/educacao">Cursos e e-books</a> · <a href="${SITE}/#/planos">Planos</a> · <a href="${SITE}/politica-de-reembolso">Reembolso e arrependimento</a> · <a href="${SITE}/#/termos">Termos</a> · <a href="${SITE}/#/privacidade">Privacidade</a></p>
+  <!-- Contato visível em toda página pública (09/11): o Merchant Center exige dados de contato e política de
+       devolução no próprio site antes de aprovar a loja. -->
+  <p>Nogueira Empreendimentos LTDA · CNPJ 02.311.492/0001-61 · Feira de Santana/BA · Contato: <a href="mailto:contato@bidprobrasil.com.br">contato@bidprobrasil.com.br</a></p>
   ${rodapeCidades}
 </div></footer>
 <!-- URGÊNCIA: preenche os selos de contagem regressiva (.prazo-badge[data-prazo]) no cliente.
@@ -1214,6 +1217,7 @@ async function paginaProduto(tipo, id) {
           ${preco ? `<div class="lance-lbl">Valor</div><div class="lance-val">${esc(preco)}</div>` : ''}
           ${p.nivel ? `<div style="margin:8px 0"><span class="chip">${esc(p.nivel)}</span></div>` : ''}
           <a class="cta" href="${SITE}/#/p/${tipo}/${esc(p.id)}">${p.gratuito ? 'Acessar grátis' : 'Comprar agora'}</a>
+          ${p.gratuito ? '' : `<ul class="bullets"><li>Acesso imediato após o pagamento</li><li>Leia no celular ou no computador</li><li><a href="${SITE}/politica-de-reembolso">7 dias para arrependimento</a> com reembolso integral</li></ul>`}
         </div>
       </aside>
     </div>`,
@@ -1238,6 +1242,27 @@ async function paginaProduto(tipo, id) {
       } } : {}),
       ...(tipo === 'curso' ? { provider: { '@type': 'Organization', name: 'BidPro Brasil', sameAs: SITE } } : {}),
     },
+  });
+}
+
+// POLÍTICA DE REEMBOLSO (09/11): o Merchant Center só aprova a loja com política de devolução visível no site.
+// Regra = direito de arrependimento do CDC (art. 49) para compra pela internet. Texto a revisar pelo dono/advogado.
+function paginaReembolso() {
+  const secoes = [
+    ['Direito de arrependimento (7 dias)', 'Toda compra feita no site — e-books, cursos e planos — pode ser cancelada em até 7 (sete) dias corridos contados da compra, sem necessidade de justificativa, conforme o artigo 49 do Código de Defesa do Consumidor.'],
+    ['Como pedir', 'Envie um e-mail para contato@bidprobrasil.com.br ou use o botão Atendimento dentro da plataforma, informando o e-mail da conta e o produto. Respondemos em até 2 dias úteis.'],
+    ['Como o valor é devolvido', 'O reembolso é integral e feito pelo mesmo meio de pagamento: no cartão de crédito, o estorno aparece na fatura conforme o prazo da operadora (normalmente na fatura seguinte); no Pix, devolvemos na conta de origem em até 5 dias úteis.'],
+    ['Produtos digitais', 'Por serem digitais, os e-books e cursos não têm devolução física: o pedido de reembolso encerra o acesso ao conteúdo.'],
+    ['Serviços de assessoria', 'A assessoria para arrematação segue as regras de cancelamento do contrato próprio aceito na contratação.'],
+  ];
+  return pagina({
+    titulo: 'Política de reembolso e arrependimento — BidPro Brasil',
+    desc: 'Compras no site da BidPro Brasil podem ser canceladas em até 7 dias, com reembolso integral, conforme o Código de Defesa do Consumidor.',
+    canonical: `${SITE}/politica-de-reembolso`,
+    migalha: [{ nome: 'Início', url: `${SITE}/` }, { nome: 'Política de reembolso' }],
+    corpo: `<h1 style="font-size:28px;margin:8px 0 18px">Política de reembolso e arrependimento</h1>
+      ${secoes.map(([t, x]) => `<div class="secao" style="margin-bottom:14px"><h2>${esc(t)}</h2><p style="margin:0;color:#334155;line-height:1.7">${esc(x)}</p></div>`).join('')}
+      <p style="color:#64748b;font-size:13px;margin-top:18px">Nogueira Empreendimentos LTDA · CNPJ 02.311.492/0001-61 · Feira de Santana/BA · contato@bidprobrasil.com.br</p>`,
   });
 }
 
@@ -1312,6 +1337,8 @@ export default async function handler(req, res) {
         res.setHeader('Location', html.redirecionar);
         return res.status(301).end();
       }
+    } else if (tipo === 'reembolso') {
+      html = paginaReembolso();
     } else if (tipo === 'educacao') {
       html = await paginaEducacao();
     } else if (tipo === 'curso' || tipo === 'ebook') {

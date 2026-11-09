@@ -123,6 +123,7 @@ export default async function handler(req, res) {
       const urls = [
         `<url><loc>${SITE}/leiloes</loc><changefreq>daily</changefreq><priority>0.9</priority></url>`,
         `<url><loc>${SITE}/educacao</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>`,
+        `<url><loc>${SITE}/politica-de-reembolso</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>`,
         ...produtos.map((p) => `<url><loc>${SITE}/${p.tipo}/${p.id}/${slug(p.titulo || p.tipo)}</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>`),
         ...[...ufs].map((uf) => `<url><loc>${SITE}/leiloes/${uf.toLowerCase()}</loc><changefreq>daily</changefreq><priority>0.8</priority></url>`),
         ...[...cidades].map((k) => { const [uf, c] = k.split('/'); return `<url><loc>${SITE}/leiloes/${uf.toLowerCase()}/${esc(c)}</loc><changefreq>daily</changefreq><priority>0.7</priority></url>`; }),
