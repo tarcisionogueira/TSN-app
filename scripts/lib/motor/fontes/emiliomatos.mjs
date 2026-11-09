@@ -78,8 +78,10 @@ export default {
   chave: 'emiliomatos',
   // Firecrawl (18/10): o preço ("Próxima Oferta") só foi medido na página MONTADA; o site fica atrás de Cloudflare.
   // ~45 créditos/semana (home + 2 eventos + ~42 lotes) no scraper-firecrawl-semanal.yml.
-  fetch: 'firecrawl',
-  firecrawl: { waitFor: 1500 },       // preço entra por script: sem espera, parte dos lotes saía sem valor (dry-run 18/10: 15 de 42)
+  // 09/11: SAI DO FIRECRAWL. Medido pelo banco (pg_net): home, eventos e lote abrem 200 sem Cloudflare, e o lote traz
+  // "OFERTA INICIAL ... R$ 112.048,41" no HTML estático. Motor padrão: direto → banco (grátis); Bright Data travado
+  // pelo `semBD` em scraper-emiliomatos.mjs. A rodada Firecrawl de 09/11 gastou 60 créditos para gravar 3 lotes.
+  // Os 37 "valor 0" daquela rodada são do evento B-SEC na plataforma Comprova: preço só para quem se habilita (descarte certo).
   catalogo: '/',                      // a HOME (eventos do leiloeiro), não o catálogo global
   paginaParam: 'page',                // ⚠️ Superbid usa ?page= (não ?pagina=)
   maxPages: 1,
@@ -109,7 +111,7 @@ export default {
   // plataforma (dry-run de 29/08). `extrairUrlsDeLote` do parser fica para eles e para os testes.
   parse: { extrairUrlsDeLote: extrairUrlsDoLeiloeiro, extrairUrlsDeEvento: extrairEventosDeImoveis, idDaUrl, parseDetalhe, montarRow, checarQualidade },
   conhecimento: {
-    plataforma: 'Superbid/MBV (white-label SSR)', acesso: 'firecrawl', custo: 'firecrawl ~45 créditos/semana',
+    plataforma: 'Superbid/MBV (white-label SSR)', acesso: 'fetch-direto · banco (pg_net)', custo: 'gratis (direto/banco)',
     anti_bot: 'cloudflare', enumeracao: 'home → eventos de imóveis → /emilio-matos-rocha/imoveis/...',
     url_lote: '/emilio-matos-rocha/imoveis/<tipo>/<slug>-<ID>', scraper: 'scraper-emiliomatos.mjs',
   },

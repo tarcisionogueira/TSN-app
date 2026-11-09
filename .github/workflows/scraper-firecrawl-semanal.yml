@@ -105,5 +105,5 @@ jobs:
           FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
           FIRECRAWL_MAX_PAGINAS: '60'
           EMILIOMATOS_DRYRUN: ${{ env.DRYRUN_PADRAO }}
-          EMILIOMATOS_MAX_LOTES: '55'
+          EMILIOMATOS_MAX_LOTES: '300'
         run: node scripts/scraper-emiliomatos.mjs

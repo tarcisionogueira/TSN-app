@@ -21,10 +21,10 @@ if (!SB_URL || !SB_KEY) { console.error('Faltam VITE_SUPABASE_URL / SUPABASE_SER
 
 rodarFonte(cfg, {
   supabase: createClient(SB_URL, SB_KEY),
-  maxLotes: Number(process.env.EMILIOMATOS_MAX_LOTES || 40),
+  maxLotes: Number(process.env.EMILIOMATOS_MAX_LOTES || 300), // grátis: lê o acervo inteiro (296 listados em 09/11)
   maxPages: Number(process.env.EMILIOMATOS_MAX_PAGES || 15),
   dryrun: process.env.EMILIOMATOS_DRYRUN !== '0',
   debug: process.env.EMILIOMATOS_DEBUG === '1',
-  semBD: process.env.EMILIOMATOS_NO_BD === '1',
+  semBD: process.env.EMILIOMATOS_NO_BD !== '0', // 09/11: grátis por padrão (direto/banco), nunca Bright Data sem pedir
   exitCodeSeFalha: true,   // o scraper original saía com exit 1 quando não havia o que gravar
 }).catch(e => { console.error(e); process.exit(1); });
