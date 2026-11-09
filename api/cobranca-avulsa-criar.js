@@ -9,6 +9,7 @@ import { getUser, getUserRoleById } from './_auth.js';
 import { checkRateLimit, getIP } from './_rate-limit.js';
 import { auditLog } from './_audit.js';
 import { pedidoRepetido, CORPO_REPETIDO } from './_pedido-unico.js';
+import { efeitoDoProduto } from '../src/lib/cobranca-produto.js';
 
 const SB_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -40,6 +41,8 @@ export default async function handler(req, res) {
   const pSemJuros = juros === 'absorve' ? Math.max(2, Math.min(pMax, Math.floor(Number(parcelas_sem_juros) || pMax))) : 1;
   const qtd = Math.max(1, Math.min(100, Math.floor(Number(quantidade) || 1)));
   const produto = produto_key ? String(produto_key).replace(/[^a-z0-9_]/gi, '').slice(0, 40) || null : null;
+  // 08/11: produto de plano ativa na conta deste e-mail quando o link for pago. Sem ele, não há em quem ativar.
+  if (efeitoDoProduto(produto) && !String(destinatario_email || '').includes('@')) return res.status(400).json({ error: 'Informe o e-mail da conta do cliente: o plano é ativado nela quando o link for pago.' });
 
   try {
     const ins = await fetch(`${SB_URL}/rest/v1/cobrancas_avulsas`, {

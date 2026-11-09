@@ -6,6 +6,18 @@
 
 
 
+## 08/11 (noite) — LINK AVULSO PAGO ATIVA O PLANO E ENCERRA AS OUTRAS COBRANÇAS
+
+- **Decisão do dono, que revoga a de 07/11:** o link é feito para uma pessoa e é de uso único. Pago, dá baixa, ativa e encerra.
+- **Como funciona:** `drenarEfeitosDeCobranca` no cron de 1 minuto (`processar-fila-webhook-mp-cron`) chama
+  `api/_cobranca-avulsa-efeitos.js`. Vale para os dois webhooks, que só dão a baixa. A ativação usa o e-mail do destinatário,
+  não o do pagador; `produto_ativado_em` impede ativar de novo; até 10 tentativas, e depois `pagamentos_sem_baixa()` acusa
+  `efeitos_pendentes` no health-check.
+- **Produto:** `src/lib/cobranca-produto.js`. `assessorado*` ativa assessoria (com comissão, igual à venda pelo checkout);
+  `*_anual` ativa o plano; o resto só recebe a baixa e o encerramento. A tela passou a exigir o produto, e o e-mail nos
+  produtos de plano. Novo item: "Assessoria (valor negociado)".
+- **Link do William:** criado sem produto, marcado `assessorado_negociada` na migração para o cron aplicar.
+
 ## 08/11 (noite) — #305: TIMEOUTS DO BANCO, O CACHE FRIO E A BUSCA QUE CAIU POR TABELA
 
 - **Medido em 24 h:** 26 estouros de 8 s. As consultas leem ~23 mil páginas do acervo para achar poucas linhas: 0,2-5 s com

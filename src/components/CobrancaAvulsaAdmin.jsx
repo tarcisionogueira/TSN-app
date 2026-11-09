@@ -5,6 +5,7 @@ import { supabase } from '../utils/supabase';
 import { maskMoedaDigitando } from '../utils/moeda';
 import { textoParcelamento, parcelamento, valorAEnviar } from '../utils/parcelamento';
 import TaxasGateways from './TaxasGateways';
+import { efeitoDoProduto } from '../lib/cobranca-produto';
 
 const fmt = (v) => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
@@ -29,7 +30,7 @@ export default function CobrancaAvulsaAdmin() {
   const FORM_VAZIO = { produto: '', quantidade: 1, descricao: '', valor: '', destinatario_nome: '', destinatario_email: '', parcelado: true, parcelas_max: 12, parcelas_sem_juros: 1, juros: null };
   const [form, setForm] = useState(FORM_VAZIO);
   // CATÁLOGO (07/11, dono): escolher um produto preenche valor e descrição (a quantidade multiplica); tudo continua
-  // editável para a negociação. 'livre' = cobrança não ligada a produto. Pagar a cobrança não ativa plano sozinho.
+  // editável para a negociação. 'livre' = cobrança não ligada a produto. 08/11 (dono): produto de plano ativa ao ser pago.
   const [catalogo, setCatalogo] = useState([]);
   useEffect(() => {
     supabase.from('planos_config').select('plano_key,nome,preco,preco_vista,preco_anual').eq('ativo', true).eq('publico', 'cliente')
@@ -40,6 +41,7 @@ export default function CobrancaAvulsaAdmin() {
           if (p.plano_key === 'assessorado') {
             if (Number(p.preco) > 0) itens.push({ key: 'assessorado', nome: 'Assessoria (parcelado)', preco: Number(p.preco) });
             if (Number(p.preco_vista) > 0) itens.push({ key: 'assessorado_vista', nome: 'Assessoria (à vista)', preco: Number(p.preco_vista) });
+            itens.push({ key: 'assessorado_negociada', nome: 'Assessoria (valor negociado)', preco: null });
           } else if (Number(p.preco_anual) > 0) {
             itens.push({ key: `${p.plano_key}_anual`, nome: `${p.nome} — anual`, preco: Number(p.preco_anual) });
           }
@@ -96,6 +98,8 @@ export default function CobrancaAvulsaAdmin() {
     const valorNum = parseFloat(String(form.valor).replace(/\./g, '').replace(',', '.')) || 0;
     if (form.descricao.trim().length < 5) { setErro('Descreva o motivo da cobrança (mín. 5 caracteres).'); return; }
     if (valorNum <= 0) { setErro('Informe um valor válido.'); return; }
+    if (!form.produto) { setErro('Escolha o produto, ou "Cobrança livre" se não houver plano a ativar.'); return; }
+    if (efeitoDoProduto(form.produto) && !form.destinatario_email.includes('@')) { setErro('Informe o e-mail da conta do cliente: o plano é ativado nela quando o link for pago.'); return; }
     // 07/11 (dono): "ao gerar, perguntar se absorve ou repassa os juros" — sem padrão, a escolha é obrigatória.
     if (form.parcelado && !form.juros) { setErro('Escolha quem paga os juros do parcelado: o cliente ou a BidPro.'); return; }
     setCriando(true);
@@ -163,8 +167,9 @@ export default function CobrancaAvulsaAdmin() {
             </div>
           </div>
           <div>
-            <label style={lbl}>E-mail do destinatário (opcional)</label>
+            <label style={lbl}>E-mail do destinatário {efeitoDoProduto(form.produto) ? '(obrigatório)' : '(opcional)'}</label>
             <input type="email" value={form.destinatario_email} onChange={e => setForm(p => ({ ...p, destinatario_email: e.target.value }))} style={inp} placeholder="email@exemplo.com" />
+            {efeitoDoProduto(form.produto) && <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 4 }}>Ao ser pago, o link ativa o plano na conta deste e-mail e não pode ser pago de novo.</div>}
           </div>
           {/* PARCELAMENTO DESTA NEGOCIAÇÃO (07/11, dono). Padrão: o cliente assume os juros a partir da 2ª parcela. */}
           <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>

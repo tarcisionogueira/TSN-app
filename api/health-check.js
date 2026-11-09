@@ -353,7 +353,7 @@ async function handler(req) {
     const casos = await r.json();
     if (!Array.isArray(casos)) throw new Error('resposta inesperada');
     if (!casos.length) return { status: 'ok', detalhe: 'Nenhum pagamento aprovado sem baixa ou sem ativação' };
-    const ROTULO = { aviso_nao_processado: 'aviso do gateway não processado', cobranca_aberta: 'cobrança aberta com pagamento aprovado', pagou_falta_ativar: 'pagou, falta ativar' };
+    const ROTULO = { aviso_nao_processado: 'aviso do gateway não processado', cobranca_aberta: 'cobrança aberta com pagamento aprovado', pagou_falta_ativar: 'pagou, falta ativar', efeitos_pendentes: 'pago, sem ativar ou sem encerrar as pendências' };
     const lista = casos.slice(0, 6).map((c) => `${ROTULO[c.tipo] || c.tipo}: R$ ${Number(c.valor || 0).toLocaleString('pt-BR')} · ${c.detalhe || c.referencia}`).join(' | ');
     return { status: 'erro', detalhe: `${casos.length} caso(s) — ${lista}` };
   }));
