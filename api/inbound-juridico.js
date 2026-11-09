@@ -642,6 +642,24 @@ function dataIso(v) {
   m = t.match(/^(\d{2})\/(\d{2})\/(\d{4})/); if (m) return `${m[3]}-${m[2]}-${m[1]}`;
   return null;
 }
+// Leiloeiro que ENCAMINHA (ENC/Fwd) em vez de responder (09/11): o Jorge Brasil mandou matrícula + edital
+// do Don Alonso para noreply@, sem o `documentos+<token>@` do reply-to, e o pedido ficou "sem resposta" com
+// os PDFs parados na caixa. Sem token, casa pelo par que só o nosso pedido tem: remetente = destinatário do
+// pedido E o assunto cita o lote do pedido. Mais de um pedido aberto casando → não chuta (segue o fluxo normal).
+const normAssunto = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+async function tokenDocumentosPorAssunto(data) {
+  const de = remetente(data).endereco;
+  const assunto = normAssunto(data?.subject);
+  if (!de || !/documenta[cç]?a?o do lote|documentacao do lote/.test(assunto)) return null;
+  const r = await sb(`documental_pedidos_leiloeiro?destinatario_email=ilike.${encodeURIComponent(de)}&respondido_em=is.null&resposta_token=not.is.null&select=resposta_token,texto_enviado&order=criado_em.desc&limit=20`);
+  if (!r.ok) { console.error('[inbound-leiloeiro] busca por assunto HTTP', r.status); return null; }
+  const casam = (await r.json().catch(() => [])).filter((p) => {
+    const lote = normAssunto((String(p.texto_enviado || '').match(/Lote:\s*(.+)/) || [])[1]);
+    return lote.length >= 10 && assunto.includes(lote);
+  });
+  if (casam.length !== 1) { if (casam.length > 1) console.error('[inbound-leiloeiro] assunto casa', casam.length, 'pedidos — não chuto'); return null; }
+  return casam[0].resposta_token;
+}
 async function tratarRespostaLeiloeiro(data, headers, messageId, token) {
   const rp = await sb(`documental_pedidos_leiloeiro?resposta_token=eq.${encodeURIComponent(token)}&select=id,imovel_id,user_id,itens_pedidos,anexos_recebidos,automatico&limit=1`);
   if (!rp.ok) { console.error('[inbound-leiloeiro] pedido HTTP', rp.status); return json({ error: 'pedido_ilegivel' }, 500); }
@@ -742,7 +760,7 @@ export default async function handler(req) {
   }
 
   // Resposta do leiloeiro a um pedido de documento (documentos+<token>@) → anexo do lote.
-  const tokenDoc = extrairTokenDocumentos(data, headers);
+  const tokenDoc = extrairTokenDocumentos(data, headers) || await tokenDocumentosPorAssunto(data);
   if (tokenDoc) {
     const resp = await tratarRespostaLeiloeiro(data, headers, messageId, tokenDoc);
     if (resp) return resp;
