@@ -27,7 +27,7 @@ export default function CobrancaAvulsaAdmin() {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
   const [criando, setCriando] = useState(false);
-  const FORM_VAZIO = { produto: '', quantidade: 1, descricao: '', valor: '', destinatario_nome: '', destinatario_email: '', parcelado: true, parcelas_max: 12, parcelas_sem_juros: 1, juros: null };
+  const FORM_VAZIO = { produto: '', quantidade: 1, descricao: '', valor: '', destinatario_nome: '', destinatario_email: '', parcelado: true, parcelas_max: 12, parcelas_sem_juros: 1, juros: 'repassa' }; // 09/11 (dono): padrão = juros pelo cliente
   const [form, setForm] = useState(FORM_VAZIO);
   // CATÁLOGO (07/11, dono): escolher um produto preenche valor e descrição (a quantidade multiplica); tudo continua
   // editável para a negociação. 'livre' = cobrança não ligada a produto. 08/11 (dono): produto de plano ativa ao ser pago.
@@ -100,8 +100,8 @@ export default function CobrancaAvulsaAdmin() {
     if (valorNum <= 0) { setErro('Informe um valor válido.'); return; }
     if (!form.produto) { setErro('Escolha o produto, ou "Cobrança livre" se não houver plano a ativar.'); return; }
     if (efeitoDoProduto(form.produto) && !form.destinatario_email.includes('@')) { setErro('Informe o e-mail da conta do cliente: o plano é ativado nela quando o link for pago.'); return; }
-    // 07/11 (dono): "ao gerar, perguntar se absorve ou repassa os juros" — sem padrão, a escolha é obrigatória.
-    if (form.parcelado && !form.juros) { setErro('Escolha quem paga os juros do parcelado: o cliente ou a BidPro.'); return; }
+    // 09/11 (dono): o padrão passou a ser "cliente paga os juros" (a venda do William em 12x sem juros custou 22%).
+    // Absorver continua possível, até N parcelas: ex. R$ 1.200 em até 3x sem juros e, de 4x em diante, com juros ao cliente.
     setCriando(true);
     try {
       const r = await apiCall('/api/cobranca-avulsa-criar', {
@@ -184,20 +184,20 @@ export default function CobrancaAvulsaAdmin() {
               <>
                 <div>
                   <label style={lbl}>Até quantas parcelas</label>
-                  <select value={form.parcelas_max} onChange={e => { const max = Number(e.target.value); setForm(p => ({ ...p, parcelas_max: max, parcelas_sem_juros: p.juros === 'absorve' ? max : 1 })); }} style={inp}>
+                  <select value={form.parcelas_max} onChange={e => { const max = Number(e.target.value); setForm(p => ({ ...p, parcelas_max: max, parcelas_sem_juros: p.juros === 'absorve' ? Math.min(Math.max(2, p.parcelas_sem_juros), max) : 1 })); }} style={inp}>
                     {[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(n => <option key={n} value={n}>{n}×</option>)}
                   </select>
                 </div>
                 <div>
-                  <label style={lbl}>Juros do parcelado (obrigatório)</label>
+                  <label style={lbl}>Juros do parcelado</label>
                   <div style={{ display: 'flex', gap: 6 }}>
                     {[['repassa', 'Cliente paga os juros'], ['absorve', 'BidPro absorve']].map(([v, l]) => (
-                      <button key={v} type="button" onClick={() => setForm(p => ({ ...p, juros: v, parcelas_sem_juros: v === 'absorve' ? p.parcelas_max : 1 }))}
+                      <button key={v} type="button" onClick={() => setForm(p => ({ ...p, juros: v, parcelas_sem_juros: v === 'absorve' ? Math.min(3, p.parcelas_max) : 1 }))}
                         style={{ flex: 1, padding: '7px', borderRadius: 8, border: `1px solid ${form.juros === v ? '#0D63DB' : '#e2e8f0'}`, background: form.juros === v ? '#0D63DB' : 'white', color: form.juros === v ? 'white' : '#475569', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>{l}</button>
                     ))}
                   </div>
                 </div>
-                {form.juros === 'absorve' && form.parcelas_max > 2 && (
+                {form.juros === 'absorve' && form.parcelas_max >= 2 && (
                   <div>
                     <label style={lbl}>Sem juros até</label>
                     <select value={form.parcelas_sem_juros} onChange={e => setForm(p => ({ ...p, parcelas_sem_juros: Number(e.target.value) }))} style={inp}>
@@ -216,7 +216,7 @@ export default function CobrancaAvulsaAdmin() {
               const nMax = form.parcelado ? Number(form.parcelas_max) : 1;
               if (form.parcelado && !form.juros) return null;
               const sj = form.parcelado && form.juros === 'absorve' ? Math.min(Number(form.parcelas_sem_juros), nMax) : 1;
-              const linhasSim = [...new Set([1, nMax])].map((n) => [n, simular(v, n, sj)]).filter(([, s]) => s);
+              const linhasSim = [...new Set([1, sj, nMax])].sort((x, y) => x - y).map((n) => [n, simular(v, n, sj)]).filter(([, s]) => s);
               if (!linhasSim.length) return null;
               return (
                 <div style={{ fontSize: 11.5, color: '#334155', background: '#f8fafc', borderRadius: 8, padding: '7px 10px', lineHeight: 1.6 }}>
