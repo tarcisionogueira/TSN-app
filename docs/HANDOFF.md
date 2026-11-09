@@ -39792,10 +39792,11 @@ assunto) — o e-mail do Jorge Brasil (Don Alonso) foi reprocessado: matrícula 
   Firecrawl desde 28/10 (~199 lotes; ~45 créditos/semana — decisão de custo).
 - **Geolocalização (09/11, tarde):** selo/Street View seguem o nível do PINO (endereço com dígito valia "exata"); gatilho
   `preservar_e_derivar_endereco` só preserva endereço legível; fila de "presos no centro" inclui lote só com condomínio
-  (533); rua da descrição aplicada a 699 terrenos/rurais (`endereco-da-descricao.yml`). Cron `/api/geocodificar` de
-  1×/h para 4×/h (`3,15,27,39`): o gargalo é o 1 req/s do Nominatim, não o lote; minutos escolhidos para não
-  sobrepor `indice-geocodificar-cron` (:50 a cada 4 h) nem `regeocod-imprecisos` (dom 06:00). Google segue limitado
-  ao teto mensal (9.900) e só para âncora precisa (rua com número ou condomínio).
+  (533); rua da descrição aplicada a 699 terrenos/rurais (`endereco-da-descricao.yml`). O gargalo da fila é o 1 req/s
+  do Nominatim (a função da Vercel passa 240 s quase só ESPERANDO, e a Vercel cobra memória provisionada pelo tempo
+  de parede — o plano já paga excedente diário). Acelerado SEM custo: `geocodificar-fila.yml` (GitHub Actions, repo
+  público) roda `processarLote` no :10 de cada hora até o :57, só rotas grátis; a Vercel segue 1×/h no :00 com o
+  Google (teto mensal 9.900, só âncora precisa: rua com número ou condomínio). Somadas, nunca passam de 1 req/s.
 - **Emílio Matos (pendência 463, fechada):** home pelas duas vias (Firecrawl 1 crédito + grátis); 346 enumerados,
   ativos 78 → 122. Porto Seguro 88/146 já vinham pela GLOBOLEILOES; Reverts 57/57 eram perda.
 - **Cobrança avulsa:** padrão "cliente paga os juros"; absorver só até N parcelas (padrão 3×).

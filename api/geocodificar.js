@@ -80,7 +80,7 @@ function cacheKey(im) {
   return `${(im.bairro || '').toLowerCase()}|${(im.cidade || '').toLowerCase()}|${(im.estado || '').toLowerCase()}`;
 }
 
-async function processarLote(estadosFilter, lote = 50, deadline = Infinity, estados = null) {
+export async function processarLote(estadosFilter, lote = 50, deadline = Infinity, estados = null) {
   // Pendentes = sem coordenada (latitude NULL) ou sentinela 0 ainda NÃO marcada como
   // 'falhou'. Itens marcados 'falhou' saem da fila (não são re-tentados todo ciclo).
   // Pendentes de coordenada OU aproximados (bairro/cidade) marcados para

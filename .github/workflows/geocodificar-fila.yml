@@ -1,0 +1,29 @@
+name: Geolocalização — fila (grátis, rotas públicas)
+
+# scripts/geocodificar-fila.mjs: a mesma fila de /api/geocodificar, mas sem o teto de 240 s da Vercel e sem custo
+# (repo público). Só rotas gratuitas — o Google fica na rodada horária da Vercel (minuto :00). Este roda no :10 e
+# para sozinho no :57, para as duas nunca somarem mais que 1 req/s no Nominatim.
+on:
+  schedule:
+    - cron: '10 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: geocodificar-fila
+  cancel-in-progress: false
+
+jobs:
+  fila:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Fila de geolocalização
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: node scripts/geocodificar-fila.mjs

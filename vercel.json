@@ -165,7 +165,7 @@
     },
     {
       "path": "/api/geocodificar",
-      "schedule": "3,15,27,39 * * * *"
+      "schedule": "0 * * * *"
     },
     {
       "path": "/api/onr-health",
