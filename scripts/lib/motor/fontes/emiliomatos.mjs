@@ -10,6 +10,28 @@
 import {
   FONTE, LEILOEIRO, BASE, idDaUrl, parseDetalhe, montarRow, checarQualidade,
 } from '../../emiliomatos-parse.mjs';
+import { criarMotorFetch } from '../fetch-fonte.mjs';
+import { criarMotorFirecrawl } from '../fetch-firecrawl.mjs';
+
+// TRANSPORTE HÍBRIDO (09/11, pendência 463). A home estática (grátis, pelo banco) traz sempre os mesmos 9 eventos
+// do leiloeiro; os eventos da REDE colaborativa BomValor exibidos no site (Porto Seguro 146 lotes, Reverts 57,
+// Banco Pan…) entram por script — só a página montada os mostra. Medido: Porto Seguro tinha 58 lotes que nenhuma
+// outra fonte trazia (88 vêm pela GLOBOLEILOES) e Reverts 57 de 57. Então: a HOME sai das DUAS vias e as listas
+// são somadas (1 crédito Firecrawl por rodada); evento e lote saem só da via grátis (direto → banco). Firecrawl
+// recusado ou sem saldo = fica a home estática, sem derrubar a coleta.
+function criarMotorEmilio() {
+  const fc = criarMotorFirecrawl({ waitFor: 2500 });
+  const gratis = criarMotorFetch('emiliomatos');
+  async function fetchFonte(url, opts = {}) {
+    let u; try { u = new URL(url); } catch { return gratis.fetchFonte(url, opts); }
+    if (u.pathname !== '/' && u.pathname !== '') return gratis.fetchFonte(url, opts);
+    const [est, mont] = await Promise.all([gratis.fetchFonte(url, opts), fc.fetchFonte(url)]);
+    if (!mont.html) console.warn(`   [EMILIOMATOS] home montada indisponível (${mont.via}) — só a lista estática nesta rodada`);
+    const html = [est.html, mont.html].filter(Boolean).join('\n<!-- emilio: home montada -->\n');
+    return html ? { html, via: [est.via, mont.html ? 'firecrawl' : null].filter(Boolean).join('+') } : est;
+  }
+  return { fetchFonte, estado: gratis.estado, fechar: fc.fechar };
+}
 
 // ── CANDIDATOS DA JUCEMG (29/08) — FORA DA PRODUÇÃO ATÉ O DRY-RUN PROVAR ────────────────────
 // A triagem residencial classificou 7 domínios como Superbid pela assinatura `/busca/segmento/`
@@ -82,6 +104,8 @@ export default {
   // "OFERTA INICIAL ... R$ 112.048,41" no HTML estático. Motor padrão: direto → banco (grátis); Bright Data travado
   // pelo `semBD` em scraper-emiliomatos.mjs. A rodada Firecrawl de 09/11 gastou 60 créditos para gravar 3 lotes.
   // Os 37 "valor 0" daquela rodada são do evento B-SEC na plataforma Comprova: preço só para quem se habilita (descarte certo).
+  criarMotor: criarMotorEmilio,
+  maxEventos: 40,                     // home estática (9) + montada (~10) somadas: o teto padrão 12 cortava
   catalogo: '/',                      // a HOME (eventos do leiloeiro), não o catálogo global
   paginaParam: 'page',                // ⚠️ Superbid usa ?page= (não ?pagina=)
   maxPages: 1,
@@ -111,7 +135,7 @@ export default {
   // plataforma (dry-run de 29/08). `extrairUrlsDeLote` do parser fica para eles e para os testes.
   parse: { extrairUrlsDeLote: extrairUrlsDoLeiloeiro, extrairUrlsDeEvento: extrairEventosDeImoveis, idDaUrl, parseDetalhe, montarRow, checarQualidade },
   conhecimento: {
-    plataforma: 'Superbid/MBV (white-label SSR)', acesso: 'fetch-direto · banco (pg_net)', custo: 'gratis (direto/banco)',
+    plataforma: 'Superbid/MBV (white-label SSR)', acesso: 'fetch-direto · banco (pg_net)', custo: 'grátis + 1 crédito Firecrawl/rodada (só a home montada)',
     anti_bot: 'cloudflare', enumeracao: 'home → eventos de imóveis → /emilio-matos-rocha/imoveis/...',
     url_lote: '/emilio-matos-rocha/imoveis/<tipo>/<slug>-<ID>', scraper: 'scraper-emiliomatos.mjs',
   },
