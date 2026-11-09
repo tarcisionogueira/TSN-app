@@ -39782,3 +39782,11 @@ assunto) — o e-mail do Jorge Brasil (Don Alonso) foi reprocessado: matrícula 
 - Explicados (não são perda): VIXLEILOES (leilão de 07/11 aconteceu), SBL_ECKERT (vem pelo portal SUPERBID).
 - Em aberto: HASTAPUBLICA (10 painéis sem linha de lote — protegidos), EMILIOMATOS (teto Firecrawl, #282),
   SUPORTE_VEICULOS (vlleiloes vazio com 28 ativos), SBID21 (41→0).
+- **Runner residencial (09/11, tarde):** diagnóstico completo de fontes (agente, só leitura) achou ~1.000 lotes listados e
+  não lidos por TETO + gate de 72 h: PW (769 listados, 78 ativos), LANCESE (499/227), HAMMERLEIL (601/461). Teto
+  `SOLEON_MAX_LOTES` 150→400, `PECINI_MAX_LOTES=200` no PW, e `coleta_cliente.intervalo_horas` de SOLEON e PW 72→24
+  (migração 20261109b). Grátis. Pendência 424 fechada (runner rodou completo em 09/11 12:14 UTC).
+- **Suspeitas abertas (pendência nova):** FRAZAO 149 "sumiu_da_fonte" com praça até 27/11 (05–07/11), GFLEILOES 36 de
+  uma vez (29/10), GOLDLEILOES 19 (28/10), NOGARI 15 (04/11); FERREIRALEIL 216 listados × 54 gravados abaixo do teto;
+  HASTAPUBLICA 10 painéis sem lote; SUPORTE_VEICULOS/vlleiloes vazio com 28 ativos; EMILIOMATOS fora do semanal
+  Firecrawl desde 28/10 (~199 lotes; ~45 créditos/semana — decisão de custo).

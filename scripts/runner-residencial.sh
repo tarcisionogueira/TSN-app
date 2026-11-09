@@ -150,10 +150,10 @@ if quer HASTA && node scripts/coleta-gate.mjs atrasada HASTA 168; then
 fi
 
 # SOLEON (calil/vegas/3torres) — sem Cloudflare: fetch direto do IP residencial = grátis (SOLEON_NO_BD).
-# TETO 150/tenant (06/11): a lista já é lida inteira de graça (SITELEILOES enumera 595, JOAOEMILIO 462), mas o acervo
+# TETO 400/tenant (09/11: com 150 e gate de 72 h, LANCESE listava 499 e tinha 227; HAMMERLEIL 601/461). TETO 150 (06/11): a lista já é lida inteira de graça (SITELEILOES enumera 595, JOAOEMILIO 462), mas o acervo
 # tinha 300 e 197 — o teto de 40–60 detalhes por rodada, 2x/semana, não alcançava. Daqui é grátis (SOLEON_NO_BD),
 # sequencial e com pausa; o teto só existe para a rodada não monopolizar o runner.
-rodar SOLEON env SOLEON_NO_BD=1 SOLEON_DRYRUN=0 SOLEON_MAX_LOTES=150 node scripts/scraper-soleon.mjs
+rodar SOLEON env SOLEON_NO_BD=1 SOLEON_DRYRUN=0 SOLEON_MAX_LOTES=400 node scripts/scraper-soleon.mjs
 # SOLEON VEÍCULOS (21/10): mesmo cluster, /lotes/veiculo (~300 no site, 0 no acervo). Só via grátis.
 rodar SOLEON_VEICULOS env SOLEON_VEICULOS=1 SOLEON_NO_BD=1 SOLEON_DRYRUN=0 node scripts/scraper-soleon.mjs
 
@@ -176,8 +176,8 @@ rodar PECINI env PECINI_HEADLESS=1 PECINI_DRYRUN=0 node scripts/scraper-pecini.m
 # ordem). Os dois corrigidos e conferidos em dry-run no PC (lote 3427: 40%, praças 19/10 e 22/10).
 rodar SUBLIME env PECINI_TENANT=SUBLIME PECINI_HEADLESS=1 PECINI_DRYRUN=0 node scripts/scraper-pecini.mjs
 # PW (22/10, triagem #292) — PW Leilões, mesma plataforma DefaultClean (lance renderizado por JS, como o Sublime).
-# Gate próprio em coleta_cliente (PW, 72 h). Responde 400 a alguns clientes HTTP fora do navegador — aqui é Chromium.
-rodar PW env PECINI_TENANT=PW PECINI_HEADLESS=1 PECINI_DRYRUN=0 node scripts/scraper-pecini.mjs
+# Gate próprio em coleta_cliente (PW, 24 h desde 09/11). Teto 200 novos (09/11: o padrão 40 deixava ~620 de 769 listados sem ler). Responde 400 a alguns clientes HTTP fora do navegador — aqui é Chromium.
+rodar PW env PECINI_TENANT=PW PECINI_HEADLESS=1 PECINI_DRYRUN=0 PECINI_MAX_LOTES=200 node scripts/scraper-pecini.mjs
 # ARNALDO (22/10, #292) — arnaldoleiloes.com.br (BH) dá 403 ao GitHub na página E no AJAX que traz lance e datas;
 # daqui o fetch direto é grátis. Gate próprio em coleta_cliente (ARNALDO, 72 h).
 rodar ARNALDO env ARNALDO_DRYRUN=0 node scripts/scraper-arnaldo.mjs
