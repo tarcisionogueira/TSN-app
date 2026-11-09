@@ -39790,3 +39790,12 @@ assunto) — o e-mail do Jorge Brasil (Don Alonso) foi reprocessado: matrícula 
   uma vez (29/10), GOLDLEILOES 19 (28/10), NOGARI 15 (04/11); FERREIRALEIL 216 listados × 54 gravados abaixo do teto;
   HASTAPUBLICA 10 painéis sem lote; SUPORTE_VEICULOS/vlleiloes vazio com 28 ativos; EMILIOMATOS fora do semanal
   Firecrawl desde 28/10 (~199 lotes; ~45 créditos/semana — decisão de custo).
+- **Geolocalização (09/11, tarde):** selo/Street View seguem o nível do PINO (endereço com dígito valia "exata"); gatilho
+  `preservar_e_derivar_endereco` só preserva endereço legível; fila de "presos no centro" inclui lote só com condomínio
+  (533); rua da descrição aplicada a 699 terrenos/rurais (`endereco-da-descricao.yml`). Cron `/api/geocodificar` de
+  1×/h para 4×/h (`3,15,27,39`): o gargalo é o 1 req/s do Nominatim, não o lote; minutos escolhidos para não
+  sobrepor `indice-geocodificar-cron` (:50 a cada 4 h) nem `regeocod-imprecisos` (dom 06:00). Google segue limitado
+  ao teto mensal (9.900) e só para âncora precisa (rua com número ou condomínio).
+- **Emílio Matos (pendência 463, fechada):** home pelas duas vias (Firecrawl 1 crédito + grátis); 346 enumerados,
+  ativos 78 → 122. Porto Seguro 88/146 já vinham pela GLOBOLEILOES; Reverts 57/57 eram perda.
+- **Cobrança avulsa:** padrão "cliente paga os juros"; absorver só até N parcelas (padrão 3×).
