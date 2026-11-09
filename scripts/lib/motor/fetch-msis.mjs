@@ -90,7 +90,17 @@ export function criarMotorMsis() {
     const host = new URL(base).host;
     const url = `${base}/Principal.asp`;
     const p1 = await pedirComRetry(url, { acaoDest: 'N', pag: '1' });
-    if (!p1.html) { cob(host).falhas.push(`catálogo: ${p1.motivo}`); return { html: null, via: `catálogo: ${p1.motivo}` }; }
+    if (!p1.html) {
+      // SITE DESATIVADO (09/11): Gabriel e Moniz de Aragão respondem a home com a página-padrão MSIS "Esta página não
+      // está disponível" e o Principal.asp dá 404 — o leiloeiro tirou o site do ar. Isso não é falha de coleta (não pinta
+      // o workflow de vermelho), mas fica no motivo do fonte_saude: se o site voltar, a coleta volta sozinha.
+      const home = /404/.test(p1.motivo) ? await pedir(`${base}/`, null) : { html: null };
+      if (home.html && /Esta p[áa]gina n[ãa]o est[áa] dispon[íi]vel/i.test(home.html)) {
+        cob(host).desativado = true;
+        return { html: null, via: 'site desativado pelo leiloeiro (MSIS: "Esta página não está disponível")' };
+      }
+      cob(host).falhas.push(`catálogo: ${p1.motivo}`); return { html: null, via: `catálogo: ${p1.motivo}` };
+    }
     // O seletor pode mostrar só uma janela de páginas: o teto é recalculado a cada página lida.
     let ult = Math.min(ultimaPagina(p1.html), MAX_PAGINAS);
     const paginas = [p1.html];
@@ -152,7 +162,7 @@ export function tabelaCobertura() {
   const linhas = ['domínio | leilões site (abertos) | lotes declarados nos abertos | lotes lidos | páginas catálogo | via | ok'];
   for (const [host, c] of COBERTURA) {
     const pct = c.declarados ? Math.round((100 * c.lidos) / c.declarados) : (c.leiloesLidos || c.paginas ? 100 : 0);
-    linhas.push(`${host} | ${c.leiloes} (${c.abertos}) | ${c.declarados} | ${c.lidos} | ${c.paginas} | ${[...c.via].join('+') || '-'} | ${pct >= 90 && !c.falhas.length ? 'ok' : `NÃO (${pct}%${c.falhas.length ? ` · ${c.falhas.slice(0, 2).join(' · ')}` : ''})`}`);
+    linhas.push(`${host} | ${c.leiloes} (${c.abertos}) | ${c.declarados} | ${c.lidos} | ${c.paginas} | ${[...c.via].join('+') || '-'} | ${c.desativado ? 'site desativado pelo leiloeiro' : pct >= 90 && !c.falhas.length ? 'ok' : `NÃO (${pct}%${c.falhas.length ? ` · ${c.falhas.slice(0, 2).join(' · ')}` : ''})`}`);
   }
   return linhas.join('\n');
 }

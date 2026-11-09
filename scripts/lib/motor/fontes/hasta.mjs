@@ -35,7 +35,7 @@ export default {
   maxPages: 20,
   // Um leilão da CAIXA tem ~579 lotes a 30/pág → 20 páginas DENTRO do evento.
   maxPagesEvento: 25,
-  maxEventos: 12,
+  maxEventos: 20, // 09/11: o site tem 18 eventos e o teto 12 deixava 6 de fora por rodada (rodízio); proxy ISP é custo fixo
   tenants: Object.values(TENANTS),
   parse: { extrairUrlsDeLote, extrairUrlsDeEvento, idDaUrl, parseDetalhe, montarRow, checarQualidade },
   conhecimento: {

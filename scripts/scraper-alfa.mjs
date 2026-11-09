@@ -18,7 +18,7 @@ if (!SB_URL || !SB_KEY) { console.error('Faltam VITE_SUPABASE_URL / SUPABASE_SER
 rodarFonte(cfg, {
   supabase: createClient(SB_URL, SB_KEY),
   maxLotes: Number(process.env.ALFA_MAX_LOTES || 40),
-  maxPages: Number(process.env.ALFA_MAX_PAGES || 5), // 06/11: 2 páginas cortavam o catálogo; grátis
+  maxPages: Number(process.env.ALFA_MAX_PAGES || 12), // 09/11: 5 ainda cortava (86 no site, 40 lidos); grátis, o laço para na 1ª página sem lote novo
   dryrun: process.env.ALFA_DRYRUN !== '0',
   debug: process.env.ALFA_DEBUG === '1',
 }).catch(e => { console.error(e); process.exit(1); });

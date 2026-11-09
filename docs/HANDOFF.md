@@ -39759,3 +39759,26 @@ O dono obteve com o leiloeiro parte das matrículas do lote (4 apartamentos unif
 **Escalada no servidor (1º passo da arena):** `api/chat-suporte.js` com `chamado_id` lê a conversa do banco, grava a resposta da IA e, em `[[ESCALAR]]`/`[[BUG]]`/falha da IA, chama `paraEquipe()` (agora em `api/_atendimento-canal.js`, o mesmo do botão "Equipe"). Antes dependia da aba do cliente.
 
 **Arena (30 especialistas, 3 juízes), ordem recomendada:** 1) contato garantido (feito em parte hoje); 2) contexto do cliente lido no servidor + preço do catálogo liberado + prompt por plano; 3) travas (sem oferta em bug/cobrança/pedido de pessoa, 1 oferta por conversa, nada vale como lance); 4) resgate de checkout abandonado; 5) ponte Pro→Assessoria por sinais do banco; 6) amostra guiada para o Explorador; 7) perfil progressivo (1 pergunta por conversa, chips, só campo nulo).
+
+## 09/11 — Onx como contratada, resposta encaminhada do leiloeiro, inspeção de captura
+
+**Decisões do dono (09/11):** o William (Onx) conversou com o dono por telefone; **pagou, concordou com os termos** — as
+observações do termo estão encerradas (pendência 450 fechada). O caso do imóvel abre quando a oportunidade for aprovada.
+
+**Consertos no ar:** `/assessorados` conta contrato pago por link (`assessoria_imoveis_contratados`, Onx = 2);
+`inbound-juridico` casa resposta do leiloeiro **encaminhada** sem token (remetente = destinatário do pedido + lote no
+assunto) — o e-mail do Jorge Brasil (Don Alonso) foi reprocessado: matrícula + edital no lote.
+
+**Inspeção de captura (fonte_saude: enumerados × gravados × ativos, + logs dos workflows):**
+- **MSIS (21 tenants):** completo (lidos = declarados em todos). O "evento no teto de 1 página" era falso — o motor já
+  concatena todas as páginas, e o aviso pulava a varredura de sumidos em 10 fontes. Novo `cfg.eventoInteiroPeloMotor`.
+  Gabriel e Moniz de Aragão: o site mostra a página MSIS "Esta página não está disponível" (leiloeiro tirou do ar) —
+  agora é motivo registrado, não falha (o workflow estava vermelho 17 dias seguidos por isso).
+- **PESTANA:** 30 de 33 leilões voltavam `<!DOCTYPE` (bloqueio da API após rajada) → coleta parcial e sweep pulado.
+  Agora só leilões dos últimos 45 dias ou por vir (havia leilões desde 2018) + nova tentativa com espera crescente
+  (2/8/20/45 s) quando vem HTML/403/429 (`paginaLotesPestana`, imóveis e veículos).
+- **ALFA:** catálogo cortado em 5 páginas (86 no site, 40 lidos) → teto 12 (grátis). **HASTA:** 12 de 18 eventos por
+  rodízio → teto 20 (proxy ISP, custo fixo).
+- Explicados (não são perda): VIXLEILOES (leilão de 07/11 aconteceu), SBL_ECKERT (vem pelo portal SUPERBID).
+- Em aberto: HASTAPUBLICA (10 painéis sem linha de lote — protegidos), EMILIOMATOS (teto Firecrawl, #282),
+  SUPORTE_VEICULOS (vlleiloes vazio com 28 ativos), SBID21 (41→0).

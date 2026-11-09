@@ -152,7 +152,10 @@ export async function enumerar(fetchFonte, tenant, cfg, { maxPages, debug, semBD
         if (cfg.parse.detalhesDoCatalogo) for (const [u, det] of cfg.parse.detalhesDoCatalogo(re.html, tenant.base)) detCatalogo.set(u, det);
         if (debug) console.log(`   [${tenant.fonte}] evento ${ev.slice(-40)} pág ${p}: +${urls.size - antes} (total ${urls.size})`);
         if (urls.size === antes) break;
-        if (p === maxPagEvento && temProxima(re.html, p)) cortada = `evento no teto de ${maxPagEvento} página(s)`;
+        // `eventoInteiroPeloMotor` (09/11, MSIS): o motor já concatena TODAS as páginas do evento e prova a completude
+        // por conta própria (lotes declarados × lidos); o link `pag=2` que sobra no HTML não é corte. Sem isto, 10
+        // fontes MSIS saíam "lista incompleta" toda rodada e a varredura de lote que saiu do site nunca rodava.
+        if (p === maxPagEvento && !cfg.eventoInteiroPeloMotor && temProxima(re.html, p)) cortada = `evento no teto de ${maxPagEvento} página(s)`;
         await sleep(400);
       }
       if (!debug) console.log(`   [${tenant.fonte}] evento ${ev.slice(-40)}: +${urls.size - antesEvento}${declarado != null ? ` de ${declarado} declarados` : ''}`);

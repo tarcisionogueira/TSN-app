@@ -20,6 +20,7 @@ export default {
   // recebe a mesma lista e o laço para. Evento idem (todas as páginas de lotes concatenadas).
   maxPages: 2,
   maxPagesEvento: 1,
+  eventoInteiroPeloMotor: true, // fetch-msis lê todas as páginas do leilão; página que falha derruba o tenant
   maxEventos: 400,
   tenants: Object.values(TENANTS),
   parse: { extrairUrlsDeEvento, extrairUrlsDeLote, idDaUrl, parseDetalhe, detalhesDoCatalogo, montarRow, checarQualidade },

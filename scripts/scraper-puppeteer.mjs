@@ -4284,6 +4284,28 @@ async function registrarVendidosPestana(vendidos) {
 //                                          imagens/caracteristicas)
 // Fotos: ged.pestanaleiloes.com.br/ged/{arquivo}. Filtramos SÓ imóveis (tipoBem 462)
 // e lotes DISPONÍVEIS (situacaoId=1) — o portal mistura veículos e lotes encerrados.
+// PÁGINA DE LOTES COM ESPERA (09/11): em 08/11, 30 de 33 leilões voltaram "<!DOCTYPE" (página de bloqueio da
+// API depois de uma rajada) e a coleta saiu PARCIAL — com o sweep pulado, lote encerrado ficou ativo. HTML no
+// lugar de JSON ou 403/429 = espera crescente e nova tentativa; outro erro tenta 2× como antes.
+async function paginaLotesPestana(page, id, pg, qtd) {
+  const esperas = [0, 2000, 8000, 20000, 45000];
+  let ultimo = null;
+  for (let t = 0; t < esperas.length; t++) {
+    if (esperas[t]) await new Promise(r => setTimeout(r, esperas[t]));
+    ultimo = await page.evaluate(async ({ id, pg, qtd }) => {
+      try {
+        const r = await fetch(`/api/v2/lote?leilao=${id}&page=${pg}&qtd=${qtd}`, { headers: { Accept: 'application/json' } });
+        if (!r.ok) return `HTTP ${r.status}`;
+        const txt = await r.text();
+        try { return JSON.parse(txt); } catch { return `html: ${txt.slice(0, 30)}`; }
+      } catch (e) { return `rede: ${String(e?.message || e).slice(0, 40)}`; }
+    }, { id, pg, qtd }).catch((e) => `evaluate: ${String(e?.message || e).slice(0, 40)}`);
+    if (Array.isArray(ultimo)) return ultimo;
+    const bloqueio = /^html|HTTP (403|429|503)/.test(String(ultimo));
+    if (!bloqueio && t >= 1) break;
+  }
+  return ultimo;
+}
 const PESTANA_BASE = 'https://www.pestanaleiloes.com.br';
 const PESTANA_GED = 'https://ged.pestanaleiloes.com.br/ged/';
 const PESTANA_TIPOBEM_IMOVEL = 462;
@@ -4503,7 +4525,11 @@ async function scraperPestana(browser) {
     if (!Array.isArray(leiloes)) { console.log('    Pestana: /api/v2/leilao não retornou lista após 3 tentativas'); return []; }
 
     // 2) Só leilões que contêm IMÓVEIS (subTipoBens com tipoBem 462).
-    const imovLeiloes = leiloes.filter(l => Array.isArray(l.subTipoBens) && l.subTipoBens.some(s => Number(s.tipoBem) === PESTANA_TIPOBEM_IMOVEL));
+    // Só leilão recente ou por vir (09/11): a lista traz leilões desde 2018, e ler os passados era a
+    // rajada que fazia a API responder página de bloqueio. Leilão sem data segue entrando (não dá para afirmar que passou).
+    const agoraIm = Date.now();
+    const imovLeiloes = leiloes.filter(l => Array.isArray(l.subTipoBens) && l.subTipoBens.some(s => Number(s.tipoBem) === PESTANA_TIPOBEM_IMOVEL)
+      && (!l.data || !Number.isFinite(Date.parse(l.data)) || Date.parse(l.data) > agoraIm - 45 * 86400000)); // folga de 45 dias: 2ª praça/venda direta depois da data do leilão
     console.log(`    Pestana: ${imovLeiloes.length}/${leiloes.length} leilões com imóveis`);
     // Mapa de TODOS os leilões (não só os com imóveis) por id — para o mapper resolver o
     // `lote.leilao` (o leilão DONO real) em vez de usar o leilão-agregador da lista.
@@ -4524,17 +4550,11 @@ async function scraperPestana(browser) {
     for (const leilao of imovLeiloes) {
       let lotes = [];
       for (let pg = 1; pg <= 20; pg++) {
-        let pagina = null;
-        for (let t = 1; t <= 2 && !Array.isArray(pagina); t++) {
-          if (t > 1) await new Promise(r => setTimeout(r, 2000));
-          pagina = await page.evaluate(async ({ id, pg, qtd }) => {
-            try { const r = await fetch(`/api/v2/lote?leilao=${id}&page=${pg}&qtd=${qtd}`, { headers: { Accept: 'application/json' } }); return r.ok ? await r.json() : `HTTP ${r.status}`; }
-            catch (e) { return `rede: ${String(e?.message || e).slice(0, 40)}`; }
-          }, { id: leilao.id, pg, qtd: QTD }).catch((e) => `evaluate: ${String(e?.message || e).slice(0, 40)}`);
-        }
+        const pagina = await paginaLotesPestana(page, leilao.id, pg, QTD);
         if (!Array.isArray(pagina)) { falhas.push(`leilão ${leilao.id} p${pg} (${pagina})`); lotes = null; break; }
         lotes.push(...pagina);
         if (pagina.length < QTD) break;
+        await new Promise(r => setTimeout(r, 400));
       }
       if (!Array.isArray(lotes)) continue;
       for (const lote of lotes) {
@@ -4599,10 +4619,7 @@ async function scraperPestanaVeiculos(browser) {
     for (const leilao of alvo) {
       let lotes = [];
       for (let pg = 1; pg <= 20; pg++) {
-        const pagina = await page.evaluate(async ({ id, pg, qtd }) => {
-          try { const r = await fetch(`/api/v2/lote?leilao=${id}&page=${pg}&qtd=${qtd}`, { headers: { Accept: 'application/json' } }); return r.ok ? await r.json() : `HTTP ${r.status}`; }
-          catch (e) { return `rede: ${String(e?.message || e).slice(0, 40)}`; }
-        }, { id: leilao.id, pg, qtd: QTD }).catch((e) => `evaluate: ${String(e?.message || e).slice(0, 40)}`);
+        const pagina = await paginaLotesPestana(page, leilao.id, pg, QTD);
         if (!Array.isArray(pagina)) { falhas.push(`leilão ${leilao.id} p${pg} (${pagina})`); lotes = null; break; }
         lotes.push(...pagina);
         if (pagina.length < QTD) break;
