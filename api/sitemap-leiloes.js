@@ -58,6 +58,20 @@ const slug = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-
  * descobriria (um sitemap incompleto não dá erro, só entrega menos). As funções devolvem UM
  * valor jsonb, que não tem teto de linhas.
  */
+// E-books e cursos ATIVOS para o sitemap. Falha de leitura vira lista vazia com log: o mapa dos leilões não pode
+// cair por causa da loja (a vitrine /educacao entra de qualquer forma e linka os produtos).
+async function lojaEducacional() {
+  const ler = async (tabela, tipo) => {
+    try {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/${tabela}?ativo=eq.true&select=id,titulo`, { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` }, signal: AbortSignal.timeout(8000) });
+      if (!r.ok) { console.error('[sitemap] loja', tabela, r.status); return []; }
+      return (await r.json()).map((p) => ({ ...p, tipo }));
+    } catch (e) { console.error('[sitemap] loja', tabela, e?.message); return []; }
+  };
+  const [e, c] = await Promise.all([ler('ebooks_admin', 'ebook'), ler('cursos_admin', 'curso')]);
+  return [...e, ...c];
+}
+
 async function rpc(nome, corpo = {}) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${nome}`, {
     method: 'POST',
@@ -104,8 +118,12 @@ export default async function handler(req, res) {
         ufs.add(uf);
         if (r.cidade_norm) cidades.add(`${uf}/${r.cidade_norm}`);
       });
+      // Loja educacional (09/11): vitrine + cada e-book/curso ativo, nas páginas montadas no servidor (api/publico).
+      const produtos = await lojaEducacional();
       const urls = [
         `<url><loc>${SITE}/leiloes</loc><changefreq>daily</changefreq><priority>0.9</priority></url>`,
+        `<url><loc>${SITE}/educacao</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>`,
+        ...produtos.map((p) => `<url><loc>${SITE}/${p.tipo}/${p.id}/${slug(p.titulo || p.tipo)}</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>`),
         ...[...ufs].map((uf) => `<url><loc>${SITE}/leiloes/${uf.toLowerCase()}</loc><changefreq>daily</changefreq><priority>0.8</priority></url>`),
         ...[...cidades].map((k) => { const [uf, c] = k.split('/'); return `<url><loc>${SITE}/leiloes/${uf.toLowerCase()}/${esc(c)}</loc><changefreq>daily</changefreq><priority>0.7</priority></url>`; }),
       ].join('');

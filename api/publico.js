@@ -48,6 +48,8 @@ const TIPO_LABEL = { casa:'Casa', apartamento:'Apartamento', terreno:'Terreno', 
 
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const brl = (v) => (Number(v) > 0 ? `R$ ${Math.round(Number(v)).toLocaleString('pt-BR')}` : null);
+// Preço de PRODUTO (e-book/curso) com centavos: `brl` arredonda e mostraria R$ 29,90 como "R$ 30".
+const brlCentavos = (v) => (Number(v) > 0 ? `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : null);
 // A data da praça vem do scraper em formatos variados. Só reformata o que for ISO reconhecível
 // e devolve o resto como veio — inventar formato é pior que repetir a fonte. Sem isto a página
 // mostrava "2026-08-31" ao visitante, que é data de banco, não de gente.
@@ -459,6 +461,7 @@ footer .in{max-width:1080px;margin:0 auto}
     <a href="${SITE}/">Home</a>
     <a href="${SITE}/#/calculadora">Calculadora</a>
     <a class="ativo" href="${SITE}/leiloes">Buscar Leilões</a>
+    <a href="${SITE}/educacao">Cursos e e-books</a>
     <a href="${SITE}/#/planos">Planos</a>
     <a class="entrar" href="${esc(urlEntrar)}">Entrar</a>
     <a class="cta" href="${esc(urlCadastro)}">Criar conta grátis</a>
@@ -470,6 +473,7 @@ footer .in{max-width:1080px;margin:0 auto}
       <a href="${SITE}/">Home</a>
       <a href="${SITE}/#/calculadora">Calculadora</a>
       <a class="ativo" href="${SITE}/leiloes">Buscar Leilões</a>
+      <a href="${SITE}/educacao">Cursos e e-books</a>
       <a href="${SITE}/#/planos">Planos</a>
       <a href="${esc(urlEntrar)}">Entrar</a>
     </div>
@@ -1182,7 +1186,7 @@ async function paginaProduto(tipo, id) {
 
   const rotulo = tipo === 'curso' ? 'Curso' : 'eBook';
   const canonical = `${SITE}/${tipo}/${p.id}/${slug(p.titulo)}`;
-  const preco = brl(p.preco);
+  const preco = p.gratuito ? null : brlCentavos(p.preco);
   const descTexto = String(p.descricao || '').trim();
   const descCurta = descTexto.replace(/\s+/g, ' ').slice(0, 155);
   const paragrafos = descTexto.split(/\n+/).map((par) => par.trim()).filter(Boolean);
@@ -1193,7 +1197,7 @@ async function paginaProduto(tipo, id) {
     canonical,
     migalha: [
       { nome: 'Início', url: `${SITE}/` },
-      { nome: tipo === 'curso' ? 'Cursos' : 'Ebooks' },
+      { nome: 'Cursos e e-books', url: `${SITE}/educacao` },
       { nome: p.titulo },
     ],
     corpo: `<div class="ficha">
@@ -1209,7 +1213,7 @@ async function paginaProduto(tipo, id) {
         <div class="acao">
           ${preco ? `<div class="lance-lbl">Valor</div><div class="lance-val">${esc(preco)}</div>` : ''}
           ${p.nivel ? `<div style="margin:8px 0"><span class="chip">${esc(p.nivel)}</span></div>` : ''}
-          <a class="cta" href="${SITE}/#/p/${tipo}/${esc(p.id)}">Comprar agora</a>
+          <a class="cta" href="${SITE}/#/p/${tipo}/${esc(p.id)}">${p.gratuito ? 'Acessar grátis' : 'Comprar agora'}</a>
         </div>
       </aside>
     </div>`,
@@ -1222,6 +1226,51 @@ async function paginaProduto(tipo, id) {
       ...(p.capa_url ? { image: p.capa_url } : {}),
       ...(Number(p.preco) > 0 ? { offers: { '@type': 'Offer', price: Number(p.preco), priceCurrency: 'BRL', availability: 'https://schema.org/InStock', url: canonical } } : {}),
       ...(tipo === 'curso' ? { provider: { '@type': 'Organization', name: 'BidPro Brasil', sameAs: SITE } } : {}),
+    },
+  });
+}
+
+// VITRINE DA LOJA EDUCACIONAL (09/11, dono: "aparecer na pesquisa Google quando alguém pesquisar leilão e comprar o
+// e-book/curso"). A loja do app vive em /#/educacao — fragmento, que o Google não indexa — e as prévias /p/... são
+// noindex. Esta página e a de cada produto (`paginaProduto`, /ebook/<id>/<nome> e /curso/<id>/<nome>) são montadas no
+// servidor, entram no sitemap-hubs e no menu de todas as páginas públicas; o botão leva à compra no app.
+async function paginaEducacao() {
+  const campos = 'id,titulo,descricao,capa_url,preco,gratuito';
+  const [c, e] = await Promise.all([
+    sb(`cursos_admin?ativo=eq.true&select=${campos},subtitulo&order=criado_em.asc`),
+    sb(`ebooks_admin?ativo=eq.true&select=${campos}&order=criado_em.asc`),
+  ]);
+  const itens = [
+    ...(Array.isArray(e.linhas) ? e.linhas : []).map((p) => ({ ...p, tipo: 'ebook', rotulo: 'eBook' })),
+    ...(Array.isArray(c.linhas) ? c.linhas : []).map((p) => ({ ...p, tipo: 'curso', rotulo: 'Curso' })),
+  ];
+  // Leitura que falhou não vira "loja vazia" indexada: 500 e o Google tenta de novo depois.
+  if (!itens.length && (!Array.isArray(e.linhas) || !Array.isArray(c.linhas))) throw new Error('produtos ilegíveis');
+  const url = (p) => `${SITE}/${p.tipo}/${p.id}/${slug(p.titulo)}`;
+  const resumo = (t) => { const x = String(t || '').replace(/\s+/g, ' ').trim(); return x.length > 180 ? `${x.slice(0, 177)}…` : x; };
+  const cards = itens.map((p) => {
+    const preco = p.gratuito ? 'Grátis' : brlCentavos(p.preco);
+    return `<a href="${esc(url(p))}" style="display:block;background:#fff;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden;text-decoration:none;color:inherit">
+      ${p.capa_url ? `<img src="${esc(p.capa_url)}" alt="Capa: ${esc(p.titulo)}" loading="lazy" style="width:100%;aspect-ratio:3/4;object-fit:cover;background:#f1f5f9"/>` : ''}
+      <div style="padding:14px 16px">
+        <div style="font-size:11px;font-weight:700;color:#0D63DB;text-transform:uppercase;letter-spacing:.5px">${esc(p.rotulo)}</div>
+        <h2 style="font-size:17px;margin:6px 0 8px;color:#0f172a;line-height:1.3">${esc(p.titulo)}</h2>
+        <p style="font-size:13.5px;color:#475569;line-height:1.55;margin:0 0 10px">${esc(resumo(p.subtitulo || p.descricao))}</p>
+        ${preco ? `<div style="font-weight:800;color:#0f172a">${esc(preco)}</div>` : ''}
+      </div></a>`;
+  }).join('');
+  return pagina({
+    titulo: 'Cursos e e-books sobre leilão de imóveis — BidPro Brasil',
+    desc: 'Aprenda a comprar imóveis em leilão com segurança: e-books e cursos sobre leilões da Caixa, judiciais e extrajudiciais, análise de edital e matrícula e como lucrar antes de arrematar.',
+    canonical: `${SITE}/educacao`,
+    migalha: [{ nome: 'Início', url: `${SITE}/` }, { nome: 'Cursos e e-books' }],
+    corpo: `<h1 style="font-size:28px;margin:8px 0 10px;color:#0f172a">Cursos e e-books sobre leilão de imóveis</h1>
+      <p style="color:#334155;line-height:1.7;max-width:760px;margin:0 0 22px">Material prático da equipe BidPro Brasil para quem quer comprar imóvel em leilão — da Caixa, judicial ou extrajudicial — com segurança: como ler o edital e a matrícula, calcular o custo total da arrematação, avaliar riscos e lucrar antes mesmo de arrematar. Leia no celular ou no computador, com acesso imediato após a compra.</p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px">${cards}</div>
+      <p style="color:#64748b;font-size:13.5px;margin:26px 0 0">Quer aplicar na prática? <a href="${SITE}/leiloes">Veja os leilões de imóveis abertos agora</a> em todo o Brasil.</p>`,
+    jsonld: {
+      '@context': 'https://schema.org', '@type': 'ItemList', name: 'Cursos e e-books sobre leilão de imóveis',
+      itemListElement: itens.map((p, i) => ({ '@type': 'ListItem', position: i + 1, url: url(p), name: p.titulo })),
     },
   });
 }
@@ -1252,6 +1301,12 @@ export default async function handler(req, res) {
         res.setHeader('Location', html.redirecionar);
         return res.status(301).end();
       }
+    } else if (tipo === 'educacao') {
+      html = await paginaEducacao();
+    } else if (tipo === 'curso' || tipo === 'ebook') {
+      if (!/^[0-9a-f-]{36}$/i.test(id)) return res.status(404).send('Produto não encontrado.');
+      html = await paginaProduto(tipo, id);
+      if (!html) return res.status(404).send('Produto não encontrado.');
     } else if (tipo === 'uf') {
       if (!UFS.includes(uf)) return res.status(404).send('Estado não encontrado.');
       html = await paginaUF(uf);

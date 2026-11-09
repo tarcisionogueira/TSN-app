@@ -70,6 +70,26 @@
       "destination": "/api/publico?tipo=cidade&uf=:uf&cidade=:cidade"
     },
     {
+      "source": "/educacao",
+      "destination": "/api/publico?tipo=educacao"
+    },
+    {
+      "source": "/ebook/:id",
+      "destination": "/api/publico?tipo=ebook&id=:id"
+    },
+    {
+      "source": "/ebook/:id/:slug",
+      "destination": "/api/publico?tipo=ebook&id=:id"
+    },
+    {
+      "source": "/curso/:id",
+      "destination": "/api/publico?tipo=curso&id=:id"
+    },
+    {
+      "source": "/curso/:id/:slug",
+      "destination": "/api/publico?tipo=curso&id=:id"
+    },
+    {
       "source": "/leilao/:id",
       "destination": "/api/publico?tipo=imovel&id=:id"
     },
