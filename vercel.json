@@ -70,6 +70,10 @@
       "destination": "/api/publico?tipo=cidade&uf=:uf&cidade=:cidade"
     },
     {
+      "source": "/feed-produtos.xml",
+      "destination": "/api/feed-produtos"
+    },
+    {
       "source": "/educacao",
       "destination": "/api/publico?tipo=educacao"
     },

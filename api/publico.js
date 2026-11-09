@@ -1219,12 +1219,23 @@ async function paginaProduto(tipo, id) {
     </div>`,
     jsonld: {
       '@context': 'https://schema.org',
-      '@type': tipo === 'curso' ? 'Course' : 'Book',
+      // 09/11 (dono quer o e-book na vitrine de compras do Google): `Product` é o tipo que o Google lê para
+      // listagem de comerciante; o Book/Course continua junto (multi-tipo) para o resultado de livro/curso.
+      '@type': tipo === 'curso' ? ['Product', 'Course'] : ['Product', 'Book'],
       name: nomeProduto(p.titulo),
       description: descCurta,
       url: canonical,
+      sku: `${tipo}-${p.id}`,
+      brand: { '@type': 'Brand', name: 'BidPro Brasil' },
+      ...(tipo === 'ebook' ? { bookFormat: 'https://schema.org/EBook', author: { '@type': 'Organization', name: 'BidPro Brasil' } } : {}),
       ...(p.capa_url ? { image: p.capa_url } : {}),
-      ...(Number(p.preco) > 0 ? { offers: { '@type': 'Offer', price: Number(p.preco), priceCurrency: 'BRL', availability: 'https://schema.org/InStock', url: canonical } } : {}),
+      ...(Number(p.preco) > 0 ? { offers: { '@type': 'Offer', price: Number(p.preco).toFixed(2), priceCurrency: 'BRL', availability: 'https://schema.org/InStock', itemCondition: 'https://schema.org/NewCondition', url: canonical,
+        // Produto digital: entrega imediata e sem frete — informado para o Google não marcar como "dado faltando".
+        shippingDetails: { '@type': 'OfferShippingDetails', shippingRate: { '@type': 'MonetaryAmount', value: 0, currency: 'BRL' }, shippingDestination: { '@type': 'DefinedRegion', addressCountry: 'BR' },
+          deliveryTime: { '@type': 'ShippingDeliveryTime', handlingTime: { '@type': 'QuantitativeValue', minValue: 0, maxValue: 0, unitCode: 'DAY' }, transitTime: { '@type': 'QuantitativeValue', minValue: 0, maxValue: 0, unitCode: 'DAY' } } },
+        // Direito de arrependimento de 7 dias (CDC art. 49) — produto digital, sem devolução física.
+        hasMerchantReturnPolicy: { '@type': 'MerchantReturnPolicy', applicableCountry: 'BR', returnPolicyCategory: 'https://schema.org/MerchantReturnFiniteReturnWindow', merchantReturnDays: 7 },
+      } } : {}),
       ...(tipo === 'curso' ? { provider: { '@type': 'Organization', name: 'BidPro Brasil', sameAs: SITE } } : {}),
     },
   });
