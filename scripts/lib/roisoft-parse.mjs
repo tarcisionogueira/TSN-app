@@ -12,6 +12,7 @@
  *     (Caiapó), praça "1º Leilão 26/10/2026 - 09h00" e "Encerramento: 29/10/2026 14:10", status em `#pregao-detalhe`.
  *   • norteleiloes.com.br saiu do molde (front Next.js novo, sem o endpoint) — fora até ser medido de novo.
  */
+import { enderecoDoTexto } from './endereco-do-texto.mjs';
 import { inferirTipo, extrairArea, checarQualidade } from './leilaopro-parse.mjs';
 import { num, plaus, textoDe, titleCase, montarRowDom, cidadeUFBare, RE_IMG_DESCARTA } from './dom-parse-util.mjs';
 import { decodificarEntidades } from '../../api/_texto-imovel.js';
@@ -85,7 +86,11 @@ export function parseDetalhe(html, url) {
   const d2 = dataBr((txt.match(/2[ºo°]\s*Leil[ãa]o\s*\|?\s*(\d{2}\/\d{2}\/\d{4})/i) || [])[1]);
   const enc = dataBr((txt.match(/Encerramento:\s*(\d{2}\/\d{2}\/\d{4})/i) || [])[1]);
   const status = limpo((h.match(/id=["']pregao-detalhe["'][^>]*>([\s\S]*?)<\//i) || [])[1]);
-  const endereco = limpo((h.match(/class=["']endereco[^"']*["'][^>]*>([\s\S]*?)<\/div>/i) || [])[1]) || null;
+  // 09/11: o bloco `.endereco` da página pode vir corrompido (Teles & Lima 21554: "aL [��, 5") — sem três letras
+  // seguidas ou com caractere de substituição não é endereço. Sem ele, a rua sai da descrição ("situada à Rua X…").
+  const endBloco = limpo((h.match(/class=["']endereco[^"']*["'][^>]*>([\s\S]*?)<\/div>/i) || [])[1]) || '';
+  const endOk = endBloco.length >= 6 && /[a-zà-ú]{3}/i.test(endBloco) && !endBloco.includes('\uFFFD');
+  const endereco = endOk ? endBloco : (enderecoDoTexto(descricao, null).endereco || null);
   let { cidade, estado } = cidadeUf(og('description'), endereco, descricao);
   // "…situado na Rua Frei Caetano… desta cidade" sem nome (Leilões Brasil 191493, leilão da prefeitura): a cidade é a
   // do LEILÃO, no breadcrumb "17/11/2026 - 51 Imóveis… | Pref Hidrolândia-GO". Só com o "desta cidade/deste município"

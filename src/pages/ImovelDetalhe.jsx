@@ -869,6 +869,14 @@ function textoTeaserDocumental(r) {
     : 'Já lemos a documentação deste lote. Veja o que ela diz (custos, débitos e ocupação) no Investidor Pro.';
 }
 
+// Endereço que o leiloeiro publicou corrompido (caractere de substituição, sem três letras seguidas) não é mostrado:
+// mesma régua de `sanearLocalizacao` (api/_geo.js), que já o descarta na geocodificação.
+function enderecoLegivel(e) {
+  const t = String(e || '').trim();
+  if (!t || t.includes('\uFFFD') || t.length < 6 || !/[a-zà-ú]{3}/i.test(t)) return null;
+  return t;
+}
+
 export default function ImovelDetalhe() {
   const nav = useNavigate();
   const loc = useLocation();
@@ -1033,7 +1041,7 @@ export default function ImovelDetalhe() {
         }
         setImovel({
           id: data.id, titulo: data.titulo, tipo: data.tipo, modalidade: data.modalidade,
-          estado: data.estado, cidade: data.cidade, bairro: data.bairro, endereco: data.endereco,
+          estado: data.estado, cidade: data.cidade, bairro: data.bairro, endereco: enderecoLegivel(data.endereco),
           valorAvaliacao: data.valor_avaliacao, valorMinimo: data.valor_minimo,
           descontoPercentual: data.desconto_percentual, areaM2: data.area_m2, descricao: data.descricao,
           urlLote: data.url_lote || data.link_edital || data.link_regras_venda, linkEdital: data.link_edital, linkMatricula: data.link_matricula, linkRegrasVenda: data.link_regras_venda,
@@ -1529,7 +1537,10 @@ export default function ImovelDetalhe() {
   // (bairro/cidade = centro da região). 95% do acervo é aproximado — não podemos
   // apontar Street View no lote, então nesse caso caímos na BUSCA por endereço.
   const nivelGeo = imovel.geocodNivel || imovel.geocod_nivel;
-  const localPrecisa = temEnderecoPreciso || nivelGeo === 'endereco' || nivelGeo === 'rua';
+  // 09/11: o selo e o Street View descrevem ONDE ESTÁ O PINO. Antes, endereço com qualquer dígito valia "exata" — o
+  // lote da Teles & Lima em Feira de Santana tinha endereço "aL [��, 5" e pino no centro da cidade, e a tela dizia
+  // "Localização exata (endereço)" e abria o Street View no centro. O endereço só decide quando não há nível gravado.
+  const localPrecisa = nivelGeo === 'endereco' || nivelGeo === 'rua' || (!nivelGeo && temEnderecoPreciso);
   const nivelTxt = { endereco: 'endereço exato', rua: 'rua', bairro: 'bairro', cidade: 'cidade/município' }[nivelGeo];
   // STREET VIEW só faz sentido com coordenada PRECISA; no aproximado o pano cairia
   // numa rua qualquer do bairro → usamos a busca pelo endereço (mais honesto).

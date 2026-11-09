@@ -3,8 +3,14 @@
 // do cron (geocodificação automática não rodava). Agora responde via res.*.
 export const config = { runtime: 'nodejs', maxDuration: 300 };
 
-import { geocodificarCascata } from './_geo.js';
+import { geocodificarCascata, sanearLocalizacao } from './_geo.js';
 import { isCronAuthorized } from './_auth.js';
+
+// Âncora que justifica a rota paga (Google): rua COM número legível, ou condomínio/loteamento nomeado.
+function ancoraPrecisa(im) {
+  const end = sanearLocalizacao({ endereco: im.endereco }).endereco;
+  return (/\d/.test(end) && end.trim().length > 8) || String(im.condominio || '').trim().length >= 3;
+}
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -109,10 +115,12 @@ async function processarLote(estadosFilter, lote = 50, deadline = Infinity, esta
   const FATIA_CENTROIDE = 20;
   try {
     const rc = await sb(
-      `imoveis_leilao?select=id,titulo,cidade,estado,endereco,bairro,cep,condominio:nomecondominio&geocod_nivel=eq.cidade&endereco=not.is.null&ativo=eq.true${estadosFilter}&order=atualizado_em.desc&limit=${FATIA_CENTROIDE * 2}`
+      // 09/11: + lote só com CONDOMÍNIO/loteamento nomeado (533 ativos no centro da cidade — ex. "Alphaville Feira de
+      // Santana"): o nome do empreendimento é âncora tão boa quanto rua com número, e a fila exigia `endereco`.
+      `imoveis_leilao?select=id,titulo,cidade,estado,endereco,bairro,cep,condominio:nomecondominio&geocod_nivel=eq.cidade&or=(endereco.not.is.null,nomecondominio.not.is.null)&ativo=eq.true${estadosFilter}&order=atualizado_em.desc&limit=${FATIA_CENTROIDE * 2}`
     );
     if (rc.ok) {
-      const presos = (await rc.json()).filter(x => /\d/.test(String(x.endereco || '')) && String(x.endereco).trim().length > 8);
+      const presos = (await rc.json()).filter(x => ancoraPrecisa(x));
       imoveis.push(...presos.slice(0, FATIA_CENTROIDE));
     }
   } catch { /* aditivo: o backlog normal segue mesmo se esta consulta falhar */ }
@@ -151,7 +159,8 @@ async function processarLote(estadosFilter, lote = 50, deadline = Infinity, esta
       // se paga. NÃO é gasto aberto: `googleGeocode` já respeita `GOOGLE_GEOCODE_MAX_MES`
       // (default 10.000/mês = o tier grátis) e vira no-op ao bater o teto, caindo de volta
       // nas rotas gratuitas. Ou seja, o pior caso continua sendo custo ~US$ 0.
-      const temEnderecoCompleto = /\d/.test(String(im.endereco || '')) && String(im.endereco || '').trim().length > 8;
+      // 09/11: decide pela âncora LIMPA (o "aL [��, 5" da Teles & Lima tinha dígito e passava como endereço completo).
+      const temEnderecoCompleto = ancoraPrecisa(im);
       coords = await geocodificarCascata(im, { deadline, permitirPago: temEnderecoCompleto });
       // Salva no cache só nível bairro/cidade (sem endereço), para reutilizar em imóveis do mesmo bairro.
       // SEM BAIRRO NA COLUNA, só o nível 'cidade' pode ser compartilhado (05/10, pendência 118): a
