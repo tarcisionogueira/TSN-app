@@ -39800,3 +39800,7 @@ assunto) — o e-mail do Jorge Brasil (Don Alonso) foi reprocessado: matrícula 
 - **Emílio Matos (pendência 463, fechada):** home pelas duas vias (Firecrawl 1 crédito + grátis); 346 enumerados,
   ativos 78 → 122. Porto Seguro 88/146 já vinham pela GLOBOLEILOES; Reverts 57/57 eram perda.
 - **Cobrança avulsa:** padrão "cliente paga os juros"; absorver só até N parcelas (padrão 3×).
+- **Loja educacional no Google (09/11):** `/educacao` (vitrine, ItemList) e `/ebook|curso/<id>/<nome>` (Book/Course +
+  Offer, preço com centavos) montadas no servidor por `api/publico.js`; menu público ganhou "Cursos e e-books";
+  `sitemap-hubs.xml` lista a vitrine e os produtos ativos. Falta o dono: reenviar o sitemap no Search Console e pedir
+  indexação de /educacao. Os 2 cursos pagos estão `ativo=false` e ficam de fora até serem ativados.
