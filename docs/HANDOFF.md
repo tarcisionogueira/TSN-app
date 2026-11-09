@@ -39804,3 +39804,7 @@ assunto) — o e-mail do Jorge Brasil (Don Alonso) foi reprocessado: matrícula 
   Offer, preço com centavos) montadas no servidor por `api/publico.js`; menu público ganhou "Cursos e e-books";
   `sitemap-hubs.xml` lista a vitrine e os produtos ativos. Falta o dono: reenviar o sitemap no Search Console e pedir
   indexação de /educacao. Os 2 cursos pagos estão `ativo=false` e ficam de fora até serem ativados.
+- **Google Shopping (09/11, noite):** páginas de produto com JSON-LD `Product`+`Book`/`Course` e feed
+  `/feed-produtos.xml` (api/feed-produtos.js, só e-books pagos — Shopping não aceita serviço). Dono criando o
+  Merchant Center como PESSOA JURÍDICA (NOGUEIRA EMPREENDIMENTOS LTDA, a mesma que recebe no Mercado Pago);
+  cadastrar o feed como programado diário. Verificação do site pela tag G-5YNHQB5F81 ou Search Console.
