@@ -162,6 +162,12 @@ export default function Assessorados() {
         {role === 'admin' ? 'Todos os clientes do plano Assessoria. Clique num nome para ver os arrematados e relatórios dele.' : 'Clientes designados a você.'}
       </div>
 
+      {dados.aviso && (
+        <div style={{ background: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa', borderRadius: 10, padding: '8px 12px', fontSize: 12.5, marginBottom: 12 }}>
+          {dados.aviso}
+        </div>
+      )}
+
       {dados.clientes.length > 0 && <ResumoFases clientes={dados.clientes} fase={fase} onFase={setFase} />}
 
       <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por nome..."

@@ -55,6 +55,19 @@ export default async function handler(req) {
       role === 'admin' ? sbJson(`assessorado_designacao?cliente_id=in.(${clienteIds.join(',')})&select=cliente_id,membro_id`) : Promise.resolve([]),
     ]);
 
+    // Imóveis CONTRATADOS por cobrança avulsa paga (09/11, dono): a Onx pagou "Assessoria para 2 imóveis"
+    // e aparecia como "Nenhuma arrematação registrada" — o contrato por link não abre caso (o imóvel ainda
+    // não foi escolhido). Leitura que falha NÃO vira zero calado: vai para `aviso` e a tela mostra.
+    let contratadosPorCliente = {};
+    let aviso = null;
+    const rc = await sb('rpc/assessoria_imoveis_contratados', { method: 'POST', body: { p_ids: clienteIds } });
+    if (rc.ok) {
+      contratadosPorCliente = Object.fromEntries((await rc.json()).map((x) => [x.cliente_id, x.imoveis || 0]));
+    } else {
+      console.error('[admin-assessorados] contratados por cobrança falhou', rc.status, await rc.text().catch(() => ''));
+      aviso = 'Não consegui ler os contratos pagos por link: a contagem de "contratadas" pode estar menor que a real.';
+    }
+
     // Resultado do leilão de cada imóvel dos casos ainda sem arremate (23/09, dono): caso
     // aberto cujo imóvel foi VENDIDO a outro não é "contratada" — o cliente não arrematou e não
     // há mais o que arrematar (ex.: Rafael, CEF de 05/08 vendida, caso aberto em 07/08). Falha
@@ -90,11 +103,16 @@ export default async function handler(req) {
       //   = status 'concluido'): o cliente não arrematou, ex. Rafael/ZUK de 31/08 (dono, 23/09).
       const perdida = (c) => !c.arrematado_em && !c.posse_em
         && (vendidos.has(String(c.imovel_id)) || c.status_etapa === 'concluido');
-      const contratadas = casosCliente.filter((c) => !c.arrematado_em && !c.posse_em && !perdida(c)).length;
+      const casosContratados = casosCliente.filter((c) => !c.arrematado_em && !c.posse_em && !perdida(c)).length;
       const concluidas = casosCliente.filter((c) => c.posse_em).length;
+      // Saldo do contrato pago: imóveis contratados menos os já arrematados. Caso aberto sem arremate ocupa
+      // uma vaga do mesmo contrato, por isso é o MAIOR dos dois, não a soma.
+      const saldoContrato = Math.max(0, (contratadosPorCliente[p.id] || 0) - emAndamento - concluidas);
+      const contratadas = Math.max(casosContratados, saldoContrato);
       return {
         id: p.id, nome: p.nome, telefone: p.telefone,
         em_andamento: emAndamento, contratadas, concluidas,
+        imoveis_contratados: contratadosPorCliente[p.id] || 0,
         casos: casosCliente.map((c) => ({
           id: c.id, imovel_endereco: c.imovel_endereco, status_etapa: c.status_etapa,
           arrematado_em: c.arrematado_em, posse_em: c.posse_em, juridico_status: c.juridico_status,
@@ -106,7 +124,7 @@ export default async function handler(req) {
       };
     });
 
-    return json({ pode_designar: role === 'admin', clientes, equipe });
+    return json({ pode_designar: role === 'admin', clientes, equipe, aviso });
   }
 
   if (req.method === 'POST') {
