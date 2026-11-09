@@ -6,6 +6,20 @@
 
 
 
+## 08/11 — FECHAMENTO DO DIA
+
+**Em produção:** baixa do William e do Marcos; aviso do MP direto no www; leilão, o próprio lote e anúncio sem preço fora das
+amostras; pesquisa fraca busca de novo; vigia de pagamento sem baixa; e-mail "Agir hoje"/"Para saber"; timeouts do banco;
+link avulso pago ativa e encerra. Último deploy conferido: ver o `git log` desta seção.
+
+**William:** assessorado desde 09/11 00:28 UTC. Asaas `pay_rafa2mvy5e2jpalz` cancelado pelo sistema (o painel não foi aberto).
+Comissão R$ 622,52 (10% de 6.225,21) na conta-empresa, que é a do dono. Garantia de 7 dias conta da ativação, não do pagamento.
+
+**Decisão do dono:** venda sem parceiro indicando fica com ele (`regra_negocio` `comissao.sem_parceiro_vai_para_empresa`).
+
+**A abrir a próxima sessão:** `pendencias_abertas()`. P0: observações do termo do William e caso do imóvel. A conferir com o
+tempo: #305 (48 h sem 57014), rodada das 18:10 UTC da página inicial e o primeiro link criado já com produto.
+
 ## 08/11 (noite) — LINK AVULSO PAGO ATIVA O PLANO E ENCERRA AS OUTRAS COBRANÇAS
 
 - **Decisão do dono, que revoga a de 07/11:** o link é feito para uma pessoa e é de uso único. Pago, dá baixa, ativa e encerra.
