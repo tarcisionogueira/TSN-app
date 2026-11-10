@@ -12,6 +12,8 @@ const SITE = 'https://www.bidprobrasil.com.br';
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
 const slug = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 70);
+// Título do feed com o ASSUNTO (10/11): o Shopping casa a busca ("livro leilão") principalmente pelo título, e dois
+// dos três e-books não tinham a palavra "leilão" no nome. A página do produto segue com o título original.
 const xml = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 async function ler(tabela, tipo) {
@@ -31,7 +33,7 @@ export default async function handler(req, res) {
       const desc = String(p.descricao || p.titulo).replace(/\s+/g, ' ').trim().slice(0, 4900);
       return `<item>
 <g:id>${xml(`${p.tipo}-${p.id}`)}</g:id>
-<title>${xml(`${p.titulo}${p.tipo === 'ebook' ? ' — eBook' : ' — Curso online'}`.slice(0, 150))}</title>
+<title>${xml(`${p.titulo} — E-book sobre leilão de imóveis`.slice(0, 150))}</title>
 <description>${xml(desc)}</description>
 <link>${xml(`${SITE}/${p.tipo}/${p.id}/${slug(p.titulo)}`)}</link>
 <g:image_link>${xml(p.capa_url)}</g:image_link>
