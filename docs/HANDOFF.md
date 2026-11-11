@@ -6,6 +6,23 @@
 
 
 
+## 11/11 (tarde) — HOMIO: INSCRITO DO LANÇAMENTO (26/11) GANHA CONTA EXPLORADOR
+
+- **Pedido do dono:** a página do lançamento é da Homio (CRM); quem se inscreve lá ganha conta Explorador aqui.
+- **Em produção (438a9409):** `/api/homio-lead` (webhook da Homio, segredo `x-homio-secret`) cria a conta trancada
+  (senha aleatória, `senha_pendente`, `lgpd_aceito=false`) e manda "Ative sua conta"; `/api/ativar-conta` gera o link
+  de recuperação só no clique (antivírus não queima) → `/redefinir-senha`; o popup de cadastro pede cidade e aceite.
+  Cron `homio-reenvio-cron` (10 min) marca ativada quando a senha é definida e reenvia avisos/e-mails. Rastro em
+  `homio_leads`; health-check "Lançamento — inscritos da Homio". Guia: `docs/INTEGRACAO_HOMIO.md`.
+- **Decisões:** webhook (não API) como caminho principal. **Senha no formulário da Homio: recusado** — ficaria em
+  texto puro no CRM e reabre #251 (conta com e-mail alheio). Alternativa oferecida ao dono: página "crie sua senha"
+  com código por e-mail depois do formulário (~1 dia), aguardando decisão.
+- **Conferido em produção:** sem segredo → 503; token inválido → login com `?ativacao=invalido`; cron sem auth → 401.
+- **Pendências:** #471 (dono: `HOMIO_WEBHOOK_SECRET` + automação), #472 (eu: teste ponta a ponta), #473 (dono: cota
+  do Resend no pico). #411 fechada: `apply_migration` passou sem bloqueio.
+- **Build local no Windows:** `verificar:csp` reprova por CRLF no `index.html` (`core.autocrlf=true`); no repositório é
+  LF e a Vercel passa. Não é regressão.
+
 ## 11/11 (tarde) — TESTE DE CAMPOLINA COM RELÓGIO FIXO E LISTA DE REGRESSÃO SÓ COM CASOS EXPLICADOS
 
 - **CI "Testes" vermelho desde 11/11 01:16:** `testar:campolina` esperava o lote 6416 "aberto", mas `encerrado` compara
