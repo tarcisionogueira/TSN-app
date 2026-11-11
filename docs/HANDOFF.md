@@ -39808,3 +39808,26 @@ assunto) — o e-mail do Jorge Brasil (Don Alonso) foi reprocessado: matrícula 
   `/feed-produtos.xml` (api/feed-produtos.js, só e-books pagos — Shopping não aceita serviço). Dono criando o
   Merchant Center como PESSOA JURÍDICA (NOGUEIRA EMPREENDIMENTOS LTDA, a mesma que recebe no Mercado Pago);
   cadastrar o feed como programado diário. Verificação do site pela tag G-5YNHQB5F81 ou Search Console.
+
+## 10/11 — Merchant Center no ar, título do e-book, WhatsApp em preparação
+
+- **Google Merchant Center criado** (conta BidPro Brasil 5902864889, pessoa jurídica NOGUEIRA EMPREENDIMENTOS LTDA,
+  endereço do CNPJ: Rua Barra Avenida S/N, Conj. Barra do Mendes, Mangabeira, Feira de Santana/BA, 44056-536).
+  Só Brasil, português, rótulo de feed `EBOOKS_BR`, feed programado diário 00:00 em
+  `https://www.bidprobrasil.com.br/feed-produtos.xml`. Frete: entrega digital imediata, sem custo, Seg–Dom, fuso
+  Brasília. Devolução: com ou sem defeito, novos e pouco usados, 7 dias, por e-mail, sem taxa, reembolso em 7 dias,
+  URL `/politica-de-reembolso`. Leitura de 10/11 00:00 trouxe os 3 e-books "Em análise" (pendência 465).
+- **Feed:** título com o assunto ("— E-book sobre leilão de imóveis"), porque o Shopping casa a busca pelo título.
+- **Página `/politica-de-reembolso`** e **rodapé com contato** (razão social, CNPJ, cidade, e-mail) em todas as páginas
+  públicas — requisitos do Merchant Center. Texto da política escrito pela sessão: dono revisar prazos (resposta 2 dias
+  úteis, Pix 5 dias úteis, fim do acesso ao pedir reembolso).
+- **E-book da Caixa** renomeado para "Leilões Caixa: Mais Fácil do que Você Imagina" (migração 20261110; slug igual).
+- **Regime tributário (Receita/BrasilAPI):** a empresa saiu do Simples em 31/12/2024. NF sempre no valor cheio pago
+  pelo cliente; taxa do cartão não abate imposto fora do Lucro Real (confirmar com o contador).
+- **WhatsApp oficial (pendência 66):** dono não tem número Business. Orientado: chip pré-pago novo (ou fixo/VoIP),
+  número fora do WhatsApp comum; só conversas iniciadas pelo cliente (grátis — sem template pago, decisão 07/11).
+  Próximo passo do dono: comprar o chip; depois a sessão guia Business Manager → app → número → token → webhook
+  `/api/whatsapp-webhook` → `WA_BOT_ATIVO=1`.
+- **Pendentes do dono:** 464 (Search Console: reenviar sitemap-hubs e indexar /educacao), 465 (acompanhar aprovação
+  no Merchant Center), 451 (NF manual dos R$ 8.000 do William no WebISS), Bunny (definir objetivo).
+- **Comigo:** 461 (conferir Pestana/ALFA/HASTA/MSIS pós-ajuste), 462 (sumidos com praça futura: FRAZAO etc.).
