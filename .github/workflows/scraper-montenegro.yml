@@ -1,0 +1,36 @@
+name: Scraper Montenegro (API do leiloeiro — conexão direta)
+
+# scripts/scraper-montenegro.mjs: 1ª integração DIRETA (11/11) — o TI da Montenegro Leilões (Fortaleza/CE) passou a API
+# https://montenegroleiloes.com.br/api/leiloes/imoveis. Custo zero (fetch direto; via banco se o Cloudflare recusar).
+# O agendado grava; o dispatch grava só com gravar=1.
+on:
+  schedule:
+    - cron: '23 12 * * *'   # 1x/dia, 09:23 em Fortaleza
+  workflow_dispatch:
+    inputs:
+      gravar:
+        description: '1 = grava; 0 = ensaio'
+        default: '0'
+
+concurrency:
+  group: scraper-montenegro
+  cancel-in-progress: false
+
+jobs:
+  montenegro:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Teste do parser
+        run: node scripts/testes/montenegro-api.mjs
+      - name: Coleta
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          MONTENEGRO_DRYRUN: ${{ (github.event_name == 'schedule' || github.event.inputs.gravar == '1') && '0' || '1' }}
+        run: node scripts/scraper-montenegro.mjs
