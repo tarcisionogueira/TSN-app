@@ -46,6 +46,12 @@ export function lerLeadHomio(corpo) {
   const telefone = pegar(['telefone', 'whatsapp', 'celular', 'phone', 'phone_number', 'phoneNumber']).slice(0, 25);
   const contactId = pegar(['contact_id', 'contactId', 'id_contato']) || texto(c.id) || '';
 
+  // Cidade e UF (opcionais): com as duas, o popup de cadastro incompleto só pede o aceite dos termos.
+  // UF só vale como sigla de 2 letras; cidade sem UF válida é descartada (filtro por região precisa das duas).
+  const ufBruta = pegar(['uf', 'estado', 'state']).toUpperCase();
+  const uf = /^[A-Z]{2}$/.test(ufBruta) ? ufBruta : '';
+  const cidade = uf ? pegar(['cidade', 'city', 'municipio']).replace(/\s+/g, ' ').slice(0, 90) : '';
+
   const utm = {};
   const atrib = [b.utm, b.attributionSource, c.attributionSource, b.contact_source && { utm_source: b.contact_source }, b, c]
     .filter((x) => x && typeof x === 'object');
@@ -60,7 +66,7 @@ export function lerLeadHomio(corpo) {
 
   const faltando = [];
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) faltando.push('email');
-  return { email, nome, telefone, contactId: contactId.slice(0, 80), utm, faltando };
+  return { email, nome, telefone, contactId: contactId.slice(0, 80), cidade, uf: cidade ? uf : '', utm, faltando };
 }
 
 /** Campanha vem da URL do webhook (`?campanha=...`), não do corpo: quem decide é quem configurou. */

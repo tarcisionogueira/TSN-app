@@ -24,6 +24,14 @@ eq('pt: whatsapp vira telefone', pt.telefone, '71988887777');
 eq('pt: contact.id como contact_id', pt.contactId, 'c9');
 eq('pt: utm solta no nível de cima', pt.utm, { utm_source: 'google' });
 
+// 2b. Cidade e UF
+const comCidade = lerLeadHomio({ email: 'a@b.com', city: 'Feira de Santana', state: 'ba' });
+eq('cidade + UF minúscula viram sigla', [comCidade.cidade, comCidade.uf], ['Feira de Santana', 'BA']);
+const ufRuim = lerLeadHomio({ email: 'a@b.com', cidade: 'Salvador', estado: 'Bahia' });
+eq('UF por extenso não vale: cidade descartada junto', [ufRuim.cidade, ufRuim.uf], ['', '']);
+const soUf = lerLeadHomio({ email: 'a@b.com', uf: 'SP' });
+eq('UF sem cidade não grava UF solta', [soUf.cidade, soUf.uf], ['', '']);
+
 // 3. Sem e-mail válido → faltando
 eq('sem e-mail', lerLeadHomio({ name: 'Ana Lima' }).faltando, ['email']);
 eq('e-mail sem domínio', lerLeadHomio({ email: 'ana@' }).faltando, ['email']);

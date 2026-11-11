@@ -140,6 +140,7 @@ export default async function handler(req, res) {
   const perfil = {
     id: userId, role: 'explorador', senha_pendente: true, lgpd_aceito: false,
     ...(nome ? { nome } : {}), ...(telefone ? { telefone } : {}),
+    ...(lido.cidade && lido.uf ? { endereco_cidade: lido.cidade, endereco_uf: lido.uf } : {}),
     mkt_utm_source: u.utm_source || 'homio', mkt_utm_medium: u.utm_medium || null,
     mkt_utm_campaign: u.utm_campaign || campanha, mkt_utm_content: u.utm_content || null,
     mkt_utm_term: u.utm_term || null, mkt_gclid: u.gclid || null, mkt_fbclid: u.fbclid || null,
