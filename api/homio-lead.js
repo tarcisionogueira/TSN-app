@@ -52,7 +52,12 @@ export default async function handler(req, res) {
   // `x-webhook-secret` e `Authorization: Bearer`); o valor é o mesmo HOMIO_WEBHOOK_SECRET.
   const bearer = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
   const recebido = req.headers['x-homio-secret'] || req.headers['x-webhook-secret'] || bearer;
-  if (!segredoConfere(recebido, segredo)) return res.status(401).json({ error: 'Não autorizado' });
+  if (!segredoConfere(recebido, segredo)) {
+    // Rastro da recusa (nunca o valor): qual cabeçalho veio e o tamanho, para diagnosticar a integração.
+    const veio = req.headers['x-homio-secret'] ? 'x-homio-secret' : req.headers['x-webhook-secret'] ? 'x-webhook-secret' : bearer ? 'authorization' : 'nenhum';
+    console.warn(`[homio-lead] 401: token não confere (cabeçalho: ${veio}, tamanho recebido ${String(recebido || '').length}, esperado ${segredo.length})`);
+    return res.status(401).json({ error: 'Não autorizado' });
+  }
 
   // Teto global (todas as chamadas vêm dos servidores da Homio): protege o cadastro em massa
   // se o segredo vazar, sem atrapalhar um lançamento de verdade (600 por 10 min).
@@ -60,7 +65,11 @@ export default async function handler(req, res) {
   if (!rl.ok) return res.status(429).json({ error: 'Muitas inscrições seguidas. A Homio tenta de novo.' });
 
   const lido = lerLeadHomio(req.body);
-  if (lido.faltando.length) return res.status(400).json({ error: 'Campos obrigatórios ausentes', faltando: lido.faltando });
+  if (lido.faltando.length) {
+    const chaves = Object.keys(req.body && typeof req.body === 'object' ? req.body : {}).slice(0, 20).join(',');
+    console.warn(`[homio-lead] 400: faltando ${lido.faltando.join(',')} (campos recebidos: ${chaves || 'corpo vazio ou não-JSON'})`);
+    return res.status(400).json({ error: 'Campos obrigatórios ausentes', faltando: lido.faltando });
+  }
   const campanha = campanhaDe(req.query?.campanha);
   const { email } = lido;
 
