@@ -26,6 +26,38 @@ depois de clicar no e-mail de ativação.
 2. Página inicial com os popups em fila: **cadastro** (cidade/UF, aceite dos termos e o que faltar de
    nome/telefone) → vídeo de boas-vindas → **questionário de perfil do investidor**.
 
+## Para o desenvolvedor da página (backend próprio na Vercel)
+
+Se o cadastro da página já passa por um backend do desenvolvedor, ele chama o BidPro direto, **do
+servidor** (nunca do navegador: o token ficaria exposto no código da página). Não é preciso a
+automação da Homio nesse caso.
+
+- **Método e URL:** `POST https://www.bidprobrasil.com.br/api/homio-lead?campanha=lancamento`
+- **Cabeçalhos:** `Content-Type: application/json` e `x-homio-secret: <token>` — o token é o mesmo valor de
+  `HOMIO_WEBHOOK_SECRET` da Vercel do BidPro, entregue ao desenvolvedor por canal privado (nunca por
+  e-mail aberto, chat de grupo ou repositório). No backend dele, fica numa variável de ambiente.
+- **Corpo:**
+  ```json
+  { "nome": "Maria da Silva", "email": "maria@exemplo.com", "telefone": "71998765432" }
+  ```
+  Opcionais: `utm_source`, `utm_medium`, `utm_campaign`, `utm_content`, `utm_term`, `gclid`, `fbclid`,
+  `cidade`, `uf`, `contact_id`.
+- **Respostas:**
+
+| HTTP | corpo | significado / o que fazer |
+|---|---|---|
+| 200 | `{"ok":true,"situacao":"conta_criada","email_ativacao":"enviado"}` | conta criada; e-mail de ativação saiu (`enfileirado` = sai amanhã por cota) |
+| 200 | `{"ok":true,"situacao":"ja_tinha_conta"}` | e-mail já é cliente; nada mudou na conta |
+| 200 | `{"ok":true,"repetido":true,...}` | mesma inscrição já processada; não repetir |
+| 400 | `{"error":"...","faltando":["telefone"]}` | campo obrigatório ausente; corrigir e reenviar |
+| 401 | `{"error":"Não autorizado"}` | token errado ou ausente |
+| 429 / 502 / 503 | `{"error":"..."}` | falha temporária: tentar de novo em alguns segundos (até 3×) |
+
+- **Tempo de resposta:** até ~10 s (cria a conta e manda o e-mail). Use timeout de 20 s e não segure a
+  tela da pessoa esperando: registre a inscrição dele primeiro e chame o BidPro em seguida.
+- **Teste:** com um e-mail que não tenha conta no BidPro, a resposta deve ser `conta_criada` e o e-mail
+  "Ative sua conta na BidPro Brasil" deve chegar em até 1 minuto.
+
 ## Como funciona
 
 1. A pessoa preenche o formulário na página da Homio.
