@@ -10,7 +10,9 @@ const eq = (nome, a, b) => { const passou = JSON.stringify(a) === JSON.stringify
 
 const urls = extrairUrlsDeLote(txt);
 eq('catálogo: 5 produtos, id estável na url', [urls.size, idDaUrl(urls.get('6416'))], [5, '6416']);
-const dets = detalhesDoCatalogo(txt);
+// Relógio fixo na data da fixture (30/10): sem isso o teste vira bomba-relógio quando a praça de 10/11 passa.
+const HOJE = new Date('2026-10-30T12:00:00-03:00');
+const dets = detalhesDoCatalogo(txt, null, { agora: HOJE });
 const det = (id) => dets.get(urls.get(id));
 const row = (id) => montarRow(urls.get(id), det(id), TENANTS.campolina);
 
@@ -18,6 +20,7 @@ const g = row('6416');
 eq('6416 avaliação e LANCE MÍNIMO (não a avaliação)', [g.valor_avaliacao, g.valor_minimo], [9000000, 4500000]);
 eq('6416 cidade da LOCALIZAÇÃO "– SETE LAGOAS – MG"', [g.cidade, g.estado], ['Sete Lagoas', 'MG']);
 eq('6416 1º leilão 10/11 15h, aberto', [g.data_leilao, det('6416').encerrado], ['2026-11-10T15:00:00-03:00', false]);
+eq('6416 depois da praça de 10/11: encerrado', detalhesDoCatalogo(txt, null, { agora: new Date('2026-11-11T12:00:00-03:00') }).get(urls.get('6416')).encerrado, true);
 eq('6416 área, matrícula, edital PDF', [g.area_m2, g.numero_matricula, /EDITAL-03-2026-3a-VARA-SETE-LAGOAS\.pdf$/.test(g.link_edital)], [10021.12, '55.090', true]);
 eq('6416 url do lote sem ?lote= e fonte_id pelo id do produto', [/\?/.test(g.url_lote), g.fonte_id], [false, 'luizcampolina_6416']);
 eq('6416 passa na qualidade', checarQualidade(g, { estrito: false }).descartar, false);

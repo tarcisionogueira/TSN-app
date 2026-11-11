@@ -95,9 +95,11 @@ export function extrairUrlsDeLote(txt) {
 }
 export function extrairUrlsDeEvento() { return new Map(); }
 /** O detalhe já vem no catálogo — o motor não abre página de lote. */
-export function detalhesDoCatalogo(txt) {
+// `agora` é injetável (como no jorgebrasil-parse) para o teste não depender do relógio: o 6416 tinha praça em
+// 10/11/2026 e o teste quebrou no dia seguinte esperando "aberto".
+export function detalhesDoCatalogo(txt, _base, { agora = new Date() } = {}) {
   const out = new Map();
-  for (const p of produtos(txt)) if (p?.id) out.set(urlDe(p), detalheDoProduto(p));
+  for (const p of produtos(txt)) if (p?.id) out.set(urlDe(p), detalheDoProduto(p, { agora }));
   return out;
 }
 // Só chamado se o catálogo não trouxe o lote (não deveria acontecer): sem página HTML para ler.

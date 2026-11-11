@@ -6,6 +6,27 @@
 
 
 
+## 11/11 (tarde) — TESTE DE CAMPOLINA COM RELÓGIO FIXO E LISTA DE REGRESSÃO SÓ COM CASOS EXPLICADOS
+
+- **CI "Testes" vermelho desde 11/11 01:16:** `testar:campolina` esperava o lote 6416 "aberto", mas `encerrado` compara
+  a praça (10/11 15h) com o relógio real. Era o teste, não o parser. `detalhesDoCatalogo(txt, _base, { agora })` agora
+  aceita o relógio (mesmo padrão do `jorgebrasil-parse`); o teste fixa 30/10 (data da fixture) e ganhou o caso
+  "depois de 10/11 → encerrado". Varri os outros testes por data fixa contra o relógio real: só esse quebrava.
+- **No Windows, `scripts/rodar-testes.mjs` acusa 174/174 falhas:** `spawnSync('npm')` não acha o `npm.cmd`. É do
+  ambiente local, não dos testes (o CI roda em Linux). Para rodar aqui: um laço `npm run -s <script>` no bash.
+- **Fontes (recon pelo pg_net, grátis):**
+  - **KLEILOES e KLEILOES_VEICULOS:** o site trocou de plataforma em 09/11 (Next.js). `/imoveis` e `/veiculos` dão 404;
+    agora `/lotes` lista server-rendered com `/lote/<id>-<slug>`. Parser novo: pendência 468.
+  - **WRLEILOES:** app novo em 09/11, renderizado no navegador; `/agenda-de-leiloes` dá 404. Achar a API: pendência 469.
+  - **LEJE:** 403 "Acesso Negado" ao runner e ao banco; só o Firecrawl lê. Caminho segue sendo o feed (386).
+  - **FLEXLEILOES:** estável em 10; os 5 que saíram tiveram praça até 06/11. **DBSLEILOES** voltou a 3 sozinho.
+  - **JORGEBRASIL e CALIL_VEICULOS:** falha de rede pontual na rodada de 11/11 (prazo curto, voltam se repetir).
+  - **~70 tenants LeilãoPro em `medicao_velha`:** coleta SEMANAL de propósito (quinta, Bright Data com teto; o runner
+    residencial não cobre esta família). A cadência aprendida ainda dá ~132 h por causa dos disparos manuais de
+    25–26/10; com a rodada de 12/11 sobe para ~187 h e cobre a semana sozinha. Conferir: pendência 470.
+- Explicações gravadas em `fonte_regressao_explicada` (migração `20261111_fonte_regressao_explicada_11-11.sql`):
+  `fonte_regressao_pendente()` ficou só com a linha `(explicadas)`.
+
 ## 08/11 — FECHAMENTO DO DIA
 
 **Em produção:** baixa do William e do Marcos; aviso do MP direto no www; leilão, o próprio lote e anúncio sem preço fora das
