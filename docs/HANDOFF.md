@@ -39845,3 +39845,10 @@ assunto) — o e-mail do Jorge Brasil (Don Alonso) foi reprocessado: matrícula 
   Ferreira, Gold) com token próprio em `leiloeiros_parceiros` (status `convidado`), e-mail pelo Resend, tag
   `convite_integracao`. Sem citar a Montenegro (não pedimos autorização). Acompanhamento: pendência 467. Regra ao
   integrar: um endpoint novo SUBSTITUI o scraper da fonte (aposentar o antigo no mesmo trabalho).
+  Aviso automático: tarefa agendada `trig_01G2fH2sTp1vdzTgAbbAY6Au` (diária 16:41 Bahia) lê o inbound do Resend e o
+  status em `leiloeiros_parceiros`, e manda push ao dono só quando alguém responde. Não responde ao leiloeiro sem o
+  dono aprovar. Desligar quando todos responderem ou o dono pedir.
+- **Retomar (12/11):** pendências 461 (Pestana/ALFA/HASTA/MSIS pós-ajuste), 462 (sumidos com praça futura: FRAZAO,
+  GFLEILOES, GOLD, NOGARI, FERREIRALEIL, HASTAPUBLICA, vlleiloes), 465 (aprovação Merchant Center), 467 (convites);
+  do dono: 464 (Search Console), 451 (NF manual William), 66 (chip WhatsApp Business). Montenegro: aguardando Paulo
+  (frequência e endpoint de veículos). Bunny e texto da política de reembolso ainda a revisar.
