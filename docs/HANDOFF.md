@@ -39831,3 +39831,9 @@ assunto) — o e-mail do Jorge Brasil (Don Alonso) foi reprocessado: matrícula 
 - **Pendentes do dono:** 464 (Search Console: reenviar sitemap-hubs e indexar /educacao), 465 (acompanhar aprovação
   no Merchant Center), 451 (NF manual dos R$ 8.000 do William no WebISS), Bunny (definir objetivo).
 - **Comigo:** 461 (conferir Pestana/ALFA/HASTA/MSIS pós-ajuste), 462 (sumidos com praça futura: FRAZAO etc.).
+- **Montenegro Leilões (Fortaleza/CE) — 1ª integração DIRETA (11/11):** API do leiloeiro
+  `montenegroleiloes.com.br/api/leiloes/imoveis` (passada pelo TI, Paulo Dantas; resposta enviada pelo Resend no fio
+  dele). `scripts/scraper-montenegro.mjs` + `lib/montenegro-api.mjs` (15 testes) + `scraper-montenegro.yml` (diário
+  09:23 de Fortaleza). 1ª gravação: 29 ativos, 27 com foto, 27 com pino do mapa do próprio lote (conferido contra o
+  município). Antes eram 0 — os 8 "Montenegro" do acervo são de OUTROS leiloeiros (Faro Online / Ronaldo Montenegro
+  Faro; Marco Túlio Montenegro). Pendente com o Paulo: frequência recomendada e endpoint de veículos.
