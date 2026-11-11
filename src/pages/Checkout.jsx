@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { senhaForte, requisitosSenha } from '../lib/senha.js';
-import { validarNome, normalizarNome } from '../lib/nome.js';
+import { validarNome, validarNomeCadastro, normalizarNome } from '../lib/nome.js';
 import { salvarConvite, CHAVE_PLANO } from '../utils/convitePendente';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { acessoAssessoria } from '../lib/assessoria-acesso';
@@ -496,7 +496,8 @@ export default function Checkout() {
     setSuErro('');
     const nome = normalizarNome(su.nome), email = su.email.trim().toLowerCase(), senha = su.senha;
     if (!nome || !email || !senha) { setSuErro('Preencha nome, e-mail e senha.'); return; }
-    { const v = validarNome(nome); if (!v.ok) { setSuErro(v.erro); return; } }
+    // Explorador é grátis: só o nome basta (dono, 11/11). O nome completo é cobrado só ao pagar.
+    { const v = validarNomeCadastro(nome); if (!v.ok) { setSuErro(v.erro); return; } }
     if (!senhaForte(senha)) { setSuErro('A senha não atende aos requisitos listados.'); return; }
     if (!su.aceite) { setSuErro('Aceite os Termos de Uso para continuar.'); return; }
     criandoContaRef.current = true; // marca antes do 1º await
@@ -664,7 +665,11 @@ export default function Checkout() {
   // Só quando falta algo é que a coleta aparece antes do pagamento.
   const enderecoOk = !!(end.cep && end.logradouro && end.numero && end.bairro && end.cidade && end.uf);
   const cpfOk = cpfDigits.length === 11;
-  const perfilFaturamentoOk = cpfOk && !!nomeUsuario && enderecoOk;
+  // NOME COMPLETO PARA PAGAR (11/11, dono): o cadastro grátis aceita só o primeiro nome (inscritos da
+  // Homio), o pagamento não — NF, contrato e gateway precisam de nome e sobrenome. Antes bastava existir
+  // um nome; agora a mesma régua do cadastro (src/lib/nome.js) e, faltando, o campo aparece abaixo.
+  const nomeCompletoOk = validarNome(normalizarNome(nomeUsuario)).ok;
+  const perfilFaturamentoOk = cpfOk && nomeCompletoOk && enderecoOk;
   // Autopreenchimento pelo endereço digitado (24/09, pedido do dono — o mesmo do Índice e do contrato):
   // escolher a sugestão preenche tudo; os campos continuam editáveis à mão (o CEP segue buscando também).
   const preencherEnderecoCk = (e) => setEnd(p => ({
@@ -698,6 +703,8 @@ export default function Checkout() {
       endereco: enderecoFmt || null, endereco_cep: end.cep || null, endereco_logradouro: end.logradouro || null,
       endereco_numero: end.numero || null, endereco_complemento: end.complemento || null, endereco_bairro: end.bairro || null,
       endereco_cidade: end.cidade || null, endereco_uf: end.uf || null,
+      // Nome completo digitado aqui (conta que nasceu só com o primeiro nome) vai para o perfil.
+      ...(validarNome(normalizarNome(nomeFat)).ok ? { nome: normalizarNome(nomeFat) } : {}),
     }).eq('id', user.id);
     // CPF pelo backend (grava só hash + cifra; a chave só existe lá). Não
     // gravamos mais o CPF em texto claro no metadata do Auth.
@@ -1862,6 +1869,15 @@ export default function Checkout() {
                     <span style={{ fontSize: 13, fontWeight: 800, color: '#111' }}>Dados de faturamento</span>
                   </div>
                   <p style={{ fontSize: 11, color: '#64748b', margin: '0 0 10px', lineHeight: 1.5 }}>Necessários para faturamento e emissão fiscal da contratação.</p>
+                  {!nomeCompletoOk && (
+                    <div style={{ marginBottom: 8 }}>
+                      <input value={nomeFat} placeholder="Nome completo (como no documento)"
+                        onChange={e => setNomeFat(e.target.value)} style={{ ...ckInp, width: '100%' }} />
+                      {nomeFat && !validarNome(normalizarNome(nomeFat)).ok && (
+                        <p style={{ fontSize: 11, color: '#b91c1c', margin: '4px 0 0' }}>{validarNome(normalizarNome(nomeFat)).erro}</p>
+                      )}
+                    </div>
+                  )}
                   {!cpfOk && (
                     <div style={{ marginBottom: 8 }}>
                       <input value={cpf} inputMode="numeric" placeholder="CPF (somente números)"

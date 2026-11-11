@@ -35,6 +35,22 @@ export function erroNome(s) {
   return '';
 }
 
+/**
+ * Cadastro grátis (Explorador): aceita só o primeiro nome (11/11, dono). Espelha `validarNomeCadastro`
+ * de src/lib/nome.js. Pagamento continua exigindo `erroNome` (nome e sobrenome).
+ * @returns {string} mensagem de erro, ou '' quando válido.
+ */
+export function erroNomeCadastro(s) {
+  const v = limparNome(s);
+  if (!v) return 'Preencha seu nome.';
+  if ((v.match(/\p{L}/gu) || []).length < 2) return 'Digite seu nome.';
+  if (v.length > 80) return 'Nome muito longo (máximo 80 caracteres).';
+  if (/\d/.test(v)) return 'O nome não deve conter números.';
+  if (!CARACTERES_OK.test(v)) return 'O nome deve conter apenas letras.';
+  if (TERMO_EMPRESA.test(v)) return MSG_NOME_EMPRESA;
+  return '';
+}
+
 const PARTICULAS = new Set(['de', 'da', 'do', 'das', 'dos', 'e', 'di', 'du', 'del', 'della', 'van', 'von', 'y', 'la', 'le']);
 const cap = (p) => (p ? p[0].toLocaleUpperCase('pt-BR') + p.slice(1) : p);
 

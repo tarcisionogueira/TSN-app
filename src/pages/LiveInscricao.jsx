@@ -4,7 +4,7 @@ import { supabase } from '../utils/supabase';
 import { lerMarketing, metaTrack, openaiTrack } from '../utils/marketing';
 import { lerRef } from '../utils/ref';
 import ConvideAmigo from '../components/ConvideAmigo';
-import { validarNome } from '../lib/nome';
+import { validarNomeCadastro } from '../lib/nome';
 import { validarTelefone, limparTelefone, formatarTelefone } from '../lib/telefone';
 import CidadeAutocomplete from '../components/CidadeAutocomplete';
 import { NAVY, LATAO, AZUL } from '../utils/marca';
@@ -175,11 +175,11 @@ export default function LiveInscricao({ adminPreview = false }) {
     setErro('');
     // MESMA RÉGUA DO CADASTRO, e de propósito (27/08). Aqui não é rigor por rigor: o nome
     // vai para o contrato e para a conta que nasce nesta inscrição, e o WhatsApp é por onde
-    // sai o link da sala. `validarNome` já exige nome + sobrenome; `validarTelefone` já
+    // sai o link da sala. `validarNomeCadastro` aceita só o nome (cadastro grátis, 11/11); `validarTelefone` já
     // recusa dígito a menos ou a mais. Reusar as duas em vez de escrever régua nova é o que
     // impede a landing de virar a porta dos fundos por onde entra o dado que o resto do
     // sistema recusa — foi assim que a inscrição de teste do dono gravou "tarcisio" sozinho.
-    const vn = validarNome(form.nome);
+    const vn = validarNomeCadastro(form.nome);
     if (!vn.ok) return setErro(vn.erro);
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.email.trim())) return setErro('Informe um e-mail válido.');
     if (!limparTelefone(form.whatsapp)) return setErro('Informe o seu WhatsApp com DDD.');

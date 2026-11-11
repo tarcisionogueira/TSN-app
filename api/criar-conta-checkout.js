@@ -10,7 +10,7 @@
 export const config = { runtime: 'nodejs' };
 
 import { checkRateLimit } from './_rate-limit.js';
-import { erroNome, normalizarNome } from './_nome.js';
+import { erroNomeCadastro, normalizarNome } from './_nome.js';
 import { hashCpf, encryptCpf, validarCPF } from './_cpf.js';
 import { comprovanteValido, ERRO_SEM_COMPROVANTE } from './_comprovante-email.js';
 import { pedidoRepetido, CORPO_REPETIDO } from './_pedido-unico.js';
@@ -50,7 +50,7 @@ export default async function handler(req, res) {
   const refCodigo = b.ref_codigo ? String(b.ref_codigo) : undefined;
 
   if (!nome || !email || !senha) return res.status(400).json({ error: 'Preencha nome, e-mail e senha.' });
-  { const e = erroNome(nome); if (e) return res.status(400).json({ error: e }); }
+  { const e = erroNomeCadastro(nome); if (e) return res.status(400).json({ error: e }); }
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ error: 'E-mail inválido.' });
   if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(senha)) {
     return res.status(400).json({ error: 'A senha deve ter ao menos 8 caracteres, com maiúscula, minúscula, número e caractere especial.' });

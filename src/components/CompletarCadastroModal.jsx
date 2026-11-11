@@ -6,7 +6,7 @@ import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import CidadeAutocomplete from './CidadeAutocomplete';
 import LogoB from './LogoB';
-import { validarNome, normalizarNome } from '../lib/nome';
+import { validarNomeCadastro, normalizarNome } from '../lib/nome';
 import { validarTelefone } from '../lib/telefone';
 import { reportarErroCliente } from '../utils/reportarErro';
 
@@ -115,7 +115,7 @@ export default function CompletarCadastroModal() {
     // 19/08: eram a 3ª/4ª cópias sem o conserto — `length >= 3` aceitava "ana", e este modal
     // é o ÚNICO ponto que ainda barra o cadastro via GOOGLE (que não passa pelo Login).
     // Regra única de src/lib/nome.js e src/lib/telefone.js, como nos outros cinco fluxos.
-    if (passo === 'nome') { const v = validarNome(dados.nome); return v.ok ? true : v.erro; }
+    if (passo === 'nome') { const v = validarNomeCadastro(dados.nome); return v.ok ? true : v.erro; }
     if (passo === 'cidade') return (dados.cidade && dados.uf) ? true : 'Selecione sua cidade na lista (com o estado).';
     if (passo === 'telefone') { const t = validarTelefone(dados.telefone); return (t.ok && dados.telefone.replace(/\D/g, '').length >= 10) ? true : (t.erro || 'Informe um telefone/WhatsApp com DDD.'); }
     if (passo === 'lgpd') return dados.lgpd ? true : 'É necessário aceitar os Termos e a Política de Privacidade.';

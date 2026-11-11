@@ -26,7 +26,7 @@ export const config = { runtime: 'nodejs' };
 import { createClient } from '@supabase/supabase-js';
 import { checkRateLimit, getIP } from './_rate-limit.js';
 import { enviarEmail } from './_email.js';
-import { erroNome, normalizarNome } from './_nome.js';
+import { erroNomeCadastro, normalizarNome } from './_nome.js';
 import { edicaoDe } from './_live-edicao.js';
 import { erroTelefone, limparTelefone, normalizarTelefoneBR } from './_telefone.js';
 import { enviarLeadCapi, leadEventId, capiAtivo } from './_meta-capi.js';
@@ -103,7 +103,7 @@ export default async function handler(req, res) {
   const utm      = (b.utm && typeof b.utm === 'object') ? b.utm : {};
 
   if (!slug) return saida(400, { error: 'Evento não informado.' });
-  const eNome = erroNome(nome);
+  const eNome = erroNomeCadastro(nome);
   if (eNome) return saida(400, { error: eNome });
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return saida(400, { error: 'E-mail inválido.' });
   // `erroTelefone` deixa passar o VAZIO por contrato (obrigatoriedade é decisão de quem

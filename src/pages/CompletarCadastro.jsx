@@ -6,7 +6,7 @@ import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
 import { useAuth } from '../contexts/AuthContext';
 import CidadeAutocomplete from '../components/CidadeAutocomplete';
-import { validarNome, normalizarNome } from '../lib/nome';
+import { validarNomeCadastro, normalizarNome } from '../lib/nome';
 import { validarTelefone } from '../lib/telefone';
 
 const inp = {
@@ -80,7 +80,7 @@ export default function CompletarCadastro() {
     e.preventDefault();
     setErro('');
     // 19/08: cópias sem o conserto (aceitavam "ana" e telefone inválido) — regra única.
-    { const v = validarNome(form.nome); if (!v.ok) { setErro(v.erro); return; } }
+    { const v = validarNomeCadastro(form.nome); if (!v.ok) { setErro(v.erro); return; } }
     if (!cpfJaTem && !cpfValido(form.cpf)) { setErro('Informe um CPF válido.'); return; }
     { const t = validarTelefone(form.telefone); if (!t.ok || form.telefone.replace(/\D/g, '').length < 10) { setErro(t.erro || 'Informe um telefone/WhatsApp válido com DDD.'); return; } }
     if (!form.cidade || !form.uf) { setErro('Selecione sua cidade na lista (com o estado).'); return; }

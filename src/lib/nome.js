@@ -52,6 +52,23 @@ export function validarNome(s) {
 
 export const nomeValido = (s) => validarNome(s).ok;
 
+/**
+ * CADASTRO GRÁTIS (EXPLORADOR) ACEITA SÓ O PRIMEIRO NOME (11/11, decisão do dono): "pelo cadastro
+ * explorador a ideia é aceitar um nome ou nome completo. Já em pagamentos exigir nome completo."
+ * Mesma régua de `validarNome`, menos o sobrenome: letras, 2–80 caracteres, sem número, sem nome de
+ * empresa. Quem PAGA passa pela régua completa no checkout (`Checkout.jsx`, dados de faturamento).
+ */
+export function validarNomeCadastro(s) {
+  const v = limparNome(s);
+  if (!v) return { ok: false, erro: 'Preencha seu nome.' };
+  if ((v.match(/\p{L}/gu) || []).length < 2) return { ok: false, erro: 'Digite seu nome.' };
+  if (v.length > 80) return { ok: false, erro: 'Nome muito longo (máximo 80 caracteres).' };
+  if (/\d/.test(v)) return { ok: false, erro: 'O nome não deve conter números.' };
+  if (!CARACTERES_OK.test(v)) return { ok: false, erro: 'O nome deve conter apenas letras.' };
+  if (TERMO_EMPRESA.test(v)) return { ok: false, erro: MSG_NOME_EMPRESA };
+  return { ok: true, erro: '' };
+}
+
 // Partículas que ficam em minúsculo quando NÃO são a primeira palavra.
 const PARTICULAS = new Set(['de', 'da', 'do', 'das', 'dos', 'e', 'di', 'du', 'del', 'della', 'van', 'von', 'y', 'la', 'le']);
 

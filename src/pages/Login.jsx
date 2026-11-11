@@ -23,7 +23,7 @@ const lbl = { fontSize: 12, fontWeight: 700, color: '#475569', display: 'block',
 // Regra de senha: uma definicao so para o front (src/lib/senha.js). Ver o cabecalho de la.
 import { SENHA_FORTE, requisitosSenha } from '../lib/senha.js';
 import { traduzErroAuth, motivoErroAuth } from '../lib/erroAuth.js';
-import { validarNome, normalizarNome } from '../lib/nome.js';
+import { validarNomeCadastro, normalizarNome } from '../lib/nome.js';
 import { validarTelefone } from '../lib/telefone.js';
 import TurnstileWidget, { turnstileConfigurado } from '../components/TurnstileWidget.jsx';
 
@@ -501,7 +501,7 @@ export default function Login() {
       if (!form.nome || !form.email || !form.senha) throw new Error('Preencha nome, email e senha.');
       // Nome e sobrenome: um primeiro nome solto nao identifica ninguem na hora de emitir
       // contrato ou falar com o cliente. Regra unica em src/lib/nome.js.
-      { const v = validarNome(form.nome); if (!v.ok) throw new Error(v.erro); }
+      { const v = validarNomeCadastro(form.nome); if (!v.ok) throw new Error(v.erro); } // cadastro grátis: só o nome basta (dono, 11/11)
       // Telefone é opcional; digitado, tem de ser um número discável (2 de 53 perfis
       // tinham dígito faltando — regra única em src/lib/telefone.js).
       { const t = validarTelefone(form.telefone); if (!t.ok) throw new Error(t.erro); }

@@ -16,7 +16,7 @@
 export const config = { runtime: 'nodejs', maxDuration: 30 };
 
 import { checkRateLimit } from './_rate-limit.js';
-import { erroNome, normalizarNome } from './_nome.js';
+import { erroNomeCadastro, normalizarNome } from './_nome.js';
 import { erroTelefone, limparTelefone, normalizarTelefoneBR } from './_telefone.js';
 import { lerLeadHomio, campanhaDe, segredoConfere, tokenAtivacao, VALIDADE_ATIVACAO_DIAS } from './_homio.js';
 import { SUPABASE_URL, SERVICE_KEY, SEGREDO, sb, atualizarLead, enviarEmailAtivacao, avisarHomio } from './_homio-io.js';
@@ -75,8 +75,11 @@ export default async function handler(req, res) {
 
   // Nome e telefone passam pela MESMA régua do cadastro; o que não passa fica vazio e o popup de
   // cadastro incompleto pede no primeiro acesso (melhor que gravar "Joao" ou celular sem o 9).
+  // SÓ O PRIMEIRO NOME BASTA AQUI (dono, 11/11): "para pagamentos precisamos de nome completo, mas para
+  // esse cadastro não". O nome entra no perfil mesmo sem sobrenome — desde que seja nome de gente (só
+  // letras, sem número, sem cara de empresa). O sobrenome é exigido no checkout, antes de pagar.
   const nomeNorm = normalizarNome(lido.nome);
-  const nome = nomeNorm && !erroNome(nomeNorm) ? nomeNorm : null;
+  const nome = nomeNorm && !erroNomeCadastro(nomeNorm) ? nomeNorm : null;
   const telNorm = normalizarTelefoneBR(lido.telefone).slice(0, 15);
   const telefone = limparTelefone(telNorm) && !erroTelefone(telNorm) ? telNorm : null;
 
