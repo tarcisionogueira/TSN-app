@@ -17,6 +17,7 @@
 import { cidadeUFBare, titleCase } from './dom-parse-util.mjs';
 import { decodificarEntidades } from '../../api/_texto-imovel.js';
 import { coordValida } from '../../api/_geo.js';
+import { extrairArea } from './leilaopro-parse.mjs';
 
 export const FONTE = 'MONTENEGRO';
 export const LEILOEIRO = 'Montenegro Leilões';
@@ -96,7 +97,8 @@ export function lotesDaApi(json) {
         titulo, tipo: TIPO[sub] || 'imovel', modalidade: modalidadeDe(lei.tipo_leilao),
         cidade: titleCase(cidade), estado: String(estado).toUpperCase(),
         valor_minimo: vm, valor_avaliacao: va, valor_minimo_2: n(lot.lance_minimo_segundo_leilao) || null,
-        area_m2: n(vist.tamanho),
+        // A API quase nunca traz `tamanho` (17% em 11/11): a metragem vem no texto — mesmo extrator dos outros coletores.
+        area_m2: n(vist.tamanho) || n(extrairArea(titulo, descricao)),
         descricao: descricao.slice(0, 9000),
         url_lote: lot.url, link_edital: edital || lot.url,
         link_foto: fotos[0] || null, ...(fotos.length > 1 ? { fotos } : {}),
