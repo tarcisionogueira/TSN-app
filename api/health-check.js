@@ -358,6 +358,24 @@ async function handler(req) {
     return { status: 'erro', detalhe: `${casos.length} caso(s) — ${lista}` };
   }));
 
+  // ── Homio (11/11): inscrito do lançamento que ficou sem conta, sem e-mail de ativação ou sem aviso de volta ──
+  // Cada inscrição da página da Homio vira uma conta aqui (api/homio-lead.js). Se uma etapa para,
+  // a pessoa se inscreveu e nunca consegue entrar — e nada na Homio nem aqui avisaria sozinho.
+  itens.push(await check('Lançamento — inscritos da Homio', async () => {
+    const r = await sb('rpc/homio_leads_resumo', { method: 'POST', body: JSON.stringify({ p_horas: 72 }) });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const s = await r.json();
+    if (!s || typeof s !== 'object') throw new Error('resposta inesperada');
+    if (!s.recebidos) return { status: 'ok', detalhe: 'Nenhuma inscrição nas últimas 72 h' };
+    const base = `${s.recebidos} inscrição(ões) em 72 h: ${s.contas_criadas} conta(s) nova(s), ${s.ja_tinham_conta} já cliente(s), ${s.ativadas} ativada(s)`;
+    const problemas = [];
+    if (s.erros) problemas.push(`${s.erros} com erro (último: ${s.ultimo_erro || '—'})`);
+    if (s.sem_email_ativacao_1h) problemas.push(`${s.sem_email_ativacao_1h} sem e-mail de ativação há mais de 1 h`);
+    if (s.aviso_homio_pendente) problemas.push(`${s.aviso_homio_pendente} aviso(s) à Homio pendente(s)`);
+    if (!problemas.length) return { status: 'ok', detalhe: base };
+    return { status: s.erros || s.sem_email_ativacao_1h ? 'erro' : 'aviso', detalhe: `${base} — ${problemas.join(' · ')}` };
+  }));
+
   // ── 3b-bis. CLIENTE TRAVADO — quem tentou usar o produto e não saiu nada (10/09) ──
   // A checagem mais próxima do dinheiro que existe aqui. Num dia só, QUATRO defeitos tinham a
   // mesma assinatura: a tela parecia funcional e estava vazia por dentro, e o único que

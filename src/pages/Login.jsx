@@ -149,7 +149,15 @@ export default function Login() {
       return !!(standalone || inApp);
     } catch { return false; }
   });
-  const [erro, setErro] = useState('');
+  // Volta do link "Ative sua conta" (inscritos da Homio, api/ativar-conta.js, 11/11): o motivo vem
+  // em `?ativacao=` e vira a primeira mensagem da tela, em vez de um login mudo sem explicação.
+  const [erro, setErro] = useState(() => ({
+    ja_ativa: 'Sua conta já está ativa. Entre com o seu e-mail e a senha que você criou.',
+    expirado: 'O link de ativação venceu. Use "Esqueci minha senha" com o seu e-mail para receber um novo.',
+    invalido: 'Este link de ativação não é válido. Use "Esqueci minha senha" com o seu e-mail para receber um novo.',
+    erro: 'Não conseguimos abrir o link de ativação agora. Tente de novo em instantes ou use "Esqueci minha senha".',
+    aguarde: 'Muitas tentativas seguidas. Aguarde alguns minutos e abra o link de novo.',
+  }[params.get('ativacao')] || ''));
   const [emailNaoConfirmado, setEmailNaoConfirmado] = useState(false);
   // "Email ou senha incorretos" é o 2º maior ponto de perda do funil (8 pessoas, 3 não voltaram):
   // a pessoa esqueceu a senha e o "Esqueci minha senha" fica pequeno no canto, desligado do erro.

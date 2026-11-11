@@ -510,6 +510,10 @@
     {
       "path": "/api/arquivar-anexos-email-cron",
       "schedule": "25 * * * *"
+    },
+    {
+      "path": "/api/homio-reenvio-cron",
+      "schedule": "*/10 * * * *"
     }
   ]
 }
