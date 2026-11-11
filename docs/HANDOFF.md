@@ -6,6 +6,24 @@
 
 
 
+## 11/11 (noite) — DATA DO LEILÃO DIVERGENTE DO EDITAL (CRAVO 12733) — "NÃO PODE SE REPETIR"
+
+- **Caso (dono):** lote de terra em Feira de Santana mostrava "Data do leilão 09/03/27" e, na mesma tela, a descrição
+  "Leilão: 21/01/2027 às 15:00"; os dois relatórios foram gerados e nada barrou.
+- **Edital:** duas tentativas — 1ª: 1º leilão 21/01/2027, 2º 28/01/2027 (15h); se falhar, 2ª: 02/03 e 09/03/2027.
+  O acervo tinha a última data da tentativa de reserva. O 12732 tinha 14/10/2027 = "matrícula expedida em".
+- **Causas e consertos (597c9f46):** (1) nenhum leitor entendia data por extenso → `normalizarDatasPorExtenso`
+  (`_data-br.js`) na entrada de `extrairCondicoes` e `extrairDatasLeilao`; (2) a regra do relatório mantinha o acervo
+  quando o edital "recua" o prazo → exceção "fora do calendário": edital com as duas praças no futuro e acervo depois
+  da última, o edital vence; (3) SOLEON lia a data do corpo (o relógio é JS) → agora do resumo do leiloeiro
+  (`scripts/lib/data-resumo-leilao.mjs`); fallback genérico de `extrairData` ignora datas de documento.
+- **Vigia:** `lote_data_diverge_resumo()` + item do health-check (divergência = erro, vazia = aviso). Em 11/11: 0
+  divergências após a correção; 22 lotes sem data com data no resumo (a próxima coleta SOLEON preenche).
+- **Corrigidos:** cravoleil_12732 (21/01/2027 11h), 12733 e 12734 (21/01 15h, 2ª 28/01). Relatórios do 12733 do dono
+  (mercado 6ad045db, documental 7467acc2) foram gerados com a data velha: gerar de novo.
+- **Limite conhecido:** a "2ª tentativa" do edital (reserva) não é modelada; se a 1ª não vender, a coleta do
+  leiloeiro traz a data nova (o resumo muda) e a regra "praça vencida" do relatório mantém o acervo.
+
 ## 11/11 (tarde) — HOMIO: INSCRITO DO LANÇAMENTO (26/11) GANHA CONTA EXPLORADOR
 
 - **Pedido do dono:** a página do lançamento é da Homio (CRM); quem se inscreve lá ganha conta Explorador aqui.
