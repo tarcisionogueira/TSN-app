@@ -101,9 +101,17 @@
 | RJLEILOES 💲 | 12 | 8 | 100 | 100 | — | 100 | 92 | 100 | 100 | 1×/sem (ter) — pago |
 | VENDASGOV | 4 | 2 | 100 | 100 | — | 75 | — | 100 | — | 2×/sem |
 | SBID21 | 2 | 1 | 100 | 100 | 100 | 100 | — | 100 | 100 | 2×/sem |
+| KLEILOES (11/11)*** | 51 | — | 96 | 100 | 73 | 100 | 98 | 100(PDF) | 85 | diário (scraper-dom) |
+| WRLEILOES (11/11)*** | 12 | — | 100 | 100 | 83 | 100 | 83 | 100(PDF do leilão) | 100 | diário (scraper-dom) |
 
 `*` **Edital**: percentuais são de `link_edital` preenchido (na maioria = URL do lote, não PDF — ver caveat 1). CEF é o único com PDF real.
 `**` **BIASI**: em investigação — correção de paginação pode elevar para ~370. Piso 150 até validar; se ficar ~173, é o acervo real do site.
+`***` **KLEILOES e WRLEILOES (11/11, pendências 468/469)**: os dois sites trocaram de plataforma em 09/11 e zeraram.
+Medidas no seco sobre o site vivo, antes de gravar. **KLEILOES** (Klöckner, kleiloes.com.br): front Next.js sobre o
+backend da Suporte; 67 imóveis no catálogo, 51 na régua (10 frações ideais, 5 vagas de garagem e 1 sem foto saem pela
+regra geral); avaliação falta nos extrajudiciais (o site só mostra as praças). **WRLEILOES**: app React renderizado no
+navegador (motor `dom` com `carregarMais`); 12 imóveis dos 25 lotes do TRT11, o resto é veículo/móvel; a data gravada é
+o DIA do encerramento (a hora do site diverge do edital). O piso é aprendido do histórico (`fonte_baseline_aprendida`).
 `💲` fonte **paga** (Bright Data): coleta parada = pagar sem coletar → o monitor cobre por **frescor** (`FONTES_SEM_SAUDE`).
 
 `SUPORTE` (11) é fonte **interna** (não é leiloeiro) — nunca alertar.

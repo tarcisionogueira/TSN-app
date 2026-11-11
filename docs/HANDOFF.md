@@ -6,6 +6,22 @@
 
 
 
+## 11/11 (noite) — KLÖCKNER E WR VOLTAM A GRAVAR (pendências 468 e 469, fechadas)
+
+- **KLEILOES (ea016a53):** kleiloes.com.br virou Next.js próprio sobre o backend da Suporte em 09/11. Fonte própria
+  (`lib/kleiloes-parse.mjs`, `motor/fontes/kleiloes.mjs`, `scraper-kleiloes.mjs`, passo no `scraper-dom.yml`; veículos
+  pela chave `kleiloes` no `scraper-veiculos-motor`). Saiu do `jeleiloes-parse.mjs` — o JE segue no template antigo.
+  Mesmo id de lote do site antigo, mesmo `fonte_id`. Gravou 40 na 1ª rodada (67 no catálogo; 51 passam na régua).
+- **WRLEILOES (ca62a1c9):** virou app React renderizado no navegador. Fonte `dom`; o motor ganhou `carregarMais` em
+  `fetch-dom.mjs` (rola e clica "Carregar mais"; desligado por padrão). ids viraram uuid → os 12 antigos saíram como
+  `sumiu_da_fonte`; 12 novos gravados, todos com data, cidade, edital (PDF do leilão) e foto. A data gravada é o DIA:
+  o site diz encerra 30/11 12:00 (Manaus), o texto do edital diz 30/11 às 9h30.
+- **Não usado de propósito:** a consulta direta ao banco público que o app da WR usa foi negada pela permissão; a
+  leitura é só pela página renderizada.
+- **Recon local:** o puppeteer roda com o Chrome do sistema (`PUPPETEER_EXECUTABLE_PATH` apontando para o chrome.exe).
+- **A conferir:** 1ª rodada agendada dos veículos da Klöckner (`KLEILOES_VEICULOS`, 44 no site) e os 2 imóveis antigos
+  com leilão de 13/10 saindo na limpeza.
+
 ## 11/11 (noite) — DATA DO LEILÃO DIVERGENTE DO EDITAL (CRAVO 12733) — "NÃO PODE SE REPETIR"
 
 - **Caso (dono):** lote de terra em Feira de Santana mostrava "Data do leilão 09/03/27" e, na mesma tela, a descrição
