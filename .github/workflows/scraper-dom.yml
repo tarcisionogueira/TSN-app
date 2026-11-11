@@ -32,6 +32,8 @@ on:
       - 'scripts/lib/nordeste-veiculo.mjs'
       - 'scripts/scraper-nordeste-veiculos.mjs'
       - 'scripts/lib/jeleiloes-parse.mjs'
+      - 'scripts/lib/kleiloes-parse.mjs'
+      - 'scripts/scraper-kleiloes.mjs'
       - 'scripts/lib/leilaoindex-parse.mjs'
       - 'scripts/lib/rocha-parse.mjs'
       - 'scripts/lib/softgt-parse.mjs'
@@ -153,7 +155,7 @@ on:
   workflow_dispatch:
     inputs:
       fontes:
-        description: 'csv: softgt,nortedeminas,leilaoeletronico,suportev2,suportenext,leilovia,labasoft,baston,cassiano,arnaldo,novaserrana(recon),alfa,hasta,nordeste,nordeste_veiculos,jeleiloes,leilaoindex,rocha,albertomacedo,francoleiloes,simon,globo,leje,freitas,leiloar,lgcorretor,nakakogue,astavero,suporteoferta,comprei,leilo,lucian,alliance,mvleiloes,dian,parquedosleiloes,campolina,botelho,triacca,jorgebrasil,flaviogarcia,leiloesbrasilto,wrleiloes,turani,benedetto,cristianoescola,d1lance'
+        description: 'csv: softgt,nortedeminas,leilaoeletronico,suportev2,suportenext,leilovia,labasoft,baston,cassiano,arnaldo,novaserrana(recon),alfa,hasta,nordeste,nordeste_veiculos,jeleiloes,kleiloes,leilaoindex,rocha,albertomacedo,francoleiloes,simon,globo,leje,freitas,leiloar,lgcorretor,nakakogue,astavero,suporteoferta,comprei,leilo,lucian,alliance,mvleiloes,dian,parquedosleiloes,campolina,botelho,triacca,jorgebrasil,flaviogarcia,leiloesbrasilto,wrleiloes,turani,benedetto,cristianoescola,d1lance'
         required: false
         default: 'alfa,nordeste'
       gravar:
@@ -247,6 +249,16 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           JELEILOES_DRYRUN: ${{ env.DRYRUN_PADRAO }}
         run: node scripts/scraper-jeleiloes.mjs
+
+      # 11/11 (pendência 468): Klöckner saiu do template antigo da Suporte (era tenant do JELEILOES acima) para um
+      # front Next.js próprio. Fetch direto, grátis.
+      - name: Klöckner Leilões
+        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'kleiloes')) }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          KLEILOES_DRYRUN: ${{ env.DRYRUN_PADRAO }}
+        run: node scripts/scraper-kleiloes.mjs
 
       - name: Suporte oferta (Rafael, Portella, Fabiano Ayupp, De Paula, Leilões JA, ABA, Araújo, Rapidão Vende)
         # 10/10: achado no radar de editais (DJEN). Server-rendered, fetch grátis — diário.
@@ -741,12 +753,12 @@ jobs:
             libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64 \
             libpango-1.0-0 libcairo2 libatspi2.0-0 libgtk-3-0
 
-      - name: Veículos (Globo, JE, Simon, Nakakogue, Suporte v2, VIX, LanceVIP, Portal dos Leilões)
+      - name: Veículos (Globo, JE, Klöckner, Simon, Nakakogue, Suporte v2, VIX, LanceVIP, Portal dos Leilões)
         if: ${{ env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'veiculos') }}
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          VEIC_FONTES: globo,jeleiloes,simon,nakakogue,suportev2,vixleiloes,lancevip,portaldosleiloes
+          VEIC_FONTES: globo,jeleiloes,kleiloes,simon,nakakogue,suportev2,vixleiloes,lancevip,portaldosleiloes
           VEIC_DRYRUN: ${{ env.DRYRUN_PADRAO }}
           VEIC_MAX_LOTES: '80'
         run: node scripts/scraper-veiculos-motor.mjs

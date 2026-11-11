@@ -44,7 +44,9 @@ import { num, plaus, textoDe, tituloDeSlug, cidadeUFDeSlug, montarRowDom } from 
 
 export const TENANTS = {
   jeleiloes: { fonte: 'JELEILOES', leiloeiro: 'JE Leilões', base: 'https://jeleiloes.com.br' },
-  kleiloes: { fonte: 'KLEILOES', leiloeiro: 'Klöckner Leilões', base: 'https://kleiloes.com.br' },
+  // KLEILOES saiu daqui em 11/11 (pendência 468): o site virou Next.js próprio em 09/11 e /imoveis dá 404.
+  // Agora é fonte própria: lib/kleiloes-parse.mjs + lib/motor/fontes/kleiloes.mjs. Os rótulos/notas dele que
+  // ficam abaixo descrevem o template antigo e só valem para o JELEILOES.
 };
 
 // SLUG COM `%` (24/10, pendência #358): o título com "nº" vira `n%C2%BA` na URL ("apto-n%C2%BA-307-do-…",

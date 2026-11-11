@@ -19,5 +19,7 @@ import vixleiloes from './fontes/vixleiloes.mjs';
 import portaldosleiloes from './fontes/portaldosleiloes.mjs';
 // 05/11: os 34+ leiloeiros da plataforma Degrau (Leilão Eletrônico, Destak, Taba, GF…) — mesmo feed dos imóveis.
 import leilaoeletronico from './fontes/leilaoeletronico.mjs';
+// 11/11: Klöckner (kleiloes.com.br) virou fonte própria — os veículos saíam pelo jeleiloes, no template antigo.
+import kleiloes from './fontes/kleiloes.mjs';
 
-export const FONTES_VEICULOS = [freitas, globo, leilaobrasil, mgl, jeleiloes, simon, nakakogue, ares, suportev2, vixleiloes, lancevip, portaldosleiloes, leilaoeletronico];
+export const FONTES_VEICULOS = [freitas, globo, leilaobrasil, mgl, jeleiloes, kleiloes, simon, nakakogue, ares, suportev2, vixleiloes, lancevip, portaldosleiloes, leilaoeletronico];
