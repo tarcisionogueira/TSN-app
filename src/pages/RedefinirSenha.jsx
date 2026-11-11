@@ -86,7 +86,8 @@ export default function RedefinirSenha() {
           const { data: pf, error: errPf } = await supabase.from('perfis').select('senha_pendente').eq('id', u.id).maybeSingle();
           if (errPf) console.warn('[redefinir-senha] leitura de senha_pendente falhou:', errPf.message);
           eraAtivacao = pf?.senha_pendente === true;
-          await supabase.from('perfis').update({ senha_pendente: false }).eq('id', u.id);
+          const { error: errUp } = await supabase.from('perfis').update({ senha_pendente: false }).eq('id', u.id);
+          if (errUp) console.warn('[redefinir-senha] senha_pendente não desligou:', errUp.message);
         }
       } catch { /* padrao-ok: best-effort, ver comentário acima */ }
       setSucesso(eraAtivacao ? 'ativacao' : true);
