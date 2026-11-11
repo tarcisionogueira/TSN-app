@@ -3,7 +3,8 @@
  * fino do motor; fonte em lib/motor/fontes/wrleiloes.mjs; parser puro em lib/wrleiloes-parse.mjs. Só via
  * grátis (`semBD`).
  *
- * Env: WRLEILOES_MAX_LOTES (60) · WRLEILOES_DRYRUN (default '1') · WRLEILOES_DEBUG.
+ * 11/11 (pendência 469): o site virou app renderizado no navegador; a fonte passou a `dom` (Chromium no runner,
+ * também grátis — `semBD` fica, sem efeito no `dom`). Env: WRLEILOES_MAX_LOTES (60) · WRLEILOES_DRYRUN (default '1') · WRLEILOES_DEBUG.
  * Env infra: VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY.
  */
 import './lib/env-runner.mjs';

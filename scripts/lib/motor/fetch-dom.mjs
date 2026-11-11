@@ -30,7 +30,11 @@ const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 // monta a lista por JS ("Carregando leilões…"): em 29/10 os 3 s fixos leram a página ainda vazia e o
 // Giordano saiu com 0 enumerados e status falhou, com o site no ar e 94 lotes. Se o seletor não aparecer,
 // segue com o HTML que houver (e loga) — quem decide se zero é zero continua sendo o motor.
-export function criarMotorDom({ esperaMs = 2500, timeoutMs = 45000, delayAntesMs = 0, isolarSessao = false, usarProxyIsp = false, bloquearMidia = false, waitUntil = 'networkidle2', esperarSeletor = null, esperarSeletorMs = 20000 } = {}) {
+// `carregarMais` (11/11, WRLEILOES): `{ texto, max, esperaMs }`. Lista que só cresce clicando num botão ("Carregar mais":
+// 12 de 25 lotes na 1ª carga) — clica no botão cujo texto casa até ele sumir ou bater `max` cliques. Bateu o teto com o
+// botão ainda lá = lista cortada: loga, e o HTML entregue é o que carregou (o motor não confunde com fim da lista
+// porque a varredura de sumidos só roda com lista completa). Default null: nenhuma outra fonte muda.
+export function criarMotorDom({ esperaMs = 2500, timeoutMs = 45000, delayAntesMs = 0, isolarSessao = false, usarProxyIsp = false, bloquearMidia = false, waitUntil = 'networkidle2', esperarSeletor = null, esperarSeletorMs = 20000, carregarMais = null } = {}) {
   const estado = { semCota: false };   // dom não usa Bright Data; campo existe pelo contrato
   const comProxy = usarProxyIsp && proxyIspDisponivel();
   let browser = null;
@@ -99,6 +103,26 @@ export function criarMotorDom({ esperaMs = 2500, timeoutMs = 45000, delayAntesMs
           .catch(() => console.error(`   [dom] "${seletor}" não apareceu em ${Math.round(esperarSeletorMs / 1000)}s em ${url} — lendo o que houver`));
       }
       await new Promise(r => setTimeout(r, esperaMs));   // hidratação após network idle
+      if (carregarMais?.texto) {
+        const alvo = String(carregarMais.texto).toLowerCase();
+        const max = carregarMais.max ?? 10;
+        let cliques = 0;
+        for (; cliques < max; cliques++) {
+          // Rola até o fim antes: o botão só é montado quando a lista entra na tela (no WR, sem rolar, ele nem
+          // existe no HTML do navegador sem tela).
+          await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+          await new Promise(r => setTimeout(r, 800));
+          const clicou = await page.evaluate((t) => {
+            const b = [...document.querySelectorAll('button, a')].find((e) => (e.textContent || '').trim().toLowerCase() === t);
+            if (!b || b.disabled) return false;
+            b.click();
+            return true;
+          }, alvo);
+          if (!clicou) break;
+          await new Promise(r => setTimeout(r, carregarMais.esperaMs ?? 1500));
+        }
+        if (cliques === max) console.error(`   [dom] "${carregarMais.texto}" ainda visível após ${max} cliques em ${url} — lista pode estar cortada`);
+      }
       const html = await page.content();
       return { html: html || null, via: 'dom' };
     } catch (e) {

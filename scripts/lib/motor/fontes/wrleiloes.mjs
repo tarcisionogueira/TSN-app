@@ -1,8 +1,9 @@
 /**
- * FONTE (config) — WR LEILÕES (wrleiloes.com.br; Wesley Silva Ramos, Boa Vista/RR + Manaus/Macapá/Rio Branco). Plataforma
- * própria (PHP + jQuery), server-rendered, sem anti-bot → fetch direto, grátis. Sem catálogo por categoria: a agenda
- * lista os leilões abertos, o leilão lista os lotes (20 por página, `?page=N`) e o card de veículo sai antes de abrir.
- * Parser puro em lib/wrleiloes-parse.mjs; teste em scripts/testes/wrleiloes-parse.mjs.
+ * FONTE (config) — WR LEILÕES (wrleiloes.com.br; Wesley Silva Ramos, Boa Vista/RR + Manaus/Macapá/Rio Branco).
+ * Pendência 469 (11/11): o site PHP server-rendered virou um app React que monta tudo no navegador — o HTML cru vem
+ * sem leilão nenhum. Agora é fonte `dom` (Chromium renderiza; grátis, roda no GitHub Actions como ALFA/HASTA).
+ * `/leiloes` lista os leilões abertos → `/leiloes/<uuid>` lista os lotes (o motor clica "Carregar mais" até o fim) →
+ * `/lotes/<uuid>`. Parser puro em lib/wrleiloes-parse.mjs; teste em scripts/testes/wrleiloes-parse.mjs.
  */
 import { TENANTS, extrairUrlsDeLote, extrairUrlsDeEvento, idDaUrl, parseDetalhe, montarRow, checarQualidade } from '../../wrleiloes-parse.mjs';
 
@@ -10,17 +11,25 @@ export const TENANTS_POR_CHAVE = TENANTS;
 
 export default {
   chave: 'wrleiloes',
-  fetch: 'fetch',
-  catalogo: '/agenda-de-leiloes',
+  fetch: 'dom',
+  dom: {
+    esperaMs: 2500,
+    // O app pinta a lista depois do 1º carregamento: espera o card (`h3`) ou o título do lote (`h1`).
+    esperarSeletor: (url) => (/\/lotes\//.test(url) ? 'h1' : 'h3'),
+    carregarMais: { texto: 'Carregar mais', max: 15 },   // 12 lotes por carga; 15 cliques = 192 lotes por leilão
+  },
+  catalogo: '/leiloes',
   paginaParam: 'page',
-  maxPages: 1,           // a agenda é uma página só
-  maxPagesEvento: 8,     // 30/10: TRT11 com 25 lotes em 2 páginas; o laço para na 1ª página sem lote novo
+  maxPages: 1,           // a lista de leilões é uma página só
+  maxEventos: 15,        // 8 abertos em 11/11 (DETRAN fica de fora no parser)
+  maxPagesEvento: 1,     // a lista do leilão cresce por clique, não por página
   maxRefresh: 30,
   tenants: Object.values(TENANTS),
   parse: { extrairUrlsDeLote, extrairUrlsDeEvento, idDaUrl, parseDetalhe, montarRow, checarQualidade },
   conhecimento: {
-    plataforma: 'Própria (PHP + jQuery), server-rendered', acesso: 'fetch-direto', custo: 'gratis', anti_bot: 'nenhum',
-    enumeracao: '/agenda-de-leiloes → /leilao/<id>/<slug>?page=N (card de veículo filtrado) → /lote/<id>/<slug>; data e situação do leilão',
-    url_lote: '/lote/<id>/<slug>', scraper: 'scraper-wrleiloes.mjs',
+    plataforma: 'App React (Vite) renderizado no navegador; fotos e editais em wrleiloes.s3.sa-east-1.amazonaws.com',
+    acesso: 'dom-puppeteer', custo: 'gratis', anti_bot: 'nenhum',
+    enumeracao: '/leiloes (abertos, antes de "Leilões anteriores") → /leiloes/<uuid> (botão "Carregar mais") → /lotes/<uuid>; edital e local na página do leilão',
+    url_lote: '/lotes/<uuid>', scraper: 'scraper-wrleiloes.mjs',
   },
 };

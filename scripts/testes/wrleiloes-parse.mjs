@@ -1,54 +1,70 @@
-// WR LEILÕES (wrleiloes.com.br, 30/10) — páginas reais (sem <script>/<style>):
-//   agenda: `/agenda-de-leiloes` (TRT11 734 + SMTRAN 810); leilao-734: TRT11 "IMOVEIS e MOVEIS" pág. 1 (20 cards, 4
-//   veículos), 30/11/2026 10:00, "Aberto para Lances"; 54339: terreno com casa em Manaus ("desta cidade" + "Registro …
-//   de Manaus/AM"); 54348: apartamento em Manaus ("… Protestos de Letras de Manaus."); 54358: Boa Vista-RR; 54362:
-//   fazenda em Rio Preto da Eva – AM (280 ha); 54342: móveis (mesa, guarda-roupa) num card "DIVERSOS/".
+// WR LEILÕES (wrleiloes.com.br, 11/11, pendência 469) — o site virou app React renderizado no navegador.
+// Fixtures: HTML do Chromium (motor `dom`) de 11/11 — /leiloes (8 abertos + "Leilões anteriores"), o leilão do TRT11
+// "IMOVEIS e MOVEIS" com os 25 lotes (depois do "Carregar mais"), o lote 1 (imóvel na Rua 24 de Maio, Manaus/AM) e o
+// lote 2 (Chevrolet Prisma).
 import fs from 'fs';
-import { TENANTS, extrairUrlsDeEvento, extrairUrlsDeLote, parseDetalhe, montarRow, checarQualidade, idDaUrl, cidadeDoBem } from '../lib/wrleiloes-parse.mjs';
+import { TENANTS, extrairUrlsDeEvento, extrairUrlsDeLote, parseDetalhe, montarRow, checarQualidade, idDaUrl, lerLeilao, dataComFuso, cardEhImovel, cidadeDoBem } from '../lib/wrleiloes-parse.mjs';
+
 const ler = (n) => fs.readFileSync(new URL(`./fixtures/wrleiloes-${n}.html`, import.meta.url), 'utf8');
 const B = 'https://www.wrleiloes.com.br';
-const HOJE = new Date('2026-10-30T12:00:00-03:00');
+const AGORA = new Date('2026-11-11T12:00:00-03:00');
 const T = TENANTS.wrleiloes;
-const LEILAO = ler('leilao-734');
-const fetchFonte = async (u) => (/\/leilao\/734\//.test(u) ? { html: LEILAO, via: 'direto' } : { html: null, via: 'direto-404' });
+const EVENTO = ler('evento-trt11');
+const U_EVENTO = `${B}/leiloes/71015981-ba8b-4062-b0e7-fecb119a08cf`;
+const fetchFonte = async (u) => (u === U_EVENTO ? { html: EVENTO, via: 'dom' } : { html: null, via: 'dom-404' });
 let ok = 0, falhas = 0;
 const eq = (nome, a, b) => { const passou = JSON.stringify(a) === JSON.stringify(b); passou ? ok++ : falhas++; if (!passou) console.log(`✗ ${nome}: ${JSON.stringify(a)} ≠ ${JSON.stringify(b)}`); };
 
-eq('agenda: só o leilão do TRT11 (SMTRAN é só veículo)', [...extrairUrlsDeEvento(ler('agenda')).keys()], ['734']);
-const lotes = extrairUrlsDeLote(LEILAO);
-eq('leilão 734 pág. 1: 16 de 20 cards (4 veículos fora)', [lotes.size, lotes.has('54340'), lotes.has('54339')], [16, false, true]);
-eq('id do lote', idDaUrl(`${B}/lote/54339/diversos-`), '54339');
+// 1. Leilões: só os abertos; DETRAN (só veículo) e "Leilões anteriores" fora
+const evs = extrairUrlsDeEvento(ler('leiloes'));
+eq('8 leilões abertos (2 DETRAN e os anteriores fora)', evs.size, 8);
+eq('TRT11 está, com a url do leilão', evs.get('71015981-ba8b-4062-b0e7-fecb119a08cf'), U_EVENTO);
+eq('DETRAN-AM (encerrado/veículos) fora', [...evs.keys()].some((k) => k.startsWith('cde472b3') || k.startsWith('0b98584f') || k.startsWith('189ded72')), false);
 
-const lote = async (id) => { const u = `${B}/lote/${id}/diversos-`; const d = await parseDetalhe(ler(`lote-${id}`), u, { fetchFonte, agora: HOJE }); return { d, r: d && montarRow(u, d, T) }; };
+// 2. Lotes do leilão: 25 cards, 12 imóveis
+const lotes = extrairUrlsDeLote(EVENTO);
+eq('12 imóveis dos 25 lotes (veículo, móvel, barco, equipamento fora)', lotes.size, 12);
+eq('lote 1 (imóvel) dentro, lote 2 (Prisma) fora', [lotes.has('a8013a79-0e60-422e-9f28-79f2fa0f7a9b'), lotes.has('cb074c02-4cae-4973-8423-cd6bb75003b1')], [true, false]);
+eq('id da url é o uuid', idDaUrl(`${B}/lotes/a8013a79-0e60-422e-9f28-79f2fa0f7a9b`), 'a8013a79-0e60-422e-9f28-79f2fa0f7a9b');
+eq('card: direitos aquisitivos de apto é imóvel', cardEhImovel('DIREITOS AQUISITIVOS | APTO 306 | SPLENDORE COMFORT RESIDENCE'), true);
+eq('card: moto com ano/ano não é imóvel', cardEhImovel('HONDA NXR 160 BROS ESDD | 2022/2023 | PLACA RZB00B90'), false);
+eq('card: áreas de terras é imóvel', cardEhImovel('02 ÁREAS DE TERRAS | MARAJÓ MIRI E SÃO SEBASTIÃO | IRANDUBA/AM'), true);
 
-const { d, r } = await lote('54339');
-eq('54339 título/cidade', [r.titulo, r.cidade, r.estado], ['Terreno - Rua Vinte e Quatro de Maio - Manaus/AM', 'Manaus', 'AM']);
-eq('54339 avaliação 800 mil, lance 40% = 320 mil, data do LEILÃO', [r.valor_avaliacao, r.valor_minimo, r.data_leilao], [800000, 320000, '2026-11-30T10:00:00-03:00']);
-eq('54339 judicial, matrícula 5112, 357,05 m², aberto', [r.modalidade, r.numero_matricula, r.area_m2, d.encerrado, d.naoImovel], ['judicial', '5112', 357.05, false, false]);
-eq('54339 foto (slide vazio fora) e edital PDF', [d.fotos.length, /\/imgTmp\/ft[0-9a-f]+\.png$/.test(r.link_foto), /\/download\/[0-9a-f]+\.pdf$/.test(r.link_edital)], [1, true, true]);
-eq('54339 passa na qualidade', checarQualidade(r, { estrito: false }).descartar, false);
+// 3. Cabeçalho do leilão
+const L = lerLeilao(EVENTO);
+eq('leilão: encerramento no fuso de Manaus, local, modalidade', [L.encerramento, L.local, L.modalidade, L.encerrado], ['2026-11-30T12:00:00-04:00', 'Manaus - AM', 'judicial', false]);
+eq('leilão: edital em PDF', /\/documents\/auctions\/.+\.pdf$/.test(L.edital), true);
+eq('fuso de Rio Branco', dataComFuso('05/12/2026, 10:00\nhorário de Rio Branco'), '2026-12-05T10:00:00-05:00');
+eq('sem fuso dito, Brasília', dataComFuso('05/12/2026, 10:00'), '2026-12-05T10:00:00-03:00');
 
-const a = await lote('54348');
-eq('54348 apartamento em Manaus (nome sem UF)', [a.r.titulo, a.r.tipo, a.r.cidade], ['Apartamento - Rua Rio Madeira, Nº 1122 - Manaus/AM', 'apartamento', 'Manaus']);
-eq('54348 valores e matrícula', [a.r.valor_avaliacao, a.r.valor_minimo, a.r.numero_matricula], [430000, 215000, '14.899']);
+// 4. Lote imóvel
+const uLote = `${B}/lotes/a8013a79-0e60-422e-9f28-79f2fa0f7a9b`;
+const d = await parseDetalhe(ler('lote-imovel'), uLote, { fetchFonte, agora: AGORA });
+eq('título', d.titulo, 'IMÓVEL | ÁREA DE 357,05M² | RUA 24 DE MAIO Nº 549 | CENTRO');
+eq('cidade do corpo ("Manaus/AM")', [d.cidade, d.estado], ['Manaus', 'AM']);
+eq('avaliação 800 mil, mínimo 320 mil', [d.valor_avaliacao, d.valor_minimo], [800000, 320000]);
+eq('data = o DIA do encerramento (a hora diverge do edital)', d.data_leilao, '2026-11-30');
+eq('área, matrícula, processo', [d.area_m2, d.numero_matricula, d.numero_processo], [357.05, '5.112', '0000103-95.2018.5.11.0017']);
+eq('edital do leilão e 2 fotos', [/\.pdf$/.test(d.link_edital), d.anexos.length, d.fotos.length], [true, 1, 2]);
+eq('judicial, aberto, imóvel', [d.modalidade, d.situacao, d.encerrado, d.naoImovel], ['judicial', 'Aberto para lances', false, false]);
+eq('descrição sem o markdown (**)', /\*\*/.test(d.descricao), false);
+const row = montarRow(uLote, d, T);
+eq('fonte_id com o uuid', row.fonte_id, 'wrleiloes_a8013a79-0e60-422e-9f28-79f2fa0f7a9b');
+eq('passa na qualidade', checarQualidade(row, { estrito: false }).ok, true);
+eq('depois do encerramento (12h de Manaus = 13h de Brasília) → encerrado', (await parseDetalhe(ler('lote-imovel'), uLote, { fetchFonte, agora: new Date('2026-11-30T13:01:00-03:00') })).encerrado, true);
+eq('antes dele, aberto', (await parseDetalhe(ler('lote-imovel'), uLote, { fetchFonte, agora: new Date('2026-11-30T12:59:00-03:00') })).encerrado, false);
 
-const bv = await lote('54358');
-eq('54358 Boa Vista-RR', [bv.r.cidade, bv.r.estado, bv.r.valor_minimo, bv.r.numero_matricula], ['Boa Vista', 'RR', 172500, '121.395']);
+// 5. Leilão que não abre: o lote segue (data e valores vêm da página do lote), só sem edital
+const semLeilao = await parseDetalhe(ler('lote-imovel'), uLote, { fetchFonte: async () => ({ html: null, via: 'dom-falha' }), agora: AGORA });
+eq('sem a página do leilão: lote lido, sem edital', [semLeilao.valor_minimo, semLeilao.data_leilao, semLeilao.link_edital], [320000, '2026-11-30', null]);
 
-const fz = await lote('54362');
-eq('54362 fazenda em Rio Preto da Eva – AM, rural, avaliada em sua totalidade', [fz.r.cidade, fz.r.tipo, fz.r.valor_avaliacao, fz.r.valor_minimo], ['Rio Preto da Eva', 'rural', 550570.33, 220228.12]);
+// 6. Veículo e casca vazia
+eq('lote de veículo marcado como não imóvel', (await parseDetalhe(ler('lote-veiculo'), `${B}/lotes/cb074c02-4cae-4973-8423-cd6bb75003b1`, { fetchFonte, agora: AGORA })).naoImovel, true);
+eq('casca do app sem título → null (não consegui ler)', await parseDetalhe('<html><body><div id="root"></div></body></html>', uLote, { fetchFonte }), null);
 
-const mv = await lote('54342');
-eq('54342 móveis num card DIVERSOS = não imóvel', mv.d.naoImovel, true);
+// 7. Cidade nas formas do leiloeiro
+eq('"Boa Vista-RR"', cidadeDoBem('IMÓVEL | TERRENO 362 M² | RUA CARMELO | BOA VISTA-RR').cidade, 'Boa Vista');
+eq('"município de Parintins, Estado do Amazonas"', cidadeDoBem('situado no município de Parintins, Estado do Amazonas').cidade, 'Parintins');
 
-eq('UF por extenso vira sigla', cidadeDoBem('no município de Parintins, Estado do Amazonas, medindo'), { cidade: 'Parintins', estado: 'AM' });
-eq('sem nome de cidade → nula (não inventa Manaus)', cidadeDoBem('Uma área de terras localizada no lado direito da Estrada dos Moraes'), { cidade: null, estado: null });
-
-const enc = await parseDetalhe(ler('lote-54339'), `${B}/lote/54339/x`, { fetchFonte: async () => ({ html: LEILAO.replace('status aberto', 'status encerrado').replace('Aberto para Lances', 'Encerrado'), via: 'direto' }), agora: HOJE });
-eq('leilão encerrado → lote encerrado', enc.encerrado, true);
-const semLeilao = await parseDetalhe(ler('lote-54339'), `${B}/lote/54339/x`, { fetchFonte: async () => ({ html: null, via: 'direto-503' }), agora: HOJE });
-eq('leilão fora do ar → null (sem detalhe), nunca lote sem data', semLeilao, null);
-eq('página sem lote → null', await parseDetalhe('<body>nada</body>', `${B}/lote/1/x`, { agora: HOJE }), null);
-
-console.log(falhas ? `\n${falhas} falha(s), ${ok} ok` : `✓ wrleiloes-parse: ${ok}/${ok} asserções`);
+console.log(`wrleiloes-parse: ${ok} ok, ${falhas} falha(s)`);
 if (falhas) process.exit(1);
