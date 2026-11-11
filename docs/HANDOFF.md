@@ -39837,3 +39837,11 @@ assunto) — o e-mail do Jorge Brasil (Don Alonso) foi reprocessado: matrícula 
   09:23 de Fortaleza). 1ª gravação: 29 ativos, 27 com foto, 27 com pino do mapa do próprio lote (conferido contra o
   município). Antes eram 0 — os 8 "Montenegro" do acervo são de OUTROS leiloeiros (Faro Online / Ronaldo Montenegro
   Faro; Marco Túlio Montenegro). Pendente com o Paulo: frequência recomendada e endpoint de veículos.
+  Qualidade após o conserto de área (11/11): 29 ativos · área 29/29 (vinha 17% — a API quase não traz `tamanho`, agora
+  sai do texto com `extrairArea`) · pino 27/29 · data 100%. Não havia scraper antigo da Montenegro: sem duplicidade.
+  Monitor: `fonte_saude` (via `api-leiloeiro`) + `leiloeiro_conhecimento`. Agradecimento enviado ao Paulo e à Fernanda.
+- **Convites de conexão direta — lote 1 (11/11):** 20 leiloeiros (Leilões Judiciais, Zuk, Mega, Site Leilões, Lance SE,
+  João Emílio, Lance no Leilão, Biasi, Grupo Lance, Web Leilões, JE, Alfa, Renovar, VIP, DG, Leilopar, Calil, Müller,
+  Ferreira, Gold) com token próprio em `leiloeiros_parceiros` (status `convidado`), e-mail pelo Resend, tag
+  `convite_integracao`. Sem citar a Montenegro (não pedimos autorização). Acompanhamento: pendência 467. Regra ao
+  integrar: um endpoint novo SUBSTITUI o scraper da fonte (aposentar o antigo no mesmo trabalho).
