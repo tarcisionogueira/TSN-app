@@ -126,6 +126,9 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true, situacao: 'ja_tinha_conta' });
   }
 
+  // Telefone já usado por outra conta (11/11, 1º teste: o WhatsApp do testador já estava na conta antiga
+  // dele). A conta nasce sem telefone e o popup pede outro; fica anotado na inscrição para a equipe ver.
+  let telefoneDuplicado = false;
   if (!retomada) {
   const meta = { role: 'explorador', origem_homio: campanha, ...(nome ? { nome } : {}), ...(telefone ? { whatsapp: telefone } : {}) };
   const cRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
@@ -171,6 +174,7 @@ export default async function handler(req, res) {
       // Índice único de telefone: WhatsApp já usado por outra conta. Grava o resto sem ele.
       const { telefone: _t, ...semTel } = perfil;
       rp = await gravarPerfil(semTel);
+      telefoneDuplicado = true;
     }
     if (!rp.ok) console.error('[homio-lead] perfil não gravado', rp.status, (await rp.text().catch(() => '')).slice(0, 200));
   } catch (e) { console.error('[homio-lead] perfil não gravado', e?.message || e); }
@@ -179,7 +183,8 @@ export default async function handler(req, res) {
   const tok = tokenAtivacao(lead.id, segredo);
   const expira = new Date(Date.now() + VALIDADE_ATIVACAO_DIAS * 86400000).toISOString();
   const okGrav = await atualizarLead(lead.id, {
-    situacao: 'conta_criada', user_id: userId, conta_nova: true, erro: null,
+    situacao: 'conta_criada', user_id: userId, conta_nova: true,
+    erro: telefoneDuplicado ? 'aviso: WhatsApp já usado por outra conta — conta criada sem telefone (o popup pede outro)' : null,
     token_hash: tok.hash, token_expira_em: expira,
   });
   lead = { ...lead, situacao: 'conta_criada', user_id: userId, conta_nova: true, token_hash: tok.hash, token_expira_em: expira };
