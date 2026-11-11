@@ -20,6 +20,7 @@ import { vasculharDocumentos, chaveDocCanonica , ehDocumento } from './_doc-scan
 import { extrairRegistroMatricula } from './_registro-matricula.js';
 import { extrairDescricaoDoCorpo, extrairAreaM2, decodificarEntidades } from './_texto-imovel.js';
 import { carregarPDFParse } from './_pdf-safe.js';
+import { normalizarDatasPorExtenso } from './_data-br.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -275,7 +276,8 @@ export function extrairDatasLeilao(html, { estrito = false } = {}) {
   const vazio = { inicio: null, fim: null, encerradaEm: null, encerramento: null, praca2: null };
   if (!html) return vazio;
   const ancora = estrito ? CTX_ANCORA_ESTRITA : CTX_ANCORA;
-  let txt = html.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');
+  // Data por extenso → dd/mm/aaaa (11/11, Cravo 12733: "1º Leilão no dia 21 de janeiro de 2027").
+  let txt = normalizarDatasPorExtenso(html.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' '));
   if (/leiloesjudiciais\.com\.br/i.test(html)) {
     // Sem os rótulos, NÃO cai no genérico: foi ele que gravou "hoje" como início.
     const semScript = html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');

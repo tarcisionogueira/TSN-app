@@ -69,10 +69,15 @@ export function extrairData(html) {
   // Prioriza datas próximas de "leilão", "praça", "data" — evita pegar data de cadastro
   const ancora = texto.match(/(?:leil[ãa]o|pra[çc]a|encerr|data\s+do\s+leil)[^\d]{0,40}(\d{2}\/\d{2}\/\d{4})/i);
   if (ancora) return normalizarData(ancora[1]);
-  // Fallback: primeira data futura plausível no texto
-  const todas = [...texto.matchAll(/(\d{2}\/\d{2}\/\d{4})/g)].map(m => m[1]);
-  for (const d of todas) {
-    const iso = normalizarData(d);
+  // Fallback: primeira data futura plausível no texto — MENOS as datas de DOCUMENTO (11/11, Cravo
+  // 12732): a página dizia "matrícula do imóvel expedida em 14/10/2027" (ano errado do leiloeiro) e
+  // essa virou a data do leilão, contra "Leilão: 21/01/2027" publicado no resumo. Data que o texto
+  // ancora como emissão, apuração, assinatura, vencimento de débito ou prazo NUNCA é data de pregão.
+  const RE_DATA_DE_DOCUMENTO = /(expedid|emitid|apurad|assinad|gerad|publicad|registrad|averbad|vencid|vencimento|atualizad|calculad|consulta|certid|protocol|at[ée]\s*$|desde\s*$|em\s+aberto)[^\d]{0,30}$/i;
+  for (const m of texto.matchAll(/(\d{2}\/\d{2}\/\d{4})/g)) {
+    const antes = texto.slice(Math.max(0, m.index - 45), m.index);
+    if (RE_DATA_DE_DOCUMENTO.test(antes)) continue;
+    const iso = normalizarData(m[1]);
     if (iso && iso >= new Date().toISOString().slice(0, 10)) return iso;
   }
   return null;

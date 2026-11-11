@@ -358,6 +358,23 @@ async function handler(req) {
     return { status: 'erro', detalhe: `${casos.length} caso(s) — ${lista}` };
   }));
 
+  // ── Data do leilão × data publicada pelo leiloeiro (11/11, Cravo 12733, "não pode se repetir") ──
+  // O lote mostrava "Data do leilão 09/03/27" com "Leilão: 21/01/2027" na descrição da mesma tela, e
+  // passou por dois relatórios. Divergência gravada = erro (o cliente vê a data errada); data vazia
+  // com o leiloeiro publicando uma = aviso (a coleta deixou de ler o campo).
+  itens.push(await check('Captura — data do leilão diverge da publicada pelo leiloeiro', async () => {
+    const r = await sb('rpc/lote_data_diverge_resumo', { method: 'POST', body: '{}' });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const casos = await r.json();
+    if (!Array.isArray(casos)) throw new Error('resposta inesperada');
+    const diverge = casos.filter((c) => c.data_gravada !== '(vazia)');
+    const vazias = casos.length - diverge.length;
+    if (!casos.length) return { status: 'ok', detalhe: 'Nenhuma divergência' };
+    const ex = diverge.slice(0, 5).map((c) => `${c.fonte_id}: gravada ${c.data_gravada}, leiloeiro ${c.data_resumo}`).join(' | ');
+    if (diverge.length) return { status: 'erro', detalhe: `${diverge.length} lote(s) com data DIVERGENTE${vazias ? ` e ${vazias} sem data` : ''} — ${ex}` };
+    return { status: 'aviso', detalhe: `${vazias} lote(s) sem data gravada, com data publicada pelo leiloeiro` };
+  }));
+
   // ── Homio (11/11): inscrito do lançamento que ficou sem conta, sem e-mail de ativação ou sem aviso de volta ──
   // Cada inscrição da página da Homio vira uma conta aqui (api/homio-lead.js). Se uma etapa para,
   // a pessoa se inscreveu e nunca consegue entrar — e nada na Homio nem aqui avisaria sozinho.

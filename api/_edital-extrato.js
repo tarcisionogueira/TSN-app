@@ -11,6 +11,7 @@ import { hostExternoSeguro, fetchExternoSeguro } from './_allowed-hosts.js';
 import { carregarPDFParse } from './_pdf-safe.js';
 import { normalizarDocumento } from './_doc-normalizar.js';
 import { extrairDatasLeilao } from './enriquecer-lote.js';
+import { normalizarDatasPorExtenso } from './_data-br.js';
 import { cacheLer, cacheGravar, chaveUrl, chaveConteudo, extrairMatriculaTexto, extrairPagamentoTexto, extrairCustosTexto, extrairIdentidadeTexto, extrairNumeroProcessoTexto } from './_doc-extracao.js';
 import { anthropicFetch } from './_claude.js';
 import { classificarDocumento, blocoParaIA, temTextoUtil } from './_doc-leitura.js';
@@ -154,7 +155,9 @@ export function isolarBlocoDoLote(texto, { valorMinimo, valorAvaliacao } = {}) {
 // Extrai praças/pagamento/avaliação de TEXTO plano (PDF com camada de texto ou HTML).
 // Exportada para teste isolado (scripts) e reuso.
 export function extrairCondicoes(texto) {
-  const t = String(texto || '').replace(/\s+/g, ' ');
+  // Data por extenso ("21 de janeiro de 2027") vira dd/mm/aaaa antes de tudo — sem isto o edital da
+  // Cravo 12733 (11/11) saiu com as duas praças SEM DATA e a divergência com o acervo nem foi vista.
+  const t = normalizarDatasPorExtenso(String(texto || '')).replace(/\s+/g, ' ');
   if (t.length < 300) return null;
   const out = { pracas: [], formaPagamento: '', avaliacao: 0 };
   // Avaliação: maior valor ANCORADO na palavra (não pega débito/lance solto).

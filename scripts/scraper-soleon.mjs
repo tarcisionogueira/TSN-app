@@ -51,6 +51,7 @@ import { galeriaDoHtml, montarFotos, FONTES_PASTA_DA_CAPA } from './lib/galeria-
 import { veiculoDoLote } from './lib/veiculo-do-lote.mjs';
 import { UFS } from './lib/dom-parse-util.mjs';
 import { patioPreservado } from './lib/patio-veiculo.mjs';
+import { dataDoResumoSoleon } from './lib/data-resumo-leilao.mjs';
 
 // Tenants SOLEON confirmados no recon (23/07). fonte = chave única no acervo/monitor;
 // o baseline auto-aprendido (monitor-fontes-cron) passa a vigiar cada um após alguns runs.
@@ -402,6 +403,7 @@ function idDaUrl(url) {
 // Incremento/Comissão; fallbacks robustos; cidade/UF por "CIDADE/UF".
 function parseDetalhe(html, url) {
   const base = extrairGenerico(html, url) || {};
+  const ogResumo = base.descricao;
   // DESCRIÇÃO INTEIRA (22/10): o genérico lê a og:description, que a plataforma CORTA em ~150 caracteres
   // com "..." — 14 tenants (CERULI, AGOSTINHO, DANIELGARCIA, FERREIRA, PURCENA, ISAIAS, APICE…) gravavam
   // a descrição pela metade. O texto completo está no corpo: `<b>Descrição: </b>…</div>`.
@@ -411,6 +413,13 @@ function parseDetalhe(html, url) {
     const praca = (String(base.descricao || '').match(/^Leil[ãa]o:[^,]{0,40},\s*/i) || [''])[0];
     base.descricao = `${praca}${descCorpo}`;
   }
+  // A DATA QUE O LEILOEIRO PUBLICA VENCE (11/11, Cravo 12733). O resumo da plataforma abre com
+  // "Leilão: 21/01/2027 às 15:00" — é o campo do próprio leiloeiro. Sem ler daqui, o genérico caía em
+  // `extrairData` sobre o corpo (que não tem a data: o relógio é preenchido por JS) e o lote ficou com
+  // 09/03/2027, enquanto a descrição dizia 21/01/2027 — e o cliente via as duas na mesma tela.
+  // Lê do resumo ORIGINAL (og:description) e, se a troca pela descrição do corpo tirou o prefixo, da final.
+  const dataResumo = dataDoResumoSoleon(ogResumo) || dataDoResumoSoleon(base.descricao);
+  if (dataResumo) base.data_leilao = dataResumo;
   // Decodifica entidades antes de qualquer regex (18/08): `Leil&atilde;o`, `1&ordm;`,
   // `matr&iacute;cula` e `m&sup2;` nao casam com regex acentuada, e o resultado nao e erro —
   // e valor faltando com cara de ausencia. Ver `api/_texto-imovel.js`.

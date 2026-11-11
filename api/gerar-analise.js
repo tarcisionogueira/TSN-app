@@ -3301,9 +3301,18 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
         // (25/08) ainda estava no futuro quando corrigiu o teto da plataforma (24/09).
         const jaPassou = (d) => { const t = Date.parse(d); return Number.isFinite(t) && t < Date.now() - DIA_MS; };
         const acervoNoFuturo = (d) => { const t = Date.parse(d); return Number.isFinite(t) && t > Date.now(); };
+        // FORA DO CALENDÁRIO DO EDITAL (11/11, Cravo 12733, pedido do dono: "não pode se repetir").
+        // O edital trazia o calendário COMPLETO — 1º leilão 21/01/2027 e 2º 28/01/2027, os dois no
+        // futuro — e o acervo carregava 09/03/2027, DEPOIS da última praça. O "recuo sem prova"
+        // protege o prazo quando o documento pode estar falando do INÍCIO de uma praça que vai além;
+        // mas uma data posterior à ÚLTIMA praça do edital não é prazo de nada: é data errada. Mesma
+        // lógica da praça única (o edital é completo sobre a estrutura), estendida às duas praças.
+        const ultimaPracaEd = p2?.fim || p2?.data || null;
+        const foraDoCalendario = !!(p1?.data && ultimaPracaEd && !jaPassou(p1.data) && imDb.data_leilao
+          && Date.parse(imDb.data_leilao) > Date.parse(ultimaPracaEd) + DIA_MS);
         if (p1?.data && imDb.data_leilao && divergeDoAcervo(p1.data, imDb.data_leilao)) {
           const pracaVencida = jaPassou(p1.data) && acervoNoFuturo(imDb.data_leilao);
-          const recuaSemProva = (encurtaPrazo(p1.data, imDb.data_leilao) && !p1.fim && !pracaUnica) || pracaVencida;
+          const recuaSemProva = (encurtaPrazo(p1.data, imDb.data_leilao) && !p1.fim && !pracaUnica && !foraDoCalendario) || pracaVencida;
           try {
             await registrarAnomalia('data_divergente_edital', fonteDb, imovelId, 'data_leilao',
               `Acervo dizia ${imDb.data_leilao}; edital diz ${p1.data} — ${recuaSemProva ? (pracaVencida ? 'MANTIDO o acervo (o edital aponta praça já encerrada; o leiloeiro publica data futura).' : 'MANTIDO o acervo (o edital recuaria o prazo sem dizer que é encerramento).') : 'corrigido pelo documento.'}`,
