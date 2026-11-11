@@ -48,7 +48,11 @@ export default async function handler(req, res) {
     console.error('[homio-lead] HOMIO_WEBHOOK_SECRET não configurado — recusando');
     return res.status(503).json({ error: 'Integração não configurada' });
   }
-  if (!segredoConfere(req.headers['x-homio-secret'], segredo)) return res.status(401).json({ error: 'Não autorizado' });
+  // Aceita o token em qualquer um dos três cabeçalhos (11/11: o desenvolvedor da página propôs
+  // `x-webhook-secret` e `Authorization: Bearer`); o valor é o mesmo HOMIO_WEBHOOK_SECRET.
+  const bearer = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+  const recebido = req.headers['x-homio-secret'] || req.headers['x-webhook-secret'] || bearer;
+  if (!segredoConfere(recebido, segredo)) return res.status(401).json({ error: 'Não autorizado' });
 
   // Teto global (todas as chamadas vêm dos servidores da Homio): protege o cadastro em massa
   // se o segredo vazar, sem atrapalhar um lançamento de verdade (600 por 10 min).

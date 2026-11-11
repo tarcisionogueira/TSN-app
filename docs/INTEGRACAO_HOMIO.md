@@ -33,7 +33,8 @@ servidor** (nunca do navegador: o token ficaria exposto no código da página). 
 automação da Homio nesse caso.
 
 - **Método e URL:** `POST https://www.bidprobrasil.com.br/api/homio-lead?campanha=lancamento`
-- **Cabeçalhos:** `Content-Type: application/json` e `x-homio-secret: <token>` — o token é o mesmo valor de
+- **Cabeçalhos:** `Content-Type: application/json` e o token em **um** destes (qualquer um serve):
+  `Authorization: Bearer <token>`, `x-webhook-secret: <token>` ou `x-homio-secret: <token>` — o token é o mesmo valor de
   `HOMIO_WEBHOOK_SECRET` da Vercel do BidPro, entregue ao desenvolvedor por canal privado (nunca por
   e-mail aberto, chat de grupo ou repositório). No backend dele, fica numa variável de ambiente.
 - **Corpo:**
