@@ -74,14 +74,29 @@ export default function RedefinirSenha() {
       // sem isto, o SenhaPendenteModal continuaria pedindo senha pra quem já definiu a dela
       // por aqui. Best-effort: a senha JÁ foi trocada (o que importa), perder este UPDATE só
       // faz o popup voltar por engano uma vez — não derruba a troca de senha em si.
+      // PRIMEIRA SENHA DE CONTA CRIADA POR NÓS (11/11, inscritos da Homio e da aula ao vivo): quem
+      // chega aqui pelo link de ativação ainda tem `senha_pendente`. Para essa pessoa, deslogar e
+      // mandar ao login era um passo à toa logo no primeiro contato — ela fica logada e segue para a
+      // página inicial, onde os popups em fila pedem o cadastro (cidade, aceite dos termos) e, em
+      // seguida, o questionário de perfil do investidor. Troca de senha comum segue como sempre.
+      let eraAtivacao = false;
       try {
         const { data: { user: u } } = await supabase.auth.getUser();
-        if (u?.id) await supabase.from('perfis').update({ senha_pendente: false }).eq('id', u.id);
+        if (u?.id) {
+          const { data: pf, error: errPf } = await supabase.from('perfis').select('senha_pendente').eq('id', u.id).maybeSingle();
+          if (errPf) console.warn('[redefinir-senha] leitura de senha_pendente falhou:', errPf.message);
+          eraAtivacao = pf?.senha_pendente === true;
+          await supabase.from('perfis').update({ senha_pendente: false }).eq('id', u.id);
+        }
       } catch { /* padrao-ok: best-effort, ver comentário acima */ }
-      setSucesso(true);
-      await supabase.auth.signOut();
-      // Redireciona para o login automaticamente após redefinir a senha
-      setTimeout(() => nav('/login'), 2500);
+      setSucesso(eraAtivacao ? 'ativacao' : true);
+      if (eraAtivacao) {
+        setTimeout(() => nav('/'), 1500);
+      } else {
+        await supabase.auth.signOut();
+        // Redireciona para o login automaticamente após redefinir a senha
+        setTimeout(() => nav('/login'), 2500);
+      }
     } catch (err) {
       // 21/08: só "new password should be different" era traduzido; senha-vazada e rate-limit
       // saíam CRUS em inglês. Reusa o tradutor compartilhado do Login (fonte única).
@@ -200,13 +215,15 @@ export default function RedefinirSenha() {
         {sucesso && (
           <div style={{ textAlign: 'center', padding: '20px 0' }}>
             <CheckCircle2 size={48} color="#10b981" style={{ margin: '0 auto 16px', display: 'block' }} />
-            <h2 style={{ margin: '0 0 8px', fontWeight: 900, color: '#111111' }}>Senha redefinida!</h2>
+            <h2 style={{ margin: '0 0 8px', fontWeight: 900, color: '#111111' }}>{sucesso === 'ativacao' ? 'Conta ativada!' : 'Senha redefinida!'}</h2>
             <p style={{ color: '#64748b', fontSize: 14, lineHeight: 1.6, marginBottom: 24 }}>
-              Sua senha foi alterada com sucesso. Redirecionando para o login…
+              {sucesso === 'ativacao'
+                ? 'Senha criada. Agora vamos completar o seu cadastro e conhecer o seu perfil de investidor…'
+                : 'Sua senha foi alterada com sucesso. Redirecionando para o login…'}
             </p>
-            <button onClick={() => nav('/login')}
+            <button onClick={() => nav(sucesso === 'ativacao' ? '/' : '/login')}
               style={{ width: '100%', padding: '12px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
-              Ir para o login
+              {sucesso === 'ativacao' ? 'Continuar' : 'Ir para o login'}
             </button>
           </div>
         )}

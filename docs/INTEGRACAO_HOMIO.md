@@ -6,18 +6,25 @@ ponta), #473 (cota de e-mail no pico).
 
 ## Dados obrigatórios do Explorador (régua do sistema)
 
-| Dado | Obrigatório? | Regra | Quem pede |
+**No webhook da Homio, só três campos são obrigatórios (decisão do dono, 11/11): nome, e-mail e
+telefone.** Falta um deles → a rota responde 400 dizendo qual. O resto a pessoa completa no BidPro,
+depois de clicar no e-mail de ativação.
+
+| Dado | Obrigatório para a conta? | Regra | Onde é pedido |
 |---|---|---|---|
-| E-mail | **sim** | válido; é o login | formulário da Homio (sem ele a rota recusa) |
-| Nome completo | **sim** | nome **e** sobrenome, só letras, 5–80 caracteres, sem nome de empresa | Homio; se vier inválido, o popup pede |
-| WhatsApp | **sim** | DDD + número (10 ou 11 dígitos); celular com 9 após o DDD; aceita "+55" | Homio; se vier inválido ou já usado em outra conta, o popup pede |
-| Cidade + UF | **sim** | cidade e sigla de 2 letras (BA, SP...) — filtram os imóveis da região e os alertas | Homio (opcional lá); sem as duas, o popup pede |
-| Senha | **sim** | 8+ caracteres com maiúscula, minúscula, número e símbolo | **só no BidPro**, no link de ativação — nunca na Homio |
-| Aceite dos Termos e da Privacidade | **sim** | caixa marcada pela própria pessoa | **só no BidPro**, no popup do 1º acesso |
+| Nome completo | **sim** | nome **e** sobrenome, só letras, 5–80 caracteres, sem nome de empresa | **Homio** (obrigatório no webhook); se vier só o primeiro nome, o popup pede o completo |
+| E-mail | **sim** | válido; é o login | **Homio** (obrigatório no webhook) |
+| WhatsApp | **sim** | DDD + número (10 ou 11 dígitos); celular com 9 após o DDD; aceita "+55" | **Homio** (obrigatório no webhook); se vier fora da regra ou já usado em outra conta, o popup pede |
+| Senha | **sim** | 8+ caracteres com maiúscula, minúscula, número e símbolo | BidPro, ao clicar no e-mail de ativação — nunca na Homio |
+| Cidade + UF | **sim** | cidade e UF — filtram os imóveis da região e os alertas | BidPro, popup de cadastro (se a Homio mandar, já entra preenchido) |
+| Aceite dos Termos e da Privacidade | **sim** | caixa marcada pela própria pessoa | BidPro, popup de cadastro |
+| Questionário de perfil do investidor | não (pedido uma vez) | objetivo, faixa de valor, pagamento, experiência, cidades, veículos | BidPro, popup no 1º acesso |
 | CPF | não | só na hora de pagar um plano ou sacar comissão | — |
 
-Ou seja: o formulário da Homio deve ter **nome completo, e-mail, WhatsApp, cidade e estado (UF)**.
-Com os cinco certos, no primeiro acesso a pessoa só cria a senha e marca o aceite.
+**O que a pessoa vê depois de clicar em "Ativar minha conta":**
+1. Tela de criar senha → "Conta ativada!" — ela **continua logada** (não volta ao login).
+2. Página inicial com os popups em fila: **cadastro** (cidade/UF, aceite dos termos e o que faltar de
+   nome/telefone) → vídeo de boas-vindas → **questionário de perfil do investidor**.
 
 ## Como funciona
 
@@ -29,7 +36,8 @@ Com os cinco certos, no primeiro acesso a pessoa só cria a senha e marca o acei
    - A mesma inscrição repetida não cria nada de novo.
 4. A pessoa recebe o e-mail **"Ative sua conta na BidPro Brasil"**. O link vale 30 dias e leva à tela de
    criar senha. Abrir o link mandado ao e-mail é a prova de que o e-mail é dela (regra de #251).
-5. No primeiro acesso, o popup pede o que faltar e o **aceite dos termos**.
+5. Depois de criar a senha ela segue logada para a página inicial, onde os popups pedem cidade/UF, o
+   **aceite dos termos** e o que faltar, e depois o questionário de perfil do investidor.
 6. Quando ela cria a senha, o cron (a cada 10 min) marca a conta como **ativada** e avisa a Homio.
 
 ## Passo a passo (dono)
@@ -48,8 +56,8 @@ Com os cinco certos, no primeiro acesso a pessoa só cria a senha e marca o acei
    responder "Não autorizado" para quem chama sem o segredo (eu confiro isso por você).
 
 ### Passo 3 — Formulário da página na Homio
-1. Campos: **Nome completo**, **E-mail**, **WhatsApp**, **Cidade**, **Estado (UF)** — UF como lista de siglas
-   (AC…TO), para não chegar "Bahia" por extenso.
+1. Campos obrigatórios: **Nome completo**, **E-mail** e **WhatsApp**. Só esses três. (Se um dia quiser
+   pedir cidade e estado na página, a rota aproveita — estado como lista de siglas AC…TO.)
 2. Caixa de consentimento obrigatória, com texto como: *"Ao me inscrever, recebo acesso gratuito à BidPro
    Brasil e concordo em receber comunicações sobre o lançamento."* (LGPD — o aceite dos Termos de Uso
    em si é feito na BidPro, no primeiro acesso.)
@@ -69,8 +77,6 @@ Com os cinco certos, no primeiro acesso a pessoa só cria a senha e marca o acei
        "email": "{{contact.email}}",
        "nome": "{{contact.name}}",
        "telefone": "{{contact.phone}}",
-       "cidade": "{{contact.city}}",
-       "uf": "{{contact.state}}",
        "contact_id": "{{contact.id}}",
        "utm_source": "{{contact.attributionSource.utmSource}}",
        "utm_campaign": "{{contact.attributionSource.utmCampaign}}"

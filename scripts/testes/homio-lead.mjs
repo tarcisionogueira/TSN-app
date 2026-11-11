@@ -24,18 +24,24 @@ eq('pt: whatsapp vira telefone', pt.telefone, '71988887777');
 eq('pt: contact.id como contact_id', pt.contactId, 'c9');
 eq('pt: utm solta no nível de cima', pt.utm, { utm_source: 'google' });
 
-// 2b. Cidade e UF
-const comCidade = lerLeadHomio({ email: 'a@b.com', city: 'Feira de Santana', state: 'ba' });
+// 2b. Cidade e UF (opcionais)
+const base = { name: 'Ana Lima', phone: '71988887777' };
+const comCidade = lerLeadHomio({ ...base, email: 'a@b.com', city: 'Feira de Santana', state: 'ba' });
 eq('cidade + UF minúscula viram sigla', [comCidade.cidade, comCidade.uf], ['Feira de Santana', 'BA']);
-const ufRuim = lerLeadHomio({ email: 'a@b.com', cidade: 'Salvador', estado: 'Bahia' });
+const ufRuim = lerLeadHomio({ ...base, email: 'a@b.com', cidade: 'Salvador', estado: 'Bahia' });
 eq('UF por extenso não vale: cidade descartada junto', [ufRuim.cidade, ufRuim.uf], ['', '']);
-const soUf = lerLeadHomio({ email: 'a@b.com', uf: 'SP' });
+const soUf = lerLeadHomio({ ...base, email: 'a@b.com', uf: 'SP' });
 eq('UF sem cidade não grava UF solta', [soUf.cidade, soUf.uf], ['', '']);
+eq('sem cidade não é obrigatório', soUf.faltando, []);
 
-// 3. Sem e-mail válido → faltando
-eq('sem e-mail', lerLeadHomio({ name: 'Ana Lima' }).faltando, ['email']);
-eq('e-mail sem domínio', lerLeadHomio({ email: 'ana@' }).faltando, ['email']);
-eq('corpo nulo não quebra', lerLeadHomio(null).faltando, ['email']);
+// 3. Obrigatórios: nome, e-mail e telefone (presença; formato o popup corrige)
+eq('sem e-mail', lerLeadHomio({ ...base }).faltando, ['email']);
+eq('e-mail sem domínio', lerLeadHomio({ ...base, email: 'ana@' }).faltando, ['email']);
+eq('sem nome', lerLeadHomio({ email: 'a@b.com', phone: '71988887777' }).faltando, ['nome']);
+eq('sem telefone', lerLeadHomio({ email: 'a@b.com', name: 'Ana Lima' }).faltando, ['telefone']);
+eq('telefone só com lixo', lerLeadHomio({ email: 'a@b.com', name: 'Ana Lima', phone: '---' }).faltando, ['telefone']);
+eq('só o primeiro nome passa (o popup pede o sobrenome)', lerLeadHomio({ email: 'a@b.com', name: 'Ana', phone: '71988887777' }).faltando, []);
+eq('corpo nulo lista os três', lerLeadHomio(null).faltando, ['nome', 'email', 'telefone']);
 
 // 4. Campanha vem da URL e é saneada
 eq('campanha padrão', campanhaDe(''), 'lancamento');

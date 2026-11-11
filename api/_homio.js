@@ -24,8 +24,8 @@ function primeiro(obj, chaves) {
 /**
  * Lê o corpo enviado pela Homio. Aceita os campos no nível de cima ou dentro de `contact`,
  * em português ou inglês, e a atribuição (utm) solta, em `utm` ou em `attributionSource`.
- * Devolve `{ email, nome, telefone, contactId, utm, faltando }` — `faltando` lista o que
- * impede criar a conta (hoje só o e-mail; nome e telefone o popup de cadastro pede depois).
+ * Devolve `{ email, nome, telefone, contactId, cidade, uf, utm, faltando }` — `faltando` lista os
+ * obrigatórios ausentes (nome, e-mail, telefone); cidade e o resto o popup de cadastro pede depois.
  */
 export function lerLeadHomio(corpo) {
   const b = (corpo && typeof corpo === 'object') ? corpo : {};
@@ -64,8 +64,13 @@ export function lerLeadHomio(corpo) {
     for (const a of atrib) { const v = primeiro(a, nomes); if (v) { utm[campo] = v.slice(0, 200); break; } }
   }
 
+  // Obrigatórios no webhook (dono, 11/11): nome, e-mail e telefone. Exige-se a PRESENÇA; formato
+  // errado (só o primeiro nome, celular sem o 9) não derruba a inscrição — a conta nasce e o popup de
+  // cadastro pede o dado certo no 1º acesso. Recusar aqui perderia o lead sem a pessoa saber.
   const faltando = [];
+  if (!nome) faltando.push('nome');
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) faltando.push('email');
+  if (telefone.replace(/\D/g, '').length < 8) faltando.push('telefone');
   return { email, nome, telefone, contactId: contactId.slice(0, 80), cidade, uf: cidade ? uf : '', utm, faltando };
 }
 
