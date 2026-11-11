@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { senhaForte } from '../lib/senha.js';
 import { traduzErroAuth } from '../lib/erroAuth.js';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
 import { Briefcase, Eye, EyeOff, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 import LogoB from '../components/LogoB';
@@ -14,6 +14,7 @@ const lbl = { fontSize: 12, fontWeight: 700, color: '#475569', display: 'block',
 
 export default function RedefinirSenha() {
   const nav = useNavigate();
+  const loc = useLocation();
   const [senha, setSenha] = useState('');
   const [confirmar, setConfirmar] = useState('');
   const [showSenha, setShowSenha] = useState(false);
@@ -45,18 +46,37 @@ export default function RedefinirSenha() {
       if (!cancelado) setSessaoValida(true);
     }
 
-    // Supabase injeta a sessão automaticamente via hash fragment quando o usuário clica no link
-    supabase.auth.getSession().then(({ data }) => {
-      if (data?.session) aoConfirmarSessao(data.session);
-      else if (!cancelado) setSessaoValida(false);
-    });
+    // LINK DE ATIVAÇÃO COM CÓDIGO (11/11, api/ativar-conta.js): chega `?th=<hashed_token>&tipo=recovery` e
+    // a verificação acontece AQUI, no navegador. O caminho antigo (o Supabase verificar e voltar com
+    // `#access_token=` grudado na rota `#/redefinir-senha`) produzia dois `#` e o supabase-js descartava
+    // a sessão — 1º teste real do desenvolvedor da Homio caiu em "Link inválido ou expirado".
+    const th = new URLSearchParams(loc.search).get('th');
+    if (th) {
+      supabase.auth.verifyOtp({ token_hash: th, type: 'recovery' }).then(({ data, error }) => {
+        if (cancelado) return;
+        // Tira o código da barra de endereço (não fica no histórico nem em print de tela).
+        window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#/redefinir-senha`);
+        if (error || !data?.session) {
+          console.warn('[redefinir-senha] verifyOtp recusou o código:', error?.message || 'sem sessão');
+          setSessaoValida(false);
+          return;
+        }
+        aoConfirmarSessao(data.session);
+      });
+    } else {
+      // Supabase injeta a sessão automaticamente via hash fragment quando o usuário clica no link
+      supabase.auth.getSession().then(({ data }) => {
+        if (data?.session) aoConfirmarSessao(data.session);
+        else if (!cancelado) setSessaoValida(false);
+      });
+    }
 
     // Ouve o evento PASSWORD_RECOVERY para quando o Supabase processa o hash
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'PASSWORD_RECOVERY') aoConfirmarSessao(session);
     });
     return () => { cancelado = true; subscription.unsubscribe(); };
-  }, [nav]);
+  }, [nav, loc.search]);
 
   const handleRedefinir = async (e) => {
     e.preventDefault();

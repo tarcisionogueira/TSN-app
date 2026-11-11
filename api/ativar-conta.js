@@ -56,9 +56,15 @@ export default async function handler(req, res) {
     const { data, error } = await admin.auth.admin.generateLink({
       type: 'recovery', email: lead.email, options: { redirectTo: `${APP_URL}/#/redefinir-senha` },
     });
-    const link = data?.properties?.action_link || data?.properties?.actionLink;
-    if (error || !link) { console.error('[ativar-conta] generateLink falhou', error?.message || 'sem link'); return login('erro'); }
-    return ir(res, link);
+    // NÃO redireciona mais para o `action_link` do Supabase (11/11, 1º teste real do desenvolvedor: "Link
+    // inválido ou expirado"). O Supabase verificava e voltava para `/#/redefinir-senha#access_token=...` —
+    // DOIS `#` (a rota do HashRouter + o fragmento com a sessão) — e o supabase-js não reconhece o token
+    // nesse formato: a sessão era criada no servidor e descartada no navegador. Agora vai o `hashed_token`
+    // para a nossa tela, que chama `verifyOtp` no navegador. Bônus: leitor de link de antivírus não executa
+    // JavaScript, então não consegue mais gastar o código antes da pessoa.
+    const th = data?.properties?.hashed_token;
+    if (error || !th) { console.error('[ativar-conta] generateLink falhou', error?.message || 'sem hashed_token'); return login('erro'); }
+    return ir(res, `${APP_URL}/#/redefinir-senha?th=${encodeURIComponent(th)}&tipo=recovery`);
   } catch (e) {
     console.error('[ativar-conta] generateLink lançou', e?.message || e);
     return login('erro');
