@@ -407,13 +407,20 @@ export default async function handler(req) {
   const attachments = [
     ...anexosLote.map(a => { const filename = comExtensao(a.nome, a.url); return { filename, path: a.url, content_type: tipoAnexo(filename) }; }),
   ];
-  // Relatórios do sistema (HTML montado pela tela, ver preview). Só para o jurídico, no máximo 2,
-  // cada um ≤ 1,5 MB — entram como arquivo .html (abre no navegador; Imprimir → PDF).
+  // Relatórios do sistema. Só para o jurídico, no máximo 2. 12/11 (print do dono): o .html chegava ao advogado
+  // como CÓDIGO-FONTE na prévia do Gmail — a tela agora converte em PDF (api/relatorio-pdf.js) e manda `pdf`
+  // (base64). O .html fica só como reserva quando o PDF falhou, e a tela avisa quem enviou.
   if (destino === 'juridico' && Array.isArray(body?.relatorios)) {
     for (const rel of body.relatorios.slice(0, 2)) {
+      const nome = String(rel?.nome || 'Relatorio BidPro').replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 120);
+      const pdf = typeof rel?.pdf === 'string' ? rel.pdf.replace(/\s+/g, '') : '';
+      // `JVBERi0` = "%PDF-" em base64: só entra o que é PDF de verdade; ~3 MB de arquivo no máximo.
+      if (pdf && pdf.startsWith('JVBERi0') && pdf.length <= 4_100_000 && /^[A-Za-z0-9+/=]+$/.test(pdf)) {
+        attachments.push({ filename: `${nome}.pdf`, content: pdf, content_type: 'application/pdf' });
+        continue;
+      }
       const html = String(rel?.html || '');
       if (!html.startsWith('<!DOCTYPE html>') || html.length > 1_500_000) continue;
-      const nome = String(rel?.nome || 'Relatorio BidPro').replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 120);
       attachments.push({ filename: `${nome}.html`, content: base64Utf8(html), content_type: 'text/html; charset=utf-8' });
     }
   }

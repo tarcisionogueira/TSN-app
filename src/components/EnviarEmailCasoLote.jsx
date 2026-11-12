@@ -56,8 +56,8 @@ export default function EnviarEmailCasoLote({ casoId, imovelId, veiculoId, imove
     }
   };
 
-  // Mesmo HTML do "Baixar PDF" da análise (htmlDocumental/htmlLaudo), montado aqui e anexado
-  // pelo servidor como .html. `cab` leva o que o documental extraiu (processo/matrícula).
+  // Mesmo HTML do "Baixar PDF" da análise (htmlDocumental/htmlLaudo), montado aqui; vira PDF antes do envio
+  // (relatoriosEmPdf). `cab` leva o que o documental extraiu (processo/matrícula).
   const montarRelatorios = () => {
     const rel = emailPreview?.relatorios;
     if (!rel) return undefined;
@@ -71,16 +71,43 @@ export default function EnviarEmailCasoLote({ casoId, imovelId, veiculoId, imove
     return out.length ? out : undefined;
   };
 
+  // 12/11 (print do dono): o .html chegava ao advogado como CÓDIGO-FONTE na prévia do Gmail. Cada relatório
+  // vira PDF no servidor (api/relatorio-pdf.js) antes do envio; o que falhar segue como .html e é AVISADO — o
+  // relatório nunca some do e-mail, e quem envia sabe em que formato ele foi.
+  const relatoriosEmPdf = async (lista) => {
+    if (!lista?.length) return { relatorios: lista, falhas: [] };
+    const falhas = [];
+    let total = 0;
+    const out = [];
+    for (const rel of lista) {
+      try {
+        const r = await apiCall('/api/relatorio-pdf', { method: 'POST', body: JSON.stringify({ html: rel.html }) });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok || !d.pdf) throw new Error(d.error || `HTTP ${r.status}`);
+        // O envio é uma função Edge (corpo até ~4 MB): passou disso, o excedente vai como .html.
+        if (total + d.pdf.length > 3_500_000) throw new Error('anexos grandes demais para um envio');
+        total += d.pdf.length;
+        out.push({ nome: rel.nome, pdf: d.pdf });
+      } catch (e) {
+        console.error('[EnviarEmailCasoLote] PDF do relatório:', rel.nome, e?.message);
+        falhas.push(`${rel.nome} (${e?.message || 'erro'})`);
+        out.push(rel);
+      }
+    }
+    return { relatorios: out, falhas };
+  };
+
   const enviar = async () => {
     if (!emailPreview) return;
     setEnviando(true);
     setMsg('');
     try {
-      const r = await apiCall('/api/enviar-email-caso', { method: 'POST', body: JSON.stringify({ ...corpoAlvo(), destino: emailPreview.destino, action: 'enviar', texto: emailPreview.texto, emails, relatorios: montarRelatorios() }) });
+      const { relatorios, falhas: falhasPdf } = await relatoriosEmPdf(montarRelatorios());
+      const r = await apiCall('/api/enviar-email-caso', { method: 'POST', body: JSON.stringify({ ...corpoAlvo(), destino: emailPreview.destino, action: 'enviar', texto: emailPreview.texto, emails, relatorios }) });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'Falha ao enviar o e-mail');
       if (d.semContato) { setMsg('Informe um e-mail válido — não há contato cadastrado para este destino ainda.'); return; }
-      const base = `📨 E-mail enviado para ${d.destinatario} com ${d.anexos} anexo(s).${d.contatoSalvo ? ` ${d.contatosSalvos > 1 ? `${d.contatosSalvos} contatos salvos` : 'Contato salvo'} para os próximos envios.` : ''}${d.aviso ? ` ⚠️ ${d.aviso}` : ''}`;
+      const base = `📨 E-mail enviado para ${d.destinatario} com ${d.anexos} anexo(s).${d.contatoSalvo ? ` ${d.contatosSalvos > 1 ? `${d.contatosSalvos} contatos salvos` : 'Contato salvo'} para os próximos envios.` : ''}${d.aviso ? ` ⚠️ ${d.aviso}` : ''}${falhasPdf.length ? ` ⚠️ Não consegui gerar o PDF de: ${falhasPdf.join('; ')} — foi como .html (abre no navegador).` : ''}`;
       setMsg(base);
       const eraLeiloeiro = emailPreview.destino === 'leiloeiro';
       setEmailPreview(null);
@@ -175,7 +202,7 @@ export default function EnviarEmailCasoLote({ casoId, imovelId, veiculoId, imove
           )}
           <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
             <button onClick={enviar} disabled={enviando || !podeEnviar} style={{ ...btnLocal('#059669'), fontSize: 12, opacity: (enviando || !podeEnviar) ? 0.6 : 1 }}>
-              {enviando ? 'Enviando…' : 'Confirmar envio'}
+              {enviando ? 'Gerando PDF e enviando…' : 'Confirmar envio'}
             </button>
             <button onClick={() => setEmailPreview(null)} disabled={enviando} style={{ ...btnLocal('#94a3b8'), fontSize: 12 }}>Cancelar</button>
           </div>
