@@ -182,7 +182,7 @@ export default async function handler(req) {
     const casoId = String(body?.caso_id || '');
     if (!/^[0-9a-f-]{36}$/i.test(casoId)) return json({ error: 'caso_id inválido' }, 400);
     let caso;
-    try { caso = await ler1(`casos?id=eq.${casoId}&select=id,cliente_id,imovel_endereco,posse_em`); }
+    try { caso = await ler1(`casos?id=eq.${casoId}&select=id,cliente_id,imovel_endereco,posse_em,copiar_cliente`); }
     catch (e) { console.error('[email-caixa] caso:', e.message); return json({ error: 'Não foi possível ler o caso.' }, 500); }
     if (!caso?.cliente_id) return json({ error: 'Caso sem cliente.' }, 404);
     let cli = null, email = null;
@@ -193,7 +193,7 @@ export default async function handler(req) {
       email = (await r.json())?.email || null;
     } catch (e) { console.error('[email-caixa] cliente do caso:', e.message); return json({ error: 'Não foi possível ler o e-mail do cliente.' }, 500); }
     if (!email) return json({ error: 'O cliente deste caso não tem e-mail cadastrado.' }, 404);
-    return json({ ok: true, email, nome: cli?.nome || null, endereco: caso.imovel_endereco || null, posse_em: caso.posse_em });
+    return json({ ok: true, email, nome: cli?.nome || null, endereco: caso.imovel_endereco || null, posse_em: caso.posse_em, copiar_cliente: caso.copiar_cliente === true });
   }
 
   if (body?.acao !== 'enviar') return json({ error: 'acao inválida' }, 400);

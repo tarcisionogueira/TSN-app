@@ -475,6 +475,33 @@ export default function CaixaEmail({ soPessoal = false }) {
       assunto: /^re:/i.test(m.assunto || '') ? m.assunto : `Re: ${m.assunto || ''}`,
       texto: '', responder_a: m.id, chamado_id: m.chamado_id, citar: false,
     });
+    // 12/11 (dono): resposta a e-mail de CASO oferece copiar o cliente — marcado por padrão quando o caso pede
+    // (casos.copiar_cliente). Leitura falhou: a caixa avisa e a resposta segue sem a opção (nunca cópia silenciosa).
+    const casoId = m.caso_id || conversa.find((x) => x.caso_id)?.caso_id;
+    if (!soPessoal && casoId) {
+      apiCall('/api/email-caixa', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ acao: 'cliente_do_caso', caso_id: casoId }) })
+        .then(lerJsonSeguro)
+        .then((j) => {
+          if (!j?.ok || !j.email) { if (j?.error) setAviso(`Sem a opção de copiar o cliente: ${j.error}`); return; }
+          const email = String(j.email).toLowerCase();
+          setCompor((c) => {
+            if (!c || c.responder_a !== m.id) return c;
+            const cc = String(c.cc || '').split(/[,;\s]+/).filter(Boolean);
+            const novoCc = j.copiar_cliente && !cc.map((e) => e.toLowerCase()).includes(email) ? [...cc, email].join(', ') : c.cc;
+            return { ...c, cliente_caso: { email, nome: j.nome || null }, cc: novoCc };
+          });
+        })
+        .catch((e) => { console.error('[caixa] cliente do caso:', e?.message); setAviso('Não consegui ler o cliente do caso — a opção de copiá-lo não aparece nesta resposta.'); });
+    }
+  }
+  // Liga/desliga o cliente do caso no Cc da resposta (12/11).
+  function alternarClienteCc(marcar) {
+    setCompor((c) => {
+      if (!c?.cliente_caso) return c;
+      const email = c.cliente_caso.email;
+      const cc = String(c.cc || '').split(/[,;\s]+/).filter(Boolean).filter((e) => e.toLowerCase() !== email);
+      return { ...c, cc: (marcar ? [...cc, email] : cc).join(', ') };
+    });
   }
   // Encaminhar (25/09): só a última mensagem OU a conversa inteira. Cada mensagem entra sem o
   // histórico citado dela (senão a conversa se repetiria dentro de si mesma a cada resposta).
@@ -855,6 +882,12 @@ export default function CaixaEmail({ soPessoal = false }) {
                   ))}
                 </div>
               </div>
+            )}
+            {compor.cliente_caso && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, fontSize: 12.5, color: '#047857', fontWeight: 600, cursor: 'pointer' }}>
+                <input type="checkbox" checked={String(compor.cc || '').toLowerCase().split(/[,;\s]+/).includes(compor.cliente_caso.email)} onChange={e => alternarClienteCc(e.target.checked)} />
+                Copiar o cliente{compor.cliente_caso.nome ? ` (${compor.cliente_caso.nome})` : ''} — {compor.cliente_caso.email}
+              </label>
             )}
             {compor.responder_a && (
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, fontSize: 12, color: '#475569', cursor: 'pointer' }}>

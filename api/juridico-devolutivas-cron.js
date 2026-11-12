@@ -63,7 +63,7 @@ function lerJSON(txt) {
 }
 
 async function analisarCaso(casoId, emailId, { seco }) {
-  const [caso] = await ler(`casos?id=eq.${casoId}&select=id,imovel_id,imovel_endereco,cliente_id,tipo_leilao,acompanhamento_intervalo_dias`);
+  const [caso] = await ler(`casos?id=eq.${casoId}&select=id,imovel_id,imovel_endereco,cliente_id,tipo_leilao,acompanhamento_intervalo_dias,acompanhamento_intervalo_manual`);
   if (!caso) return { caso: casoId, erro: 'caso não encontrado' };
   const msgs = await ler(`email_caixa?caso_id=eq.${casoId}&pasta=neq.spam&pasta=neq.lixeira&select=id,direcao,de_email,criado_em,texto,anexos&order=criado_em.asc&limit=60`);
   if (!msgs.length) return { caso: casoId, erro: 'sem mensagens' };
@@ -95,7 +95,8 @@ async function analisarCaso(casoId, emailId, { seco }) {
     if (ins.status === 409) return { caso: casoId, ja_analisado: true };
     throw new Error(`gravar análise HTTP ${ins.status}: ${(await ins.text().catch(() => '')).slice(0, 200)}`);
   }
-  if (caso.acompanhamento_intervalo_dias !== intervalo) {
+  // 12/11 (dono): frequência escolhida na tela do caso manda — a leitura das devolutivas só sugere quando não há escolha manual.
+  if (!caso.acompanhamento_intervalo_manual && caso.acompanhamento_intervalo_dias !== intervalo) {
     const up = await sb(`casos?id=eq.${casoId}`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ acompanhamento_intervalo_dias: intervalo }) });
     const mudou = up.ok ? await up.json() : [];
     if (!mudou.length) console.error(`[devolutivas] intervalo do caso ${casoId} NÃO atualizado: HTTP ${up.status}`);

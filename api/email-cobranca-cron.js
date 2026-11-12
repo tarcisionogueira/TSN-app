@@ -2,11 +2,11 @@
  * /api/email-cobranca-cron — "Cobrar posição" (17/10, pedido do dono).
  *
  * O dono liga a cobrança num e-mail que ENVIOU pela caixa pessoal (CaixaEmail → CobrarPosicao.jsx, tabela
- * email_cobranca): a cada 7, 15 ou 30 dias sai um "Re:" curto para o mesmo destinatário, do endereço dele, com
+ * email_cobranca): a cada N dias (2 a 30, escolhido pelo dono — 12/11) sai um "Re:" curto para o mesmo destinatário, do endereço dele, com
  * o e-mail original citado. Para sozinho quando:
  *   - o destinatário RESPONDE: entrada ligada pelo +token a um dos envios (resposta_de), ou vinda de um dos
  *     destinatários com o mesmo assunto depois do envio original (resposta que caiu fora do token);
- *   - bate o limite (3): na data seguinte, sem resposta, encerra e avisa o dono;
+ *   - bate o limite (max_cobrancas, 1 a 10): na data seguinte, sem resposta, encerra e avisa o dono;
  *   - o dono desliga na tela.
  * Dias úteis só (seg–sex, horário de Brasília). Idempotente por (cobrança, nº do envio). `?seco=1` só mostra.
  */

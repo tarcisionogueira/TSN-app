@@ -42,7 +42,6 @@ const BASE         = process.env.APP_BASE_URL || 'https://bidprobrasil.com.br';
 const ETAPAS = ['arrematado', 'honorarios_pagos', 'procuracao_assinada', 'pos_arrematacao'];
 // Marcos do pedido da guia (dias até o vencimento → marco). Janela, não dia exato: o cron roda só em
 // dia útil, e um marco que cai no fim de semana ainda é pego no dia útil seguinte.
-const QUINZENAL_LIGADO = false;
 const DIA_ATUALIZACAO = 1; // SEGUNDA-feira de manhã (dono, 26/10; antes quarta) — getUTCDay sobre a data de Brasília
 // "Operação atribuída pela equipe" / "Arremate atribuído pela equipe" são marcadores do cadastro manual,
 // não endereço — não vão para o assunto nem para o texto do e-mail ao escritório.
@@ -150,7 +149,7 @@ async function handler(req) {
     const remet = admin ? (await ler(`equipe_email?user_id=eq.${admin.id}&select=endereco`))[0] : null;
     if (!remet?.endereco) throw new Error('admin sem endereço pessoal em equipe_email');
 
-    const COLS = 'id,cliente_id,advogado_id,imovel_id,imovel_endereco,acompanhamento_para,acompanhamento_cc,acompanhamento_liberado_em,acompanhamento_assunto,acompanhamento_intervalo_dias';
+    const COLS = 'id,cliente_id,advogado_id,imovel_id,imovel_endereco,acompanhamento_para,acompanhamento_cc,acompanhamento_liberado_em,acompanhamento_assunto,acompanhamento_intervalo_dias,copiar_cliente,acompanhamento_atualizacao_ativa,acompanhamento_guia_ativa';
     const todos = await ler(`casos?posse_em=is.null&status_etapa=in.(${ETAPAS.join(',')})&select=${COLS}`);
     const temEscritorio = (c) => Array.isArray(c.acompanhamento_para) && c.acompanhamento_para.length > 0;
     // Cobrado: conta de advogado vinculada, OU e-mails do escritório no caso com o 1º envio já aprovado.
@@ -212,6 +211,8 @@ async function handler(req) {
         if (!endereco && im?.titulo && !RE_PLACEHOLDER.test(im.titulo)) endereco = im.titulo;
       }
 
+      // 12/11 (dono): pedido da guia desligado no caso → não pede (o painel do arremate segue mostrando a parcela).
+      if (parcela && c.acompanhamento_guia_ativa === false) { res.guia_desligada = (res.guia_desligada || 0) + 1; parcela = null; }
       // Guia já anexada no sistema pela equipe (painel "Emitir guia", 12/10): não pede ao jurídico.
       if (parcela && temGuia(arr, parcela.idx)) { res.guia_ja_no_sistema = (res.guia_ja_no_sistema || 0) + 1; parcela = null; }
       // Guia já chegou? Insistir (véspera/atraso) só se nenhuma resposta com anexo entrou no caso
@@ -222,28 +223,39 @@ async function handler(req) {
         const veio = await ler(`email_caixa?caso_id=eq.${c.id}&direcao=eq.entrada&anexos=neq.[]&criado_em=gte.${desde}&select=id&limit=1`);
         if (veio.length) { res.guia_ja_recebida = (res.guia_ja_recebida || 0) + 1; parcela = null; }
       }
-      // Intervalo aprendido das devolutivas (7 = toda quarta; 14 = quarta sim, quarta não): conta desde o
-      // último acompanhamento ENVIADO pelo cron (resposta_token só existe nos envios dele).
-      let atualizaHoje = diaDeAtualizacao;
-      // 26/10 (dono: "toda segunda-feira de manhã"): SEMANAL fixo. O quinzenal aprendido das devolutivas fica
-      // desligado (QUINZENAL_LIGADO) — a coluna segue gravada pelo juridico-devolutivas-cron, só não é obedecida.
-      if (QUINZENAL_LIGADO && atualizaHoje && !atualizarAgora && Number(c.acompanhamento_intervalo_dias) === 14) {
-        const [ultEnvio] = await ler(`email_caixa?caso_id=eq.${c.id}&direcao=eq.saida&resposta_token=not.is.null&select=criado_em&order=criado_em.desc&limit=1`);
-        if (ultEnvio && Date.now() - Date.parse(ultEnvio.criado_em) < 12 * 864e5) { atualizaHoje = false; res.quinzenal_aguardando = (res.quinzenal_aguardando || 0) + 1; }
+      // 12/11 (dono): atualização LIGA/DESLIGA por caso e frequência obedecida (7/14/21/28 dias, sempre às
+      // segundas). Antes o intervalo era ignorado (QUINZENAL_LIGADO=false) e não havia como desligar em caso
+      // com advogado vinculado. Conta desde o último pedido de atualização ENVIADO — a trava `atualizacao|caso|semana`
+      // em webhook_eventos_processados — com 3 dias de folga para a segunda cair dentro da janela.
+      let atualizaHoje = diaDeAtualizacao && c.acompanhamento_atualizacao_ativa !== false;
+      if (c.acompanhamento_atualizacao_ativa === false) res.atualizacao_desligada = (res.atualizacao_desligada || 0) + 1;
+      const intervalo = Number(c.acompanhamento_intervalo_dias) || 7;
+      if (atualizaHoje && !atualizarAgora && intervalo > 7) {
+        const [ult] = await ler(`webhook_eventos_processados?gateway=eq.acompanhamento_caso&gateway_payment_id=eq.${c.id}&evento=like.atualizacao%7C*&select=processado_em&order=processado_em.desc&limit=1`);
+        if (ult && Date.now() - Date.parse(ult.processado_em) < (intervalo - 3) * 864e5) { atualizaHoje = false; res.intervalo_aguardando = (res.intervalo_aguardando || 0) + 1; }
       }
       const [analise] = await ler(`caso_acompanhamento_analise?caso_id=eq.${c.id}&select=referencia_curta&order=criado_em.desc&limit=1`);
       // Conversa do imóvel: assunto da conversa que o escritório já tem → "Re: …" para os dois e-mails.
       const assuntoConversa = c.acompanhamento_assunto ? `Re: ${c.acompanhamento_assunto.replace(/^(re|res|fwd?):\s*/i, '')}` : null;
       const envios = [
-        ...((atualizaHoje || seco) ? [{ tipo: 'atualizacao', chave: `atualizacao|${c.id}|${semana}`,
+        ...((atualizaHoje || (seco && c.acompanhamento_atualizacao_ativa !== false)) ? [{ tipo: 'atualizacao', chave: `atualizacao|${c.id}|${semana}`,
           assunto: assuntoConversa || `Acompanhamento — ${cli?.nome || 'cliente'} · ${endereco || 'imóvel arrematado'}`,
           texto: textoPedido({ advogado: adv?.nome, cliente: cli?.nome, endereco, processo, atualizacao: true, parcela: null, referencia: analise?.referencia_curta }) }] : []),
         ...(parcela ? [{ tipo: 'parcela', chave: `parcela|${c.id}|${parcela.idx}|${parcela.venc}|${parcela.marco}`,
           assunto: assuntoConversa || `Guia da ${parcela.rotulo} (vence ${dataBR(parcela.venc)}) — ${cli?.nome || 'cliente'} · ${endereco || 'imóvel arrematado'}`,
           texto: textoPedido({ advogado: adv?.nome, cliente: cli?.nome, endereco, processo, atualizacao: false, parcela, insistencia: parcela.marco !== 5 }) }] : []),
       ];
-      const destinosDoCaso = () => (c.advogado_id ? destinatarios(c.advogado_id)
+      const destinosBase = () => (c.advogado_id ? destinatarios(c.advogado_id)
         : { to: c.acompanhamento_para.map((e) => e.toLowerCase()), cc: (c.acompanhamento_cc || []).map((e) => e.toLowerCase()).filter((e) => !c.acompanhamento_para.includes(e)) });
+      // 12/11 (dono): "copiar o cliente" no caso → o cliente vai em cópia; o "Responder a todos" do escritório
+      // chega a ele também. E-mail do cliente ilegível: segue sem ele e registra (não bloqueia o pedido).
+      const destinosDoCaso = async () => {
+        const d = await destinosBase();
+        if (!c.copiar_cliente) return d;
+        const em = String((await usuarioAuth(c.cliente_id))?.email || '').toLowerCase();
+        if (!em) { console.error(`[acompanhamento] copiar_cliente ligado no caso ${c.id}, mas o cliente não tem e-mail legível — seguiu sem cópia`); return d; }
+        return { to: d.to, cc: [...new Set([...(d.cc || []), em])].filter((e) => !d.to.includes(e)) };
+      };
       if (seco || !liberado) {
         const d = await destinosDoCaso();
         res.previa.push({ caso: c.id, cliente: cli?.nome, aguardando_aprovacao: !liberado, para: d.to, cc: d.cc,

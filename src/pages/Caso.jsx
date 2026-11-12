@@ -1499,8 +1499,9 @@ export default function Caso() {
       {/* Documentos do caso (15/10, dono): anexos dos e-mails lidos pela IA e separados em pessoais e
           da arrematação — ver DocumentosCaso.jsx / caso-documentos-cron. */}
       {isStaff && <ParcelasCaso casoId={caso.id} cardStyle={{ ...card, marginBottom:20 }} />}
-      {/* Destinatários e frequência do andamento ao jurídico (17/10) — só admin, só operação arrematada. */}
-      {role === 'admin' && ['arrematado','honorarios_pagos','procuracao_assinada','pos_arrematacao'].includes(caso.status_etapa) && (
+      {/* Destinatários e frequência do andamento ao jurídico (17/10) — só admin. 12/11: em qualquer etapa (a cópia ao
+          cliente vale também para lote aprovado para arrematação); os pedidos automáticos seguem só depois do arremate. */}
+      {role === 'admin' && (
         <AcompanhamentoJuridicoCaso caso={caso} onSalvo={(c) => setCaso((x) => ({ ...x, ...c }))} cardStyle={{ ...card, marginBottom:20 }} />
       )}
       {isStaff && <DocumentosCaso casoId={caso.id} podeMover={['admin', 'analista', 'consultor'].includes(role)} cardStyle={{ ...card, marginBottom:20 }} />}
