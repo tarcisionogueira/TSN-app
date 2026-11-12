@@ -68,6 +68,10 @@ export const PAGAMENTO_FILTRO_DB = {
 // Guia por leiloeiro (atualizar conforme integração):
 //   Caixa (CEF)        → inferido da modalidade (ver scraper-caixa.js)
 //   Superbid           → a_vista por padrão (hardcoded até integração real)
+//   ⚠️ 12/11: ~30 coletores gravam 'a_vista' fixo. O gatilho `trg_forma_pagamento_texto`
+//   (migração 20261112_forma_pagamento_do_texto) relê título+descrição em lote NÃO judicial
+//   e grava 'financiado' quando o texto AFIRMA financiamento/parcelamento sem negá-lo —
+//   e impede o re-scrape de desfazer um 'financiado' provado pelo documento.
 //   eLeilões           → a_vista por padrão (hardcoded até integração real)
 //   Mega Leilões       → a_vista por padrão (hardcoded até integração real)
 //   Zukerman           → a_vista por padrão (hardcoded até integração real)
