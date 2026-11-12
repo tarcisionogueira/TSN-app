@@ -253,6 +253,9 @@ function GuiaDeposito({ parcela, processo, indice, partes, titulo, userId, dataA
   // Conferência ANTES de enviar (pendência 254), igual a ParcelasCaso.jsx: o envio vai direto ao arrematante,
   // então nome, processo e valor lidos da guia aparecem ao lado do que o caso diz, e só sai com "Confirmar envio".
   const [confirmandoEnvio, setConfirmandoEnvio] = React.useState(false);
+  // Celular: a conferência fica no fim de um painel longo — rola até ela ao abrir pelo atalho.
+  const refConfirmar = React.useRef(null);
+  React.useEffect(() => { if (confirmandoEnvio) refConfirmar.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, [confirmandoEnvio]);
   const subir = async (file, tipo, descricao) => {
     const fd = new FormData();
     fd.append('file', file); fd.append('imovel_id', imovelId); fd.append('tipo', tipo); fd.append('descricao', descricao);
@@ -330,9 +333,24 @@ function GuiaDeposito({ parcela, processo, indice, partes, titulo, userId, dataA
   return (
     <div style={{ marginTop: 10, border: '1px dashed #93c5fd', borderRadius: 10, padding: '10px 12px', background: '#f8fbff' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <div style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', minWidth: 0 }}>🧾 Emitir guia — {parcela.rotulo} <span style={{ fontSize: 10.5, fontWeight: 700, color: '#7c3aed', background: '#f3e8ff', borderRadius: 6, padding: '1px 6px', marginLeft: 4 }}>equipe · em validação</span></div>
-        <button onClick={() => setAberto((v) => !v)} style={{ padding: '6px 12px', borderRadius: 8, background: '#0D63DB', color: 'white', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{aberto ? 'Fechar' : 'Emitir guia'}</button>
+        <div style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', minWidth: 0 }}>🧾 {guiaGerada ? 'Guia' : 'Emitir guia'} — {parcela.rotulo} <span style={{ fontSize: 10.5, fontWeight: 700, color: '#7c3aed', background: '#f3e8ff', borderRadius: 6, padding: '1px 6px', marginLeft: 4 }}>equipe · em validação</span></div>
+        <button onClick={() => setAberto((v) => !v)} style={{ padding: '6px 12px', borderRadius: 8, background: '#0D63DB', color: 'white', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{aberto ? 'Fechar' : (guiaGerada ? 'Ver guia' : 'Emitir guia')}</button>
       </div>
+      {/* 12/11 (dono não achou o envio): a guia que chega por e-mail fica ligada à parcela aguardando aprovação,
+          mas o "Enviar ao cliente" morava DENTRO do painel fechado de "Emitir guia" — a equipe via só o convite
+          para emitir uma guia que já existia. Agora a guia pendente aparece aqui fora, com o atalho para a
+          mesma conferência de antes (nome · processo · valor → Confirmar envio). */}
+      {guiaGerada && !guiaGerada.enviada_em && !aberto && (
+        <div style={{ marginTop: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 10px' }}>
+          <span style={{ fontSize: 12.5, color: '#92400e', minWidth: 0 }}>
+            📩 Guia {guiaGerada.origem === 'email' ? 'recebida por e-mail' : 'anexada'}{guiaGerada.valor != null ? ` · ${brl(guiaGerada.valor)}` : ''} — <b>aguardando sua aprovação</b> para enviar ao cliente.
+          </span>
+          <button onClick={() => { setAberto(true); setConfirmandoEnvio(true); setMsg(null); }}
+            style={{ padding: '7px 12px', borderRadius: 8, background: '#15803d', color: 'white', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+            Revisar e enviar
+          </button>
+        </div>
+      )}
       {aberto && (
         <div style={{ marginTop: 8 }}>
           {!guia && (
@@ -393,7 +411,7 @@ function GuiaDeposito({ parcela, processo, indice, partes, titulo, userId, dataA
                   <div style={{ fontSize: 11.5, color: '#b45309', marginTop: 4 }}>⚠️ {guiaGerada.avisos.join(' ')}</div>
                 )}
                 {confirmandoEnvio && (
-                  <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div ref={refConfirmar} style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
                     <div style={{ fontSize: 11.5, color: '#334155', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6, padding: '6px 8px', lineHeight: 1.6 }}>
                       <div><b>Nome:</b> {guiaGerada.depositante || 'não lido na guia'} <span style={{ color: '#64748b' }}>· arrematante: {arrematante || '—'}</span></div>
                       <div><b>Processo:</b> {guiaGerada.processo || 'não lido na guia'} <span style={{ color: '#64748b' }}>· caso: {guia?.cnj.formatado || processo || '—'}</span></div>
