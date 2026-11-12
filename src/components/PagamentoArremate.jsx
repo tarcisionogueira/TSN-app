@@ -280,7 +280,7 @@ function GuiaDeposito({ parcela, processo, indice, partes, titulo, userId, dataA
       const d = await chamarApi('/api/guia-parcela', { json: { acao: 'enviar', arrematado_id: arrematadoId, parcela_idx: parcela.idx } });
       if (d.parcelamento) onParcelamento(d.parcelamento);
       setConfirmandoEnvio(false);
-      setMsg({ tipo: 'ok', txt: `Guia enviada para ${d.enviada_para}.${d.aviso ? ` ${d.aviso}` : ''}` });
+      setMsg({ tipo: 'ok', txt: `Guia enviada para ${d.enviada_para}${d.copia_advogado ? `, com cópia a ${d.copia_advogado} (quem mandou a guia — recebe também a resposta com o comprovante)` : ''}.${d.aviso ? ` ${d.aviso}` : ''}` });
     } catch (e) { setMsg({ tipo: 'erro', txt: e.message }); }
     setOcupado('');
   };
@@ -417,7 +417,7 @@ function GuiaDeposito({ parcela, processo, indice, partes, titulo, userId, dataA
                       <div><b>Processo:</b> {guiaGerada.processo || 'não lido na guia'} <span style={{ color: '#64748b' }}>· caso: {guia?.cnj.formatado || processo || '—'}</span></div>
                       <div><b>Valor:</b> {brl(guiaGerada.valor)} <span style={{ color: '#64748b' }}>· parcela: {brl(parcela.valor)}</span></div>
                     </div>
-                    <span style={{ fontSize: 11.5, color: '#334155' }}>{guiaGerada.enviada_em ? 'Reenviar' : 'Enviar'} ao arrematante: pagar até {dataBR(parcela.pagar_ate || parcela.venc)}?</span>
+                    <span style={{ fontSize: 11.5, color: '#334155' }}>{guiaGerada.enviada_em ? 'Reenviar' : 'Enviar'} ao arrematante{guiaGerada.origem === 'email' ? ', com cópia a quem mandou a guia (advogado)' : ''}: pagar até {dataBR(parcela.pagar_ate || parcela.venc)}?</span>
                     <span style={{ display: 'inline-flex', gap: 6 }}>
                       <button onClick={enviarCliente} disabled={!!ocupado}
                         style={{ padding: '7px 12px', borderRadius: 8, background: '#15803d', color: 'white', border: 'none', fontSize: 12, fontWeight: 700, cursor: ocupado ? 'wait' : 'pointer' }}>

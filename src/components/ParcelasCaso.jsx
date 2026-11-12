@@ -46,7 +46,7 @@ export default function ParcelasCaso({ casoId, cardStyle }) {
       const r = await apiCall('/api/guia-parcela', { method: 'POST', body: JSON.stringify({ acao: 'enviar', arrematado_id: dados.arrematado.id, parcela_idx: item.idx }) });
       const d = await r.json().catch(() => ({}));
       if (!r.ok || !d.ok) throw new Error(d.error || `HTTP ${r.status}`);
-      setOk(`Guia da ${item.rotulo} enviada para ${d.enviada_para} (cópia para você).`);
+      setOk(`Guia da ${item.rotulo} enviada para ${d.enviada_para} (cópia para você${d.copia_advogado ? ` e para ${d.copia_advogado}, que mandou a guia` : ""}).`);
       if (d.aviso) setErro(d.aviso);
       setConfirmando(null);
       await carregar();

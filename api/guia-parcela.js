@@ -175,7 +175,7 @@ export default async function handler(req, res) {
   if (acao === 'enviar') {
     const g = guias[idx];
     if (!g?.anexo_id && !g?.storage_path) { res.status(400).json({ error: 'Esta parcela ainda não tem guia' }); return; }
-    let destino, pdf, nomeArq, caso = null, remet = null;
+    let destino, pdf, nomeArq, caso = null, remet = null, advogado = null;
     try {
       const r = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${arr.user_id}`, { headers: hdr, signal: AbortSignal.timeout(10000) });
       if (!r.ok) throw new Error(`e-mail do cliente: HTTP ${r.status}`);
@@ -193,6 +193,17 @@ export default async function handler(req, res) {
       [caso] = await sbGet(`casos?cliente_id=eq.${arr.user_id}&imovel_id=eq.${arr.imovel_id}&select=id&order=created_at.desc&limit=1`);
       const [admin] = await sbGet('perfis?role=eq.admin&ativo=eq.true&select=id&order=created_at.asc&limit=1');
       [remet] = admin ? await sbGet(`equipe_email?user_id=eq.${admin.id}&select=endereco`) : [];
+      // 12/11 (dono): quem mandou a guia por e-mail (o advogado do processo) vai em cópia E no responder — o
+      // comprovante que o cliente devolver chega a ele também, mesmo com "Responder" em vez de "Responder a todos".
+      // Guia de upload manual não tem remetente: segue sem advogado. Falha aqui não bloqueia o envio ao cliente.
+      if (g.caso_documento_id) {
+        try {
+          const [doc] = await sbGet(`caso_documentos?id=eq.${encodeURIComponent(g.caso_documento_id)}&select=email_id`);
+          const [orig] = doc?.email_id ? await sbGet(`email_caixa?id=eq.${doc.email_id}&direcao=eq.entrada&select=de_email`) : [];
+          const de = String(orig?.de_email || '').toLowerCase().trim();
+          if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(de) && !de.endsWith('@bidprobrasil.com.br')) advogado = de;
+        } catch (e) { console.error('[guia-parcela] remetente da guia (advogado) não lido — segue sem cópia a ele:', e.message); }
+      }
     } catch (e) {
       console.error('[guia-parcela] enviar:', e.message);
       res.status(502).json({ error: `Não consegui preparar o envio: ${e.message}` }); return;
@@ -217,8 +228,9 @@ export default async function handler(req, res) {
     // batia 409 no Resend ("E-mail não saiu") e o duplo toque não era deduplicado.
     const chaveEnvio = `guia-${arr.id}-${idx}-${g.anexo_id || g.storage_path}-${g.enviada_em || 'v1'}`;
     const tokenResposta = caso && remet?.endereco ? crypto.createHash('sha256').update(chaveEnvio).digest('hex').slice(0, 24) : null;
-    const replyTo = tokenResposta ? remet.endereco.replace('@', `+${tokenResposta}@`) : (remet?.endereco || undefined);
-    const cc = [...new Set([DONO_EMAIL, EQUIPE_EMAIL].filter(Boolean).map((e) => e.toLowerCase()))].filter((e) => e !== destino);
+    const replyCaso = tokenResposta ? remet.endereco.replace('@', `+${tokenResposta}@`) : (remet?.endereco || undefined);
+    const replyTo = advogado && advogado !== destino ? [replyCaso, advogado].filter(Boolean) : replyCaso;
+    const cc = [...new Set([DONO_EMAIL, EQUIPE_EMAIL, advogado].filter(Boolean).map((e) => e.toLowerCase()))].filter((e) => e !== destino);
     const assunto = `Guia da ${parcela.rotulo} · pagar até ${dataBR(pagarAte)} · ${brl(valor)}`;
     // Com anexo não entra na fila do orçamento diário (a fila não guarda anexo).
     const envio = await enviarEmail({
@@ -244,7 +256,7 @@ export default async function handler(req, res) {
     try {
       // Pelo servidor não há token de usuário: grava pela função atômica (só service_role), só a chave da parcela.
       const parcelamento = cron ? await registrarServidor(arr.id, idx, carimbo) : await gravar(token, arr.id, { ...arr.parcelamento, guias });
-      res.status(200).json({ ok: true, enviada_para: destino, parcelamento });
+      res.status(200).json({ ok: true, enviada_para: destino, copia_advogado: advogado, parcelamento });
     } catch (e) {
       console.error('[guia-parcela] carimbo de envio:', e.message);
       res.status(200).json({ ok: true, enviada_para: destino, aviso: `E-mail enviado, mas não gravei o registro do envio: ${e.message}` });
