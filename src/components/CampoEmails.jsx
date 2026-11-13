@@ -91,8 +91,8 @@ export default function CampoEmails({ valorInicial = [], onChange, placeholder =
       {emails.map(e => (
         <span key={e} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', borderRadius: 14, padding: '2px 8px', fontSize: 12.5, fontWeight: 600, maxWidth: '100%', overflowWrap: 'anywhere' }}>
           {e}
-          <button type="button" aria-label={`Remover ${e}`} onClick={(ev) => { ev.stopPropagation(); setEmails(prev => prev.filter(x => x !== e)); }}
-            style={{ background: 'none', border: 'none', color: '#1e40af', cursor: 'pointer', padding: 0, fontSize: 14, lineHeight: 1 }}>×</button>
+          <button type="button" aria-label={`Remover ${e}`} title={`Tirar ${e} deste envio`} onClick={(ev) => { ev.stopPropagation(); setEmails(prev => prev.filter(x => x !== e)); }}
+            style={{ background: '#dbeafe', border: 'none', color: '#1e40af', cursor: 'pointer', padding: 0, width: 18, height: 18, borderRadius: 9, fontSize: 15, fontWeight: 700, lineHeight: '18px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
         </span>
       ))}
       <input ref={input} value={texto} autoFocus={autoFocus} onChange={e => { setDestaque(0); setFocado(true); aoDigitar(e.target.value); }} onKeyDown={aoTeclar}

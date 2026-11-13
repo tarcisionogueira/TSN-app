@@ -157,12 +157,17 @@ export default function EnviarEmailCasoLote({ casoId, imovelId, veiculoId, imove
           <div style={{ marginBottom: 10 }}>
             <div style={{ fontSize: 12, color: emailPreview.contatoDisponivel ? '#64748b' : '#b91c1c', marginBottom: 6 }}>
               {emailPreview.contatoDisponivel
-                ? 'Para (cadastrados — pode tirar ou acrescentar):'
-                : '⚠️ Nenhum e-mail cadastrado para este destino ainda — digite (um ou vários; ficam salvos para os próximos envios):'}
+                ? <><b>Confira quem vai receber</b> — veio do cadastro. Clique no <b>×</b> para tirar quem não deve receber; digite para incluir outro.</>
+                : emailPreview.destino === 'juridico'
+                  ? '⚠️ Nenhum e-mail cadastrado para o jurídico — digite (um ou vários; valem só para este envio).'
+                  : '⚠️ Nenhum e-mail cadastrado para este destino ainda — digite (um ou vários; ficam salvos para os próximos envios):'}
             </div>
             <CampoEmails key={emailPreview.chave} valorInicial={emailPreview.destinatarios || (emailPreview.destinatarioEmail ? [emailPreview.destinatarioEmail] : [])}
-              onChange={setEmails} autoFocus={!emailPreview.contatoDisponivel} />
-            <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>Tab, Enter ou vírgula confirma cada endereço (ao terminar em .com.br confirma sozinho).</div>
+              onChange={setEmails} autoFocus={!emailPreview.contatoDisponivel} sugestoes={emailPreview.sugestoes || []} />
+            <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
+              Tab, Enter ou vírgula confirma cada endereço (ao terminar em .com.br confirma sozinho).
+              {emailPreview.destino === 'juridico' && ' O que você digitar aqui vale só para este envio — não entra no cadastro do jurídico.'}
+            </div>
           </div>
 
           {emailPreview.redator && (

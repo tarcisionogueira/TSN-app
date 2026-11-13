@@ -87,6 +87,28 @@ async function auditar(row) {
     await sb('caso_emails_enviados', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(row) });
   } catch { /* padrao-ok: auditoria não pode derrubar a resposta ao usuário */ }
 }
+// SUGESTÕES do campo "Para" no envio ao jurídico (13/11): cadastro (inclusive inativos) + quem já
+// recebeu e-mail jurídico nosso. Só sugere — nada entra pré-marcado por estar aqui. Falha de leitura
+// devolve lista vazia COM rastro no log: sem sugestão o envio segue normal (digita-se o endereço).
+async function sugestoesJuridico() {
+  try {
+    const [rCad, rHist] = await Promise.all([
+      sb('juridico_destinatarios?select=email,nome&limit=200'),
+      sb('email_caixa?categoria=eq.juridico&direcao=eq.saida&select=para&order=criado_em.desc&limit=80'),
+    ]);
+    if (!rCad.ok) console.warn('[enviar-email-caso] sugestões: cadastro jurídico HTTP', rCad.status);
+    if (!rHist.ok) console.warn('[enviar-email-caso] sugestões: histórico jurídico HTTP', rHist.status);
+    const cad = rCad.ok ? await rCad.json().catch(() => []) : [];
+    const hist = rHist.ok ? await rHist.json().catch(() => []) : [];
+    const mapa = new Map();
+    for (const d of Array.isArray(cad) ? cad : []) { const e = norm(d?.email); if (e) mapa.set(e, { email: e, nome: /cadastrado por/i.test(d?.nome || '') ? '' : (d?.nome || '') }); }
+    for (const h of Array.isArray(hist) ? hist : []) for (const p of (Array.isArray(h?.para) ? h.para : [])) { const e = norm(p); if (e && !mapa.has(e)) mapa.set(e, { email: e, nome: '' }); }
+    return [...mapa.values()].filter(s => RE_EMAIL.test(s.email)).slice(0, 60);
+  } catch (e) {
+    console.warn('[enviar-email-caso] sugestões do jurídico:', String(e?.message || e).slice(0, 120));
+    return [];
+  }
+}
 // Grava o e-mail digitado na mão para os PRÓXIMOS envios não pedirem de novo — mesmo padrão
 // de api/leiloeiro-contato.js (upsert por `fonte`) e api/juridico-destinatarios.js (insert).
 async function salvarContato(destino, email, { fonte, leiloeiro, advogadoId, nomeRemetente }) {
@@ -378,6 +400,7 @@ export default async function handler(req) {
       avisoRestricao: restricao?.aviso || null,
       redator: redator ? { usado: !!redator.texto, motivo: redator.motivo, exemplos: redator.exemplos } : null,
       destinatarios,
+      sugestoes: destino === 'juridico' ? await sugestoesJuridico() : [],
       destinatarioEmail: destinatarios[0] || null, // compat com a tela antiga
       contatoDisponivel: destinatarios.length > 0,
       anexosLote: anexosLote.map(a => a.nome || 'documento'),
@@ -490,8 +513,12 @@ export default async function handler(req) {
 
   // Só grava o contato novo DEPOIS de confirmar que o envio deu certo — um e-mail digitado
   // errado (que o Resend recusou) não pode virar cadastro permanente.
-  // Leiloeiro tem UM contato por fonte (upsert): só grava se não havia nenhum. Jurídico grava cada novo.
-  const aSalvar = destino === 'leiloeiro' ? (cadastrados.size ? [] : novos.slice(0, 1)) : novos;
+  // Leiloeiro tem UM contato por fonte (upsert): só grava se não havia nenhum.
+  // Jurídico NÃO grava mais (13/11, dono): o digitado na hora virava destinatário GLOBAL e passava a
+  // ir pré-marcado em TODO envio ao jurídico — foi assim que a Goldstone (não é escritório jurídico)
+  // recebeu o "Apoio jurídico" de Capão da Canoa junto com a Cajado de Menezes. O digitado vale só
+  // para este envio e volta como SUGESTÃO ao digitar (histórico); fixar escritório é no cadastro.
+  const aSalvar = destino === 'leiloeiro' ? (cadastrados.size ? [] : novos.slice(0, 1)) : [];
   for (const e of aSalvar) await salvarContato(destino, e, { fonte: loteFonte, leiloeiro: lote?.leiloeiro || null, advogadoId: caso?.advogado_id, nomeRemetente });
 
   const naoEnviados = (r.anexos_status || []).filter(s => s.enviado === false);
