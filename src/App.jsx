@@ -81,6 +81,7 @@ const LeiloeiroPortal = lazy(() => import('./pages/LeiloeiroPortal'));
 const EbookPage = lazy(() => import('./pages/EbookPage'));
 const ContratoLink = lazy(() => import('./pages/ContratoLink'));
 const TestemunhaLink = lazy(() => import('./pages/TestemunhaLink'));
+const ValidarDocumento = lazy(() => import('./pages/ValidarDocumento'));
 const ProdutoLanding = lazy(() => import('./pages/ProdutoLanding'));
 const ProdutoPublico = lazy(() => import('./pages/ProdutoPublico'));
 const EducacaoPublico = lazy(() => import('./pages/EducacaoPublico'));
@@ -551,6 +552,9 @@ export default function App() {
               fora do MainLayout, o destinatário não vê menu de um sistema a que não tem acesso. */}
           <Route path="/v/:token" element={<div style={{ minHeight: '100vh', background: '#f8fafc' }}><VeiculoDetalhe /></div>} />
           <Route path="/t/:token" element={<TestemunhaLink />} />
+          {/* Validação PÚBLICA de documento assinado pelo código do rodapé/QR (12/11). Sem login. */}
+          <Route path="/validar" element={<ValidarDocumento />} />
+          <Route path="/validar/:codigo" element={<ValidarDocumento />} />
           {/* Páginas PÚBLICAS de eBook/Curso (preço + aquisição). Precisam estar no router
               de TOPO senão o /p/:tipo/:id (ProdutoLanding, sem tratamento) as sombreava →
               "Produto não encontrado". A rota estática vence a dinâmica. */}

@@ -8,6 +8,8 @@
 // Gerado no cliente a partir do que o token expõe: dados COMPLETOS do próprio signatário +
 // situação das DEMAIS partes (nome + data), sem vazar CPF/IP/assinatura de terceiros. Retroativo.
 import { imprimirHtml } from './pdfImprimir';
+import qrcode from 'qrcode-generator';
+import { formatarCodigo } from '../lib/codigo-validacao.js';
 import { mascararDoc, mascararEmail, mascararTel } from '../utils/cnpjCep';
 
 // Renderiza as páginas de um PDF (URL) em imagens (dataURL) via pdf.js — para EMBUTIR o documento
@@ -108,6 +110,10 @@ const ESTILOS_CONTRATO = `
   .docconv table{border-collapse:collapse;width:100%;margin:8px 0;}
   .docconv td,.docconv th{border:1px solid #cbd5e1;padding:5px 7px;font-size:11.5px;vertical-align:top;}
   .docconv img{max-width:100%;}
+  .valida{display:flex;gap:12px;align-items:center;border:1px solid #cbd5e1;border-radius:9px;padding:8px 12px;margin-bottom:12px;page-break-inside:avoid;}
+  .valida svg{width:84px;height:84px;flex:none;}
+  .valida .cod{font-size:17px;font-weight:900;letter-spacing:1.5px;color:#111;}
+  .valida .vl{font-size:10px;color:#475569;line-height:1.5;word-break:break-all;}
   .pagefoot{position:fixed;bottom:4mm;left:8mm;right:8mm;text-align:center;font-size:8px;line-height:1.3;color:#94a3b8;word-break:break-all;}
 `;
 
@@ -168,6 +174,23 @@ export async function gerarContratoPDF({ contrato, roster = [] } = {}) {
   const total = partes.length;
   const completo = total > 0 && totAssin === total;
 
+  // CÓDIGO DE VALIDAÇÃO (12/11): liga TODAS as páginas (rodapé repetido pela impressão) à folha de
+  // assinaturas e à página pública /#/validar/<código>. Só existe com ao menos uma assinatura.
+  // Falha ao emitir não impede o PDF: sai com o rodapé antigo (hash), como antes.
+  let codigo = contrato.codigo_validacao || null;
+  if (!codigo && totAssin > 0 && contrato.token) {
+    try {
+      const r = await fetch('/api/validar-documento', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: contrato.token }) });
+      if (r.ok) codigo = (await r.json())?.codigo || null;
+    } catch (e) { console.warn('código de validação indisponível', e?.message); }
+  }
+  const urlValida = codigo ? `${origin}/#/validar/${codigo}` : '';
+  let qrSvg = '';
+  if (codigo) {
+    try { const qr = qrcode(0, 'M'); qr.addData(urlValida); qr.make(); qrSvg = qr.createSvgTag({ cellSize: 3, margin: 2, scalable: true }); }
+    catch (e) { console.warn('QR do código de validação', e?.message); }
+  }
+
   // Cartão por signatário no padrão ZapSign ("Assinado via …", nome, data/hora, Token, assinatura,
   // "Pontos de autenticação"). Dados completos: do próprio (p.eu, vindo de contrato.*) OU de CADA
   // parte quando o chamador passa o roster COMPLETO (p._full — caso do admin, que tem acesso às
@@ -219,7 +242,9 @@ export async function gerarContratoPDF({ contrato, roster = [] } = {}) {
 <title>Contrato - ${esc(titulo)}</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet">
 <style>${ESTILOS_CONTRATO}</style></head><body>
-  <div class="pagefoot">BidPro Brasil · Documento nº ${esc(numero)}${contrato.assinatura_hash ? ` · Hash SHA-256: ${esc(contrato.assinatura_hash)}` : ''} · assinado eletronicamente (MP 2.200-2/2001 · Lei 14.063/2020)</div>
+  <div class="pagefoot">${codigo
+    ? `BidPro Brasil · Assinado eletronicamente (MP 2.200-2/2001 · Lei 14.063/2020) · ${totAssin} de ${total} assinatura(s) · Código de validação: <b>${esc(formatarCodigo(codigo))}</b> · Confira em ${esc(urlValida)}${contrato.assinatura_hash ? ` · Hash SHA-256: ${esc(contrato.assinatura_hash.slice(0, 16))}…` : ''}`
+    : `BidPro Brasil · Documento nº ${esc(numero)}${contrato.assinatura_hash ? ` · Hash SHA-256: ${esc(contrato.assinatura_hash)}` : ''} · assinado eletronicamente (MP 2.200-2/2001 · Lei 14.063/2020)`}</div>
   <div class="cab"><div class="logo"></div><div><div class="sub">BidPro Brasil, Contrato Digital</div><div class="tit">${esc(titulo)}</div></div></div>
   ${corpoDoc}
   <div class="quebra man">
@@ -233,7 +258,8 @@ export async function gerarContratoPDF({ contrato, roster = [] } = {}) {
       <div><b>Assinaturas:</b> ${totAssin} de ${total}</div>
       <div class="muted">Datas e horários em UTC-03:00 (America/Sao_Paulo).</div>
     </div>
-    <div class="legal"><span class="cert">INTEGRIDADE CERTIFICADA.</span> Assinaturas eletrônicas têm validade legal, conforme a MP nº 2.200-2/2001 (ICP-Brasil) e a Lei nº 14.063/2020. A integridade é assegurada pelo hash SHA-256 acima; qualquer alteração no texto do contrato invalida as assinaturas.${verUrl ? ` Confira a autenticidade deste documento em ${verUrl}.` : ''}${numero ? ` Este relatório é parte integrante do documento nº ${esc(numero)}.` : ''} Para proteção dos assinantes (LGPD, Lei nº 13.709/2018), os dados pessoais são exibidos de forma parcial; o registro completo (incluindo os pontos de autenticação) é mantido pela plataforma e disponibilizado às partes e às autoridades competentes mediante solicitação.</div>
+    ${codigo ? `<div class="valida">${qrSvg}<div><div class="vl">Código de validação</div><div class="cod">${esc(formatarCodigo(codigo))}</div><div class="vl">Confira a autenticidade deste documento em ${esc(urlValida)} (ou aponte a câmera para o QR). O código aparece no rodapé de todas as páginas.</div></div></div>` : ''}
+    <div class="legal"><span class="cert">INTEGRIDADE CERTIFICADA.</span> Assinaturas eletrônicas têm validade legal, conforme a MP nº 2.200-2/2001 (ICP-Brasil) e a Lei nº 14.063/2020. A integridade é assegurada pelo hash SHA-256 acima; qualquer alteração no texto do contrato invalida as assinaturas.${urlValida ? ` Confira a autenticidade deste documento em ${esc(urlValida)}.` : verUrl ? ` Confira a autenticidade deste documento em ${verUrl}.` : ''}${numero ? ` Este relatório é parte integrante do documento nº ${esc(numero)}.` : ''} Para proteção dos assinantes (LGPD, Lei nº 13.709/2018), os dados pessoais são exibidos de forma parcial; o registro completo (incluindo os pontos de autenticação) é mantido pela plataforma e disponibilizado às partes e às autoridades competentes mediante solicitação.</div>
     ${blocosPartes}
   </div>
 </body></html>`;

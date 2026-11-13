@@ -6,6 +6,21 @@
 
 
 
+## 12/11 (noite) — CÓDIGO DE VALIDAÇÃO EM TODAS AS PÁGINAS DOS DOCUMENTOS ASSINADOS
+
+- **Caso (dono):** pediu um código ligando todas as páginas do documento à folha de assinaturas, como nos serviços de assinatura, em todos os
+  sistemas (holding e BidPro). Antes: rodapé com `Documento nº {grupo||token}` (expunha o TOKEN do link quando não havia grupo) e a folha
+  apontava para `/#/c/<token>` (a página do próprio signatário).
+- **Feito:** `contratos_link.codigo_validacao` (16 car., alfabeto sem I/O/0/1 = 80 bits; um por documento/grupo; imutável) — migração
+  `20261112_contratos_link_codigo_validacao.sql` (`gerar_codigo_validacao()`, `garantir_codigo_validacao(token)`, ambos SECURITY INVOKER,
+  sem REVOKE). `api/validar-documento.js`: POST {token} emite o código (só com ao menos 1 assinatura); GET ?c= devolve título, partes
+  com CPF/CNPJ mascarado, datas e hashes — nunca token/e-mail/IP/imagens. `ContratoPDF`: rodapé de TODAS as páginas com o código + endereço
+  de conferência; quadro com QR (qrcode-generator) na folha de assinaturas; o token saiu do rodapé quando há código. Página pública
+  `/#/validar/:codigo` (`ValidarDocumento.jsx`). Teste `npm run testar:codigo-validacao`.
+- **Fora (de propósito):** termos de aceite (`cobrancas_avulsas.termo_aceite`, `aceites_plano`) não são documentos assinados com folha —
+  seguem com o hash próprio. Contrato de arquivo anexo (CriarContrato) continua sem hash dos BYTES do arquivo (lacuna antiga).
+- **Local:** `verificar:csp` falha no Windows também no main limpo (quebra de linha CRLF muda o hash dos scripts inline); sintaxe e vite ok.
+
 ## 11/11 (noite) — KLÖCKNER E WR VOLTAM A GRAVAR (pendências 468 e 469, fechadas)
 
 - **KLEILOES (ea016a53):** kleiloes.com.br virou Next.js próprio sobre o backend da Suporte em 09/11. Fonte própria
