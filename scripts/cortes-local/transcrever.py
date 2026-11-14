@@ -54,7 +54,7 @@ def nota(texto):
 def escolher(segs, n=3, minimo=30.0, maximo=60.0):
     cands = []
     for i, s in enumerate(segs):
-        if MULETA_INICIO.match(s["texto"]) or not s["texto"][:1].isalpha():
+        if MULETA_INICIO.match(s["texto"]) or not s["texto"][:1].isupper():  # minúscula = frase pela metade (29:01 "com 30%, 40%...")
             continue
         # início do trecho: valoriza a 1ª frase (é ela que segura o espectador)
         abertura = nota(s["texto"]) * 2

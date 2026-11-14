@@ -210,7 +210,10 @@ function Teste-4K {
   $fonte = [ordered]@{ arquivo = $v.Name; gb = [math]::Round($v.Length / 1GB, 2); duracao_min = [math]::Round($dur / 60, 1)
     video = "$($vid.codec_name) $($vid.profile) $($vid.width)x$($vid.height) $($vid.r_frame_rate) fps $($vid.pix_fmt)"
     mbps = [math]::Round([double]$p.format.bit_rate / 1e6, 1); audio = "$($aud.codec_name) $($aud.sample_rate) Hz $($aud.channels) canais" }
-  $qualidade = if ([int]$vid.height -lt 1080 -and [int]$vid.width -lt 1080) { 'REPROVADO: abaixo de 1080p' } elseif ([int]$aud.sample_rate -lt 44100) { 'REPROVADO: áudio abaixo de 44,1 kHz' } else { 'aprovado' }
+  # régua das regras de corte: lado menor >= 1080 aprova; 720 só com 4 Mbps ou mais; áudio >= 44,1 kHz
+  $lado = [math]::Min([int]$vid.width, [int]$vid.height); $mbps = [double]$p.format.bit_rate / 1e6
+  $qualidade = if ($lado -lt 720 -or ($lado -lt 1080 -and $mbps -lt 4)) { "REPROVADO: ${lado}p a $([math]::Round($mbps,1)) Mbps" } elseif ([int]$aud.sample_rate -lt 44100) { 'REPROVADO: áudio abaixo de 44,1 kHz' } elseif ($lado -lt 1080) { "aprovado com ressalva: ${lado}p (o 9:16 usa só ~$([math]::Round($lado*9/16))px de largura e é ampliado)" } else { 'aprovado' }
+  $ehFonte4K = $lado -ge 2160
   $tempos = [ordered]@{}
 
   $sw = [Diagnostics.Stopwatch]::StartNew()
@@ -250,7 +253,10 @@ function Teste-4K {
   $tempos.x_tempo_real_transcricao = [math]::Round($dur / [math]::Max($tempos.transcricao_s, 0.1), 2)
   # projeção para 15 min: transcrição escala com a duração; os 3 cortes não
   $proj15 = [math]::Round((900 / $dur) * ($tempos.extrair_audio_s + $tempos.transcricao_s) / 60 + $tempos.cortes_s / 60, 1)
-  $veredito = if ($qualidade -ne 'aprovado') { "INCONCLUSIVO — fonte $qualidade" }
+  # o veredito só fala em 4K se a fonte FOR 4K: cortar 720p é bem mais leve e não prova nada sobre 4K
+  $res = "$($vid.width)x$($vid.height)"
+  $veredito = if ($qualidade -like 'REPROVADO*') { "INCONCLUSIVO — fonte $qualidade" }
+  elseif (-not $ehFonte4K) { "PARCIAL — medido em $res, NÃO em 4K: 15 min nesta resolução ~$proj15 min; a transcrição vale para 4K, os cortes não" }
   elseif ($cortes.Count -lt 3) { 'NÃO ATENDE AINDA — algum corte falhou (ver acima)' }
   elseif ($proj15 -le 30) { "ATENDE — 15 min de 4K viram 3 cortes em ~$proj15 min, sem OpusClip" }
   elseif ($proj15 -le 60) { "ATENDE COM ESPERA — ~$proj15 min por vídeo de 15 min (deixar rodando)" }
