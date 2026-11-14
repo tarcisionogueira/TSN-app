@@ -13,7 +13,8 @@ $Base = 'C:\Servidor'
 $Venv = "$Base\venv"
 $Py = "$Venv\Scripts\python.exe"
 New-Item -ItemType Directory -Force $Base, "$Base\teste", "$Base\saida" | Out-Null
-Copy-Item -Force (Join-Path $PSScriptRoot 'transcrever.py') "$Base\transcrever.py"
+$origem = Join-Path $PSScriptRoot 'transcrever.py'  # só copia se o script rodar de outra pasta
+if ((Resolve-Path $origem).Path -ne (Join-Path $Base 'transcrever.py')) { Copy-Item -Force $origem "$Base\transcrever.py" }
 $Rel = "$Base\relatorio.md"
 $ResFile = "$Base\resultado.json"
 $R = if (Test-Path $ResFile) { Get-Content $ResFile -Raw -Encoding UTF8 | ConvertFrom-Json } else { [pscustomobject]@{} }
