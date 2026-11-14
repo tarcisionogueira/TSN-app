@@ -7,7 +7,8 @@
 #   powershell -ExecutionPolicy Bypass -File .\cortes-local.ps1 -Etapa diag  # diag|instalar|teste|teste4k
 # Resultado: C:\Servidor\relatorio.md (para ler) e C:\Servidor\resultado.json (para colar no Claude).
 
-param([ValidateSet('tudo', 'diag', 'instalar', 'teste', 'teste4k')][string]$Etapa = 'tudo')
+param([ValidateSet('tudo', 'diag', 'instalar', 'teste', 'teste4k')][string]$Etapa = 'tudo',
+      [string]$Video = '')  # caminho do vídeo onde ele já está (evita copiar GBs para C:\Servidor\teste)
 $ErrorActionPreference = 'Stop'
 $Base = 'C:\Servidor'
 $Venv = "$Base\venv"
@@ -198,8 +199,9 @@ function Teste-Rapido {
 
 # ============================== 4. TESTE 4K ==============================
 function Teste-4K {
-  $v = Get-ChildItem "$Base\teste" -File -Include *.mp4, *.mov, *.mkv, *.m4v -Recurse | Where-Object { $_.FullName -notmatch '\\_hw\\' } | Sort-Object Length -Descending | Select-Object -First 1
-  if (-not $v) { Out-Rel "`n## 4. Teste 4K: PULADO — nenhum vídeo em $Base\teste (copie o arquivo para lá e rode -Etapa teste4k)."; return }
+  if ($Video) { if (-not (Test-Path -LiteralPath $Video)) { throw "vídeo não encontrado: $Video" }; $v = Get-Item -LiteralPath $Video }
+  else { $v = Get-ChildItem "$Base\teste" -File -Include *.mp4, *.mov, *.mkv, *.m4v, *.webm, *.avi -Recurse | Where-Object { $_.FullName -notmatch '\\_hw\\' } | Sort-Object Length -Descending | Select-Object -First 1 }
+  if (-not $v) { Out-Rel "`n## 4. Teste 4K: PULADO — nenhum vídeo em $Base\teste (copie o arquivo para lá, ou rode -Etapa teste4k -Video "<caminho do vídeo>")."; return }
   $total = [Diagnostics.Stopwatch]::StartNew()
   $p = (& ffprobe -v error -show_entries 'stream=codec_type,codec_name,profile,pix_fmt,width,height,r_frame_rate,sample_rate,channels:format=duration,bit_rate' -of json $v.FullName) -join '' | ConvertFrom-Json
   $vid = $p.streams | Where-Object codec_type -eq 'video' | Select-Object -First 1
