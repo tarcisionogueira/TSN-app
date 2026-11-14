@@ -256,8 +256,9 @@ function Teste-4K {
   # o veredito só fala em 4K se a fonte FOR 4K: cortar 720p é bem mais leve e não prova nada sobre 4K
   $res = "$($vid.width)x$($vid.height)"
   $veredito = if ($qualidade -like 'REPROVADO*') { "INCONCLUSIVO — fonte $qualidade" }
+  elseif ($dur -lt 300) { "INCONCLUSIVO — vídeo de $([math]::Round($dur/60,1)) min é curto demais para 3 trechos de 30-60 s; use 10-15 min" }
+  elseif ($cortes.Count -lt 3) { "NÃO ATENDE AINDA — saíram $($cortes.Count) de 3 cortes (ver acima)" }
   elseif (-not $ehFonte4K) { "PARCIAL — medido em $res, NÃO em 4K: 15 min nesta resolução ~$proj15 min; a transcrição vale para 4K, os cortes não" }
-  elseif ($cortes.Count -lt 3) { 'NÃO ATENDE AINDA — algum corte falhou (ver acima)' }
   elseif ($proj15 -le 30) { "ATENDE — 15 min de 4K viram 3 cortes em ~$proj15 min, sem OpusClip" }
   elseif ($proj15 -le 60) { "ATENDE COM ESPERA — ~$proj15 min por vídeo de 15 min (deixar rodando)" }
   else { "NÃO ATENDE BEM — ~$proj15 min por vídeo de 15 min; manter OpusClip no plano mínimo" }
