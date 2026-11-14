@@ -201,7 +201,7 @@ function Teste-Rapido {
 function Teste-4K {
   if ($Video) { if (-not (Test-Path -LiteralPath $Video)) { throw "vídeo não encontrado: $Video" }; $v = Get-Item -LiteralPath $Video }
   else { $v = Get-ChildItem "$Base\teste" -File -Include *.mp4, *.mov, *.mkv, *.m4v, *.webm, *.avi -Recurse | Where-Object { $_.FullName -notmatch '\\_hw\\' } | Sort-Object Length -Descending | Select-Object -First 1 }
-  if (-not $v) { Out-Rel "`n## 4. Teste 4K: PULADO — nenhum vídeo em $Base\teste (copie o arquivo para lá, ou rode -Etapa teste4k -Video "<caminho do vídeo>")."; return }
+  if (-not $v) { Out-Rel "`n## 4. Teste 4K: PULADO — nenhum vídeo em $Base\teste (copie o arquivo para lá, ou rode -Etapa teste4k -Video <caminho do vídeo>)."; return }
   $total = [Diagnostics.Stopwatch]::StartNew()
   $p = (& ffprobe -v error -show_entries 'stream=codec_type,codec_name,profile,pix_fmt,width,height,r_frame_rate,sample_rate,channels:format=duration,bit_rate' -of json $v.FullName) -join '' | ConvertFrom-Json
   $vid = $p.streams | Where-Object codec_type -eq 'video' | Select-Object -First 1
