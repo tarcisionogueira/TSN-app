@@ -115,11 +115,14 @@ function Instalar {
   }
   else { Out-Rel '- FFmpeg: instalação recusada.'; return }
 
-  $tem311 = $false; try { $tem311 = ((& py -3.11 --version 2>$null) -match '3\.11') } catch {}
-  if ($tem311) { Out-Rel '- Python 3.11 já instalado.' }
-  elseif (Confirma 'Instalar Python 3.11 (winget Python.Python.3.11, ~30 MB)?') {
-    winget install -e --id Python.Python.3.11 --accept-source-agreements --accept-package-agreements; Atualiza-Path
-    Out-Rel '- Python 3.11 instalado via winget.'
+  $py311 = Acha-Py311
+  if ($py311) { Out-Rel "- Python 3.11 já instalado ($py311)." }
+  elseif (Confirma 'Instalar Python 3.11 (winget Python.Python.3.11, ~30 MB, só para o seu usuário, sem pedir administrador)?') {
+    winget install -e --id Python.Python.3.11 --scope user --accept-source-agreements --accept-package-agreements
+    $codigo = $LASTEXITCODE; Atualiza-Path; $py311 = Acha-Py311
+    # winget devolve 1602 quando a instalação é cancelada: não dá para seguir dizendo "instalado"
+    if (-not $py311) { Out-Rel "- Python 3.11: instalação NÃO concluída (winget código $codigo). Rode de novo e aceite a janela do instalador, se aparecer."; return }
+    Out-Rel "- Python 3.11 instalado via winget ($py311)."
   }
   else { Out-Rel '- Python 3.11: instalação recusada.'; return }
 
@@ -128,7 +131,7 @@ function Instalar {
   if (Test-Path $Py) { Out-Rel "- venv já existe em $Venv." }
   $extra = if ($mod.dev -eq 'cuda') { ' + bibliotecas CUDA da NVIDIA (cuBLAS/cuDNN, ~1 GB)' } else { '' }
   if (Confirma "Criar $Venv e instalar faster-whisper$extra? O modelo '$($mod.m)' ($tam) baixa no 1º uso.") {
-    if (-not (Test-Path $Py)) { & py -3.11 -m venv $Venv }
+    if (-not (Test-Path $Py)) { & $py311 -m venv $Venv; if (-not (Test-Path $Py)) { throw "não consegui criar o venv com $py311" } }
     & $Py -m pip install --upgrade pip --quiet
     & $Py -m pip install faster-whisper --quiet
     if ($mod.dev -eq 'cuda') { & $Py -m pip install nvidia-cublas-cu12 'nvidia-cudnn-cu12==9.*' --quiet }
@@ -138,6 +141,13 @@ function Instalar {
   Set-R 'modelo' $mod
   Out-Rel "- Modelo escolhido pelo hardware: **$($mod.m)** ($($mod.dev), $($mod.c))."
   if (-not $R.hardware) { Teste-Hardware }
+}
+
+# Acha o python.exe 3.11 mesmo se o PATH desta janela ainda não souber dele (recém-instalado)
+function Acha-Py311 {
+  try { $p = (& py -3.11 -c "import sys;print(sys.executable)" 2>$null); if ($LASTEXITCODE -eq 0 -and $p) { return "$p".Trim() } } catch {}
+  foreach ($c in "$env:LOCALAPPDATA\Programs\Python\Python311\python.exe", "$env:ProgramFiles\Python311\python.exe") { if (Test-Path $c) { return $c } }
+  return $null
 }
 
 # CUDA no Windows: as DLLs pip da NVIDIA precisam estar no PATH do processo
