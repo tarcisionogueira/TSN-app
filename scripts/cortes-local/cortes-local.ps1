@@ -159,7 +159,7 @@ function Prepara-Cuda {
 }
 
 function Transcreve($entrada, $saida, [int]$cortes = 0) {
-  $mod = $R.modelo; if (-not $mod) { $mod = Modelo }
+  $mod = $R.modelo; if (-not "$($mod.m)") { $mod = Modelo }
   if ($mod.dev -eq 'cuda') { Prepara-Cuda }
   $a = @("$Base\transcrever.py", $entrada, $saida, '--modelo', $mod.m, '--device', $mod.dev, '--compute', $mod.c)
   if ($cortes) { $a += @('--cortes', "$cortes", '--pasta-srt', "$Base\saida") }
@@ -186,11 +186,11 @@ function Teste-Rapido {
          'e vi que o imóvel estava ocupado. A desocupação levou quatro meses. No leilão, você lucra antes de arrematar. '
   $s.SetOutputToWaveFile($wav); $s.Speak($txt + $txt); $s.Dispose()
   $sw = [Diagnostics.Stopwatch]::StartNew()
-  $r = Transcreve $wav "$Base\teste\fala_pt.json"
+  $tr = Transcreve $wav "$Base\teste\fala_pt.json"
   $sw.Stop()
-  $t = [ordered]@{ duracao_audio_s = $r.duracao_audio_s; carga_modelo_s = $r.carga_modelo_s; transcricao_s = $r.transcricao_s
-    x_tempo_real = $r.x_tempo_real; total_s = [math]::Round($sw.Elapsed.TotalSeconds, 1); modelo = $r.modelo; device = $r.device
-    trecho = (($r.segmentos | Select-Object -First 2 | ForEach-Object { $_.texto }) -join ' ') }
+  $t = [ordered]@{ duracao_audio_s = $tr.duracao_audio_s; carga_modelo_s = $tr.carga_modelo_s; transcricao_s = $tr.transcricao_s
+    x_tempo_real = $tr.x_tempo_real; total_s = [math]::Round($sw.Elapsed.TotalSeconds, 1); modelo = $tr.modelo; device = $tr.device
+    trecho = (($tr.segmentos | Select-Object -First 2 | ForEach-Object { $_.texto }) -join ' ') }
   Set-R 'teste_rapido' $t
   Out-Rel "`n## 3. Teste rápido (áudio sintético pt-BR de $($t.duracao_audio_s) s)`n"
   Out-Rel "- Modelo $($t.modelo) ($($t.device)): transcreveu em $($t.transcricao_s) s = **$($t.x_tempo_real)x o tempo real** (carga do modelo: $($t.carga_modelo_s) s)."
@@ -218,7 +218,7 @@ function Teste-4K {
   if (-not (FF @('-hide_banner', '-y', '-i', $v.FullName, '-vn', '-ac', '1', '-ar', '16000', $wav)).ok) { throw 'falha ao extrair o áudio' }
   $tempos.extrair_audio_s = [math]::Round($sw.Elapsed.TotalSeconds, 1)
 
-  $sw.Restart(); $r = Transcreve $wav "$Base\saida\transcricao.json" 3
+  $sw.Restart(); $tr = Transcreve $wav "$Base\saida\transcricao.json" 3
   $tempos.transcricao_s = [math]::Round($sw.Elapsed.TotalSeconds, 1)
 
   $enc = $R.hardware.encoder_escolhido
@@ -234,7 +234,7 @@ function Teste-4K {
   $cortes = @(); $k = 0
   Push-Location "$Base\saida"  # o filtro subtitles recebe o .srt por nome relativo (evita escapar C:\ no filtro)
   try {
-    foreach ($c in $r.cortes) {
+    foreach ($c in $tr.cortes) {
       $k++; $sw.Restart()
       $a = @('-hide_banner', '-y', '-hwaccel', 'd3d11va', '-ss', "$($c.ini)", '-t', "$([math]::Round($c.fim - $c.ini, 2))", '-i', $v.FullName,
         '-vf', "${vf}scale=1080:1920:flags=lanczos,subtitles=corte$k.srt:force_style='$estilo'") + $encArgs +
@@ -270,5 +270,6 @@ function Teste-4K {
 if ($Etapa -in 'tudo', 'diag') { Diagnostico }
 if ($Etapa -in 'tudo', 'instalar') { Instalar }
 if ($Etapa -in 'tudo', 'teste') { if (-not (Test-Path $Py)) { throw 'faster-whisper não instalado (rode -Etapa instalar).' }; Teste-Rapido }
+if ($Etapa -eq 'teste4k' -and -not $R.hardware.encoder_escolhido) { Diagnostico }  # estado perdido: refaz (1 min)
 if ($Etapa -in 'tudo', 'teste4k') { if (-not (Test-Path $Py)) { throw 'faster-whisper não instalado (rode -Etapa instalar).' }; Teste-4K }
 Write-Host "`nPronto. Relatório: $Rel · Resultado para colar no Claude: $ResFile"
