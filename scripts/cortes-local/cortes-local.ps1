@@ -145,8 +145,9 @@ function Instalar {
 
 # Acha o python.exe 3.11 mesmo se o PATH desta janela ainda não souber dele (recém-instalado)
 function Acha-Py311 {
-  try { $p = (& py -3.11 -c "import sys;print(sys.executable)" 2>$null); if ($LASTEXITCODE -eq 0 -and $p) { return "$p".Trim() } } catch {}
-  foreach ($c in "$env:LOCALAPPDATA\Programs\Python\Python311\python.exe", "$env:ProgramFiles\Python311\python.exe") { if (Test-Path $c) { return $c } }
+  # 1º os caminhos fixos: o texto devolvido pelo py.exe chega com acento trocado (Tarcísio -> TarcÝsio)
+  foreach ($c in "$env:LOCALAPPDATA\Programs\Python\Python311\python.exe", "$env:ProgramFiles\Python311\python.exe") { if (Test-Path -LiteralPath $c) { return $c } }
+  try { $p = "$(& py -3.11 -c "import sys;print(sys.executable)" 2>$null)".Trim(); if ($p -and (Test-Path -LiteralPath $p)) { return $p } } catch {}
   return $null
 }
 
