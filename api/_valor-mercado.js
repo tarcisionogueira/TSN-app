@@ -72,7 +72,8 @@ const TEXTO_LEILAO = /leil[aã]o|leiloeir|leil[oõ]es|hasta\s*p[uú]bl|pra[cç]a
 const TEXTO_NAO_E_LEILAO = /n[aã]o\s+(é|e)\s+(de\s+)?leil/i;
 // 15/11: agregadores e leiloeiros cujo DOMÍNIO não diz "leilão" (o BidHero trouxe o próprio lote em leilão como
 // comparável em Capão da Canoa). Lista pelo host, para não pegar "sold" ou "frazao" no meio de outra palavra.
-const URL_LEILAO = /leil[aã]o|leiloes|leiloeir|caixa\.gov|hasta-publica|arremat|venda-?direta|\/\/(?:www\.)?(?:bidhero|portalzuk|superbid|sold\.superbid|megaleiloes|biasileiloes|frazaoleiloes|pestanaleiloes|sodresantoro|leiloesjudiciais|lancenoleilao|grupolance|resale|imoveiscaixa|vipleiloes|lancejudicial|zukerman|hastavip|d1lance|e-?leiloes)\./i;
+// 15/11: leeilon (LeeilON — site de leilão; o "leil" do regex não casa com "leeil"; achado por indice_suspeitas()).
+const URL_LEILAO = /leil[aã]o|leiloes|leiloeir|caixa\.gov|hasta-publica|arremat|venda-?direta|\/\/(?:www\.)?(?:bidhero|portalzuk|superbid|sold\.superbid|megaleiloes|biasileiloes|frazaoleiloes|pestanaleiloes|sodresantoro|leiloesjudiciais|lancenoleilao|grupolance|resale|imoveiscaixa|vipleiloes|lancejudicial|zukerman|hastavip|d1lance|e-?leiloes|leeilon)\./i;
 
 /** A amostra se declara leilão em algum campo? Aceita a amostra inteira ou só o nome da fonte. */
 export function ehAmostraDeLeilao(amostra) {

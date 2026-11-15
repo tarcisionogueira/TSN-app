@@ -6,6 +6,21 @@
 
 
 
+## 15/11 (noite, 4) — ÍNDICE: INVARIANTES + A #444 EXPLICADA (#484, item 4)
+
+- Migração `20261115_indice_invariantes.sql` (aplicada): `indice_suspeitas()` (motivo por amostra: `parece_leilao` = área E
+  valor idênticos a lote de leilão; `mesma_unidade_2cid` = mesmo valor+área em cidades diferentes; `redirecionador`) e
+  `indice_prova_parada()`; ligadas em `qa_invariantes()` como `indice_amostra_suspeita` e `indice_prova_parada` (limite 0).
+- **#444 explicada e fechada:** o "94.815" é preço de venda CEF (bate área e valor com lotes de leilão) gravado como anúncio
+  do Wimoveis/Imovelweb/Attria. 9 amostras assim (uma do LeeilON — `leeilon` entrou no `URL_LEILAO`) + 2 links
+  vertexaisearch antigos = 11. **Limpeza é DELETE → pendência #486 do dono:**
+  `delete from public.indice_amostra where id in (select id from public.indice_suspeitas());`
+- Duas armadilhas medidas antes de fixar a regra (forma nº 10): (a) valor REDONDO se repete de verdade entre cidades
+  (178 casos); (b) o que só PARECE não redondo — R$ 200.000 / 42 m² = 4.762/m² × 42 = 200.004 (34 de 34 eram isso). Regra:
+  "não redondo" = distância ao milhar maior que a área. E o join com `imoveis_leilao` (118 mil) precisa de lateral +
+  LIMIT 1 nos índices de valor (3 s → 0,6 s); criado `idx_imoveis_leilao_valor_avaliacao`.
+- Falta do plano: item 5 (FipeZap/laudo só como alarme).
+
 ## 15/11 (noite, 3) — ÍNDICE: PISO DE 5 UNIDADES E SUBIDA DE NÍVEL DECLARADA (#484, item 3)
 
 - `api/indice-consulta.js`: o ramo de mercado exige `MIN_UNIDADES = 5` unidades INDEPENDENTES de venda (antes 4 vendas OU
