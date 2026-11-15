@@ -30,6 +30,7 @@ import { parseLeilaoHasta } from './lib/hastapublica-parse.mjs';
 import { urlDiretaDoDocumento } from '../api/_anexo-nome.js';
 import { cortarOutrosLotes, datasLjud } from '../api/enriquecer-lote.js';
 import { pracasZuk } from './lib/zuk-pracas.mjs';
+import { cardDoDetalheZuk } from './lib/zuk-detalhe.mjs';
 import { mapaCardWebLeiloes, extrairCardsWebLeiloes, descartarFotoGenerica } from './lib/webleiloes-lote.mjs';
 import { fichaVip } from './lib/vip-ficha.mjs';
 import { enderecoObsPestana } from './lib/pestana-endereco.mjs';
@@ -2252,6 +2253,45 @@ async function scraperPortalZuk(browser) {
     });
 
     console.log(`    PortalZuk: ${cards.length} cards`);
+    // LOTES DO MAPA FORA DA LISTA (15/11, pedido do dono). O "Carregar mais" para antes do fim (429) e 64 lotes do mapa
+    // nunca tinham sido coletados; os que caem fora da lista num dia ficavam sem releitura. Cada um é aberto por
+    // `/imovel/<il>-<ilo>` e vira o MESMO card da listagem (lib/zuk-detalhe.mjs) — segue o caminho de sempre.
+    // Grátis (navegador do runner); teto de lotes e de tempo para não empurrar o resto da rodada.
+    const codCards = new Set(cards.map((c) => (c.href.match(/(\d+-\d+)\/?$/) || [])[1]).filter(Boolean));
+    const faltam = [...mapaZuk].filter((c) => !codCards.has(c));
+    if (faltam.length) {
+      const MAX = Number(process.env.ZUK_MAPA_MAX || 300);
+      const ATE = Date.now() + Number(process.env.ZUK_MAPA_MIN || 12) * 60e3;
+      const pg = await browser.newPage();
+      await pg.setUserAgent(USER_AGENT);
+      try {
+        await pg.setRequestInterception(true);
+        pg.on('request', (req) => (['image', 'media', 'font', 'stylesheet'].includes(req.resourceType()) ? req.abort() : req.continue()));
+      } catch (e) { console.log(`    PortalZuk: sem interceptação (${String(e.message).slice(0, 50)}) — segue baixando tudo`); }
+      let lidos = 0, semCard = 0, falhas = 0;
+      for (const cod of faltam.slice(0, MAX)) {
+        if (Date.now() > ATE) { console.log('    PortalZuk: teto de tempo dos lotes do mapa atingido'); break; }
+        try {
+          await pg.goto(`https://www.portalzuk.com.br/imovel/${cod}`, { waitUntil: 'networkidle2', timeout: 25000 });
+          const d = await pg.evaluate(() => ({
+            canonical: document.querySelector('link[rel="canonical"]')?.href || location.href,
+            tituloPagina: document.title || '',
+            ogImage: document.querySelector('meta[property="og:image"]')?.content || null,
+            texto: document.body?.innerText || '',
+          }));
+          const card = cardDoDetalheZuk({ ...d, texto: cortarOutrosLotes(d.texto.replace(/\s+/g, ' ')) });
+          if (card) {
+            cards.push(card); lidos++;
+            if (lidos <= 3) console.log(`    PortalZuk: mapa→card ${cod}: ${card.title.slice(0, 70)} · ${card.valores.join(' / ')}`);
+          } else semCard++;
+        } catch (e) {
+          falhas++;
+          if (falhas <= 3) console.log(`    PortalZuk: lote do mapa ${cod} não abriu (${String(e.message).slice(0, 60)})`);
+        }
+      }
+      await pg.close().catch(() => {});
+      console.log(`    PortalZuk: mapa tinha ${faltam.length} fora da lista · ${lidos} lidos pela página do lote · ${semCard} sem valor/URL · ${falhas} falha(s)`);
+    }
     const seen = new Set();
     const imoveis = cards.map(c => {
       const idm = c.href.match(/(\d+(?:-\d+)?)\/?$/);
