@@ -1,4 +1,5 @@
 import { fmt, fmtPct, moedaOuTraco, pctOuTraco } from '../utils/calculos';
+import { pagamentoNaoConfirmado, AVISO_PAGAMENTO_NAO_CONFIRMADO } from '../lib/condicoes-pagamento';
 import { imprimirHtml } from './pdfImprimir';
 import { cabecalhoBidPro, ESTILOS_CABECALHO } from './pdfCabecalho';
 import { notaMetodologicaTexto } from './NotaMetodologica';
@@ -216,6 +217,7 @@ ${sec.pos?`<div class="av"><h2>Posicionamento Estratégico</h2><pre>${sec.pos}</
       <div class="card-l" style="color:#c2410c;">1 · Disponível ao arrematar</div>
       <div class="card-v" style="color:#9a3412;">R$ ${fmt(m.desembolsoInicial)}</div>
       <div style="font-size:8px;color:#9a3412;">${isAVista?'lance + custos, à vista':`sinal (${fmtPct(d.sinalPercentual)}) + custos iniciais`}</div>
+      ${pagamentoNaoConfirmado(d, isAVista)?`<div style="font-size:8px;color:#b91c1c;font-weight:700;margin-top:3px;">⚠ ${AVISO_PAGAMENTO_NAO_CONFIRMADO}</div>`:''}
     </div>
     <div class="card" style="background:#eff6ff;">
       <div class="card-l" style="color:#1d4ed8;">2 · Custo mensal a suportar</div>

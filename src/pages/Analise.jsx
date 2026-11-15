@@ -38,7 +38,7 @@ import { alertaAvaliacaoMercado } from '../utils/alertaAvaliacao';
 import { COMISSAO_LEILOEIRO_PCT, ITBI_REGISTRO_PCT } from '../lib/rentabilidade';
 import { faltaNoRelatorio, relatorioEntregue } from '../lib/entrega-relatorio';
 import { vendasDe, locacoesDe, totalAmostrasDe, RAIO_NIVEL, precoM2DoRelatorio } from '../lib/niveis-mercado';
-import { aplicarCondicoesEdital } from '../lib/condicoes-pagamento';
+import { aplicarCondicoesEdital, pagamentoNaoConfirmado, AVISO_PAGAMENTO_NAO_CONFIRMADO } from '../lib/condicoes-pagamento';
 import { fraseTerrenoExcedente } from '../lib/terreno-excedente';
 import { vereditoMercadologico, fraseOrigemAmostras } from '../lib/veredito-mercadologico';
 import { soAceitaAVista } from '../data/pagamento.js';
@@ -5269,6 +5269,7 @@ export default function Analise() {
               <div style={{ fontSize:11, fontWeight:800, color:'#c2410c', textTransform:'uppercase', letterSpacing:0.5 }}>1 · Disponível ao arrematar</div>
               <div style={{ fontSize:23, fontWeight:900, color:'#9a3412', margin:'6px 0 4px' }}>R$ {fmt(metricas.desembolsoInicial)}</div>
               <div style={{ fontSize:12, color:'#9a3412' }}>{isAVista ? 'Lance + custos, pagos à vista na arrematação' : `Sinal (${d.sinalPercentual||0}%) + custos iniciais (leiloeiro, honorários, ITBI…)`}</div>
+              {pagamentoNaoConfirmado(d, isAVista) && <div style={{ fontSize:11.5, color:'#b91c1c', fontWeight:700, marginTop:6 }}>⚠ {AVISO_PAGAMENTO_NAO_CONFIRMADO}</div>}
             </div>
             <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:14, padding:'16px 18px' }}>
               <div style={{ fontSize:11, fontWeight:800, color:'#1d4ed8', textTransform:'uppercase', letterSpacing:0.5 }}>2 · Custo mensal a suportar</div>

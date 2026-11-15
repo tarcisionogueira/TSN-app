@@ -99,3 +99,13 @@ export function aplicarCondicoesEdital(d, rp, texto) {
     faltando,
   };
 }
+
+// AVISO NO CARTÃO, NÃO SÓ NO RODAPÉ (15/11, dono: "esse tipo de erro não pode ocorrer"). O apto do Brooklin (MEGA
+// X131536) exigia o preço TODO em 24 h e o relatório mostrou "Sinal (5%)" e "Parcela do banco ~R$ 9.051" nos cartões
+// principais; o "NÃO confirmadas" existia só na nota metodológica, no fim. Parcelado cuja condição não veio do EDITAL
+// nem do CLIENTE é premissa do sistema — e o cartão precisa dizer isso onde o número aparece.
+export const AVISO_PAGAMENTO_NAO_CONFIRMADO = 'Entrada e parcelas NÃO confirmadas no edital (premissa do sistema). O edital pode exigir pagamento à vista — confirme antes do lance.';
+export function pagamentoNaoConfirmado(d, isAVista) {
+  if (isAVista || d?.somenteAVista) return false;
+  return !['edital', 'cliente'].includes(String(d?.origemCondicoesPagamento || ''));
+}
