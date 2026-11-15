@@ -70,20 +70,35 @@ export function corpoIndice({ form = {}, reg = {}, amostras = [], amostrasAno = 
   const MES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
   const mesAno = (d) => { const m = String(d || '').match(/(\d{4})-(\d{2})/); return m ? `${MES[+m[2] - 1] || m[2]}/${m[1]}` : esc(d || ''); };
   const dataCurta = (d) => { const m = String(d || '').match(/(\d{4})-(\d{2})-(\d{2})/); return m ? `${m[3]}/${m[2]}/${m[1].slice(2)}` : ''; };
+  // LINK CLICÁVEL NO PDF (15/11, pedido do dono). O PDF sai da impressão do navegador, que preserva <a href> como link.
+  // "ver anúncio" = o link gravado (pode ter expirado: a pesquisa é feita por IA — ver api/_link-anuncio.js);
+  // "buscar" = a mesma busca da tela (portal + condomínio/bairro + cidade), que sempre abre.
+  const hrefOk = (u) => (/^https?:\/\//i.test(String(u || '')) ? String(u) : '');
+  const buscaPdf = (a) => {
+    let site = '';
+    try { if (a.url) site = new URL(a.url).hostname.replace(/^www\./, '').replace(/\.com(\.br)?$/, ''); } catch { /* link malformado: busca sem portal */ }
+    const termos = [site, a.condominio || a.bairro_norm || a.endereco, form.cidade, a.especie === 'locacao' ? 'aluguel' : 'venda'].filter(Boolean).join(' ');
+    return `https://www.google.com/search?q=${encodeURIComponent(termos)}`;
+  };
   const amRows = (Array.isArray(amostras) ? amostras : []).slice(0, 16).map(a => {
     const loc = a.especie === 'locacao';
+    const onde = a.condominio || a.endereco || a.bairro_norm || '';
     const area = Number(a.area_m2) > 0 ? `${Math.round(a.area_m2)} m²` : '—';
     const total = Number(a.valor_total) > 0 ? brl(a.valor_total) + (loc ? '/mês' : '') : '—';
     const m2 = Number(a.valor_m2) > 0 ? brl(a.valor_m2) + (loc ? '/m²·mês' : '/m²') : '—';
-    return `<tr><td>${loc ? 'Locação' : 'Venda'} · ${area} · ${total}</td>`
+    const link = hrefOk(a.url);
+    const acoes = [link && `<a href="${esc(link)}" target="_blank" rel="noopener" style="color:#0D63DB;font-weight:700;text-decoration:underline;">ver anúncio ↗</a>`,
+      (link || onde) && `<a href="${esc(buscaPdf(a))}" target="_blank" rel="noopener" style="color:#64748b;font-weight:700;text-decoration:underline;">buscar ↗</a>`].filter(Boolean).join('<br>') || '—';
+    return `<tr><td>${loc ? 'Locação' : 'Venda'} · ${area} · ${total}${onde ? `<br><span style="color:#64748b;font-weight:400;">${esc(String(onde).slice(0, 70))}</span>` : ''}</td>`
       + `<td class="num">${m2}</td>`
       + `<td>${esc(String(a.fonte || '—').slice(0, 60))}</td>`
-      + `<td class="num">${mesAno(a.data_ref)}${a.criado_em ? `<br><span style="color:#94a3b8;font-weight:400;">capt. ${dataCurta(a.criado_em)}</span>` : ''}</td></tr>`;
+      + `<td class="num">${mesAno(a.data_ref)}${a.criado_em ? `<br><span style="color:#94a3b8;font-weight:400;">capt. ${dataCurta(a.criado_em)}</span>` : ''}</td>`
+      + `<td style="font-size:9.5px;white-space:nowrap;">${acoes}</td></tr>`;
   }).join('');
   const samplesHtml = amRows ? `
 <h2>Relação dos imóveis da amostra (rastreabilidade)</h2>
 <div class="av" style="font-size:10px;color:#94a3b8;margin-bottom:6px;">Comparáveis de mercado (anúncios e revendas) do segmento na cidade que embasam o índice. "Data" = período de referência do anúncio; "capt." = quando entrou na base BidPro.</div>
-<table class="av"><thead><tr><th>Descrição</th><th class="num">R$/m²</th><th>Portal (fonte)</th><th class="num">Data</th></tr></thead><tbody>${amRows}</tbody></table>` : '';
+<table class="av"><thead><tr><th>Descrição</th><th class="num">R$/m²</th><th>Portal (fonte)</th><th class="num">Data</th><th>Anúncio</th></tr></thead><tbody>${amRows}</tbody></table>` : '';
 
   // AVISO de frescor/projeção (quando não há amostra recente) + COMPOSIÇÃO POR PERÍODO (4 meses).
   const avisoHtml = aviso
