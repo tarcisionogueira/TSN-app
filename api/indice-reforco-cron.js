@@ -18,6 +18,7 @@ export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 import { isCronAuthorized } from './_auth.js';
 import { norm, parseJSON, promptIndice, montarAmostras } from './_indice-core.js';
+import { semLinksMortos } from './_link-anuncio.js';
 import { comCascataBusca } from './_busca-modelo.js';
 import { buscarComProva, EXIGE_BUSCA } from './_busca-com-prova.js';
 
@@ -82,7 +83,8 @@ async function reforcarCidade(cidade, uf) {
     try { mercado = await buscar(8, 150000); } catch { mercado = null; }
     if (!mercado) { try { mercado = await buscar(3, 70000); } catch { mercado = null; } }
     if (!mercado) return { cidade, uf, erro: 'busca instável', ms: Date.now() - t0 };
-    const amostras = montarAmostras(mercado, { cidadeNorm, uf, bairroNorm: null, lat: null, lng: null, tipo: 'todos', todos: true });
+    // Link provadamente morto não entra (15/11) — ver api/_link-anuncio.js.
+    const { vivas: amostras, mortas: linksMortos } = await semLinksMortos(montarAmostras(mercado, { cidadeNorm, uf, bairroNorm: null, lat: null, lng: null, tipo: 'todos', todos: true }));
     let inseridas = 0;
     // A ingestão pode FALHAR sem que a busca tenha falhado. Antes o `|| 0` transformava isso em
     // "inseriu zero", indistinguível de "não havia amostra a inserir" — e o estado da rotação
@@ -93,7 +95,7 @@ async function reforcarCidade(cidade, uf) {
       inseridas = ing.ok ? (ing.data || 0) : 0;
       if (!ing.ok) erroIngestao = 'ingestao_falhou';
     }
-    return { cidade, uf, amostras: amostras.length, inseridas, erro: erroIngestao, ms: Date.now() - t0 };
+    return { cidade, uf, amostras: amostras.length, links_mortos: linksMortos, inseridas, erro: erroIngestao, ms: Date.now() - t0 };
   } catch (e) {
     return { cidade, uf, erro: String(e?.message || e).slice(0, 120), ms: Date.now() - t0 };
   }

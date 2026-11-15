@@ -15,6 +15,7 @@ import { groundingGemini, geminiDisponivel } from './_grounding.js';
 import { comCascataBusca } from './_busca-modelo.js';
 import { buscarComProva, EXIGE_BUSCA } from './_busca-com-prova.js';
 import { SEG_TIPOS, norm, parseJSON, promptIndice, montarAmostras } from './_indice-core.js';
+import { semLinksMortos } from './_link-anuncio.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -253,7 +254,12 @@ export default async function handler(req, res) {
   }
 
   // Guarda as amostras e recomputa o índice ponderado.
-  const amostras = montarAmostras(mercado, { cidadeNorm, uf, bairroNorm, lat, lng, tipo, todos: false });
+  // LINK MORTO NÃO ENTRA (15/11): o link e o número de cada amostra são escritos pela IA — em Capão da Canoa 0 de 17
+  // existiam (404 em série, IDs sequenciais). Só sai o que tem PROVA de não existir (404/410/caiu na home); bloqueio
+  // de robô e timeout não condenam. Teto de 12 s: cabe na folga reservada para a ingestão.
+  const conferidas = await semLinksMortos(montarAmostras(mercado, { cidadeNorm, uf, bairroNorm, lat, lng, tipo, todos: false }), { tetoTotalMs: Math.max(2000, Math.min(12000, restante() + FOLGA_MS - 13000)) });
+  const amostras = conferidas.vivas;
+  if (conferidas.mortas) console.log('[indice-mercado] amostras com link morto descartadas', { cidade: cidadeNorm, tipo, mortas: conferidas.mortas, incertas: conferidas.incertas });
   let inseridas = 0;
   if (amostras.length) inseridas = (await rpc('ingerir_amostras_indice', { p_amostras: amostras })) || 0;
 
@@ -288,7 +294,7 @@ export default async function handler(req, res) {
   })();
   clearTimeout(vigia);
   if (!registrado) registrado = true; else console.warn('[indice-mercado] concluiu depois do vigia do teto');
-  await registrarCustoGeracao('indice', { userId: user.id, imovelId: `${cidadeNorm}|${tipo}`, custoMicro, ok: amostras.length > 0, meta: { uf, bairro: bairroNorm || null, motor: motorUsado, amostras: amostras.length, inseridas, segundos: Math.round((Date.now() - T0) / 1000), ...(diagVazio ? { diag: diagVazio } : {}) } });
+  await registrarCustoGeracao('indice', { userId: user.id, imovelId: `${cidadeNorm}|${tipo}`, custoMicro, ok: amostras.length > 0, meta: { uf, bairro: bairroNorm || null, motor: motorUsado, amostras: amostras.length, links_mortos: conferidas.mortas, inseridas, segundos: Math.round((Date.now() - T0) / 1000), ...(diagVazio ? { diag: diagVazio } : {}) } });
 
   // Cobra 1 crédito só no SUCESSO: cota mensal → crédito. Uma pesquisa = um tipo = 1 crédito.
   const cobrar = async () => {

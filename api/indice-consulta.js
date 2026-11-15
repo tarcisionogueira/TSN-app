@@ -13,6 +13,10 @@ import { composicaoTemporal, avisoFrescor } from './_indice-composicao.js';
 import { referenciaPonderada } from './_indice-ponderacao.js';
 import { ehAmostraDeLeilao } from './_valor-mercado.js';
 
+// AMOSTRA SEM COORDENADA NÃO ESTÁ EM (0, 0) (15/11). `Number.isFinite(+null)` é true (+null === 0): a amostra sem
+// lat/lng aparecia a "5.855.390 m" de Capão da Canoa — a distância até o Golfo da Guiné.
+const coordOk = (v) => v != null && v !== '' && Number.isFinite(+v) && +v !== 0;
+
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
 // Mesma normalização do banco (_bairro_norm): minúsculas, sem acento, só alfanumérico.
@@ -144,7 +148,7 @@ export default async function handler(req) {
     let nivelGeo = 'cidade';
     let regSamples = regCidade;
     if (lat != null && lng != null) {
-      const distM = (aLat, aLng) => (Number.isFinite(+aLat) && Number.isFinite(+aLng))
+      const distM = (aLat, aLng) => (coordOk(aLat) && coordOk(aLng))
         ? 111320 * Math.sqrt(Math.pow(+aLat - lat, 2) + Math.pow((+aLng - lng) * Math.cos(lat * Math.PI / 180), 2)) : null;
       const nivelDe = (a) => {
         const d = distM(a.lat, a.lng);
@@ -333,7 +337,7 @@ export default async function handler(req) {
     // Ordem: proximidade primeiro (mesmo condomínio/endereço > mesma rua/250 m > 1 km > bairro),
     // e dentro do mesmo nível o anúncio mais RECENTE — que é o que mais pesa na precificação,
     // já que a composição temporal projeta pelo mais novo.
-    const distDe = (a) => (lat != null && lng != null && Number.isFinite(+a.lat) && Number.isFinite(+a.lng))
+    const distDe = (a) => (lat != null && lng != null && coordOk(a.lat) && coordOk(a.lng))
       ? 111320 * Math.sqrt(Math.pow(+a.lat - lat, 2) + Math.pow((+a.lng - lng) * Math.cos(lat * Math.PI / 180), 2))
       : null;
     // Peso de proximidade quando NÃO há coordenada (o caso comum: a amostra acabou de nascer e o

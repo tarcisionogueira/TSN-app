@@ -12,11 +12,14 @@ import CardDemografia from '../components/CardDemografia';
 // número inventado: em 60 dias, 43 de 73 links com número repetiam o número de OUTRO anúncio (VivaReal 1327660285
 // em dois imóveis; Zap 2592750346 em três apartamentos de 133, 122 e 72 m²). Abrir o link direto mostrava a página
 // errada ou expirada. Em vez dele, uma busca no próprio portal pelo que o anúncio descreve — sempre abre.
+// 15/11 (dono: "os anúncios não abrem"): a busca levava rua + área + "site:" e voltava vazia — o título do anúncio
+// quase nunca traz a rua. Agora: portal (sem o operador site:, que zera o resultado quando o domínio não indexa) +
+// condomínio OU bairro + cidade + venda/aluguel. A rua só entra quando não há condomínio nem bairro.
 function buscaDoAnuncio(a, esp, cidade) {
   let site = '';
-  try { if (a.url) site = new URL(a.url).hostname.replace(/^www\./, ''); } catch { /* link malformado: busca sem site */ }
-  const termos = [site && `site:${site}`, a.condominio || a.endereco || a.bairro_norm, cidade,
-    a.area_m2 ? `${Math.round(a.area_m2)} m²` : '', esp === 'locacao' ? 'aluguel' : 'venda'].filter(Boolean).join(' ');
+  try { if (a.url) site = new URL(a.url).hostname.replace(/^www\./, '').replace(/\.com(\.br)?$/, ''); } catch { /* link malformado: busca sem portal */ }
+  const onde = a.condominio || a.bairro_norm || a.endereco;
+  const termos = [site, onde, cidade, esp === 'locacao' ? 'aluguel' : 'venda'].filter(Boolean).join(' ');
   return `https://www.google.com/search?q=${encodeURIComponent(termos)}`;
 }
 import NotaMetodologica from '../components/NotaMetodologica';
@@ -557,7 +560,10 @@ export default function IndiceConsulta() {
                               {brl(a.valor_m2)}/m²{esp === 'locacao' ? '·mês' : ''}
                             </div>
                             {Number(a.valor_total) > 0 && <div style={{ fontSize: 10, color: '#94a3b8' }}>{brl(a.valor_total)}</div>}
-                            {(a.url || a.condominio || a.endereco || a.bairro_norm) && <a href={buscaDoAnuncio(a, esp, cidadeRes || form?.cidade)} target="_blank" rel="noopener noreferrer" title="Busca o anúncio no portal pelo que ele descreve" style={{ fontSize: 10, color: '#0D63DB', fontWeight: 700 }}>buscar anúncio →</a>}
+                            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                              {/^https?:\/\//i.test(a.url || '') && <a href={a.url} target="_blank" rel="noopener noreferrer nofollow" title="Link informado pela pesquisa — pode ter expirado" style={{ fontSize: 10, color: '#0D63DB', fontWeight: 700 }}>abrir anúncio ↗</a>}
+                              {(a.url || a.condominio || a.endereco || a.bairro_norm) && <a href={buscaDoAnuncio(a, esp, cidadeRes || form?.cidade)} target="_blank" rel="noopener noreferrer" title="Busca no Google pelo portal, bairro e cidade do anúncio" style={{ fontSize: 10, color: '#64748b', fontWeight: 700 }}>buscar →</a>}
+                            </div>
                           </div>
                         </div>
                       ))}

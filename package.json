@@ -60,6 +60,7 @@
     "testar:sbidloja": "node scripts/testes/sbidloja-parse.mjs",
     "testar:milan": "node scripts/testes/milan-parse.mjs",
     "testar:leilaobrasil-atlantico": "node scripts/testes/leilaobrasil-atlantico.mjs",
+    "testar:link-anuncio": "node scripts/testes/link-anuncio.mjs",
     "testar:zuk-detalhe": "node scripts/testes/zuk-detalhe.mjs",
     "testar:sweep-trava": "node scripts/testes/sweep-trava.mjs && node scripts/testes/sweep-por-tenant.mjs",
     "testar:pecini-fila": "node scripts/testes/pecini-fila.mjs",
