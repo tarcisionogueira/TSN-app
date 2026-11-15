@@ -512,7 +512,11 @@ export function extrairIdentidadeTexto(texto) {
 // à toa. Achado de 17/09: 11 de 24 imóveis financiado/hipotecado tinham o prior
 // aprendido só para os campos numéricos e `parcelamentoPermitido` ausente — o mesmo
 // leiloeiro com editais lidos e o campo que decide "trava o cenário à vista" sumindo.
-const CAMPOS_SO_CONFIRMA = new Set(['aVista', 'parcelamentoPermitido', 'financiavel', 'fgts']);
+// 15/11 (arena, classe Brooklin): `financiavel` sai daqui (passa a exigir 2 votos — a visão IA marcava "financiável"
+// por ver a palavra FGTS) e `fgts` deixa de VOTAR e de SER LIDO: FGTS não é condição de parcelamento, e os votos
+// gravados antes do conserto do extrator contavam "não é permitido o FGTS" como true.
+const CAMPOS_SO_CONFIRMA = new Set(['aVista', 'parcelamentoPermitido']);
+const CAMPOS_FORA_DO_PRIOR = new Set(['fgts']);
 
 /** Consenso aprendido: moda por campo, exigindo ≥2 amostras (1 para campo só-confirma). null = sem consenso. */
 export async function pagamentoPrior(fonte, modalidade) {
@@ -524,6 +528,7 @@ export async function pagamentoPrior(fonte, modalidade) {
     if (!row || Number(row.amostras) < 2) return null;
     const consenso = {};
     for (const [campo, votos] of Object.entries(row.freq || {})) {
+      if (CAMPOS_FORA_DO_PRIOR.has(campo)) continue;
       let melhor = null, n = 0;
       for (const [valor, cont] of Object.entries(votos || {})) if (cont > n) { n = cont; melhor = valor; }
       const minimo = CAMPOS_SO_CONFIRMA.has(campo) ? 1 : 2;
@@ -537,7 +542,7 @@ export async function pagamentoPrior(fonte, modalidade) {
 /** Vota o padrão observado (read-modify-write; volume baixo). Best-effort. */
 export async function pagamentoAprender(fonte, modalidade, regras) {
   if (!fonte || !regras) return;
-  const votos = Object.entries(regras).filter(([, v]) => v !== null && v !== undefined);
+  const votos = Object.entries(regras).filter(([c, v]) => v !== null && v !== undefined && !CAMPOS_FORA_DO_PRIOR.has(c));
   if (!votos.length) return;
   try {
     const r = await sb(`leiloeiro_pagamento_prior?fonte=eq.${encodeURIComponent(fonte)}&modalidade=eq.${encodeURIComponent(modalidade || '')}&select=freq,amostras&limit=1`);

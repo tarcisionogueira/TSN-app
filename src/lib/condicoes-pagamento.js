@@ -55,17 +55,21 @@ export function condicoesDoEdital(rp, texto) {
  * Patch a aplicar sobre os inputs da viabilidade (`d` da tela / `pInp` do servidor), ou `null`.
  * `faltando` explica, em palavras, o que o edital não disse — vai para o rodapé.
  */
-export function aplicarCondicoesEdital(d, rp, texto) {
+export function aplicarCondicoesEdital(d, rp, texto, { regrasOrigem = '' } = {}) {
   const ce = condicoesDoEdital(rp, texto);
+  // 15/11 (arena — classe Brooklin): regra que veio do ANÚNCIO, do DOCUMENTAL (IA) ou do PADRÃO DO LEILOEIRO saía com
+  // origem 'edital' e o rodapé dizia "LIDAS NO EDITAL". Agora carrega o nome de onde veio — e, não sendo 'edital' nem
+  // 'cliente', `pagamentoNaoConfirmado` acende o aviso no cartão.
+  const origemExterna = regrasOrigem && regrasOrigem !== 'edital' ? `premissa_${String(regrasOrigem).replace(/[^a-z_+]/gi, '')}` : '';
   if (!ce) return null;
   const origem = String(d?.origemCondicoesPagamento || '');
   if (origem === 'cliente') return null;
-  if (ce.veda) return d?.somenteAVista && origem === 'edital_veda' ? null : { somenteAVista: true, origemCondicoesPagamento: 'edital_veda', faltando: [] };
+  if (ce.veda) return d?.somenteAVista && origem === 'edital_veda' ? null : { somenteAVista: true, origemCondicoesPagamento: origemExterna || 'edital_veda', faltando: [] };
 
   const sinalAtual = Number(d?.sinalPercentual) || 0, prazoAtual = Number(d?.prazoMeses) || 0;
-  if (origem === 'edital') return null; // já aplicado
+  if (origem === 'edital' || (origemExterna && origem === origemExterna)) return null; // já aplicado
   // Sem marcador de origem e com números fora dos defaults = alguém digitou: respeita.
-  const ehDefault = origem === 'padrao_legal' || origem === 'edital_incompleto'
+  const ehDefault = origem === 'padrao_legal' || origem === 'edital_incompleto' || origem.startsWith('premissa_')
     || DEFAULTS.some(x => x.sinalPercentual === sinalAtual && x.prazoMeses === prazoAtual);
   if (!ehDefault) return null;
 
@@ -93,7 +97,7 @@ export function aplicarCondicoesEdital(d, rp, texto) {
     prazoMeses: prazo,
     // O parcelamento de leilão é saldo corrigido (IPCA etc.), não financiamento com juros: 0% real.
     cetAnual: financiamento ? (Number(d?.cetAnual) > 0 ? Number(d.cetAnual) : 12) : 0,
-    origemCondicoesPagamento: faltando.length ? 'edital_incompleto' : 'edital',
+    origemCondicoesPagamento: origemExterna || (faltando.length ? 'edital_incompleto' : 'edital'),
     parcelaMinimaEdital: ce.parcelaMinima || 0,
     parcelaMinimaAplicada,
     faltando,

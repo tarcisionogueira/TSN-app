@@ -318,9 +318,10 @@ export default function Analise() {
       // `a_vista`. Agora, qualquer indício de parcelamento lido no DOCUMENTO ou no anúncio
       // (`doc_fatos.pagamento`) destrava o cenário — o acervo deixa de ter a última palavra
       // contra o que o próprio leiloeiro publicou.
+      // 15/11 (arena): `sinalPct > 0` saiu — sinal sozinho é prova fraca (entrada + saldo à vista continua à vista) e o
+      // servidor já não o aceita; a tela destravava o parcelado por um critério que o servidor recusava.
       somenteAVista: soAceitaAVista(imovelInicial.pagamento)
         && !(Number(imovelInicial.docFatos?.pagamento?.parcelas) >= 2
-          || Number(imovelInicial.docFatos?.pagamento?.sinalPct) > 0
           || imovelInicial.docFatos?.pagamento?.financiavel === true),
       // Venda direta e Licitação (Caixa) normalmente NÃO têm leiloeiro → sem taxa.
       // Demais: 5% (editável — alguns leiloeiros cobram mais). Confirmar no edital.
@@ -542,7 +543,13 @@ export default function Analise() {
     setLoadCnj(false);
   };
 
-  const [cenario, setCenario] = useState('financiado');
+  // 15/11 (arena — classe Brooklin): abria 'financiado' por padrão, num acervo com 30.596 lotes à vista contra 2.414
+  // financiados, e o financiado vazio usa o default bancário (5% / 360 / 12%). Agora abre à vista; o relatório
+  // carregado troca para o cenário que o SERVIDOR provou (`mercado.condicoesPagamento.cenarioInicial`).
+  const [cenario, setCenarioBruto] = useState('aVista');
+  const cenarioEscolhidoRef = React.useRef(false);
+  const setCenario = setCenarioBruto;
+  const escolherCenario = (v) => { cenarioEscolhidoRef.current = true; setCenarioBruto(v); };
   const [mercado, setMercado] = useState(null);
   const [parecer, setParecer] = useState('');
   const [loadDoc, setLoadDoc] = useState(false);
@@ -1646,7 +1653,9 @@ export default function Analise() {
       cidade: dSnap.cidade, estado: dSnap.estado,
       nomeCondominio: dSnap.nomeCondominio || '',
     };
-    const parecerInputs = { d: dSnap, metricas: metricasSnap, teto: tetoSnap, cenario: isAVistaSnap ? 'À Vista' : 'Alavancado' };
+    // `cenarioEscolhido` (15/11): o servidor só respeita o cenário da tela se o CLIENTE o escolheu; senão usa o que ele
+    // mesmo provou nas condições do edital (a tela, antes do relatório, está sempre no à vista padrão).
+    const parecerInputs = { d: dSnap, metricas: metricasSnap, teto: tetoSnap, cenario: isAVistaSnap ? 'À Vista' : 'Alavancado', cenarioEscolhido: cenarioEscolhidoRef.current };
     registrarEvento('analise_gerar', { alvo: 'mercado', detalhe: 'iniciou no servidor' });
     showMsg('Geração iniciada no servidor, pode até fechar a aba; acompanhe em "Análises" no topo.');
     iniciarAnalise(
@@ -1788,6 +1797,10 @@ export default function Analise() {
     aplicadoRef.current = entry.updatedAt;
     const r = entry.result;
     if (r.mercado) setMercado(r.mercado);
+    // CENÁRIO INICIAL DECIDIDO PELO SERVIDOR (15/11, arena — classe Brooklin): abre no que o servidor provou
+    // (trecho do edital citado ou ficha da Caixa); sem prova, À VISTA. Só antes de o cliente escolher um cenário.
+    // Relatório antigo (sem o objeto) também abre à vista: era o 'financiado' padrão que mostrou o "sinal de 5%".
+    if (!cenarioEscolhidoRef.current) setCenario(r.mercado?.condicoesPagamento?.cenarioInicial === 'financiado' ? 'financiado' : 'aVista');
     if (r.valorMercado) up('valorMercado', r.valorMercado);
     if (r.valorLocacao) up('valorLocacao', r.valorLocacao);
     // Avaliação confirmada no SERVIDOR (garantirValores leu edital/anexos e corrigiu o
@@ -1858,7 +1871,7 @@ export default function Analise() {
       // 03/11 (caso Peruíbe): o "valor de VAZIO" era só o default bancário (5%/360) — o piso do art. 895
       // que o lote judicial já traz (25%/30) passava por escolha do cliente e as 10 parcelas do edital
       // nunca entravam. A regra agora é a MESMA do servidor (src/lib/condicoes-pagamento.js).
-      const pc = aplicarCondicoesEdital(d, rp, ce?.formaPagamento);
+      const pc = aplicarCondicoesEdital(d, rp, ce?.formaPagamento, { regrasOrigem: ce?.regrasOrigem || '' });
       if (pc) {
         const { faltando, parcelaMinimaAplicada, parcelaMinimaEdital, ...campos } = pc;
         Object.assign(patch, campos);
@@ -5202,7 +5215,7 @@ export default function Analise() {
           <div style={{ display:'flex', alignItems:'center', gap:10, background:'#f8fafc', borderRadius:10, padding:'12px 16px' }}>
             <span style={{ fontSize:12, fontWeight:700, color:'#64748b' }}>CENÁRIO:</span>
             {[['aVista','À Vista','#0D63DB'],['financiado','Alavancado','#10b981']].map(([v,l,c])=>(
-              <button key={v} onClick={()=>setCenario(v)} disabled={v==='financiado'&&d.somenteAVista}
+              <button key={v} onClick={()=>escolherCenario(v)} disabled={v==='financiado'&&d.somenteAVista}
                 style={{ padding:'7px 20px', borderRadius:8, background:cenario===v?c:'white', color:cenario===v?'white':'#64748b', fontWeight:800, fontSize:13, cursor:'pointer', border:`2px solid ${cenario===v?c:'#e2e8f0'}`, opacity:v==='financiado'&&d.somenteAVista?0.4:1 }}>
                 {l}
               </button>

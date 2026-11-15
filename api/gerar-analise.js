@@ -20,6 +20,7 @@ import { resolverRedirecionadores } from './_link-anuncio.js';
 import { composicaoTemporal, avisoFrescor } from './_indice-composicao.js';
 import { referenciaPonderada } from './_indice-ponderacao.js';
 import { aplicarPesos } from './_indice-peso.js';
+import { montarCondicoesPagamento } from './_condicoes-origem.js';
 import { geocodificarCascata, rankNivel, coordValida } from './_geo.js';
 import { extratoEdital, extratoMatricula } from './_edital-extrato.js';
 import { auditarMercadologico, motivoBuscaFraca } from './_auditoria-relatorio.js';
@@ -3467,6 +3468,12 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
     // documental leu "à vista ou parcelado: sinal de 50% + duas parcelas de 25%" e o mercadológico saiu só à vista,
     // porque a projeção olha o edital/ficha/título e nunca o que o documental extraiu. Entra quando o edital não
     // trouxe regra de parcelamento — documento lido vale mais que o padrão do leiloeiro (logo abaixo).
+    // CAMADAS DE PROVA DO PAGAMENTO (15/11, arena — classe Brooklin): cada fonte guardada SEPARADA, antes de os blocos
+    // abaixo fundirem tudo em `regrasPagamento`. É daqui que `condicoesPagamento` (origem por campo + cenário inicial
+    // decidido no servidor) é montado no fim — a tela e o PDF leem esse objeto em vez de decidir por conta própria.
+    const camadasPag = {
+      edital: mercado?.condicoesEdital?.regrasPagamento ? { regras: mercado.condicoesEdital.regrasPagamento, texto: mercado.condicoesEdital.formaPagamento || '' } : null,
+    };
     {
       const rpAtual = mercado.condicoesEdital?.regrasPagamento;
       const semParcelaNoEdital = !rpAtual || !(Number(rpAtual.parcelas) >= 2 || rpAtual.parcelamentoPermitido === true || rpAtual.financiavel === true);
@@ -3476,7 +3483,8 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
           const [dRow] = rDoc.ok ? await rDoc.json() : [];
           const formaTxt = dRow?.formaPagamento || '';
           const doDoc = formaTxt ? extrairPagamentoTexto(formaTxt) : null;
-          if (doDoc && (Number(doDoc.parcelas) >= 2 || doDoc.parcelamentoPermitido === true || doDoc.financiavel === true)) {
+          if (doDoc) camadasPag.documental = { regras: doDoc, texto: formaTxt };
+          if (doDoc &&(Number(doDoc.parcelas) >= 2 || doDoc.parcelamentoPermitido === true || doDoc.financiavel === true)) {
             mercado.condicoesEdital = { ...(mercado.condicoesEdital || {}),
               regrasPagamento: { ...(rpAtual || {}), ...Object.fromEntries(Object.entries(doDoc).filter(([, v]) => v !== null)), parcelamentoPermitido: true },
               regrasOrigem: 'documental', regrasTexto: formaTxt.slice(0, 400) };
@@ -3495,6 +3503,7 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
       const semParcela = !rpAtual || !(Number(rpAtual.parcelas) >= 2 || Number(rpAtual.sinalPct) > 0);
       const txtAnuncio = String(imDb?.titulo || '');
       const doAnuncio = semParcela && txtAnuncio ? extrairPagamentoTexto(txtAnuncio) : null;
+      if (doAnuncio) camadasPag.anuncio = { regras: doAnuncio, texto: txtAnuncio };
       if (doAnuncio && (Number(doAnuncio.parcelas) >= 2 || Number(doAnuncio.sinalPct) > 0) && rpAtual?.parcelamentoPermitido !== false) {
         const preencher = Object.fromEntries(Object.entries(doAnuncio).filter(([k, v]) => v !== null && (rpAtual?.[k] ?? null) === null));
         mercado.condicoesEdital = { ...(mercado.condicoesEdital || {}),
@@ -3518,8 +3527,17 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
             regrasOrigem: 'padrao_leiloeiro',
             regrasAmostras: amostras,
           };
+          camadasPag.prior = { regras, amostras };
         }
       } catch { /* best-effort */ }
+    }
+    // UM DECISOR SÓ (15/11, arena): servidor monta as condições com origem por campo e decide o cenário inicial; a tela
+    // abre nele. Sem prova forte (trecho citado do edital ou ficha da Caixa) abre À VISTA — o erro do lado seguro.
+    if (mercado) {
+      try {
+        mercado.condicoesPagamento = montarCondicoesPagamento({ ...camadasPag, fichaCef: imDb?.ficha_cef || null, modalidade: imDb?.modalidade || imovel?.modalidade || '' });
+        console.log('[condicoes-pagamento]', JSON.stringify({ imovel: String(imovelId), cenario: mercado.condicoesPagamento.cenarioInicial, campos: Object.fromEntries(Object.entries(mercado.condicoesPagamento.campos).map(([k, v]) => [k, v.origem])) }));
+      } catch (e) { console.error('[condicoes-pagamento] não montado:', e?.message || e); }
     }
     // VALOR type-correct: o avaliador (IA) calcula valorEstimadoImovel pelo MÉTODO DO TIPO
     // (m² privativo/construído, m² de terreno, hectare, terreno excedente à parte) — preferimos
@@ -4024,7 +4042,9 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
       regrasPagamentoEdital: mercado?.condicoesEdital?.regrasPagamento,
     });
     const pagamentoContraditorio = String(imDb?.forma_pagamento || '') === 'a_vista' && !!pagamentoDocCedo
-      && (pagamentoDocCedo.financiavel === true || Number(pagamentoDocCedo.parcelas) >= 2 || pagamentoDocCedo.fgts === true || pagamentoDocCedo.parcelamentoPermitido === true);
+      // 15/11 (arena, classe Brooklin): FGTS NÃO é parcelamento — "aceita FGTS" num lote à vista continua à vista, e o
+      // extrator antigo lia até "não é permitido o FGTS" como fgts:true. Só parcela/financiamento/parcelamento desarmam.
+      && (pagamentoDocCedo.financiavel === true || Number(pagamentoDocCedo.parcelas) >= 2 || pagamentoDocCedo.parcelamentoPermitido === true);
     if (pagamentoContraditorio) parecerDiag.pagamentoContraditorio = true;
     // Só gera o parecer se ainda houver orçamento (a pesquisa de mercado é a etapa cara e já
     // rodou). Sem tempo, ENTREGA o relatório de mercado SEM o parecer — melhor que estourar o
@@ -4103,7 +4123,7 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
         // CONDIÇÕES DO EDITAL NO RECÁLCULO (03/11, caso Peruíbe). Antes o ROE e o teto saíam do piso do
         // art. 895 (30 parcelas) com o edital dizendo 10 parcelas. Regra em src/lib/condicoes-pagamento.js.
         {
-          const patchCond = aplicarCondicoesEdital(pInp, mercado?.condicoesEdital?.regrasPagamento, mercado?.condicoesEdital?.formaPagamento);
+          const patchCond = aplicarCondicoesEdital(pInp, mercado?.condicoesEdital?.regrasPagamento, mercado?.condicoesEdital?.formaPagamento, { regrasOrigem: mercado?.condicoesEdital?.regrasOrigem || '' });
           if (patchCond) {
             const { faltando, parcelaMinimaAplicada, ...campos } = patchCond;
             Object.assign(pInp, campos);
@@ -4126,7 +4146,13 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
         // razão; o terceiro relatório era o mensageiro, não o bug. Agora o servidor
         // recalcula com o valor que ele mesmo descobriu, usando a MESMA função pura da
         // tela, para que parecer, laudo e tela falem do mesmo imóvel.
-        const isAVistaParecer = parecerInputs.cenario === 'À Vista' || (!!pInp.somenteAVista && !pagamentoContraditorio);
+        // 15/11 (arena — classe Brooklin): sem escolha do cliente, o parecer segue o cenário que o SERVIDOR provou
+        // (mercado.condicoesPagamento) — o mesmo em que a tela abre. Cliente que escolheu, manda.
+        const cenarioProvado = mercado?.condicoesPagamento?.cenarioInicial;
+        const isAVistaParecer = parecerInputs.cenarioEscolhido
+          ? (parecerInputs.cenario === 'À Vista' || (!!pInp.somenteAVista && !pagamentoContraditorio))
+          : cenarioProvado ? cenarioProvado === 'aVista'
+          : (parecerInputs.cenario === 'À Vista' || (!!pInp.somenteAVista && !pagamentoContraditorio));
         let metricasParecer = parecerInputs.metricas || {};
         const vmCliente = Number(parecerInputs.d?.valorMercado) || 0;
         const vmServidor = Number(pInp.valorMercado) || 0;
@@ -4139,11 +4165,16 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
         // (calculado no CLIENTE, antes de existir qualquer checagem de documento) passava
         // batido intacto pelo servidor.
         const condicoesMudaram = !!parecerDiag.condicoesEdital;
-        const precisaRecalcular = (vmServidor > 0 || aluguelEntrouAgora || pagamentoContraditorio || condicoesMudaram)
+        // O cenário do parecer pode ter mudado acima (decisão do servidor ≠ tela padrão): as métricas do cliente valem
+        // para o OUTRO cenário e precisam ser refeitas, e o rótulo que vai ao texto também.
+        const cenarioDivergiu = isAVistaParecer !== (parecerInputs.cenario === 'À Vista');
+        if (cenarioDivergiu) { pInp._cenario = isAVistaParecer ? 'À Vista' : 'Alavancado'; parecerDiag.cenarioDoServidor = pInp._cenario; }
+        const precisaRecalcular = (vmServidor > 0 || aluguelEntrouAgora || pagamentoContraditorio || condicoesMudaram || cenarioDivergiu)
           && (vmCliente <= 0
             || aluguelEntrouAgora
             || pagamentoContraditorio
             || condicoesMudaram
+            || cenarioDivergiu
             || (vmServidor > 0 && Math.abs(vmServidor - vmCliente) / vmServidor > 0.02)
             || !(Number(metricasParecer.capitalMobilizado) > 0));
         if (precisaRecalcular) {
@@ -4389,7 +4420,7 @@ COMO USAR (obrigatório): dedique um parágrafo aos CUSTOS DA OPERAÇÃO segundo
       // relatório errado. Best-effort: se a leitura falhar, a auditoria roda sem esse sinal.
       let temMatricula = false, pagamentoDoc = null, somenteAVista = false;
       try {
-        const [ix] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=link_matricula,anexos,titulo,forma_pagamento,doc_fatos,ficha_cef,modalidade&limit=1`)).json();
+        const [ix] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=link_matricula,anexos,titulo,forma_pagamento,doc_fatos,ficha_cef,modalidade,fonte&limit=1`)).json();
         temMatricula = !!(ix?.link_matricula || (Array.isArray(ix?.anexos) && ix.anexos.some((a) => a?.tipo === 'matricula')));
         somenteAVista = String(ix?.forma_pagamento || '') === 'a_vista';
         // A CAIXA JÁ PUBLICA A CONDIÇÃO, E NÓS JÁ GUARDAMOS (15/08). `ficha_cef` traz
@@ -4418,12 +4449,9 @@ COMO USAR (obrigatório): dedique um parágrafo aos CUSTOS DA OPERAÇÃO segundo
           titulo: ix?.titulo,
           regrasPagamentoEdital: result?.mercado?.condicoesEdital?.regrasPagamento,
         });
-        // Publica na ficha do imóvel para a TELA parar de travar o cenário financiado e o
-        // cliente ver a condição real — foi por não estar publicada que ela se perdeu.
-        if (pagamentoDoc && (Number(pagamentoDoc.parcelas) >= 2 || Number(pagamentoDoc.sinalPct) > 0 || pagamentoDoc.financiavel === true || pagamentoDoc.parcelamentoPermitido === true)) {
-          await sb(`rpc/registrar_doc_fatos`, { method: 'POST', headers: { Prefer: 'return=minimal' },
-            body: JSON.stringify({ p_imovel_id: String(imovelId), p_fatos: { pagamento: pagamentoDoc, em: new Date().toISOString() } }) }).catch(() => {});
-        }
+        // 15/11 (arena, classe Brooklin): o RELATÓRIO NÃO ESCREVE NO ACERVO. Aqui ele publicava em doc_fatos o resultado
+        // da cascata (que mistura título do anúncio e ficha CEF) como se fosse leitura de documento — e doc_fatos é a camada
+        // MAIS FORTE na próxima geração: uma inferência virava "prova" para todos os clientes seguintes.
         // 14/09: o `registrar_doc_fatos` acima só grava dentro do JSON — a coluna PLANA
         // `forma_pagamento` (a que a Busca filtra e a que trava o cenário financiado na tela)
         // nunca era atualizada. Achado ao investigar a queixa do dono sobre forma de pagamento:
@@ -4444,10 +4472,15 @@ COMO USAR (obrigatório): dedique um parágrafo aos CUSTOS DA OPERAÇÃO segundo
         // financiamento). Nenhum lote judicial ATIVO está com esse valor hoje (conferido:
         // 2437/2437 corretamente `hipotecado`), mas o código sempre escreveu o rótulo errado
         // por baixo — corrigido antes que aconteça de verdade.
-        if (somenteAVista && pagamentoDoc && (pagamentoDoc.financiavel === true || Number(pagamentoDoc.parcelas) >= 2 || pagamentoDoc.fgts === true || pagamentoDoc.parcelamentoPermitido === true)) {
-          const ehJudicialSemBancoExplicito = String(ix?.modalidade || '').toLowerCase() === 'judicial' && pagamentoDoc.financiavel !== true;
-          const formaCorrigida = ehJudicialSemBancoExplicito ? 'hipotecado' : 'financiado';
-          try { await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ forma_pagamento: formaCorrigida }) }); } catch { /* best-effort */ }
+        // 15/11 (arena, classe Brooklin): era aqui que o lote do Brooklin virou 'financiado' — bastava fgts===true, e
+        // um relatório de UM cliente reescrevia a coluna que a Busca, a ficha e os próximos relatórios leem. Agora a
+        // divergência (cadastro à vista × leitura dizendo parcelável) vira ANOMALIA para conferência; nada é reescrito.
+        if (somenteAVista && pagamentoDoc && (pagamentoDoc.financiavel === true || Number(pagamentoDoc.parcelas) >= 2 || pagamentoDoc.parcelamentoPermitido === true)) {
+          const prova = [pagamentoDoc.financiavel === true ? 'financiável' : '', Number(pagamentoDoc.parcelas) >= 2 ? `${pagamentoDoc.parcelas} parcelas` : '',
+            pagamentoDoc.parcelamentoPermitido === true ? 'parcelamento permitido' : ''].filter(Boolean).join(', ');
+          // registrarAnomalia nunca lança (engole e segue): o rastro, se faltar, é a ausência da linha na tabela.
+          await registrarAnomalia('pagamento_divergente', ix?.fonte || null, String(imovelId), 'forma_pagamento',
+            `Cadastro do lote = à vista; a leitura (${pagamentoDoc.origem || 'cascata doc > edital > ficha CEF > título'}) diz: ${prova}. Conferir no edital antes de mudar o cadastro.`);
         }
       } catch { /* sinais opcionais da auditoria */ }
       const aud = auditarMercadologico(result, { temMatricula, pagamentoDoc, somenteAVista });

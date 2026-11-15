@@ -18,6 +18,8 @@ import { classificarDocumento, blocoParaIA, temTextoUtil } from './_doc-leitura.
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
+// Deploy do conserto do extrator de pagamento (f6abb16 + dac5ae4, 15/11): `pagamento` em cache anterior é relido.
+export const CORTE_EXTRATOR_PAGAMENTO = '2026-11-15T19:00:00Z';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 /**
@@ -576,6 +578,27 @@ export async function extratoEdital(imovelId, { deadline } = {}) {
     if (hit?.campos?.condicoes && !custoSemResp) {
       cond = hit.campos.condicoes; datas = hit.campos.datas || null;
       pagamento = hit.campos.pagamento || null; deCache = true;
+      // PAGAMENTO DE CACHE ANTERIOR AO CONSERTO DO EXTRATOR (15/11, arena — classe Brooklin): até f6abb16 o regex lia
+      // "Não é permitida a utilização do FGTS" como fgts:true, não reconhecia "valor total da arrematação" como à vista
+      // e não lia "sinal a partir de"/"de 24 a 240 parcelas". O cache guarda CAMPOS, não texto: o `pagamento` velho é
+      // descartado e relido do texto (download direto + regex, custo zero). PDF sem camada de texto NÃO chama a visão só
+      // para isso — o pagamento fica nulo (= não verificado), nunca o valor velho.
+      const pagamentoVelho = pagamento && (!hit.atualizado_em || Date.parse(hit.atualizado_em) < Date.parse(CORTE_EXTRATOR_PAGAMENTO));
+      if (pagamentoVelho) {
+        pagamento = null;
+        const txtP = await lerTexto(url, fim).catch((e) => { console.error('[edital-pagamento] releitura falhou:', e?.message || e); return ''; });
+        if (txtP) {
+          const bloco = isolarBlocoDoLote(txtP, { valorMinimo: im.valor_minimo, valorAvaliacao: im.valor_avaliacao });
+          const marca = bloco ? txtP.search(/\bLotes?\s*(?:n[ºo°.]?)?\s*:?\s*\d+\b/i) : -1;
+          pagamento = extrairPagamentoTexto(bloco ? (marca > 0 ? `${bloco} ${txtP.slice(0, marca)}` : bloco) : txtP);
+          // Regrava o cache por URL com o pagamento novo (carimbo novo) — só edital de lote único, como a gravação
+          // original (multi-lote cacheia pelo conteúdo do bloco, que aqui não se refaz).
+          // Confiança 90: precisa VENCER o pagamento velho (visão = 80, regex = 60) no merge por campo do cacheGravar —
+          // senão o carimbo renovava e o valor velho ficava, agora com cara de recente.
+          if (!bloco && pagamento) await cacheGravar(chaveUrl(url), { url, imovelId: String(imovelId), tipoDoc: 'edital', campos: { pagamento }, via: 'regex_releitura_15nov', confianca: 90 });
+        }
+        console.log('[edital-pagamento]', JSON.stringify({ imovel: String(imovelId), releitura: txtP ? 'texto' : 'sem_texto_nao_verificado' }));
+      }
       // Identidade de cache gravado ANTES de 05/10 13h UTC fica de fora: o detector de edital de
       // vários bens não reconhecia TRT ("1: processo") nem lista por matrícula, e o cache por URL
       // republicava a identidade de outro lote a cada geração (#50).

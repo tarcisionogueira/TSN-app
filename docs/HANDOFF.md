@@ -6,6 +6,35 @@
 
 
 
+## 15/11 (noite, 8) — ARENA DOS RELATÓRIOS: FASE 1 (classe Brooklin fechada)
+
+Arena (10 personas, 24 agentes; registro em scratchpad/arena/debate-relatorios.json) sobre mercadológico e documental.
+Vencedora: proveniência por campo + cenário decidido no servidor + cache relido + vigilância. Fase 1 entregue:
+- **O relatório não escreve mais no acervo** (`gerar-analise.js`): saiu a reescrita a_vista→financiado/hipotecado e a
+  publicação da cascata em `doc_fatos` (ela misturava título e ficha CEF como se fosse documento). Divergência vira
+  `relatorio_anomalias` tipo `pagamento_divergente`. FGTS saiu de `pagamentoContraditorio`.
+- **Cache do edital** (`_edital-extrato.js`): `pagamento` gravado antes de `CORTE_EXTRATOR_PAGAMENTO` (15/11 19h UTC) é
+  relido do texto (regex, custo zero) e regravado com confiança 90; PDF sem texto fica nulo (não verificado), sem visão.
+- **Padrão do leiloeiro** (`_doc-extracao.js`): `fgts` não vota nem é lido; `financiavel` exige 2 votos.
+- **Um decisor só** (`api/_condicoes-origem.js`, teste `testar:condicoes-origem`): cada condição {valor, origem,
+  trecho}; `edital_texto` só se o trecho citado, relido, der o mesmo valor; cenário inicial 'financiado' só com prova
+  forte (edital_texto ou ficha da Caixa) — título, documental (IA) e padrão do leiloeiro NUNCA abrem financiado.
+  Gravado em `result.mercado.condicoesPagamento`; o parecer segue esse cenário salvo escolha do cliente
+  (`parecerInputs.cenarioEscolhido`).
+- **Tela** (`Analise.jsx`): abre À VISTA (era 'financiado' padrão) e troca para o cenário do servidor ao carregar o
+  relatório; o semeador não destrava mais por `sinalPct`. `aplicarCondicoesEdital` recebe `regrasOrigem`: regra do
+  anúncio/documental/padrão vira `premissa_*` (aviso no cartão + nota "NÃO confirmadas … no anúncio").
+- **Vigilância**: `qa_cond_pagamento()` em `qa_invariantes()` (cond_pagamento_sem_prova / _ausente / _sem_trecho /
+  _nunca_provada / pagamento_divergente_aberto), só relatórios depois de 16/11 00h UTC; regra `pagamento_so_com_prova`
+  em `regra_negocio`.
+- Lotes que a reescrita antiga deixou como 'financiado' sem prova: só 1 (BAYIT 00e95b8e, edital à vista); os ~2.400
+  'financiado' restantes vêm da coleta (ficha CEF, PGFN, título com parcelas). Comando para o dono:
+  `update imoveis_leilao set forma_pagamento='a_vista' where id='00e95b8e-4283-4328-b55f-a5ef0a0cf548' and forma_pagamento='financiado';`
+- **Fica para a Fase 2/3** (pendência aberta): defaults 5/360/12 ainda preenchem o financiado que o cliente liga (com
+  aviso); PDF (bloco Condições, data da geração, 0,00%, 1ª/2ª praça), ×0,9 em dobro, custo total × capital, quadro de
+  premissas, aluguel do Índice rotulado, documental com veredito único / confiança no PDF / [object Object], fontes
+  (FipeZAP oficial, amostras com URL), trava `default-como-fato`.
+
 ## 15/11 (noite, 7) — #461: HASTA, ALFA E PESTANA (coleta "parcial" de três fontes)
 
 - **HASTA não estava perdendo imóvel.** 189 enumerados, 182 já no banco: o leilão 579 (Salvador, SAEB 006/2026) é de

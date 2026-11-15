@@ -179,6 +179,7 @@ export function fraseCondicoesPagamento(cp) {
   if (cp.somenteAVista) {
     return cp.origem === 'edital_veda'
       ? 'Condições de pagamento: o edital deste leilão VEDA expressamente o parcelamento — a projeção considera pagamento à vista.'
+      : String(cp.origem || '').startsWith('premissa_') ? 'Condições de pagamento: à vista — a vedação de parcelamento não foi lida no edital (veio de fonte secundária); confirme no documento.'
       : 'Condições de pagamento: à vista, conforme o cadastro do lote; o edital não foi lido nesta emissão para confirmar se há parcelamento disponível.';
   }
   const minimo = Number(cp.parcelaMinima) > 0 ? `, parcela mínima de R$ ${Math.round(Number(cp.parcelaMinima)).toLocaleString('pt-BR')}` : '';
@@ -189,6 +190,12 @@ export function fraseCondicoesPagamento(cp) {
   if (cp.origem === 'edital_incompleto') {
     const falta = Array.isArray(cp.faltando) && cp.faltando.length ? cp.faltando.join(' nem ') : 'todas as condições';
     return `Condições de pagamento PARCIALMENTE lidas no edital: o documento permite parcelar, mas não informa ${falta}${termos ? `; a projeção parcelada usa ${termos}${minimo}, completando com o piso legal` : ''}. NÃO confirmadas: confira no edital antes de dar lance.`;
+  }
+  // 15/11 (arena — classe Brooklin): regra vinda do anúncio, do documental (IA) ou do padrão do leiloeiro diz o nome dela.
+  if (String(cp.origem || '').startsWith('premissa_')) {
+    const de = ({ premissa_anuncio: 'no anúncio do leiloeiro', premissa_documental: 'na leitura do documental (IA), não no texto do edital',
+      premissa_padrao_leiloeiro: 'no padrão de outros editais deste leiloeiro', 'premissa_edital+anuncio': 'em parte no edital e em parte no anúncio' })[cp.origem] || 'fora do edital';
+    return `Condições de pagamento NÃO confirmadas no edital: a projeção parcelada usa o que consta ${de}${termos ? ` (${termos}${minimo})` : ''}. Confirme no edital antes de dar lance.`;
   }
   if (cp.origem === 'cliente') {
     return `Condições de pagamento informadas por você${termos ? ` (${termos})` : ''}, não lidas em documento. Confirme no edital antes de dar lance.`;
