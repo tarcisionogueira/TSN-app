@@ -6,6 +6,35 @@
 
 
 
+## 15/11 (noite) — ÍNDICE SEM PROVA, LEILÃO COMO COMPARÁVEL, "SINAL 5%" INVENTADO NO RELATÓRIO
+
+**Índice de Capão da Canoa (dono, arrematação na terça):** 0 de 17 links existiam (404 em série, IDs sequenciais em
+portais diferentes). Com o Gemini, o link é redirecionador do Google (`vertexaisearch…/grounding-api-redirect`) que
+EXPIRA em dias (277 de 336 já davam 404) e escondia o destino: o PRÓPRIO lote em leilão (BidHero) entrou como
+comparável. Consertos: `api/_link-anuncio.js` (`semLinksMortos` na entrada; `resolverRedirecionadores` troca pelo
+destino real logo que a pesquisa volta — Índice e mercadológico — antes da trava anti-leilão); `URL_LEILAO` com
+domínios de leilão sem "leilão" no nome; `indice_aplicar_destinos(tarefa, apagar_leilao)` limpou o acervo (336 → 2
+redirecionadores; 45 destinos reais, 277 expirados nulos, 3 de leilão apagadas — dono autorizou). Tela/PDF: "ver
+anúncio ↗" + "buscar ↗" clicáveis; distância de amostra sem coordenada (`+null === 0` → 5.855 km) corrigida;
+cabeçalho "17 amostras (8 venda · 9 locação)" e composição "amostras de VENDA por distância".
+
+**Arena (10 debatedores, 24 agentes) — Índice confiável:** a conta está certa; o que entra nela não tem prova.
+Medição em seco (45 cidades): venda 3.754 → 45% sem link, 26% em página de busca compartilhada, 29% com link próprio
+(não conferido), 23% repetidas (Osasco: mesma casa 4× → mediana +115% ao deduplicar). Feito já: metodologia do PDF
+honesta (preço PEDIDO, nem tudo conferido, não substitui NBR 14653), rótulo "rua" → "bairro / vizinhança",
+`indice-consulta.restGet` não engole erro (503 "não consegui ler"). Plano completo na pendência **#484** (corpus único
+`indice_amostra` × plural `indice_amostras`, prova por amostra, ponderação por evidência, selo ao cliente, invariantes;
+FipeZap/laudo só como alarme). Mercadológico: comparáveis sem prova e carimbo de coordenada na **#482**.
+
+**Relatório do apto do Brooklin (MEGA X131536):** mostrava "Sinal 5%" e "Parcela do banco R$ 9.051". O edital (lido
+por inteiro via Firecrawl, 9 créditos) exige o preço TODO em 24 h, à vista, e PROÍBE FGTS. Cadeia: extrator lia
+`fgts:true` pela palavra na frase de proibição → `gerar-analise` (~linha 4438) reescreveu o lote à vista para
+'financiado' → sem entrada lida, default bancário 5%/360. Consertos (f6abb16, 79b2604): `_doc-extracao` — negação =
+PROIBIÇÃO (false), "totalidade do preço / valor total da arrematação" = à vista, à vista sem prova de parcelamento =
+`parcelamentoPermitido:false` (→ `somenteAVista`); cartão "Disponível ao arrematar" (tela e PDF) avisa em vermelho
+quando entrada/parcelas não vêm do edital nem do cliente (`pagamentoNaoConfirmado`). Lote corrigido no banco. **#485**:
+112 lotes 'financiado' cuja única prova é `fgts:true` (108 SUPERBID) — reler com o extrator novo.
+
 ## 15/11 (fim da tarde) — P1 DO CLAUDE: ZUK RELIGADO PELO MAPA, MOTOR RELIGA "SUMIU", UF DA LEILOTECH
 
 **#462 fechada / #428 conserto no ar (commit 8a7f45d).** Os `sumiu_da_fonte` com praça futura tinham disparado
