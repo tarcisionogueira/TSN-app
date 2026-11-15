@@ -6,6 +6,23 @@
 
 
 
+## 15/11 (noite, 6) — P1: #485 FECHADA, #482 NO CÓDIGO, #371 MEDIDA
+
+- **#485 (fechada):** os 109 "financiado" só com fgts:true eram quase todos Banco Inter na SUPERBID — título da oferta
+  "Entrada de 30% + Saldo em 240x | Aceita FGTS" (conferido página a página via pg_net, `bastidor.req` tarefa
+  `fgts485`). FGTS e financiado CERTOS; faltavam sinal/parcelas: o extrator não lia "Sinal a partir de 30%" nem "Saldo
+  de 24 a 240 parcelas" (corrigido em `_doc-extracao.js`, casos reais no `testar:edital-a-vista`). 106 completados por
+  migração com `pagamento.complemento` = prova; 3 ficaram (2 só "Aceita FGTS", 1 página 400).
+- **#482 (código; falta ver amostra nova):** o mercadológico lê o corpus pela view `indice_amostra_valida` (unidade
+  independente, sem link morto) nas 5 leituras de `gerar-analise.js`; distância/vizinhança só com
+  `coord_origem='geocodificada'` (eram 747 carimbadas × 122 geocodificadas); `centralIndiceRegiao` pondera pela prova;
+  e a gravação parou de carimbar lat/lng do alvo (fica a quadrícula de ~1 km). Efeito esperado: menos amostra "nível 1"
+  da base → o relatório recorre mais à busca/bairro. Conferir no próximo relatório: amostras novas de origem
+  `relatorio` com `lat` nula e o cron de geocodificação preenchendo pelo endereço.
+- **#371 (medida, não resolvida):** 167 sem UF, cidade VAZIA (não nula). Regra geral cidade/UF por texto validada no
+  IBGE resolve só 12 (e uma, TURANI "Caxias/MA", é duvidosa) → é ajuste de parser por fonte (TURANI 32, SUPORTE 29,
+  ALEXANDRECOSTA 11, GRANDESLEIL 7…).
+
 ## 15/11 (noite, 5) — ÍNDICE: FIPEZAP OFICIAL SÓ COMO ALARME (#484, item 5 — plano da arena concluído)
 
 - O "FipeZAP" que a pesquisa da IA declarava (64 amostras sintéticas, 4 cidades) NÃO serve de régua: Salvador a

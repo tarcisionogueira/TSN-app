@@ -19,6 +19,7 @@ import { avaliarMercado, explicarCalculo, ehAmostraDeLeilao, limparComentarioDeL
 import { resolverRedirecionadores } from './_link-anuncio.js';
 import { composicaoTemporal, avisoFrescor } from './_indice-composicao.js';
 import { referenciaPonderada } from './_indice-ponderacao.js';
+import { aplicarPesos } from './_indice-peso.js';
 import { geocodificarCascata, rankNivel, coordValida } from './_geo.js';
 import { extratoEdital, extratoMatricula } from './_edital-extrato.js';
 import { auditarMercadologico, motivoBuscaFraca } from './_auditoria-relatorio.js';
@@ -485,7 +486,10 @@ async function centralIndiceRegiao(imDb, segmento = 'apartamento') {
   try {
     if (!imDb?.cidade_norm || !imDb?.estado) return null;
     const uf = String(imDb.estado).toUpperCase();
-    const r = await sb(`indice_amostra?cidade_norm=eq.${encodeURIComponent(imDb.cidade_norm)}&uf=eq.${uf}&tipo=eq.${encodeURIComponent(segmento)}&especie=eq.venda&${faixaVendaQ(segmento)}&select=valor_m2,fonte,lat,lng,bairro_norm&limit=800`);
+    // 15/11 (#482): view `indice_amostra_valida` — unidade independente (a mesma oferta em 4 portais conta 1×) e sem
+    // link morto, como o Índice. E coordenada só GEOCODIFICADA: a carimbada com a posição do alvo de outro relatório
+    // (a IA DECLARAVA "mesmo condomínio") virava vizinha perfeita aqui e puxava o valor.
+    const r = await sb(`indice_amostra_valida?cidade_norm=eq.${encodeURIComponent(imDb.cidade_norm)}&uf=eq.${uf}&tipo=eq.${encodeURIComponent(segmento)}&especie=eq.venda&${faixaVendaQ(segmento)}&select=valor_m2,fonte,lat,lng,bairro_norm,coord_origem,url,prova&limit=800`);
     if (!r.ok) return null;
     const j = await r.json().catch(() => []);
     const limpas = (Array.isArray(j) ? j : []).filter(a => Number(a.valor_m2) > 0 && !ehFonteLeilao(a));
@@ -495,7 +499,8 @@ async function centralIndiceRegiao(imDb, segmento = 'apartamento') {
     // Headline por PROXIMIDADE + PADRÃO ao imóvel-alvo, misturado ao ticket médio quando há poucas
     // amostras perto (pedido do dono). Só quando o alvo tem coordenada; senão mediana da cidade.
     // As BANDAS (popular/médio/alto) seguem os percentis da CIDADE — descrevem o espectro de padrão.
-    const pond = referenciaPonderada(limpas.map(a => ({ valor_m2: Number(a.valor_m2), lat: a.lat, lng: a.lng })),
+    const geoOk = (a) => a.coord_origem === 'geocodificada';
+    const pond = referenciaPonderada(aplicarPesos(limpas).map(a => ({ valor_m2: Number(a.valor_m2), lat: geoOk(a) ? a.lat : null, lng: geoOk(a) ? a.lng : null, peso: a.peso })),
       { lat: imDb.latitude, lng: imDb.longitude });
     const venda_m2 = (pond && pond.valor > 0) ? pond.valor : Math.round(pct(0.50));
     // DE QUAIS BAIRROS ESSA MÉDIA É FEITA (09/09, achado do dono: "o mercadológico deu muito
@@ -661,9 +666,6 @@ async function gravarAmostrasIndice(imDb, mercado, imovelId, segmento = 'apartam
     const bairroNorm = _norm(imDb.bairro);          // bairro do imóvel-alvo (fallback)
     const bDe = (s) => _norm(s?.bairro) || bairroNorm;   // bairro POR AMOSTRA (a IA marca cada uma)
     const geoGrid = geoGridDe(imDb.latitude, imDb.longitude);
-    // Coordenada do imóvel-alvo → guardada em cada amostra p/ o recorte por RAIO (~250m) no Índice.
-    const latA = coordNum(imDb.latitude) && coordNum(imDb.longitude) ? Number(imDb.latitude) : null;
-    const lngA = latA !== null ? Number(imDb.longitude) : null;
     const nowMes = new Date().toISOString().slice(0, 7);
     const dref = (d) => (/^\d{4}-\d{2}$/.test(String(d || '')) ? `${d}-01` : `${nowMes}-01`);
     const vendas = vendasDe(mercado);
@@ -720,8 +722,12 @@ async function gravarAmostrasIndice(imDb, mercado, imovelId, segmento = 'apartam
     // mesmo ali: mesmo condomínio, mesmo logradouro ou distância declarada ≤ 250 m. Antes
     // era só a distância — o que excluía a amostra do mesmo condomínio que não a declarou
     // (a maioria) e a rebaixava a "bairro", perdendo o recorte mais preciso que existe.
+    // 15/11 (#482): deixa de carimbar lat/lng. A "evidência forte" é a PALAVRA da IA (mesmo condomínio/rua) — 992 de
+    // 1.247 amostras de relatório tinham a coordenada do alvo, e no Índice viravam vizinhas de tudo. Fica só a
+    // quadrícula de ~1 km (grão compatível com "mesmo condomínio/rua"); coordenada de verdade vem do cron de
+    // geocodificação pelo endereço do anúncio (coord_origem='geocodificada'), a única que as leituras aceitam.
     const coordDe = (s) => (grauProximidade(s) === 'forte'
-      ? { geo_grid: geoGrid, lat: latA, lng: lngA }
+      ? { geo_grid: geoGrid, lat: null, lng: null }
       : { geo_grid: '', lat: null, lng: null });
     // REFERÊNCIA CITÁVEL da amostra (link/endereço/condomínio). Sem ela, um comparável guardado
     // na base não é auditável pelo cliente — e é a base que sustenta o relatório em MODO BASE.
@@ -866,7 +872,8 @@ async function amostrasRegiaoCache(imDb, segmento = 'apartamento') {
     const cols = 'select=valor_m2,valor_total,area_m2,data_ref,fonte,url,endereco,condominio,bairro_norm,geo_grid,criado_em&order=criado_em.desc&limit=400';
     const buscar = async (extra) => {
       try {
-        const r = await sb(`indice_amostra?${baseFiltro}${extra}&${cols}`);
+        // 15/11 (#482): unidades independentes, sem link morto (mesma base do Índice).
+        const r = await sb(`indice_amostra_valida?${baseFiltro}${extra}&${cols}`);
         if (!r.ok) return [];
         const j = await r.json().catch(() => []);
         return (Array.isArray(j) ? j : []).filter(a => Number(a.valor_m2) > 0 && !ehFonteLeilao(a));
@@ -907,8 +914,10 @@ async function amostrasBaseParaValor(imDb, segmento, existentes = []) {
   if (!imDb?.cidade_norm || !imDb?.estado) return { 1: [], 2: [], 3: [] };
   const uf = String(imDb.estado).toUpperCase();
   const desde = new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10);
-  const r = await sb(`indice_amostra?cidade_norm=eq.${encodeURIComponent(imDb.cidade_norm)}&uf=eq.${uf}&tipo=eq.${encodeURIComponent(segmento)}&especie=eq.venda&${faixaVendaQ(segmento)}&data_ref=gte.${desde}`
-    + '&select=valor_m2,valor_total,area_m2,data_ref,fonte,url,endereco,condominio,bairro_norm,lat,lng&order=criado_em.desc&limit=600');
+  // 15/11 (#482): `indice_amostra_valida` (unidade independente, sem link morto) e distância só com coordenada
+  // GEOCODIFICADA — a carimbada com o alvo de outro relatório caía no nível 1 (≤250 m) sem prova nenhuma de lugar.
+  const r = await sb(`indice_amostra_valida?cidade_norm=eq.${encodeURIComponent(imDb.cidade_norm)}&uf=eq.${uf}&tipo=eq.${encodeURIComponent(segmento)}&especie=eq.venda&${faixaVendaQ(segmento)}&data_ref=gte.${desde}`
+    + '&select=valor_m2,valor_total,area_m2,data_ref,fonte,url,endereco,condominio,bairro_norm,lat,lng,coord_origem&order=criado_em.desc&limit=600');
   if (!r.ok) throw new Error(`indice_amostra HTTP ${r.status}`);
   const rows = await r.json();
   const latA = coordNum(imDb.latitude) && coordNum(imDb.longitude) ? Number(imDb.latitude) : null;
@@ -920,7 +929,7 @@ async function amostrasBaseParaValor(imDb, segmento, existentes = []) {
   for (const a of (Array.isArray(rows) ? rows : [])) {
     if (!(Number(a.valor_m2) > 0) || ehFonteLeilao(a)) continue;
     let nivel = null, dist;
-    if (latA !== null && coordNum(a.lat) && coordNum(a.lng)) {
+    if (latA !== null && a.coord_origem === 'geocodificada' && coordNum(a.lat) && coordNum(a.lng)) {
       const rad = Math.PI / 180, dLat = (a.lat - latA) * rad, dLng = (a.lng - lngA) * rad;
       const h = Math.sin(dLat / 2) ** 2 + Math.cos(latA * rad) * Math.cos(a.lat * rad) * Math.sin(dLng / 2) ** 2;
       dist = 2 * 6371 * Math.asin(Math.sqrt(h));
@@ -979,7 +988,7 @@ async function locacoesDaBase(imDb, segmento, nivel) {
     const geoGrid = geoGridDe(imDb.latitude, imDb.longitude);
     const recorte = nivel === 'bairro' && bairroNorm ? `&bairro_norm=eq.${encodeURIComponent(bairroNorm)}`
       : nivel === 'grid' && geoGrid ? `&geo_grid=eq.${encodeURIComponent(geoGrid)}` : '';
-    const r = await sb(`indice_amostra?cidade_norm=eq.${encodeURIComponent(imDb.cidade_norm)}&uf=eq.${uf}&tipo=eq.${encodeURIComponent(segmento)}&especie=eq.locacao&data_ref=gte.${desde}${recorte}&select=valor_m2,valor_total,area_m2,data_ref,fonte,url,endereco,condominio,bairro_norm&order=data_ref.desc&limit=60`);
+    const r = await sb(`indice_amostra_valida?cidade_norm=eq.${encodeURIComponent(imDb.cidade_norm)}&uf=eq.${uf}&tipo=eq.${encodeURIComponent(segmento)}&especie=eq.locacao&data_ref=gte.${desde}${recorte}&select=valor_m2,valor_total,area_m2,data_ref,fonte,url,endereco,condominio,bairro_norm&order=data_ref.desc&limit=60`);
     if (!r.ok) return [];
     const j = await r.json().catch(() => []);
     return (Array.isArray(j) ? j : []).filter(a => Number(a.valor_total) > 0 && Number(a.area_m2) > 0 && !ehFonteLeilao(a));
@@ -1072,7 +1081,7 @@ async function lerComposicaoRegiao(imDb, segmento = 'apartamento') {
     if (!imDb?.cidade_norm || !imDb?.estado) return null;
     const uf = String(imDb.estado).toUpperCase();
     const filtro = `cidade_norm=eq.${encodeURIComponent(imDb.cidade_norm)}&uf=eq.${uf}&tipo=eq.${encodeURIComponent(segmento)}&especie=eq.venda&${faixaVendaQ(segmento)}`;
-    const r = await sb(`indice_amostra?${filtro}&select=valor_m2,data_ref,fonte&order=data_ref.desc&limit=600`);
+    const r = await sb(`indice_amostra_valida?${filtro}&select=valor_m2,data_ref,fonte&order=data_ref.desc&limit=600`);
     if (!r.ok) return null;
     const j = await r.json().catch(() => []);
     const rows = (Array.isArray(j) ? j : []).filter(a => Number(a.valor_m2) > 0 && !ehFonteLeilao(a));
