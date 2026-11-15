@@ -3747,7 +3747,10 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
     const vEstIA = iaUso.valor;
     let valorMercado = null;
     if (vEstIA > 0) valorMercado = Math.round(vEstIA);
-    else if (precoM2 && areaM2 && ['residencial', 'comercial', 'industrial'].includes(baseTipo)) valorMercado = Math.round(precoM2 * areaM2 * 0.9);
+    // 15/11 (arena, Fase 2): sem o ×0,9. O valor de MERCADO é o dos comparáveis; o desconto para vender (90%) é premissa
+    // da PROJEÇÃO (src/utils/calculos.js) e já era aplicado lá — aqui ele entrava de novo (venda a 81% do mercado), e só
+    // neste caminho: quando o valor vinha da estimativa da IA, o desconto era um só. Mesmo imóvel, duas réguas.
+    else if (precoM2 && areaM2 && ['residencial', 'comercial', 'industrial'].includes(baseTipo)) valorMercado = Math.round(precoM2 * areaM2);
     // MODO BASE + TERRENO: sem a IA, não há `valorEstimadoImovel`, e o fallback acima cobre só
     // as bases por m² construído — um terreno sairia SEM valor de mercado. Aqui a conta é a
     // mesma, com a régua do tipo: R$/m² de TERRENO da base × área de terreno (da matrícula
@@ -3755,9 +3758,9 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
     else if (mercado?.__modoBase && baseTipo === 'terreno' && precoM2 > 0) {
       const aT = Number(mercadoInputs.areaTerrenoM2) || Number(areaM2) || 0;
       if (aT > 0) {
-        valorMercado = Math.round(precoM2 * aT * 0.9);
+        valorMercado = Math.round(precoM2 * aT);   // 15/11: sem ×0,9 — o desconto de venda é premissa da projeção
         mercado.consolidado = { ...(mercado.consolidado || {}), valorEstimadoImovel: valorMercado, areaConsiderada: aT,
-          baseCalculo: `R$ ${Math.round(precoM2).toLocaleString('pt-BR')}/m² de terreno (mediana da base própria) × ${Math.round(aT).toLocaleString('pt-BR')} m², com margem conservadora de 10% para revenda` };
+          baseCalculo: `R$ ${Math.round(precoM2).toLocaleString('pt-BR')}/m² de terreno (mediana da base própria) × ${Math.round(aT).toLocaleString('pt-BR')} m²` };
       }
     }
     // COERÊNCIA (só bases por m² privativo/construído) — se o R$/m² dos comparáveis divergir
@@ -3902,7 +3905,7 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
     // tela usa) — ver lá o porquê do allowlist. Sem valor de mercado, `mercadoVazio` fica true:
     // a cota é ESTORNADA e ninguém paga por uma estimativa que o dado não sustenta.
     if (!(valorMercado > 0) && !(precoM2 > 0) && indicePrecifica(mercado.indiceBidPro) && areaSeg > 0 && segIdx !== 'rural') {
-      valorMercado = Math.round(indiceVenda * areaSeg * 0.9); // haircut conservador (asking → fechamento)
+      valorMercado = Math.round(indiceVenda * areaSeg);   // 15/11: sem ×0,9 — o desconto de venda é premissa da projeção (uma vez só)
       mercado.precoMedioM2 = indiceVenda;
       const aluIdx = Number(mercado.indiceBidPro?.aluguel_m2) || 0;
       if (aluIdx > 0) { mercado.aluguelMedio = Math.round(aluIdx * areaSeg); valorLocacao = mercado.aluguelMedio; }
@@ -3910,7 +3913,7 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
       // O bloco do cálculo acompanha o valor; antes seguia com o texto da IA ("não foi possível calcular") ao lado de um valor.
       mercado.consolidado = {
         ...(mercado.consolidado || {}), precoMedioM2: indiceVenda, valorEstimadoImovel: valorMercado, areaConsiderada: areaSeg,
-        baseCalculo: `Índice BidPro: R$ ${Math.round(indiceVenda).toLocaleString('pt-BR')}/m² × ${areaSeg.toLocaleString('pt-BR')} m² × 0,9 (redução de anúncio para fechamento) = R$ ${valorMercado.toLocaleString('pt-BR')}. Sem comparável ativo com preço.`,
+        baseCalculo: `Índice BidPro: R$ ${Math.round(indiceVenda).toLocaleString('pt-BR')}/m² × ${areaSeg.toLocaleString('pt-BR')} m² = R$ ${valorMercado.toLocaleString('pt-BR')} (preço pedido em anúncio; a projeção vende a 90% deste valor). Sem comparável ativo com preço.`,
       };
       const rotSeg ={ apartamento: 'apartamento', casa: 'casa', terreno: 'terreno', comercial: 'imóvel comercial' }[segIdx] || segIdx;
       mercado.comentario = `Não encontramos anúncios comparáveis ATIVOS de ${rotSeg} para ${mercadoInputs.cidade || 'esta localidade'} no momento; a estimativa usa o Índice BidPro (base própria por microrregião e segmento, R$ ${Math.round(indiceVenda).toLocaleString('pt-BR')}/m²${mercado.indiceBidPro?.nivel ? `, nível ${mercado.indiceBidPro.nivel}` : ''}) como referência. É uma referência interna consolidada das análises da plataforma, não um comparativo de anúncio ao vivo.`;

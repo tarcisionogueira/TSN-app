@@ -2315,8 +2315,11 @@ export default function Analise() {
     }
     const nr = parecerDocumental.nivelRisco;
     const pa = parecerDocumental.pontosAtencao || {};
-    if (nr === 'vermelho' || (pa.altos || 0) > 0) return { txt: 'REPROVADO', sub: 'Alto risco jurídico — resolver os pontos antes de qualquer lance', bg: '#fee2e2', c: '#b91c1c' };
-    if (nr === 'amarelo' || (pa.medios || 0) > 0) return { txt: 'APROVADO COM RESSALVAS', sub: 'Viável, com pontos a confirmar com o analista e jurídico', bg: '#fef3c7', c: '#92400e' };
+    // VEREDITO ÚNICO (15/11, arena — Fase 2): com `nivelRisco` do servidor, ele manda. `pontosAtencao` conta também os
+    // riscos NÃO confirmados no documento — misturar os dois dava "Risco verde" no selo e "REPROVADO" no cabeçalho.
+    if (nr === 'verde') return { txt: 'APROVADO', sub: (pa.altos || pa.medios) ? 'Sem impedimento confirmado na documentação — há pontos a diligenciar (não confirmados no documento)' : 'Sem impedimentos jurídicos identificados na documentação', bg: '#dcfce7', c: '#15803d' };
+    if (nr === 'vermelho' || (!nr && (pa.altos || 0) > 0)) return { txt: 'REPROVADO', sub: 'Alto risco jurídico — resolver os pontos antes de qualquer lance', bg: '#fee2e2', c: '#b91c1c' };
+    if (nr === 'amarelo' || (!nr && (pa.medios || 0) > 0)) return { txt: 'APROVADO COM RESSALVAS', sub: 'Viável, com pontos a confirmar com o analista e jurídico', bg: '#fef3c7', c: '#92400e' };
     return { txt: 'APROVADO', sub: 'Sem impedimentos jurídicos identificados na documentação', bg: '#dcfce7', c: '#15803d' };
   })();
 
@@ -2344,7 +2347,7 @@ export default function Analise() {
     if (relSel === 'laudo' && relLaudoGerado && laudoEntry?.result) {
       return gerarLaudoPDF({ imovel: d, laudo: laudoEntry.result, cab: cabPDF });
     }
-    return gerarPDF({ d, metricas, metricasTeto, teto, isAVista, isUsoProprio, isViavel, fluxo, sacTab, priceTab, mercado, parecer, indicadores, divergenciaArea: analiseEntry?.result?.divergenciaArea || null, cab: cabPDF, fotos: fotosLote?.lista || null, linkLote: fotosLote?.linkLote || '' });
+    return gerarPDF({ d, metricas, metricasTeto, teto, isAVista, isUsoProprio, isViavel, fluxo, sacTab, priceTab, mercado, parecer, indicadores, divergenciaArea: analiseEntry?.result?.divergenciaArea || null, cab: { ...cabPDF, geradoEm: analiseEntry?.updatedAt || analiseEntry?.createdAt || null }, fotos: fotosLote?.lista || null, linkLote: fotosLote?.linkLote || '' });
   };
 
   // "Baixar os 3": só liberado quando os TRÊS relatórios estão prontos. Gera um
@@ -2356,7 +2359,7 @@ export default function Analise() {
 
   const imprimirTodosPDF = () => {
     gerarCombinadoPDF({
-      mercado: mercadoProntoPDF ? { d, metricas, metricasTeto, teto, isAVista, isUsoProprio, isViavel, fluxo, sacTab, priceTab, mercado, parecer, indicadores, cab: cabPDF, fotos: fotosLote?.lista || null, linkLote: fotosLote?.linkLote || '' } : null,
+      mercado: mercadoProntoPDF ? { d, metricas, metricasTeto, teto, isAVista, isUsoProprio, isViavel, fluxo, sacTab, priceTab, mercado, parecer, indicadores, cab: { ...cabPDF, geradoEm: analiseEntry?.updatedAt || analiseEntry?.createdAt || null }, fotos: fotosLote?.lista || null, linkLote: fotosLote?.linkLote || '' } : null,
       documental: documentalProntoPDF ? { imovel: d, parecer: parecerDocumental, bidscore: bidscoreDoc, cab: cabPDF } : null,
       laudo: laudoProntoPDF ? { imovel: d, laudo: laudoEntry.result, cab: cabPDF } : null,
     });
@@ -3334,7 +3337,7 @@ export default function Analise() {
                       <Bloco titulo="Débitos">
                         <div style={{ fontSize:12.5, color:'#334155', lineHeight:1.6 }}>
                           {db.totalAssumidoArrematante > 0 ? <div>Você assume (propter rem): <strong style={{ color:'#b45309' }}>{brl(db.totalAssumidoArrematante)}</strong></div> : (db.aLevantar ? <div style={{ color:'#b45309' }}>Débitos propter rem a levantar (IPTU/condomínio).</div> : null)}
-                          {(db.propterRem||[]).length>0 && <div style={{ color:'#64748b' }}>Acompanham o imóvel: {(db.propterRem).join(', ')}</div>}
+                          {(db.propterRem||[]).length>0 && <div style={{ color:'#64748b' }}>Acompanham o imóvel: {(db.propterRem).map((x) => (x && typeof x === 'object') ? [x.tipo || x.descricao || x.natureza, Number(x.valor) > 0 ? `R$ ${fmt(x.valor)}` : null].filter(Boolean).join(' ') : String(x)).join(', ')}</div>}
                           {(db.pessoais||[]).length>0 && <div style={{ color:'#64748b' }}>Do devedor (não transferem): {(db.pessoais).join(', ')}</div>}
                         </div>
                       </Bloco>
@@ -4091,7 +4094,9 @@ export default function Analise() {
           const fonteArea = mercado?.metodologia?.area?.fonte || null;
           const pm2 = precoM2DoRelatorio(mercado);
           const valorMedia = pm2 && area ? Math.round(pm2 * area) : (Number(d.valorMercado) || 0);
-          const sugerido = Number(d.valorMercado) || (valorMedia ? Math.round(valorMedia * 0.9) : 0);
+          // 15/11 (arena, Fase 2): sem ×0,9 aqui — "venda estimada no mercado" é o valor de mercado; o desconto de 10% é
+          // a premissa de venda, mostrada logo abaixo ("valor sugerido de venda") e usada UMA vez na projeção.
+          const sugerido = Number(d.valorMercado) || valorMedia || 0;
           const vAval = Number(d.valorAvaliacao) || 0;
           const vArr = Number(d.valorArrematacao) || 0;
           if (!valorMedia && !sugerido && !vAval && !vArr) return null;
@@ -4314,7 +4319,9 @@ export default function Analise() {
           const lance = Number(metricas?.vArremate) || Number(d.valorArrematacao) || 0;
           if (!(lance > 0)) return null;
           const ceC = mercado?.condicoesEdital || null;
-          const comEdital = ceC && ceC.regrasOrigem !== 'padrao_leiloeiro' ? Number(ceC.regrasPagamento?.comissaoPct) || 0 : 0;
+          // 15/11 (arena, Fase 2): "lido no edital" só quando a regra veio do EDITAL — título do anúncio e documental (IA)
+          // também preenchiam `regrasPagamento.comissaoPct` e saíam com o mesmo rótulo.
+          const comEdital = ceC && (!ceC.regrasOrigem || ceC.regrasOrigem === 'edital') ? Number(ceC.regrasPagamento?.comissaoPct) || 0 : 0;
           const pctCom = Number(d.taxaLeiloeiroPercentual ?? COMISSAO_LEILOEIRO_PCT);
           const pctItbi = Number(d.itbiPercentual ?? ITBI_REGISTRO_PCT);
           const pctTxt = (v) => String(v).replace('.', ',');
@@ -4324,6 +4331,9 @@ export default function Analise() {
             Number(d.taxaAdministrativaPercentual) > 0 && ['Taxa administrativa', Number(metricas?.taxaAdministrativa) || 0, `${pctTxt(d.taxaAdministrativaPercentual)}%`],
             Number(d.despesasAdministrativas) > 0 && ['Despesas administrativas', Number(metricas?.despesasAdm) || 0, null],
             ['ITBI + registro', Number(metricas?.itbiRegistro) || 0, `${pctTxt(pctItbi)}% estimado`],
+            // 15/11 (arena, Fase 2): honorários entravam no CAPITAL aportado e não neste total — dois "custos" diferentes
+            // para o mesmo arremate. Agora o total é um só.
+            Number(metricas?.honorarios) > 0 && ['Honorários (assessoria)', Number(metricas.honorarios), `${pctTxt(d.honorariosPercentual ?? 10)}% do lance`],
             ['Débitos conhecidos (IPTU/condomínio)', Number(d.debitosAssumidos) > 0 ? (Number(metricas?.debitos) || Number(d.debitosAssumidos)) : null, Number(d.debitosAssumidos) > 0 ? 'por conta do arrematante' : 'só a leitura do edital/matrícula diz'],
             ['Reforma', Number(d.manutencaoEstimada) > 0 ? (Number(metricas?.manutencao) || Number(d.manutencaoEstimada)) : null, Number(d.manutencaoEstimada) > 0 ? 'estimativa deste relatório' : null],
             ['Desocupação', null, 'depende de quem ocupa o imóvel'],
@@ -4428,6 +4438,18 @@ export default function Analise() {
                   ))}
                 </div>
                 {!semM && <div style={{ fontSize:10.5, color:'#94a3b8', marginTop:8 }}>Régua (TMA) de VPL e payback: o dinheiro deveria render ao menos <strong>{fmtPct(indicadores.tma,0)} ao ano</strong>; os números já descontam essa régua.</div>}
+                {/* PREMISSAS USADAS (15/11, arena — Fase 2): lucro, ROI, TIR e teto saem de premissas que o cliente não via
+                    (só a TMA aparecia). Cada uma aqui, com o valor em uso — premissa invisível é número sem fonte. */}
+                {!semM && (
+                  <div style={{ fontSize:10.5, color:'#64748b', marginTop:8, background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:8, padding:'8px 10px', lineHeight:1.6 }}>
+                    <strong style={{ color:'#334155' }}>Premissas usadas no cálculo</strong> (ajustáveis nos campos da viabilidade):{' '}
+                    venda a <strong>90%</strong> do valor de mercado · comissão de venda <strong>5%</strong> · IR sobre ganho de capital <strong>15%</strong> ·
+                    honorários <strong>{String(d.honorariosPercentual ?? 10).replace('.', ',')}%</strong> do lance · comissão do leiloeiro <strong>{String(d.taxaLeiloeiroPercentual ?? 5).replace('.', ',')}%</strong> ·
+                    ITBI + registro <strong>{String(d.itbiPercentual ?? 5).replace('.', ',')}%</strong> · prazo até a venda <strong>{d.prazoVendaMeses || 12} meses</strong>
+                    {Number(d.prazoReformaMeses) > 0 ? <> · reforma <strong>{d.prazoReformaMeses} meses</strong></> : null} ·
+                    rentabilidade líquida do aluguel = bruta <strong>−15%</strong> (vacância/despesas).
+                  </div>
+                )}
                 {!semM && (Number(indicadores.loc?.aluguelLiquido) > 0 ? (
                   <div style={{ marginTop:10, padding:'10px 14px', background:'#faf5ff', border:'1px solid #e9d5ff', borderRadius:12 }}>
                     <div style={{ fontSize:12, fontWeight:800, color:'#6b21a8', marginBottom:6 }}>Cenário de locação (segurar e alugar por {indicadores.loc.horizonte} meses, venda ao final)</div>
@@ -4587,13 +4609,15 @@ export default function Analise() {
                 {[
                   [mercado.fonteEstimativa === 'indice_bidpro' ? 'Preço/m² (Índice BidPro)' : 'Preço Médio/m²', moedaOuTraco(precoM2DoRelatorio(mercado)), '#0D63DB','#eff6ff'],
                   ...(mercado.locacaoNaoSeAplica ? [] : [
-                    ['Aluguel Médio', moedaOuTraco(mercado.aluguelMedio, { sufixo: '/mês' }), '#8b5cf6','#ede9fe'],
+                    // 15/11 (arena, Fase 2): `aluguelEstimadoPorIndice` era gravado e nunca lido — o aluguel do Índice
+                    // (R$/m² da base × área) aparecia como se fosse a média dos anúncios de locação deste imóvel.
+                    [mercado.aluguelEstimadoPorIndice ? 'Aluguel (estimado pelo Índice)' : 'Aluguel Médio', moedaOuTraco(mercado.aluguelMedio, { sufixo: '/mês' }), '#8b5cf6','#ede9fe'],
                     // A auditoria final pode marcar um indicador como incoerente (ex.: yield
                     // que não fecha com o próprio aluguel). Indicador contraditório NÃO é
                     // exibido — mostrar o número e o aviso juntos deixaria o cliente decidir
                     // qual acreditar, que é justamente o que não se quer.
                     ['Rentabilidade Bruta (aluguel)', suprimido('yieldBruto') ? SEM_MEDIDA : pctOuTraco(mercado.yieldBruto, { sufixo: ' a.a.' }), '#10b981','#f0fdf4'],
-                    ['Rentabilidade Líquida (aluguel)', suprimido('yieldLiquido') ? SEM_MEDIDA : pctOuTraco(mercado.yieldLiquido, { sufixo: ' a.a.' }), '#f59e0b','#fef3c7'],
+                    ['Rentabilidade Líquida (premissa: −15% vacância/despesas)', suprimido('yieldLiquido') ? SEM_MEDIDA : pctOuTraco(mercado.yieldLiquido, { sufixo: ' a.a.' }), '#f59e0b','#fef3c7'],
                   ]),
                 ].map(([l,v,c,bg])=>(
                   <div key={l} style={{background:bg,borderRadius:12,padding:'14px 16px',textAlign:'center',border:`1px solid ${c}30`}}>

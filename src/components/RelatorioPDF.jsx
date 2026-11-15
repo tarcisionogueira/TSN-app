@@ -119,9 +119,9 @@ ${(() => {
   <div style="display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid #e2e8f0;">
     ${cel('Imóvel', `${(d.tipo||'—').toUpperCase()} · ${d.cidade||''}${d.estado?'/'+d.estado:''}`)}
     ${cel('Área', `${d.areaM2||0} m²${d.areaTerrenoM2?` (terreno ${d.areaTerrenoM2} m²)`:''}`)}
-    ${cel('Forma de pagamento', isAVista?'À vista':'Financiado / alavancado')}
-    ${cel('1ª praça (avaliação)', d.valorAvaliacao>0?`R$ ${fmt(d.valorAvaliacao)}`:'—')}
-    ${cel('2ª praça (lance mínimo)', lanceBase>0?`R$ ${fmt(lanceBase)}`:'—','#0D63DB')}
+    ${cel('Forma de pagamento', isAVista ? 'À vista' : (pagamentoNaoConfirmado(d, isAVista) ? 'Simulação parcelada — NÃO confirmada no edital' : 'Parcelado (condição do edital)'), !isAVista && pagamentoNaoConfirmado(d, isAVista) ? '#b91c1c' : '#111111')}
+    ${cel('Avaliação', d.valorAvaliacao>0?`R$ ${fmt(d.valorAvaliacao)}`:'—')}
+    ${cel('Lance mínimo usado na projeção', lanceBase>0?`R$ ${fmt(lanceBase)}`:'—','#0D63DB')}
     ${cel('Teto com disputa', semMargemDisputa?'Sem margem':(teto>0?`R$ ${fmt(teto)}`:'—'), semMargemDisputa?'#d97706':'#d97706')}
     ${cel('Valor pretendido de venda', valorVendaPretendido>0?`R$ ${fmt(valorVendaPretendido)}`:'—','#059669')}
     ${cel(isUsoProprio?'Economia estimada':'Lucro líquido estimado', `R$ ${fmt(m.lucro)}`, (m.lucro>=0?'#059669':'#dc2626'))}
@@ -177,7 +177,7 @@ ${(() => {
 <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;" class="av">
   ${[['Capital Aportado',`R$ ${fmt(m.capitalMobilizado)}`,'#dc2626'],
      [isUsoProprio?'Economia Real':'Lucro Líquido',`R$ ${fmt(m.lucro)}`,(m.lucro>=0?'#059669':'#dc2626')],
-     ['Rentab. Aluguel',`${fmtPct(m.yieldMensal)}/mês`,'#7c3aed'],
+     ['Rentab. Aluguel', Number(m.yieldMensal) > 0 ? `${fmtPct(m.yieldMensal)}/mês` : '—','#7c3aed'],
      ['Teto Disputa',`R$ ${fmt(teto)}`,'#d97706']].map(([l,v,c])=>`
   <div class="card"><div class="card-l">${l}</div><div class="card-v" style="color:${c}">${v}</div></div>`).join('')}
 </div>
@@ -209,6 +209,21 @@ ${ind?`
 
 ${sec.pos?`<div class="av"><h2>Posicionamento Estratégico</h2><pre>${sec.pos}</pre></div>`:''}
 
+${(() => {
+  // CONDIÇÕES DE PAGAMENTO COM A ORIGEM (15/11, arena — Fase 2). A tela mostrava as condições lidas e o PDF não: o cliente
+  // que só lê o PDF via "Financiado / alavancado" sem saber de onde veio. Mesmo objeto da tela (mercado.condicoesPagamento).
+  const cp = mercado?.condicoesPagamento;
+  if (!cp || !cp.campos || !Object.keys(cp.campos).length) return '';
+  const ROT = { aVista: 'À vista', parcelamentoPermitido: 'Parcelamento permitido', parcelas: 'Parcelas', sinalPct: 'Entrada (%)', financiavel: 'Financiamento', fgts: 'FGTS', prazoDias: 'Prazo para pagar (dias)', comissaoPct: 'Comissão do leiloeiro (%)' };
+  const ORIG = { edital_texto: 'edital', edital_sem_trecho: 'edital (sem trecho citado)', ficha_cef: 'ficha da Caixa', documental_ia: 'documental (IA)', anuncio: 'anúncio do leiloeiro', padrao_leiloeiro: 'padrão do leiloeiro' };
+  const val = (v) => v === true ? 'sim' : v === false ? 'não' : esc(String(v).replace('.', ','));
+  const linhas = Object.entries(cp.campos).map(([k, c]) => `<tr><td style="padding:3px 6px;">${esc(ROT[k] || k)}</td><td style="padding:3px 6px;font-weight:700;">${val(c.valor)}</td><td style="padding:3px 6px;color:${['edital_texto','ficha_cef'].includes(c.origem) ? '#047857' : '#b45309'};">${esc(ORIG[c.origem] || 'não verificado')}</td></tr>`).join('');
+  const trechoEd = Object.values(cp.campos).find((c) => c.origem === 'edital_texto' && c.trecho)?.trecho;
+  return `<div class="av" style="margin-bottom:10px;"><h3>Condições de pagamento — de onde veio cada uma</h3>
+  <table style="width:100%;font-size:8.5px;border-collapse:collapse;"><tr style="color:#64748b;"><td style="padding:3px 6px;">Condição</td><td style="padding:3px 6px;">Valor</td><td style="padding:3px 6px;">Origem</td></tr>${linhas}</table>
+  ${trechoEd ? `<div style="font-size:8px;color:#475569;margin-top:4px;">Trecho do edital: “${esc(String(trechoEd).slice(0, 300))}”</div>` : ''}
+  <div style="font-size:8px;color:#64748b;margin-top:4px;">Cenário inicial do relatório: <strong>${cp.cenarioInicial === 'financiado' ? 'parcelado (comprovado)' : 'à vista'}</strong> — ${esc(cp.motivo || '')}. Só edital citado e ficha da Caixa contam como prova.</div></div>`;
+})()}
 <h2>Detalhamento Financeiro Completo</h2>
 <div class="av">
   <h3>Resumo de Caixa</h3>
@@ -394,7 +409,7 @@ ${sec.conc?`<div class="av"><h2>Conclusão e Recomendação da Gestão</h2><pre>
 </div>
 
 <div style="margin-top:14px;border-top:2px solid #e2e8f0;padding-top:12px;display:flex;justify-content:space-between;font-size:8.5px;color:#94a3b8;">
-  <span>BidPro Brasil · Análise gerada em ${new Date().toLocaleString('pt-BR')}</span>
+  <span>BidPro Brasil · Análise gerada em ${(() => { try { return cab.geradoEm ? new Date(cab.geradoEm).toLocaleString('pt-BR') : 'data não registrada'; } catch (e) { return 'data não registrada'; } })()} · impresso em ${new Date().toLocaleString('pt-BR')}</span>
   <span>Documento confidencial · Uso exclusivo do cliente</span>
 </div>
 `;

@@ -51,7 +51,8 @@ export const ESTILOS_DOCUMENTAL = `
 // combinado. O gerador individual (gerarDocumentalPDF) empacota isto num
 // documento completo e imprime.
 export function corpoDocumental({ imovel: d = {}, parecer: P = {}, bidscore: sb = null, cab = {} }) {
-  const risco = P.nivelRisco || 'amarelo';
+  // 15/11 (arena, Fase 2): sem `nivelRisco` o PDF estampava "RISCO MÉDIO" — um veredito que ninguém deu.
+  const risco = P.nivelRisco || 'nao_avaliado';
   // Espelha o veredito da TELA (Analise.jsx): quando o parecer é PRELIMINAR (fonte
   // externa como CNJ/DJEN indisponível, ou matrícula da Caixa pendente), o PDF não
   // pode estampar um risco definitivo — senão o cliente lê "risco médio" como
@@ -62,7 +63,7 @@ export function corpoDocumental({ imovel: d = {}, parecer: P = {}, bidscore: sb 
       verde:    { txt: 'RISCO BAIXO',   cor: '#065f46', bg: '#d1fae5', bd: '#10b981' },
       amarelo:  { txt: 'RISCO MÉDIO',   cor: '#92400e', bg: '#fef3c7', bd: '#f59e0b' },
       vermelho: { txt: 'RISCO ALTO',    cor: '#b91c1c', bg: '#fee2e2', bd: '#ef4444' },
-    }[risco] || { txt: 'RISCO MÉDIO', cor: '#92400e', bg: '#fef3c7', bd: '#f59e0b' });
+    }[risco] || { txt: 'RISCO NÃO AVALIADO', cor: '#475569', bg: '#f1f5f9', bd: '#94a3b8' });
 
   const corCamada = (n) => n >= 7 ? '#16a34a' : n >= 4 ? '#b45309' : '#dc2626';
 
@@ -194,6 +195,9 @@ ${cabecalhoBidPro({
 
 <div class="av" style="border:2px solid ${R.bd};background:${R.bg};border-radius:8px;padding:12px 16px;text-align:center;margin-bottom:14px;">
   <div style="font-size:15px;font-weight:900;color:${R.cor};">${R.txt}</div>
+  ${/* 15/11 (arena, Fase 2): a tela mostrava a CONFIANÇA (quanto do necessário foi lido) e o PDF não — o risco aparecia
+       sem dizer sobre quanta documentação ele foi medido. */ ''}
+  ${!P.preliminar && P.confianca ? `<div style="font-size:10px;font-weight:700;color:#475569;margin-top:3px;">Confiança da análise: ${esc(({ alta: 'alta', media: 'média', baixa: 'baixa' })[P.confianca] || P.confianca)}${P.confiancaMotivo ? ` — ${esc(String(P.confiancaMotivo).slice(0, 220))}` : ''}</div>` : ''}
   ${P.preliminar ? (() => {
     // Mesmo critério de esgotamento de src/pages/Analise.jsx (18/09) — `regenTentativas`/
     // `startedAt` só chegam aqui quando o chamador os inclui no objeto `parecer`; ausentes,

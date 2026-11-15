@@ -6,6 +6,27 @@
 
 
 
+## 15/11 (noite, 9) — ARENA DOS RELATÓRIOS: FASE 2 (o que não fazia sentido)
+
+- **Desconto de 10% em dobro:** o valor de mercado por R$/m² × área (comparáveis, base, fallback do Índice) já saía
+  ×0,9 no servidor e a projeção vendia a 90% dele (81%); pela estimativa da IA, o desconto era um só. Agora o valor de
+  mercado é sem desconto em todos os caminhos e o 90% é premissa única da projeção (gerar-analise.js + Analise.jsx).
+  Efeito: relatórios desses caminhos sobem ~11% no valor de mercado e no lucro projetado.
+- **Rótulos:** aluguel do Índice aparece como "Aluguel (estimado pelo Índice)"; rentabilidade líquida diz "premissa:
+  −15%"; comissão "lida no edital" só quando a regra veio do edital; honorários entram no "Custo total estimado" (era um
+  total diferente do capital aportado); quadro "Premissas usadas no cálculo" (venda 90%, comissão de venda 5%, IR 15%,
+  honorários, leiloeiro, ITBI, prazo, reforma, yield −15%) ao lado da TMA.
+- **PDF mercadológico:** quadro "Condições de pagamento — de onde veio cada uma" (mesmo `condicoesPagamento` da tela,
+  com trecho do edital e motivo do cenário); "Forma de pagamento" diz "Simulação parcelada — NÃO confirmada" em vermelho;
+  "Avaliação"/"Lance mínimo usado" no lugar de "1ª/2ª praça"; "—" no lugar de "0,00%/mês"; cabeçalho e rodapé com a data
+  da GERAÇÃO (rodapé também "impresso em").
+- **Documental:** veredito do cabeçalho segue o `nivelRisco` do servidor (fim do "Risco verde" + "REPROVADO"); PDF sem
+  nivelRisco diz "RISCO NÃO AVALIADO" (era "RISCO MÉDIO" por default) e mostra a confiança; "[object Object]" nos débitos
+  propter rem virou texto.
+- Ficou (pendência #488): defaults 5/360/12 do financiado ligado pelo cliente; `constaNaDoc` undefined = não confirmado
+  (mexe na régua → subir reguaVersao junto); FipeZAP oficial e amostras com URL/data no relatório; lista de riscos com
+  citação na tela; trava `default-como-fato`.
+
 ## 15/11 (noite, 8) — ARENA DOS RELATÓRIOS: FASE 1 (classe Brooklin fechada)
 
 Arena (10 personas, 24 agentes; registro em scratchpad/arena/debate-relatorios.json) sobre mercadológico e documental.
