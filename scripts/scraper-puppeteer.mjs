@@ -44,7 +44,7 @@ import { capturarContatoSeAusente, lojaSuperbid, gravarContatosTenant } from './
 import { localVeiculoZuk } from './lib/zuk-local-veiculo.mjs';
 import { galeriaDoHtml, montarFotos, fotosPreservadas } from './lib/galeria-veiculo.mjs';
 import { fotoDoMeta } from './lib/dom-parse-util.mjs';
-import { travaDoSweep, medianaTotais, tenantParcial, likePrefixo, MAX_PROTEGIDOS } from './lib/sweep-trava.mjs';
+import { travaDoSweep, medianaTotais, tenantParcial, likePrefixo, MAX_PROTEGIDOS, codigosMapaZuk, semOsVivos } from './lib/sweep-trava.mjs';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -507,15 +507,37 @@ async function salvarEFinalizar(imoveis, fonte) {
     // lista oferta ABERTA) — então todo "sem lance" apurado era desligado aqui na coleta
     // seguinte (186 de 186 SUPERBID invisíveis). Mesma janela de desativar_leiloes_encerrados():
     // sem_lance/indeterminado apurado há < 15 dias continua ativo, para a proposta de compra.
-    const { error, count } = await semProtegidos(supabase
-      .from('imoveis_leilao')
-      .update({ ativo: false, suprimido_motivo: 'sumiu_da_fonte' }, { count: 'exact' })
-      .eq('fonte', fonte)
-      .eq('ativo', true)
-      .lt('atualizado_em', runStart)
-      .or(ORFILTRO_VARRIVEL));
+    // PROVA DE VIDA (15/11, #428): fonte que sabe o acervo inteiro (ZUK: mapa da listagem) marca `vivosNaFonte`. Aí o
+    // sweep lê os candidatos, tira os vivos e desliga por id — lote no mapa nunca sai como "sumiu da fonte".
+    let error = null, count = 0, poupados = 0;
+    if (imoveis.vivosNaFonte?.size) {
+      // Fração ideal barrada nesta rodada continua saindo (decisão do dono, 17/08) mesmo estando no mapa.
+      for (const im of imoveis) if (ehFracaoIdeal(im)) imoveis.vivosNaFonte.delete(im.fonte_id);
+      const { data: cand, error: eCand } = await semProtegidos(supabase
+        .from('imoveis_leilao').select('id, fonte_id')
+        .eq('fonte', fonte).eq('ativo', true).lt('atualizado_em', runStart).or(ORFILTRO_VARRIVEL)).limit(5000);
+      if (eCand) error = eCand;
+      else {
+        const r = semOsVivos(cand, imoveis.vivosNaFonte);
+        poupados = r.poupados;
+        for (let i = 0; i < r.varrer.length && !error; i += 200) {
+          const ids = r.varrer.slice(i, i + 200).map((c) => c.id);
+          const { data: feitos, error: eUp } = await supabase.from('imoveis_leilao')
+            .update({ ativo: false, suprimido_motivo: 'sumiu_da_fonte' }).in('id', ids).eq('ativo', true).select('id');
+          if (eUp) error = eUp; else count += feitos?.length || 0;
+        }
+      }
+    } else {
+      ({ error, count } = await semProtegidos(supabase
+        .from('imoveis_leilao')
+        .update({ ativo: false, suprimido_motivo: 'sumiu_da_fonte' }, { count: 'exact' })
+        .eq('fonte', fonte)
+        .eq('ativo', true)
+        .lt('atualizado_em', runStart)
+        .or(ORFILTRO_VARRIVEL)));
+    }
     if (error) console.error(`  Erro ao desativar ${fonte} obsoletos:`, error.message);
-    else console.log(`  🔻 ${fonte}: ${count ?? 0} lotes obsoletos desativados${protegidos.length ? ` (${protegidos.length} tenant(s)/leilão(ões) protegidos: ${protegidos.slice(0, 8).join(', ')})` : ''}`);
+    else console.log(`  🔻 ${fonte}: ${count ?? 0} lotes obsoletos desativados${poupados ? ` · ${poupados} poupados (vivos no mapa da fonte)` : ''}${protegidos.length ? ` (${protegidos.length} tenant(s)/leilão(ões) protegidos: ${protegidos.slice(0, 8).join(', ')})` : ''}`);
   } else if (gravouTudo && salvos < SWEEP_MIN) {
     console.log(`  ⚠️ ${fonte} gravou ${salvos} (< ${SWEEP_MIN}) — pulando desativação por segurança`);
   }
@@ -2158,6 +2180,10 @@ async function scraperPortalZuk(browser) {
   try {
     await page.goto('https://www.portalzuk.com.br/leilao-de-imoveis', { waitUntil: 'networkidle2', timeout: 45000 });
     try { await page.waitForSelector('.card-property', { timeout: 10000 }); } catch {}
+    // Prova de vida do acervo inteiro (15/11, #428): o JSON do mapa vem na 1ª página, antes de qualquer "Carregar mais".
+    // Lido do HTML do servidor, não do DOM (o mapa pode nem ser montado no navegador sem tela).
+    const mapaZuk = codigosMapaZuk(await page.content().catch((e) => { console.log(`    PortalZuk: mapa ilegível (${e.message.slice(0, 60)})`); return ''; }));
+    console.log(`    PortalZuk: mapa da listagem com ${mapaZuk.size} lote(s)`);
 
     // A listagem tem um botão "Carregar mais" (#btn_carregarMais) que dispara o
     // POST leilao-de-imoveis/mais (rota Ziggy carrega.mais) e faz o append dos
@@ -2278,6 +2304,12 @@ async function scraperPortalZuk(browser) {
     }).filter(Boolean);
     console.log(`    PortalZuk: ${imoveis.length} imóveis mapeados${n429 ? ` · ${n429}× 429 no "carregar mais"` : ''}`);
     if (botaoNoFim) imoveis.coletaParcial = `ZUK: "carregar mais" ainda na tela no fim (${n429}× 429)`;
+    // Mapa com menos de 300 lotes = leitura duvidosa (o ZUK tem ~1.100): sem prova de vida, o sweep segue as travas antigas.
+    if (mapaZuk.size >= 300) {
+      imoveis.vivosNaFonte = new Set([...mapaZuk].map((c) => `zuk_${c}`));
+      const fora = imoveis.vivosNaFonte.size - imoveis.filter((i) => imoveis.vivosNaFonte.has(i.fonte_id)).length;
+      if (fora > 0) console.log(`    PortalZuk: ${fora} lote(s) do mapa fora da lista de cards — o sweep não os desliga`);
+    }
     await priorizarDatasZuk(imoveis);
     return await enriquecerDatasZuk(browser, imoveis);
   } catch (err) {

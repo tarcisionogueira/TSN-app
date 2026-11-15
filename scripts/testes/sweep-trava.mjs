@@ -74,3 +74,17 @@ console.log('sweep-trava: todos os casos passaram');
   console.log('✓ sumidos acima do freio: saem só os parados, com a lista inteira');
 }
 
+
+// #428/#462 (15/11): prova de vida pelo mapa do ZUK. Trecho real da 1ª página da listagem (lote 38212-239033, desligado
+// em 14/11 pelo sweep com a praça em 03/12 e presente no mapa).
+{
+  const { codigosMapaZuk, semOsVivos } = await import('../lib/sweep-trava.mjs');
+  const html = 'var x = "[{\\"il\\":38077,\\"ilo\\":237900,\\"la\\":\\"-22.2\\"},{\\"il\\":38212,\\"ilo\\":239033,\\"lv\\":1812000}]"; {"il":37593,"ilo":234809}';
+  const cods = codigosMapaZuk(html);
+  assert.deepEqual([...cods].sort(), ['37593-234809', '38077-237900', '38212-239033']);
+  assert.equal(codigosMapaZuk('<html>sem mapa</html>').size, 0);
+  const vivos = new Set([...cods].map((c) => `zuk_${c}`));
+  const cand = [{ id: 1, fonte_id: 'zuk_38212-239033' }, { id: 2, fonte_id: 'zuk_30000-200000' }];
+  assert.deepEqual(semOsVivos(cand, vivos), { varrer: [{ id: 2, fonte_id: 'zuk_30000-200000' }], poupados: 1 });
+  assert.deepEqual(semOsVivos(cand, new Set()), { varrer: cand, poupados: 0 }, 'sem mapa: sweep como antes');
+}

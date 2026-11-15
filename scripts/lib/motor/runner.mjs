@@ -262,7 +262,12 @@ const UPSERT_FATIA = 100;
 export function planejarAlvo({ urls, meta, chaveDe, maxLotes, maxRefresh, recusados = new Set(), agora = Date.now() }) {
   // `recusados` (#238, 20/10): lote lido e RECUSADO há pouco (encerrado/não-imóvel/descartado) nunca entra em
   // imoveis_leilao, então sem esta memória ele era "novo" para sempre e gastava leitura antes dos não lidos.
-  const novos = urls.filter(u => !meta.has(chaveDe(u)) && !recusados.has(chaveDe(u)));
+  // VOLTARAM (15/11, #428): lote desligado como `sumiu_da_fonte` que REAPARECE no catálogo. Antes ele não era "novo"
+  // (está no banco) nem entrava na releitura (só relê ativo) — ficava desligado para sempre, com a praça correndo no
+  // site. Agora entra junto com os novos (precisa de leitura inteira; a gravação o religa). Outros motivos
+  // (não-imóvel, gêmeo, praça vencida, fração ideal) são decisão e continuam fora.
+  const voltaram = urls.filter(u => { const m = meta.get(chaveDe(u)); return m && m.ativo === false && m.suprimido_motivo === 'sumiu_da_fonte'; });
+  const novos = [...urls.filter(u => !meta.has(chaveDe(u)) && !recusados.has(chaveDe(u))), ...voltaram];
   const limite = agora + DIAS_IMINENTE * 864e5;
   const porOrdemBase = urls
     .filter(u => meta.has(chaveDe(u)))
@@ -297,7 +302,7 @@ export function planejarAlvo({ urls, meta, chaveDe, maxLotes, maxRefresh, recusa
   const conhecidas = [...semFotoBoost, ...famintos, ...porOrdemBase.filter(c => !boostIds.has(c.id))];
   const releitura = conhecidas.slice(0, teto).map(c => c.url);
   return {
-    novos, releitura,
+    novos, releitura, voltaram,
     alvo: [...novos.slice(0, maxLotes), ...releitura],
     iReleitura: usadosPorNovos,
   };
@@ -328,13 +333,14 @@ export async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLote
   const metaAtivo = new Set();
   const recusas = [];   // #238: { fonte_id, motivo, dias } — gravadas no fim (fora do dry-run)
   let nRecusados = 0;   // listados e pulados pela memória de recusa — entram no porquê do zero
+  let voltaramIds = new Set();   // #428: `sumiu_da_fonte` que reapareceu — religado pela gravação, motivo limpo depois
   if (urls.length) {
     const ids = urls.map(u => idFonte(tenant, cfg.parse.idDaUrl(u)));
     const meta = new Map();
     for (let i = 0; i < ids.length; i += 200) {
       // padrao-ok: leitura best-effort de dedup; erro → reprocessa lote conhecido (upsert idempotente), nunca corrompe. Mesmo padrão dos scrapers de origem.
       const { data } = await supabase.from('imoveis_leilao')
-        .select('fonte_id,atualizado_em,data_fim,ativo,link_foto').in('fonte_id', ids.slice(i, i + 200));
+        .select('fonte_id,atualizado_em,data_fim,ativo,link_foto,suprimido_motivo').in('fonte_id', ids.slice(i, i + 200));
       for (const r of data || []) meta.set(r.fonte_id, r);
     }
     // Memória de recusa (#238). Falhar aqui só custa leitura repetida (o comportamento antigo), nunca dado
@@ -350,13 +356,14 @@ export async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLote
     nRecusados = recusados.size;
     // Fonte NUNCA coletada (nada no banco): `novos` são todas as urls e não há releitura —
     // o caminho antigo, intacto.
-    const { novos, releitura, alvo, iReleitura } = planejarAlvo({
+    const { novos, releitura, alvo, iReleitura, voltaram } = planejarAlvo({
       urls, meta, chaveDe: u => idFonte(tenant, cfg.parse.idDaUrl(u)),
       maxLotes, maxRefresh: cfg.maxRefresh, recusados,
     });
     for (const [k, m] of meta) if (m.ativo !== false) metaAtivo.add(k);
     let pararReleitura = false;
-    console.log(`[${tenant.fonte}] no banco ${meta.size} · novos ${novos.length} · releitura ${releitura.length}${recusados.size ? ` · ${recusados.size} recusado(s) recentemente, pulados` : ''} · processando ${alvo.length}`);
+    voltaramIds = new Set(voltaram.map(u => idFonte(tenant, cfg.parse.idDaUrl(u))));
+    console.log(`[${tenant.fonte}] no banco ${meta.size} · novos ${novos.length}${voltaram.length ? ` (${voltaram.length} voltaram ao catálogo)` : ''} · releitura ${releitura.length}${recusados.size ? ` · ${recusados.size} recusado(s) recentemente, pulados` : ''} · processando ${alvo.length}`);
     const t0 = Date.now();
     let amostrouIlegivel = false;
     for (let i = 0; i < alvo.length; i++) {
@@ -514,7 +521,7 @@ export async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLote
   // Forte…), o ruído que treina a ignorar o painel. Queda real continua pega: a saúde compara a LISTA
   // (enumerados) com a execução anterior e promove a 'degradado'.
   const zeroExplicado = fetchOk && enumerado.urls.length > 0 && !sem && !cotaNegada && !prontos.length;
-  return { prontos, encerrados, fonteVazia: fetchOk && enumerado.urls.length === 0, vazioDeclarado, enumerados: enumerado.urls.length, cotaNegada, eventosCount, viaCatalogo: via, naoImovelIds, idsEnumerados, listaCompleta: enumerado.completa, listaCortada: enumerado.cortada, porqueZero, encerradosAtivos, zeroExplicado };
+  return { prontos, encerrados, fonteVazia: fetchOk && enumerado.urls.length === 0, vazioDeclarado, enumerados: enumerado.urls.length, cotaNegada, eventosCount, viaCatalogo: via, naoImovelIds, idsEnumerados, listaCompleta: enumerado.completa, listaCortada: enumerado.cortada, porqueZero, encerradosAtivos, zeroExplicado, voltaramIds };
 }
 
 // Roda a coleta de uma fonte inteira (todos os tenants). opts:
@@ -542,7 +549,7 @@ export async function rodarFonte(cfg, opts) {
   console.log(`${rotulo} ${dryrun ? '(DRY-RUN — não grava)' : '(GRAVANDO)'} · tenants: ${tenants.map(t => t.fonte).join(',')} · max ${maxLotes}/tenant`);
 
   for (const tenant of tenants) {
-    const { prontos, encerrados, fonteVazia, vazioDeclarado, enumerados, cotaNegada, eventosCount, viaCatalogo, naoImovelIds = [], idsEnumerados, listaCompleta, listaCortada, porqueZero, encerradosAtivos = [], zeroExplicado } = await coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debug, semBD, dryrun });
+    const { prontos, encerrados, fonteVazia, vazioDeclarado, enumerados, cotaNegada, eventosCount, viaCatalogo, naoImovelIds = [], idsEnumerados, listaCompleta, listaCortada, porqueZero, encerradosAtivos = [], zeroExplicado, voltaramIds = new Set() } = await coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debug, semBD, dryrun });
 
     if (!prontos.length) {
       // ⚠️ 29/08 — FONTE VAZIA PRECISA VIRAR LINHA, NÃO SILÊNCIO. Isto era um `continue` que
@@ -660,6 +667,15 @@ export async function rodarFonte(cfg, opts) {
     }
     if (error) { console.error(`[${tenant.fonte}] erro ao gravar:`, error.message); process.exitCode = 1; continue; }
     console.log(`✅ [${tenant.fonte}] ${prontos.length} imóveis gravados/atualizados.`);
+    // #428: o upsert religou (`ativo: true`) o que voltou ao catálogo; o motivo velho sai só de quem ficou ativo de
+    // fato (gatilho de fração/não-imóvel/praça vencida pode tê-lo segurado — aí o motivo é o dele, não este).
+    const religar = prontos.map(r => r.fonte_id).filter(id => voltaramIds.has(id));
+    if (religar.length) {
+      const { data: rel, error: eRel } = await supabase.from('imoveis_leilao').update({ suprimido_motivo: null })
+        .in('fonte_id', religar).eq('ativo', true).eq('suprimido_motivo', 'sumiu_da_fonte').select('id');
+      if (eRel) console.error(`[${tenant.fonte}] religados sem limpar o motivo:`, eRel.message);
+      else console.log(`♻️ [${tenant.fonte}] ${rel.length} lote(s) que tinham saído como sumiu_da_fonte voltaram ao acervo.`);
+    }
     // `cotaNegada` no ramo de SUCESSO: coleta cortada no meio pelo orçamento devolve lotes
     // de verdade e cai aqui — sem este número a linha vira medição sadia da fonte.
     // Lista cortada vai para a LINHA da saúde (06/11): até aqui só aparecia no log da varredura de sumidos, e a busca

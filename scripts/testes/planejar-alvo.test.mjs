@@ -130,5 +130,15 @@ const eq = (nome, a, b) => {
   eq('sem fome: 40 iminentes, como antes', r2.releitura.every(u => u.startsWith('im')), true);
 }
 
-console.log(falhas ? `\n${falhas} FALHA(S)` : '\n12/12 cenários passam');
+// 13) #428 (15/11): `sumiu_da_fonte` que reaparece no catálogo volta à fila (antes: nem novo, nem releitura, para sempre
+// desligado). Outros motivos de desligamento continuam fora.
+{
+  const meta = metaDe([{u:'vivo',tocado:'2026-08-28T00:00:00Z'},{u:'sumiu',tocado:'2026-08-20T00:00:00Z',ativo:false},{u:'gemeo',tocado:'2026-08-20T00:00:00Z',ativo:false}]);
+  meta.get('f_sumiu').suprimido_motivo = 'sumiu_da_fonte';
+  meta.get('f_gemeo').suprimido_motivo = 'gemeo_hasta';
+  const r = planejarAlvo({ urls: ['novo','vivo','sumiu','gemeo'], meta, chaveDe, maxLotes: 10, agora: AGORA });
+  eq('sumiu_da_fonte que voltou entra com os novos; gêmeo não', [r.novos, r.voltaram, r.alvo], [['novo','sumiu'], ['sumiu'], ['novo','sumiu','vivo']]);
+}
+
+console.log(falhas ? `\n${falhas} FALHA(S)` : '\n13/13 cenários passam');
 process.exit(falhas ? 1 : 0);

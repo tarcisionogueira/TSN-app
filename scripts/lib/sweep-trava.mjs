@@ -91,3 +91,23 @@ export function sumidosLiberados({ fora, ativos, enumerados, historico, agora = 
   const liberar = fora.filter(a => Date.parse(a.atualizado_em || '') < corte);
   return { liberar, motivo: `${fora.length} de ${ativos} fora da lista (acima do freio); lista inteira (${enumerados} ≥ piso ${piso}) — saem só os ${liberar.length} parados há ${diasParado}+ dias` };
 }
+
+// PROVA DE VIDA PELO MAPA (15/11, #428/#462). A listagem do ZUK embute, na 1ª página, o JSON do mapa com o acervo
+// INTEIRO (`{"il":<leilão>,"ilo":<lote>,…}` — 1.124 lotes em 15/11), independente do "Carregar mais". A lista de cards
+// oscila com o 429 desse botão (858 em 14/11 contra 1.058 em 13/11) sem acusar corte, e a trava de proporção passa
+// (858 > metade da mediana): o sweep de 14/11 desligou ~176 lotes VIVOS (184 dos 202 "sumidos" com praça futura
+// estavam no mapa). Lote no mapa não é "sumiu da fonte" — o sweep não o toca. Aceita aspas escapadas (\") porque o
+// JSON vem dentro de string JS no HTML.
+export function codigosMapaZuk(html) {
+  const out = new Set();
+  for (const m of String(html || '').matchAll(/\\?"il\\?"\s*:\s*(\d+)\s*,\s*\\?"ilo\\?"\s*:\s*(\d+)/g)) out.add(`${m[1]}-${m[2]}`);
+  return out;
+}
+
+// Candidatos do sweep (linhas {id, fonte_id}) menos os que a fonte prova estarem vivos. `vivos` vazio/ausente = sem
+// prova de vida (o sweep segue como antes, com as travas de sempre).
+export function semOsVivos(candidatos, vivos) {
+  if (!vivos || !vivos.size) return { varrer: candidatos || [], poupados: 0 };
+  const varrer = (candidatos || []).filter((c) => !vivos.has(c.fonte_id));
+  return { varrer, poupados: (candidatos || []).length - varrer.length };
+}
