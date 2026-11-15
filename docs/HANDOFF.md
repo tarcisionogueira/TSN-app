@@ -6,6 +6,34 @@
 
 
 
+## 15/11 (tarde) — WR PELO JSON-LD, REVOKE #479 APLICADO, #305 CONFERIDA
+
+**#481 WRLEILOES — resolvida (commit 94cf4c3).** O fallback da manhã (data do "Encerramento" da página do leilão) não
+bastou: a rodada de 11:48 voltou 12× "parser não leu". A página do leilão TAMBÉM parou de escrever a data por extenso
+(o motor abriu a página — deu +12 lotes — e `lerLeilao` não achou nada; não houve "página do leilão não abriu").
+Achado pelo HTML cru via `pagina_pedir` (o proxy da sessão bloqueia o host; o pg_net abriu): o app virou SSR
+(TanStack Start) e o `<head>` traz um JSON-LD `Event` com `startDate` (`2026-11-30T13:30:00+00:00` = 9h30 de Manaus,
+a hora do EDITAL) e `eventStatus`. A página do lote tem JSON-LD `Product`, sem data.
+- `lerLeilao`: texto por extenso primeiro; depois `endDate`/`startDate` do JSON-LD (convertido para o relógio de
+  Brasília); `EventCancelled/Postponed` = encerrado.
+- Só o INÍCIO do pregão conhecido (`soInicio`): o lote fica aberto até 23:59 do dia — senão sumia às 10h30 com
+  lances abertos (o pregão fecha 12h de Manaus).
+- Sem data em lugar nenhum: o log imprime um trecho da página do leilão (diagnóstico de graça na próxima mudança).
+- Prova: run 43711504157 → 12 prontos, foto/descrição 100%, saúde `ok`; banco com 12/12 ativos com data 30/11,
+  cidade, edital PDF e mínimo. Teste com 7 casos novos (39 ok).
+- ⚠️ Se o WR mudar de novo: a amostra do lote está em `recon_dump` (origem `motor-ilegivel`); para a do leilão,
+  `select pagina_pedir('<url do leilão>')` + `pagina_ler(id)` lê o HTML do servidor sem gastar nada.
+
+**#479 / #459 — REVOKE aplicado** (dono autorizou no chat, 12:26 UTC). `homio_leads` sem escrita de anon/authenticated;
+`politica_parcelamento` sem EXECUTE de anon/PUBLIC (authenticated e service_role mantidos). `auditoria_seguranca()` =
+**total 0**.
+
+**#305 (statement timeouts)** — ver o fechamento/estado no fim desta entrada.
+
+**#480 (dono)** segue aberta: compute Small no Supabase. É o que resta para os 57014 de `anon`/`authenticated`
+(página pública `/api/publico`, `acervo_cidades_uf`, painel admin) — esses têm o teto de 8 s por desenho e o cache
+frio do Micro (256 MB para 1,5 GB) é a causa.
+
 ## 15/11 — #305: SERVICE_ROLE COM 45 s, CI VERDE DE NOVO, WR SEM "ENCERRA EM", RLS INITPLAN
 
 - **Causa dos 57014 (~30/dia desde 09/11), medida:** banco 1,5 GB, `shared_buffers` 256 MB (Micro). A contagem de
