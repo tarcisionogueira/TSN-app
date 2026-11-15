@@ -29,10 +29,12 @@ function sb(path, opts = {}) {
 // marca a amostra: com coordenada + NÍVEL de precisão (posição efetiva vs aproximada) ou só
 // geocod_em (falha) — nos dois casos sai da fila (índice parcial filtra geocod_em null): 1 tentativa.
 async function marcar(id, coords) {
+  // `coord_origem` só no SUCESSO (15/11, corpus único): é o que a distância do Índice confere. A falha grava só a
+  // tentativa — e mantém a lat/lng que já houvesse (o carimbo do relatório), que segue sem valor de distância.
   const body = coords
-    ? { lat: coords.lat, lng: coords.lng, geo_nivel: coords.nivel || null, geocod_em: new Date().toISOString(), ...(coords.cep ? { cep: coords.cep } : {}) }
+    ? { lat: coords.lat, lng: coords.lng, geo_nivel: coords.nivel || null, coord_origem: 'geocodificada', geocod_em: new Date().toISOString(), ...(coords.cep ? { cep: coords.cep } : {}) }
     : { geocod_em: new Date().toISOString() };
-  const res = await sb(`indice_amostras?id=eq.${id}`, {
+  const res = await sb(`indice_amostra?id=eq.${id}`, {
     method: 'PATCH', body: JSON.stringify(body), headers: { Prefer: 'return=minimal' },
   });
   return res.ok;
@@ -66,7 +68,9 @@ export default async function handler(req, res) {
   // Amostras SEM coordenada e ainda não tentadas que têm CEP, endereço OU condomínio (sinais que a
   // cascata usa p/ chegar a nível rua/edifício). bairro-only fica de fora (já é nível 1 sem coord).
   const r = await sb(
-    `indice_amostras?select=id,cidade_norm,uf,bairro_norm,cep,endereco,condominio&lat=is.null&geocod_em=is.null&or=(cep.not.is.null,endereco.not.is.null,condominio.not.is.null)&order=criado_em.desc&limit=${lote}`
+    // 15/11: tabela única (`indice_amostra`) e SEM o filtro `lat=is.null` — a amostra do relatório nasce com a coordenada
+    // do imóvel analisado carimbada; ela também precisa da posição real.
+    `indice_amostra?select=id,cidade_norm,uf,bairro_norm,cep,endereco,condominio&geocod_em=is.null&or=(cep.not.is.null,endereco.not.is.null,condominio.not.is.null)&order=criado_em.desc&limit=${lote}`
   );
   if (!r.ok) { res.status(502).json({ error: 'Falha ao listar', detalhe: (await r.text().catch(() => '')).slice(0, 200) }); return; }
   const amostras = await r.json();

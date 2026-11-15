@@ -521,8 +521,8 @@ async function handler(req) {
         problemas.push(`${f}: ${seguidas} falhas seguidas (última ${doF[0].criado_em.slice(0, 16)}) — "${motivo}"`);
       }
     }
-    const ra = await sb('indice_amostras?select=criado_em&order=criado_em.desc&limit=1');
-    if (!ra.ok) throw new Error(`HTTP ${ra.status} em indice_amostras`);
+    const ra = await sb('indice_amostra?select=criado_em&order=criado_em.desc&limit=1');
+    if (!ra.ok) throw new Error(`HTTP ${ra.status} em indice_amostra`);
     const ultima = (await ra.json())[0]?.criado_em;
     const diasSemAmostra = ultima ? (Date.now() - Date.parse(ultima)) / 864e5 : Infinity;
     const tentativasIndice = rows.filter((x) => x.funcao === 'indice').length;

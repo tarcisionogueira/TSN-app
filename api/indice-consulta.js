@@ -16,6 +16,9 @@ import { ehAmostraDeLeilao } from './_valor-mercado.js';
 // AMOSTRA SEM COORDENADA NÃO ESTÁ EM (0, 0) (15/11). `Number.isFinite(+null)` é true (+null === 0): a amostra sem
 // lat/lng aparecia a "5.855.390 m" de Capão da Canoa — a distância até o Golfo da Guiné.
 const coordOk = (v) => v != null && v !== '' && Number.isFinite(+v) && +v !== 0;
+// 15/11 (corpus único): só coordenada GEOCODIFICADA por nós mede distância. A do relatório é a do imóvel analisado,
+// carimbada quando a IA declara "mesmo condomínio/rua" — contava como vizinhança de 0 m.
+const temPosicao = (a) => a?.coord_origem === 'geocodificada' && coordOk(a.lat) && coordOk(a.lng);
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -147,7 +150,7 @@ export default async function handler(req) {
     // antes barrada pelo piso 200 → locação caía num sintético 0,4%). A plausibilidade POR TIPO
     // (venda) e por natureza (locação) é aplicada em JS logo abaixo — tira o outlier da conta.
     const regCidade = semLeilao(await restGet('indice_amostra',
-      `${filtro}&valor_m2=gte.1&valor_m2=lte.200000&select=especie,valor_m2,valor_total,area_m2,data_ref,fonte,criado_em,bairro_norm,geo_grid,lat,lng,endereco,condominio,url&order=data_ref.desc,criado_em.desc&limit=2000`))
+      `${filtro}&valor_m2=gte.1&valor_m2=lte.200000&select=especie,valor_m2,valor_total,area_m2,data_ref,fonte,criado_em,bairro_norm,geo_grid,lat,lng,coord_origem,endereco,condominio,url&order=data_ref.desc,criado_em.desc&limit=2000`))
       .filter(amostraPlausivel);
 
     // RECORTE POR RAIO (pedido do dono — classificar a ~250m, rua/condomínio). Com coordenada na
@@ -161,7 +164,7 @@ export default async function handler(req) {
       const distM = (aLat, aLng) => (coordOk(aLat) && coordOk(aLng))
         ? 111320 * Math.sqrt(Math.pow(+aLat - lat, 2) + Math.pow((+aLng - lng) * Math.cos(lat * Math.PI / 180), 2)) : null;
       const nivelDe = (a) => {
-        const d = distM(a.lat, a.lng);
+        const d = temPosicao(a) ? distM(a.lat, a.lng) : null;
         if ((d != null && d <= 250) || (bairroNorm && a.bairro_norm && a.bairro_norm === bairroNorm)) return 1;
         if (d != null && d <= 1000) return 2;
         return 3;
@@ -349,7 +352,7 @@ export default async function handler(req) {
     // Ordem: proximidade primeiro (mesmo condomínio/endereço > mesma rua/250 m > 1 km > bairro),
     // e dentro do mesmo nível o anúncio mais RECENTE — que é o que mais pesa na precificação,
     // já que a composição temporal projeta pelo mais novo.
-    const distDe = (a) => (lat != null && lng != null && coordOk(a.lat) && coordOk(a.lng))
+    const distDe = (a) => (lat != null && lng != null && temPosicao(a))
       ? 111320 * Math.sqrt(Math.pow(+a.lat - lat, 2) + Math.pow((+a.lng - lng) * Math.cos(lat * Math.PI / 180), 2))
       : null;
     // Peso de proximidade quando NÃO há coordenada (o caso comum: a amostra acabou de nascer e o
