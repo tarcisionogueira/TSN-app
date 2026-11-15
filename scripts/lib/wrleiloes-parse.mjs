@@ -85,20 +85,48 @@ export function dataComFuso(txt) {
   return `${m[3]}-${m[2]}-${m[1]}T${(m[4] || '00').padStart(2, '0')}:${m[5] || '00'}:00${fuso}`;
 }
 
+// ISO com fuso ("2026-11-30T13:30:00+00:00") → mesma hora no relógio de Brasília, no formato do `dataComFuso`. O dia
+// gravado é o de Brasília: só diverge do dia local em leilão perto da meia-noite, o que este leiloeiro não faz.
+function isoBrasilia(iso) {
+  const ms = Date.parse(iso);
+  if (!Number.isFinite(ms)) return null;
+  return `${new Date(ms - 3 * 3600e3).toISOString().slice(0, 16)}:00-03:00`;
+}
+
+/** JSON-LD `Event` que o servidor do app embute no <head> da página do leilão (independe da renderização). */
+export function eventoLd(html) {
+  for (const m of String(html || '').matchAll(/<script[^>]*application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi)) {
+    let j = null;
+    try { j = JSON.parse(m[1]); } catch { continue; }   // bloco ld+json malformado: os outros blocos ainda valem
+    for (const o of [].concat(j?.['@graph'] || j)) {
+      if (o?.['@type'] === 'Event') return { inicio: o.startDate ? isoBrasilia(o.startDate) : null, fim: o.endDate ? isoBrasilia(o.endDate) : null, status: String(o.eventStatus || '') };
+    }
+  }
+  return null;
+}
+
 /** Cabeçalho do leilão: nome, encerramento, local, modalidade e edital. */
 export function lerLeilao(html) {
   const h = String(html || '');
   const t = textoDe(h);
+  // 15/11: a página do leilão deixou de escrever "Encerramento DD/MM/AAAA" (12 lotes "parser não leu" desde 13/11).
+  // O JSON-LD Event segue no <head> com o início do pregão (30/11 13:30Z = 9h30 de Manaus, a hora do EDITAL). O texto
+  // por extenso continua primeiro quando existir (é o fim do pregão, que decide "já encerrou").
+  const ld = eventoLd(h);
   const enc = t.match(/Encerramento\n?([^\n]*\d{2}\/\d{2}\/\d{4}[^\n]*(?:\nhor[áa]rio[^\n]*)?)/i);
   const local = (`\n${t}`.match(/\nLocal\s*\n?\s*([A-Za-zÀ-ÿ' ]+?\s*-\s*[A-Z]{2})(?=\s|$)/) || [])[1] || null;
   const edital = (h.match(/href="(https:\/\/[^"]+\/documents\/auctions\/[^"]+\.pdf)"/i) || [])[1] || null;
   return {
     nome: textoDe((h.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i) || [])[1]).replace(/\n/g, ' ') || null,
-    encerramento: enc ? dataComFuso(enc[1]) : null,
+    encerramento: (enc && dataComFuso(enc[1])) || ld?.fim || ld?.inicio || null,
+    // Só o INÍCIO do pregão é conhecido: o lote segue aberto até o fim daquele dia (não some às 9h30 com lances abertos).
+    soInicio: !(enc && dataComFuso(enc[1])) && !ld?.fim && !!ld?.inicio,
+    // Sem data em lugar nenhum: trecho do texto para o log dizer o que a página mostra agora (diagnóstico, não dado).
+    amostra: (enc || ld?.fim || ld?.inicio) ? undefined : t.slice(0, 700).replace(/\n/g, ' | '),
     local,
     modalidade: /\nExtrajudicial\n/i.test(`\n${t}\n`) ? 'extrajudicial' : /\nJudicial\n/i.test(`\n${t}\n`) ? 'judicial' : null,
     edital,
-    encerrado: /\n(Encerrado|Finalizado|Cancelado|Suspenso)\n/i.test(`\n${t.slice(0, 600)}\n`),
+    encerrado: /\n(Encerrado|Finalizado|Cancelado|Suspenso)\n/i.test(`\n${t.slice(0, 600)}\n`) || /EventCancelled|EventPostponed/i.test(ld?.status || ''),
   };
 }
 
@@ -161,7 +189,10 @@ export async function parseDetalhe(html, url, { fetchFonte = null, agora = new D
   const L = leilao && !leilao.erro ? leilao : null;
 
   const encerraEm = (encLote && dataComFuso(encLote)) || L?.encerramento || null;
-  if (!encerraEm) return null;   // título sem data em lugar nenhum: ainda é "não consegui ler"
+  if (!encerraEm) {   // título sem data em lugar nenhum: ainda é "não consegui ler" — mas diz o que viu
+    if (L?.amostra) console.log(`   [WRLEILOES] lote ${idDaUrl(url)}: sem data no lote nem no leilão. Leilão mostra: ${L.amostra.slice(0, 400)}`);
+    return null;
+  }
   const dataLeilao = encerraEm.slice(0, 10);
 
   let local = cidadeDoBem(titulo);
@@ -192,7 +223,8 @@ export async function parseDetalhe(html, url, { fetchFonte = null, agora = new D
     numero_processo: processo,
     situacao: status,
     naoImovel: !cardEhImovel(titulo),
-    encerrado: FORA.test(status || '') || !!L?.encerrado || (encerraEm ? Date.parse(encerraEm) < +agora : false),
+    encerrado: FORA.test(status || '') || !!L?.encerrado
+      || Date.parse(!encLote && L?.soInicio ? `${dataLeilao}T23:59:00-03:00` : encerraEm) < +agora,
   };
 }
 

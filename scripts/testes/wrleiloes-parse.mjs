@@ -65,6 +65,22 @@ const viaLeilao = await parseDetalhe(semData, uLote, { fetchFonte, agora: AGORA 
 eq('lote sem data → data do leilão', [viaLeilao?.data_leilao, viaLeilao?.valor_minimo], ['2026-11-30', 320000]);
 eq('lote sem data e leilão fora do ar → null', await parseDetalhe(semData, uLote, { fetchFonte: async () => ({ html: null, via: 'dom-falha' }), agora: AGORA }), null);
 
+// 5c. (15/11, de novo) A página do LEILÃO também parou de escrever "Encerramento" — a rodada de 15/11 11:48 voltou
+// 12× "parser não leu" com o fallback de 5b no ar. O que sobrou é o JSON-LD Event que o servidor do app põe no <head>
+// (HTML cru via pg_net, 15/11): startDate 2026-11-30T13:30:00+00:00 = 9h30 de Manaus, a hora do edital.
+const LD = '<script type="application/ld+json">{"@context":"https://schema.org","@type":"Event","name":"Leilão TRT11","startDate":"2026-11-30T13:30:00+00:00","eventStatus":"https://schema.org/EventScheduled"}</script>';
+const eventoSemTexto = LD + EVENTO.replace(/Encerramento/g, 'Fechamento');
+const ffLd = async (u) => (u === U_EVENTO ? { html: eventoSemTexto, via: 'dom' } : { html: null, via: 'dom-404' });
+eq('leilão sem "Encerramento": data do JSON-LD (relógio de Brasília)', [lerLeilao(eventoSemTexto).encerramento, lerLeilao(eventoSemTexto).soInicio], ['2026-11-30T10:30:00-03:00', true]);
+const viaLd = await parseDetalhe(semData, uLote, { fetchFonte: ffLd, agora: AGORA });
+eq('lote e leilão sem texto de data → dia do JSON-LD', [viaLd?.data_leilao, viaLd?.encerrado], ['2026-11-30', false]);
+eq('só o início conhecido: 11h do dia do pregão ainda aberto', (await parseDetalhe(semData, uLote, { fetchFonte: ffLd, agora: new Date('2026-11-30T11:00:00-03:00') }))?.encerrado, false);
+eq('dia seguinte → encerrado', (await parseDetalhe(semData, uLote, { fetchFonte: ffLd, agora: new Date('2026-12-01T08:00:00-03:00') }))?.encerrado, true);
+const cancelado = LD.replace('EventScheduled', 'EventCancelled') + EVENTO;
+eq('JSON-LD cancelado → leilão encerrado', lerLeilao(cancelado).encerrado, true);
+eq('ld+json malformado não derruba a leitura', lerLeilao('<script type="application/ld+json">{oops</script>' + EVENTO).encerramento, '2026-11-30T12:00:00-04:00');
+eq('texto por extenso continua primeiro (fim do pregão)', lerLeilao(LD + EVENTO).encerramento, '2026-11-30T12:00:00-04:00');
+
 // 6. Veículo e casca vazia
 eq('lote de veículo marcado como não imóvel', (await parseDetalhe(ler('lote-veiculo'), `${B}/lotes/cb074c02-4cae-4973-8423-cd6bb75003b1`, { fetchFonte, agora: AGORA })).naoImovel, true);
 eq('casca do app sem título → null (não consegui ler)', await parseDetalhe('<html><body><div id="root"></div></body></html>', uLote, { fetchFonte }), null);
