@@ -506,7 +506,11 @@ export async function processarEventoMp(req, res) {
 
   // Idempotência: o MP reenvia a mesma notificação. Se já tratamos este
   // (pagamento, status), responde OK sem reprocessar.
-  if (await eventoJaProcessado({ gateway: 'mercadopago', gatewayPaymentId: pagamento.id, evento: status })) {
+  // 15/11 (bug bounty 07/11 — achado 8): o 2º reembolso PARCIAL do mesmo pagamento chega com o mesmo status
+  // 'partially_refunded' e era descartado como reenvio — o estorno do segundo valor nunca acontecia. A chave do parcial
+  // carrega o ACUMULADO devolvido (estornarRecargaMp já trabalha pelo acumulado, então reprocessar não estorna em dobro).
+  const statusIdem = status === 'partially_refunded' ? `partially_refunded:${Number(pagamento.transaction_amount_refunded) || 0}` : status;
+  if (await eventoJaProcessado({ gateway: 'mercadopago', gatewayPaymentId: pagamento.id, evento: statusIdem })) {
     return res.status(200).json({ ok: true, duplicado: true });
   }
 
@@ -563,7 +567,7 @@ export async function processarEventoMp(req, res) {
           if (row?.preco_anual) precoAnual = Number(row.preco_anual);
         } catch (e) { console.error('[mp-webhook] plano_anual preço:', e?.message || e); }
         if (!(precoAnual > 0)) {
-          await removerEventoProcessado({ gateway: 'mercadopago', gatewayPaymentId: String(pagamento.id), evento: status });
+          await removerEventoProcessado({ gateway: 'mercadopago', gatewayPaymentId: String(pagamento.id), evento: statusIdem });
           return res.status(500).json({ error: 'plano_anual_preco_indisponivel' });
         }
         const vAnual = Number(pagamento.transaction_amount) || 0;
@@ -592,7 +596,7 @@ export async function processarEventoMp(req, res) {
           // morria no guard de duplicidade sem NUNCA chegar aqui. Resultado: R$449,90 pagos
           // e Pro anual jamais ativado, sem reconciliação. Agora as DUAS marcas caem.
           await removerEventoProcessado({ gateway: 'mercadopago', gatewayPaymentId: String(pagamento.id), evento: 'pix_plano_anual' });
-          await removerEventoProcessado({ gateway: 'mercadopago', gatewayPaymentId: String(pagamento.id), evento: status });
+          await removerEventoProcessado({ gateway: 'mercadopago', gatewayPaymentId: String(pagamento.id), evento: statusIdem });
           console.error('[mp-webhook] plano_anual ativação:', e?.message);
           return res.status(500).json({ error: 'plano_anual_ativacao_falhou' });
         }
@@ -607,7 +611,7 @@ export async function processarEventoMp(req, res) {
         // para o MP/fila reentregar. Só a lista vazia de verdade é "não encontrada".
         if (!arrRes.ok) {
           console.error('[mp-webhook] honorário: leitura da arrematação falhou', arrRes.status, arrId);
-          await removerEventoProcessado({ gateway: 'mercadopago', gatewayPaymentId: pagamento.id, evento: status });
+          await removerEventoProcessado({ gateway: 'mercadopago', gatewayPaymentId: pagamento.id, evento: statusIdem });
           return res.status(500).json({ error: 'honorario_leitura_falhou' });
         }
         const [arr] = await arrRes.json();
@@ -673,7 +677,7 @@ export async function processarEventoMp(req, res) {
           }),
         });
         if (!insRes.ok) {
-          await removerEventoProcessado({ gateway: 'mercadopago', gatewayPaymentId: pagamento.id, evento: status });
+          await removerEventoProcessado({ gateway: 'mercadopago', gatewayPaymentId: pagamento.id, evento: statusIdem });
           return res.status(502).json({ error: 'honorario_patch_falhou' });
         }
         // O INSERT acima já disparou a trigger `honorarios_recebimentos_fecha_se_completo`
@@ -698,7 +702,7 @@ export async function processarEventoMp(req, res) {
         });
         if (!cobRes.ok) { // mesmo caso do honorário acima (04/10)
           console.error('[mp-webhook] cobrança avulsa: leitura falhou', cobRes.status, cobId);
-          await removerEventoProcessado({ gateway: 'mercadopago', gatewayPaymentId: pagamento.id, evento: status });
+          await removerEventoProcessado({ gateway: 'mercadopago', gatewayPaymentId: pagamento.id, evento: statusIdem });
           return res.status(500).json({ error: 'cobranca_avulsa_leitura_falhou' });
         }
         const [cob] = await cobRes.json();
@@ -744,7 +748,7 @@ export async function processarEventoMp(req, res) {
             : { valor_pago_pix: jaPagoPix + pago, gateway_payment_id: String(pagamento.id) }),
         });
         if (!patchRes.ok) {
-          await removerEventoProcessado({ gateway: 'mercadopago', gatewayPaymentId: pagamento.id, evento: status });
+          await removerEventoProcessado({ gateway: 'mercadopago', gatewayPaymentId: pagamento.id, evento: statusIdem });
           return res.status(502).json({ error: 'cobranca_avulsa_patch_falhou' });
         }
         return res.status(200).json({ ok: true, cobranca_avulsa: { id: cobId, pago: completou, saldo_restante: completou ? 0 : Math.max(0, esperado - pago) } });
@@ -754,7 +758,7 @@ export async function processarEventoMp(req, res) {
         if (result && result.ok === false) {
           // Efeito falhou → desmarca a idempotência e devolve 5xx p/ o MP reenviar (senão a
           // compra ficaria presa em 'pendente' e a comissão nunca creditaria — sem reconciliação).
-          await removerEventoProcessado({ gateway: 'mercadopago', gatewayPaymentId: pagamento.id, evento: status });
+          await removerEventoProcessado({ gateway: 'mercadopago', gatewayPaymentId: pagamento.id, evento: statusIdem });
           return res.status(502).json({ error: 'confirmar_compra_produto_falhou', detalhe: result });
         }
         // Conversão de anúncio (Meta CAPI + Google Ads offline) — só na ativação DE VERDADE
@@ -799,7 +803,7 @@ export async function processarEventoMp(req, res) {
       if (ehProdutoMp) {
         result = await rpcProduto('estornar_compra_produto', { p_gateway_payment_id: String(pagamento.id) });
         if (result && result.ok === false) {
-          await removerEventoProcessado({ gateway: 'mercadopago', gatewayPaymentId: pagamento.id, evento: status });
+          await removerEventoProcessado({ gateway: 'mercadopago', gatewayPaymentId: pagamento.id, evento: statusIdem });
           return res.status(502).json({ error: 'estornar_compra_produto_falhou', detalhe: result });
         }
         return res.status(200).json({ ok: true, produto_estorno: result });
@@ -843,7 +847,7 @@ export async function processarEventoMp(req, res) {
         if (parcial) return res.status(200).json({ ok: true, ignorado: 'reembolso_parcial_produto' });
         result = await rpcProduto('estornar_compra_produto', { p_gateway_payment_id: String(pagamento.id) });
         if (result && result.ok === false) {
-          await removerEventoProcessado({ gateway: 'mercadopago', gatewayPaymentId: pagamento.id, evento: status });
+          await removerEventoProcessado({ gateway: 'mercadopago', gatewayPaymentId: pagamento.id, evento: statusIdem });
           return res.status(502).json({ error: 'estornar_compra_produto_falhou', detalhe: result });
         }
         return res.status(200).json({ ok: true, produto_estorno: result });
@@ -865,7 +869,7 @@ export async function processarEventoMp(req, res) {
   } catch (e) {
     console.error('[mp-webhook]', e.message);
     // Efeito falhou após a marca de idempotência → desmarca p/ o MP reenviar.
-    await removerEventoProcessado({ gateway: 'mercadopago', gatewayPaymentId: pagamento.id, evento: status });
+    await removerEventoProcessado({ gateway: 'mercadopago', gatewayPaymentId: pagamento.id, evento: statusIdem });
     return res.status(500).json({ error: 'Erro interno' });
   }
 }

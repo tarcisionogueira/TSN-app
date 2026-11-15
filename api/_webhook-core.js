@@ -525,6 +525,20 @@ async function ativarTrilhaVeiculos({ userId, gateway, cobranca, temCobrancaReal
 // o cliente para 'explorador' e marca inadimplência (dispara o aviso in-app).
 // Idempotente: se já está inadimplente, não repete. Guarda role_anterior para
 // reativar quando o pagamento voltar.
+/**
+ * Guardas que impedem rebaixar o assinante por falha/recusa de cobrança recorrente (puro; testado em
+ * scripts/testes/recusa-recorrencia-guardas.mjs). Devolve o motivo para NÃO rebaixar, ou null.
+ *   'papel_acima_do_plano' — a cobrança recusada é de um plano MENOR que o papel atual (anti-flip);
+ *   'anual_vigente'        — ciclo anual com vencimento no futuro: os 12 meses já foram pagos.
+ */
+export function guardaRebaixeRecorrencia(cliente, planoKey, agoraMs = Date.now()) {
+  const RANK = { explorador: 0, top2: 1, combo: 1, assessorado: 2, clube: 3 };
+  const rPlano = RANK[planoBase(planoKey)], rPapel = RANK[planoBase(cliente?.role)];
+  if (planoKey && rPlano != null && rPapel != null && rPapel > rPlano) return 'papel_acima_do_plano';
+  if (/anual/i.test(cliente?.plano_ciclo || '') && cliente?.plano_vencimento && new Date(cliente.plano_vencimento).getTime() > agoraMs) return 'anual_vigente';
+  return null;
+}
+
 export async function suspenderPlanoDireto({ userId, gateway, planoKey = null }) {
   if (!userId) return { skipped: 'sem_referencia' };
   // Falha/cancelamento da assinatura de VEÍCULOS não rebaixa o plano principal: o acesso vence sozinho.
@@ -1144,6 +1158,16 @@ export async function processarRecusado({ gatewayCustomerId, email, motivo, gate
     // (inclusive Investidor Pro sem fidelidade), o que travava a reativação automática do
     // reconciliar-assinaturas-cron (guarda `!perfil.inadimplente_desde`) mesmo quando o mandato
     // MP seguia autorizado e a cobrança seguinte podia passar sozinha.
+    // GUARDAS DE RECORRÊNCIA (15/11, bug bounty de 07/11 — achado 3): as mesmas de suspenderPlanoDireto, que esta função
+    // não tinha. (a) ANTI-FLIP: recusa de um plano MENOR que o papel atual não rebaixa (contratou a assessoria, o mandato
+    // antigo do Pro é recusado → virava explorador). (b) ANUAL VIGENTE: quem pagou os 12 meses mantém o acesso até
+    // plano_vencimento — a recusa da renovação/troca rebaixa no vencimento, não antes. O erro fica registrado nos dois.
+    const naoRebaixa = guardaRebaixeRecorrencia(cliente, planoReferencia);
+    if (naoRebaixa) {
+      const { error } = await supabase.from('perfis').update(update).eq('id', cliente.id);
+      if (error) throw new Error(error.message);
+      return { ok: true, suspensao_ignorada: naoRebaixa };
+    }
     if (ROLES_PAGANTES.includes(cliente.role) && !cliente.inadimplente_desde) {
       const temFidelidade = ROLES_COM_FIDELIDADE.includes(cliente.role);
       if (temFidelidade) update.inadimplente_desde = new Date().toISOString().slice(0, 10);

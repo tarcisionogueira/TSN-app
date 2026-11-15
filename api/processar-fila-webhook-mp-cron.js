@@ -10,7 +10,7 @@
  * rede — assim o cron sabe se deu certo sem a função de negócio precisar saber que está sendo
  * chamada de um lugar diferente.
  *
- * MAX_TENT=5 espelha o padrão já usado em regenerar-relatorios-cron/login-rate: depois de
+ * MAX_TENT (era 5 a cada minuto; desde 15/11, 7 com espaçamento crescente — ver BACKOFF_MIN): depois de
  * esgotar, marca 'falhou' e alerta por e-mail (alertarErro) em vez de tentar pra sempre — um
  * evento que sempre falha (ex.: bug real, referência que nunca vai existir) não pode represar a
  * fila competindo por espaço com eventos novos e legítimos.
@@ -25,8 +25,15 @@ import { aplicarEfeitosDaCobranca } from './_cobranca-avulsa-efeitos.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
-const MAX_TENT = 5;
+// 15/11 (bug bounty 07/11 — achado 4): eram 5 tentativas a cada 1 minuto — uma instabilidade de 5 min no MP marcava o
+// evento de DINHEIRO como 'falhou' para sempre. Agora o espaçamento cresce (reservado_ate = agora + BACKOFF_MIN[n]) e
+// a fila insiste por ~17 h antes de desistir e alertar.
+const BACKOFF_MIN = [1, 5, 15, 60, 240, 720];
+const MAX_TENT = BACKOFF_MIN.length + 1;
 const LOTE = 25;
+// Orçamento de tempo da rodada (maxDuration 60 s): não começa evento novo depois de 40 s — o evento cortado no meio
+// ficava reservado 5 min e era reprocessado a partir de um estado parcial.
+const ORCAMENTO_MS = 40_000;
 
 function sb(path, opts = {}) {
   return fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
@@ -109,8 +116,10 @@ async function handler(req) {
   if (!r.ok) return new Response(JSON.stringify({ error: 'query da fila falhou' }), { status: 500 });
   const fila = await r.json();
 
-  let processados = 0, falhas = 0;
+  let processados = 0, falhas = 0, adiados = 0;
+  const inicio = Date.now();
   for (const item of fila) {
+    if (Date.now() - inicio > ORCAMENTO_MS) { adiados++; continue; }   // fica para a próxima rodada (1 min)
     // 19/10 (#255): RESERVA atômica — rodadas sobrepostas não processam o mesmo evento. Só segue quem
     // conseguiu a linha (PATCH condicional devolve 1 linha); a reserva vence em 5 min se a rodada morrer.
     const rv = await sb(`mp_webhook_fila?id=eq.${item.id}&status=eq.pendente&${livre}`, {
@@ -138,7 +147,9 @@ async function handler(req) {
       const motivo = String(e?.message || e).slice(0, 500);
       await sb(`mp_webhook_fila?id=eq.${item.id}`, {
         method: 'PATCH', headers: { Prefer: 'return=minimal' },
-        body: JSON.stringify({ tentativas, ultimo_erro: motivo, reservado_ate: null, ...(esgotou ? { status: 'falhou' } : {}) }),
+        body: JSON.stringify({ tentativas, ultimo_erro: motivo,
+          reservado_ate: esgotou ? null : new Date(Date.now() + BACKOFF_MIN[Math.min(tentativas - 1, BACKOFF_MIN.length - 1)] * 60_000).toISOString(),
+          ...(esgotou ? { status: 'falhou' } : {}) }),
       }).then((x) => { if (!x.ok) console.error('[processar-fila-webhook-mp] falha não registrada', item.id, x.status); });
       if (esgotou) {
         console.error('[processar-fila-webhook-mp] esgotou tentativas', item.id, item.mp_topic, item.mp_data_id, motivo);
@@ -154,5 +165,5 @@ async function handler(req) {
     console.error('[efeitos-cobranca] rodada falhou', e?.message || e);
     return { erro: String(e?.message || e).slice(0, 200) };
   });
-  return new Response(JSON.stringify({ ok: true, vistos: fila.length, processados, falhas, efeitos }), { headers: { 'Content-Type': 'application/json' } });
+  return new Response(JSON.stringify({ ok: true, vistos: fila.length, processados, falhas, adiados, efeitos }), { headers: { 'Content-Type': 'application/json' } });
 }

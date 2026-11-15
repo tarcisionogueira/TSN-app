@@ -90,6 +90,20 @@ async function mpTokenDoCartaoSalvo(accessToken, cardId, customerId) {
   return String(d.id);
 }
 
+// Motivo (texto) se o cliente já tem plano pago ou mandato ativo; '' se não; null se não deu para ler.
+async function jaTemPlanoPago(userId) {
+  const rP = await sb(`perfis?id=eq.${encodeURIComponent(userId)}&select=role,plano_ciclo&limit=1`);
+  const rA = await sb(`mp_assinaturas?user_id=eq.${encodeURIComponent(userId)}&status=eq.authorized&select=plano_key&limit=1`);
+  if (!rP.ok || !rA.ok) { console.error('[ativar-assinatura-bonus] perfil/mandatos ilegíveis', userId, rP.status, rA.status); return null; }
+  const [perf] = await rP.json().catch(() => [null]);
+  const [mand] = await rA.json().catch(() => [null]);
+  if (mand) return `mandato ${mand.plano_key || 'ativo'}`;
+  const role = String(perf?.role || '');
+  if (['assessorado', 'clube', 'assessorado_anual', 'clube_anual', 'top2_anual'].includes(role)) return role;
+  if (role === 'top2' && !/cortesia/i.test(perf?.plano_ciclo || '')) return `top2 ${perf?.plano_ciclo || 'pago'}`;
+  return '';
+}
+
 export const GET = handler;
 export const POST = handler;
 async function handler(req) {
@@ -125,6 +139,19 @@ async function handler(req) {
 
   for (const c of candidatos) {
     try {
+      // QUEM JÁ PAGA NÃO GANHA MANDATO PRO (15/11, bug bounty 07/11 — achado 6). O bônus de cortesia do e-book virava
+      // mandato Pro mesmo para quem, no meio da cortesia, contratou a assessoria/Clube ou assinou o Pro por conta
+      // própria — e a confirmação desse Pro dispara a regra de recorrência única (cancelarOutrasRecorrencias), que
+      // CANCELA a assinatura maior. Leitura que falha pula a compra hoje (fail-closed; volta amanhã, dentro da janela).
+      const jaPaga = await jaTemPlanoPago(c.user_id);
+      if (jaPaga === null) { resumo.falhas++; continue; }
+      if (jaPaga) {
+        resumo.dispensados = (resumo.dispensados || 0) + 1;
+        const rD = await sb(`compras_produtos?id=eq.${c.id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' },
+          body: JSON.stringify({ assinatura_id: `dispensada:${jaPaga}`.slice(0, 120), assinatura_falha_motivo: `cliente já tem plano pago (${jaPaga}) — bônus não vira mandato Pro` }) });
+        if (!rD.ok) console.error('[ativar-assinatura-bonus] dispensa não gravada', c.id, rD.status);
+        continue;
+      }
       const email = await emailDoUsuario(c.user_id);
       if (!email) { resumo.sem_email++; continue; }
 

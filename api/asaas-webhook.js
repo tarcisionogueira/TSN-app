@@ -338,7 +338,10 @@ export default async function handler(req, res) {
       }
       return res.status(200).json(result);
     }
-    if (tipo === 'PAYMENT_OVERDUE') {
+    // 15/11 (bug bounty 07/11, achado 7): a guarda de TROCA ABANDONADA valia só para o vencimento (OVERDUE). A recusa
+    // de cartão (REFUSED) da subscription NOVA de uma troca rebaixava quem segue pagando a antiga — e, com o Asaas
+    // ilegível, devolvia 200 (o evento se perdia). Mesma guarda para os dois eventos.
+    if (tipo === 'PAYMENT_OVERDUE' || tipo === 'PAYMENT_REFUSED') {
       // TROCA ABANDONADA NÃO REBAIXA QUEM PAGA (04/10, pendência 123 + 2 revisões): sem o
       // cancelamento antecipado no checkout, uma troca abandonada pelo Asaas deixa uma subscription
       // ACTIVE nunca paga — e o vencimento dela rebaixaria quem segue pagando a ANTIGA (e geraria
@@ -359,7 +362,7 @@ export default async function handler(req, res) {
           if (nuncaPaga === null || outra.erro) {
             console.error('[asaas-webhook] overdue de subscription: situação incerta — reentrega', pagReal.subscription, outra.erro || 'pagamentos ilegíveis');
             await removerEventoProcessado({ gateway: 'asaas', gatewayPaymentId: pagReal.id, evento: tipo });
-            return res.status(500).json({ error: 'overdue_incerto' });
+            return res.status(500).json({ error: tipo === 'PAYMENT_REFUSED' ? 'recusa_incerta' : 'overdue_incerto' });
           }
           if (outra.tem) {
             try { await apagarAssinaturaAsaas(pagReal.subscription); }
@@ -373,6 +376,8 @@ export default async function handler(req, res) {
           }
         }
       }
+    }
+    if (tipo === 'PAYMENT_OVERDUE') {
       // Compra AVULSA de produto (curso/e-book) não é assinatura: boleto/pix não pago só deixa
       // a compra pendente. Sem este guard, o assinante em dia que abandonava um boleto de
       // produto caía em processarVencido → role rebaixado p/ explorador, inadimplente_desde,

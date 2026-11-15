@@ -6,6 +6,27 @@
 
 
 
+## 15/11 (noite, 13) — PAGAMENTOS: achados 3–8 do bug bounty de 07/11 (#429)
+
+- **3 · processarRecusado sem guardas** (`_webhook-core.js`): ganhou as guardas de `suspenderPlanoDireto` via
+  `guardaRebaixeRecorrencia` (puro, `testar:recusa-recorrencia`): recusa de plano MENOR que o papel não rebaixa (anti-flip
+  — assessoria contratada, Pro antigo recusado) e anual vigente mantém acesso até o vencimento. O erro fica registrado.
+- **4 · fila MP** (`processar-fila-webhook-mp-cron.js`): orçamento de 40 s por rodada (não começa evento novo depois) e
+  backoff 1/5/15/60/240/720 min em `reservado_ate` (eram 5 tentativas em 5 minutos → 'falhou' numa instabilidade curta).
+  Invariantes novos `mp_fila_falhou` e `mp_fila_parada` (pendente > 24 h) — a fila não tinha vigilância nenhuma.
+- **5 · reconciliar-asaas reativava com pagamento do mês anterior**: mensal recusado vira explorador sem
+  inadimplente_desde, e a janela de 45 dias achava o pagamento velho. Agora só reativa pagamento POSTERIOR a
+  `perfis.pagamento_erro_data` (`dataPagamentoAnteriorARecusa`, `testar:reconciliar-antes-da-recusa`; leitura que falha não
+  reativa).
+- **6 · ativar-assinatura-bonus**: não cria mandato Pro para quem já tem plano pago (assessoria/Clube/Pro pago/anual) ou
+  mandato `authorized` — a confirmação desse Pro cancelaria a assinatura maior (recorrência única). Marca
+  `assinatura_id='dispensada:<motivo>'`.
+- **7 · recusa com Asaas incerto devolvia 200** (`asaas-webhook.js`): a guarda de troca abandonada (subscription nova nunca
+  paga + outra ativa → apaga a nova; incerto → 500 para reentrega) passa a valer para PAYMENT_REFUSED também.
+- **8 · 2º reembolso parcial descartado** (`mp-webhook.js`): chave de idempotência do parcial carrega o acumulado devolvido
+  (`partially_refunded:<total>`); o estorno da recarga já é pelo acumulado.
+- O "achado 10" não tem descrição em lugar nenhum (nem HANDOFF, nem pendência); fica registrado como não localizado.
+
 ## 15/11 (noite, 12) — MEDIÇÃO EM SECO DO DECISOR NOS TEXTOS REAIS: três parceláveis viravam VETO (corrigido)
 
 Rodado `montarCondicoesPagamento` + extrator sobre 11 trechos reais de relatórios dos últimos 45 dias

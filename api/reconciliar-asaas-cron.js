@@ -49,6 +49,24 @@ async function asaasGet(path) {
 // IMPORTANTE: exportar por MÉTODO nomeado (GET/POST), não `export default`. No runtime
 // Node da Vercel, `export default` é tratado como assinatura Express (req, res) e o
 // `Response` retornado é IGNORADO — a função trava até o maxDuration (504) a cada run.
+// O pagamento é ANTERIOR à última recusa de cobrança registrada no perfil? (achado 5, 15/11). Leitura que falha
+// devolve true — fail-closed: sem saber, não reativa; a varredura seguinte tenta de novo.
+async function pagoAntesDaRecusa(userId, p) {
+  const { data, error } = await supabase.from('perfis').select('pagamento_erro_data').eq('id', userId).maybeSingle();
+  if (error) { console.error('[reconciliar-asaas] recusa ilegível, pagamento pulado:', p.id, error.message); return true; }
+  return dataPagamentoAnteriorARecusa(p, data?.pagamento_erro_data);
+}
+/** Puro (testado em scripts/testes/reconciliar-pagamento-antes-da-recusa.mjs). */
+export function dataPagamentoAnteriorARecusa(p, erroEm) {
+  if (!erroEm) return false;
+  const pagoEm = Date.parse(p?.confirmedDate || p?.paymentDate || p?.clientPaymentDate || p?.dateCreated || '');
+  const recusa = Date.parse(erroEm);
+  if (!Number.isFinite(recusa)) return false;
+  if (!Number.isFinite(pagoEm)) return true;   // sem data do pagamento: não dá para provar que é novo
+  // Datas do Asaas são DIA (sem hora): pagamento no MESMO dia da recusa conta como posterior (regularização no dia).
+  return pagoEm < Date.parse(new Date(recusa).toISOString().slice(0, 10));
+}
+
 export const GET = handler;
 export const POST = handler;
 async function handler(req) {
@@ -132,6 +150,7 @@ async function handler(req) {
           // Veículos: idempotente de ponta a ponta (repetir não estende nem conta conversão). Combo passa pela
           // ativação inteira do Pro, então só entra no mesmo caso de órfão do Pro (explorador sem inadimplência).
           if (/^combo/.test(refPlano || '') && (cliente.role !== 'explorador' || cliente.inadimplente_desde)) continue;
+          if (/^combo/.test(refPlano || '') && await pagoAntesDaRecusa(cliente.id, p)) continue;
           if (refPlano) {
             try {
               await ativarPlanoDireto({ userId: cliente.id, planoKey: refPlano, gateway: 'asaas',
@@ -143,6 +162,10 @@ async function handler(req) {
 
           // Órfão: pagou mas segue no Explorador (e não é suspensão por inadimplência).
           if (cliente.role !== 'explorador' || cliente.inadimplente_desde) continue;
+          // PAGAMENTO ANTERIOR À RECUSA NÃO REATIVA (15/11, bug bounty 07/11 — achado 5). Mensal recusado vira explorador
+          // SEM inadimplente_desde (regra do dono, 17/08); a janela de 45 dias achava o pagamento do MÊS ANTERIOR e
+          // devolvia o plano a quem não pagou este mês. Só reativa se o pagamento é posterior à última recusa.
+          if (await pagoAntesDaRecusa(cliente.id, p)) continue;
 
           // Plano vem do valor pago (difference/upgrade avulso não mapeia → ignora).
           const mapeado = mapearPlano(Number(p.value), p.description || '');
