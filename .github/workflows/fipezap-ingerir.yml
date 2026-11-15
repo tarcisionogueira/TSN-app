@@ -1,0 +1,27 @@
+name: FipeZAP oficial (série histórica → alarme do Índice)
+
+# Baixa a planilha pública da Fipe (grátis) e grava o R$/m² de venda por cidade. Só serve de ALARME no Índice.
+# seco=1 imprime a estrutura sem gravar (recon). 0 Bright Data, 0 Firecrawl.
+on:
+  workflow_dispatch:
+    inputs:
+      seco:
+        description: '1 = só imprime a estrutura (não grava)'
+        required: false
+        default: '1'
+
+jobs:
+  fipezap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - run: npm i --no-save --no-package-lock fflate@0.8.2
+      - name: FipeZAP
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          FIPEZAP_SECO: ${{ github.event.inputs.seco }}
+        run: node scripts/fipezap-ingerir.mjs
