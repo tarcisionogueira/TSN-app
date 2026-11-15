@@ -6,6 +6,17 @@
 
 
 
+## 15/11 (noite, 11) — DOCUMENTAL: só "consta no documento" confirma; lista de riscos na tela
+
+- `gerar-documental.js`: confirmado = `constaNaDoc === true` (ausente contava como confirmado e podia pintar
+  vermelho/amarelo). Medido antes: 0 de 208 riscos (60 dias, régua 2) sem a marcação → nenhum veredito muda; por isso
+  `reguaVersao` FICA em 2 (subir tiraria toda a amostra da documental_distribuicao sem mudança real de classificação —
+  seria a forma nº 10 no instrumento). Confiança e pendências essenciais contam o ausente como não confirmado.
+- Tela do documental: lista dos riscos (bloqueante/alerta) com "confirmado no documento" ou "a confirmar"; antes só
+  a contagem. Riscos copiados para o mercadológico marcam "(a confirmar)" também quando a marcação falta.
+- Taxa administrativa/despesas lidas pela IA não sobrescrevem mais o que o cliente já preencheu.
+- Resta da #488: campos em branco no financiado ligado pelo cliente (hoje default + aviso em 3 lugares + tabela oculta).
+
 ## 15/11 (noite, 10) — ARENA DOS RELATÓRIOS: FASE 3 (fontes visíveis) + trava
 
 - **FipeZAP oficial no relatório** (gerar-analise.js): `referenciaFipeZap` vem de `fipezap_cidade` (último mês, 12m

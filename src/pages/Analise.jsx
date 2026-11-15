@@ -2060,7 +2060,7 @@ export default function Analise() {
     if (Array.isArray(r.riscos) && r.riscos.length) {
       setD(p => ({ ...p, riscos: r.riscos.map(x => ({
         id: Date.now() + Math.random(),
-        texto: x.constaNaDoc === false ? `${x.descricao || x.categoria} (não consta na documentação, a confirmar)` : (x.descricao || x.categoria),
+        texto: x.constaNaDoc !== true ? `${x.descricao || x.categoria} (não consta na documentação, a confirmar)` : (x.descricao || x.categoria),
         tipo: x.severidade === 'bloqueante' ? 'bloqueante' : 'alerta',
       })) }));
     }
@@ -2071,9 +2071,11 @@ export default function Analise() {
       const taxaAdm = Number(ex.taxaAdministrativaPercentual) || 0;
       const despAdm = Number(ex.despesasAdministrativas) || 0;
       if (taxaAdm > 0 || despAdm > 0) {
+        // 15/11 (arena, Fase 2): campo que o CLIENTE já preencheu (≠ 0, o valor do VAZIO) não é sobrescrito pela IA —
+        // antes a leitura do documental trocava o que o cliente digitou sem avisar.
         setD(p => ({ ...p,
-          ...(taxaAdm > 0 ? { taxaAdministrativaPercentual: taxaAdm } : {}),
-          ...(despAdm > 0 ? { despesasAdministrativas: despAdm } : {}),
+          ...(taxaAdm > 0 && !(Number(p.taxaAdministrativaPercentual) > 0) ? { taxaAdministrativaPercentual: taxaAdm } : {}),
+          ...(despAdm > 0 && !(Number(p.despesasAdministrativas) > 0) ? { despesasAdministrativas: despAdm } : {}),
         }));
       }
     }
@@ -3233,6 +3235,23 @@ export default function Analise() {
                     {fatos.length > 0 && (
                       <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
                         {fatos.map((c,i)=><span key={i} style={{ fontSize:11, fontWeight:700, padding:'3px 10px', borderRadius:8, background:c.bg, color:c.c }}>{c.t}</span>)}
+                      </div>
+                    )}
+                    {/* LISTA DE RISCOS (15/11, arena — Fase 2): a tela só mostrava a CONTAGEM; cada risco agora aparece com
+                        o que ele é — "confirmado no documento" (constaNaDoc === true) ou "a confirmar" (diligência). */}
+                    {Array.isArray(parecerDocumental.riscos) && parecerDocumental.riscos.length > 0 && (
+                      <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
+                        {parecerDocumental.riscos.filter((r) => r && r.severidade !== 'informativo').slice(0, 12).map((r, i) => (
+                          <div key={i} style={{ fontSize:11.5, color:'#334155', lineHeight:1.45, display:'flex', gap:6, alignItems:'baseline', minWidth:0 }}>
+                            <span style={{ flexShrink:0, fontWeight:800, color: r.severidade === 'bloqueante' ? '#b91c1c' : '#92400e' }}>{r.severidade === 'bloqueante' ? '⛔' : '⚠'}</span>
+                            <span style={{ minWidth:0 }}>
+                              <strong>{r.categoria || 'Risco'}</strong>: {r.descricao || ''}{' '}
+                              <span style={{ fontSize:10.5, fontWeight:700, color: r.constaNaDoc === true ? '#047857' : '#b45309' }}>
+                                {r.constaNaDoc === true ? '· confirmado no documento' : '· a confirmar (não consta no documento lido)'}
+                              </span>
+                            </span>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>

@@ -2563,7 +2563,10 @@ export default async function handler(req, res) {
     //     já estava no prompt ("nivelRisco considera APENAS achados com constaNaDoc=true") e a IA
     //     não a seguia: 3 dos 14 relatórios sem nenhum achado confirmado saíram "amarelo".
     //     bloqueante confirmado → vermelho; alerta confirmado → amarelo; nenhum → verde.
-    const confirmados = (rlist || []).filter((r) => r && r.constaNaDoc !== false);
+    // 15/11 (arena, Fase 2): só `constaNaDoc === true` é confirmado. Antes, a marcação AUSENTE contava como confirmada —
+    // um risco que a IA não disse se está no documento virava vermelho/amarelo. Medido nos 208 riscos de 60 dias (régua 2):
+    // 0 sem a marcação — nenhum veredito muda hoje, por isso a reguaVersao fica em 2; é a rede para quando faltar.
+    const confirmados = (rlist || []).filter((r) => r && r.constaNaDoc === true);
     const nivelRiscoFinal = confirmados.some((r) => r.severidade === 'bloqueante') ? 'vermelho'
       : confirmados.some((r) => r.severidade === 'alerta') ? 'amarelo'
       : 'verde';
@@ -2574,7 +2577,7 @@ export default async function handler(req, res) {
     // Confiança: a palavra do modelo é o ponto de partida, mas o SERVIDOR tem o desempate,
     // porque ele sabe coisas que o modelo não sabe (se o CNJ respondeu, quais documentos
     // foram lidos). Nunca sobe a confiança declarada — só desce.
-    const riscosNaoConfirmados = (rlist || []).filter(r => r?.constaNaDoc === false).length;
+    const riscosNaoConfirmados = (rlist || []).filter(r => r?.constaNaDoc !== true).length;
     const totalRiscos = (rlist || []).length;
     const faltaDocEssencial = !(lidos || []).some(l => l.tipo === 'matricula')
       || !(lidos || []).some(l => l.tipo === 'edital' || l.tipo === 'regras_venda');
@@ -2588,7 +2591,7 @@ export default async function handler(req, res) {
     //     registrá-lo em TODO imóvel (é diligência de campo universal), então não discrimina.
     const RE_ESSENCIAL = /ocupa|desocupa|posse|d[ée]bito|condom[ií]nio|iptu|propter|processo|a[çc][ãa]o judicial|recurso|embargo|penhora|indisponib/i;
     const RE_UNIVERSAL = /vulner|idoso|estatuto|pessoa com defici/i;
-    const pendenciasEssenciais = (rlist || []).filter((r) => r?.constaNaDoc === false
+    const pendenciasEssenciais = (rlist || []).filter((r) => r?.constaNaDoc !== true
       && RE_ESSENCIAL.test(`${r.categoria || ''} ${r.descricao || ''}`)
       && !RE_UNIVERSAL.test(`${r.categoria || ''} ${r.descricao || ''}`));
     const naoLidosNaoBloqueantes = (naoLidos || []).filter((n) => n.inexistente || n.porLimite);
