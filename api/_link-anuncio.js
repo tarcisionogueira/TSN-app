@@ -59,3 +59,44 @@ export async function semLinksMortos(amostras, opts) {
   return { vivas: lista.filter((a) => !(a?.url && vered.get(a.url) === 'morto')), mortas: mortas.length,
     incertas: [...vered.values()].filter((v) => v === 'incerto').length };
 }
+
+// REDIRECIONADOR DO GROUNDING (15/11). Com o Gemini, o "link" de cada amostra é `vertexaisearch.cloud.google.com/
+// grounding-api-redirect/…` — o destino REAL só aparece seguindo o redirecionamento. Duas consequências medidas em
+// Capão da Canoa: (1) a trava anti-leilão, que olha a URL, não via nada — e o próprio lote em leilão (BidHero,
+// 33,28 m², avaliação R$ 250 mil) entrou como comparável de mercado; (2) o "ver anúncio" abria um link opaco.
+// Resolve-se UMA vez, logo que a pesquisa volta: o JSON segue com o destino real em `url`/`link` e todas as travas
+// que já leem a URL passam a funcionar. Sem resposta no tempo, o link original fica (nunca some amostra por isso).
+export const ehRedirecionador = (u) => /^https?:\/\/vertexaisearch\.cloud\.google\.com\/grounding-api-redirect\//i.test(String(u || ''));
+
+export async function resolverRedirecionadores(json, { timeoutMs = 6000, concorrencia = 8, tetoTotalMs = 10000 } = {}) {
+  if (!json || typeof json !== 'object') return { resolvidos: 0, total: 0 };
+  const alvos = [];
+  const visitar = (o) => {
+    if (Array.isArray(o)) { o.forEach(visitar); return; }
+    if (!o || typeof o !== 'object') return;
+    for (const k of ['url', 'link']) if (ehRedirecionador(o[k])) alvos.push([o, k]);
+    for (const v of Object.values(o)) if (v && typeof v === 'object') visitar(v);
+  };
+  visitar(json);
+  const unicos = [...new Set(alvos.map(([o, k]) => o[k]))];
+  const destino = new Map();
+  const fim = Date.now() + tetoTotalMs;
+  let i = 0;
+  async function trabalhador() {
+    while (i < unicos.length) {
+      const u = unicos[i++];
+      if (Date.now() > fim) continue;
+      try {
+        const r = await fetch(u, { redirect: 'follow', headers: { 'User-Agent': UA, 'Accept': 'text/html' },
+          signal: AbortSignal.timeout(Math.min(timeoutMs, Math.max(1000, fim - Date.now()))) });
+        if (r.url && !ehRedirecionador(r.url)) destino.set(u, r.url);
+        r.body?.cancel?.().catch(() => {});
+      } catch (e) {
+        // sem resposta: o link original fica (a amostra não é descartada por isso)
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concorrencia, unicos.length) }, trabalhador));
+  for (const [o, k] of alvos) if (destino.has(o[k])) o[k] = destino.get(o[k]);
+  return { resolvidos: destino.size, total: unicos.length };
+}

@@ -16,6 +16,7 @@ import { groundingGemini } from './_grounding.js';
 import { resumoAprendizadoTexto, recalcularArremate } from './_arremate-aprendizado.js';
 import { ehCidadeTemporada, motivoTemporada } from './_temporada.js';
 import { avaliarMercado, explicarCalculo, ehAmostraDeLeilao, limparComentarioDeLeilao } from './_valor-mercado.js';
+import { resolverRedirecionadores } from './_link-anuncio.js';
 import { composicaoTemporal, avisoFrescor } from './_indice-composicao.js';
 import { referenciaPonderada } from './_indice-ponderacao.js';
 import { geocodificarCascata, rankNivel, coordValida } from './_geo.js';
@@ -2715,7 +2716,13 @@ export default async function handler(req, res) {
             ? 'A base própria acima já cobre esta praça: use-a como fonte principal e busque apenas para CONFIRMAR/ATUALIZAR o que estiver faltando ou desatualizado. Não refaça do zero o que já está na base.'
             : 'Priorize as buscas que trazem comparáveis do MESMO tipo e da MENOR distância.'}`;
           const g = await buscarGeminiGrounding({ prompt: prompt + teto, sistema, timeoutMs: Math.min(115000, Math.max(30000, msBudget)) });
-          if (g && !g.__falhou && Object.keys(g).some((k) => k !== '__diag')) return g;
+          if (g && !g.__falhou && Object.keys(g).some((k) => k !== '__diag')) {
+            // Link do grounding é redirecionador do Google: troca pelo destino real ANTES de qualquer filtro — é o que
+            // deixa a trava anti-leilão ver o BidHero/ZUK e o "ver anúncio" abrir a página certa (15/11, Capão).
+            const rr = await resolverRedirecionadores(g, { tetoTotalMs: Math.max(3000, Math.min(10000, restante() - minReserva)) });
+            if (g.__diag && typeof g.__diag === 'object') g.__diag.linksResolvidos = `${rr.resolvidos}/${rr.total}`;
+            return g;
+          }
           // O MOTIVO DA QUEDA DO MOTOR PRIMÁRIO NÃO PODE SER DESCARTADO (09/09).
           // `groundingGemini` devolve o motivo real (`HTTP 429: ...`, `sem GEMINI_API_KEY`,
           // `gemini exc: ...`) e esta linha o jogava fora ao cair no Claude. Resultado medido

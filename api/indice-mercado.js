@@ -15,7 +15,7 @@ import { groundingGemini, geminiDisponivel } from './_grounding.js';
 import { comCascataBusca } from './_busca-modelo.js';
 import { buscarComProva, EXIGE_BUSCA } from './_busca-com-prova.js';
 import { SEG_TIPOS, norm, parseJSON, promptIndice, montarAmostras } from './_indice-core.js';
-import { semLinksMortos } from './_link-anuncio.js';
+import { semLinksMortos, resolverRedirecionadores } from './_link-anuncio.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -158,6 +158,8 @@ export default async function handler(req, res) {
     const json = parseJSON(g.texto);
     if (!json) { motivoFalha = `gemini JSON incompleto (stop=${g.diag?.stop}, out_tokens=${g.diag?.out_tokens})`; return null; }
     motorUsado = 'gemini';
+    // Redirecionador do grounding → destino real, antes da trava anti-leilão (15/11, BidHero em Capão da Canoa).
+    await resolverRedirecionadores(json, { tetoTotalMs: 8000 });
     return json;
   };
   // FALLBACK EM CASCATA (09/09): Haiku primeiro — 3x mais barato e mais rápido que o Sonnet —

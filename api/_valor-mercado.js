@@ -70,7 +70,9 @@ export function pesoRecencia(data) {
 export const FONTE_LEILAO = /leil[ãa]o|leiloeir|arremat|hasta.?p[uú]bl|pra[cç]a p[uú]blica|preg[aã]o|\bcef\b|caixa\s*econ|aliena[çc]|extrajud|retomad|venda\s*direta|megaleil|zukerman|foreclos/i;
 const TEXTO_LEILAO = /leil[aã]o|leiloeir|leil[oõ]es|hasta\s*p[uú]bl|pra[cç]a\s*p[uú]blica|arremata|venda\s*online|desconsiderad|avaliad[oa]\s+em\s+r\$|im[oó]vel\s+retomado/i;
 const TEXTO_NAO_E_LEILAO = /n[aã]o\s+(é|e)\s+(de\s+)?leil/i;
-const URL_LEILAO = /leil[aã]o|leiloes|leiloeir|caixa\.gov|hasta-publica|arremat/i;
+// 15/11: agregadores e leiloeiros cujo DOMÍNIO não diz "leilão" (o BidHero trouxe o próprio lote em leilão como
+// comparável em Capão da Canoa). Lista pelo host, para não pegar "sold" ou "frazao" no meio de outra palavra.
+const URL_LEILAO = /leil[aã]o|leiloes|leiloeir|caixa\.gov|hasta-publica|arremat|venda-?direta|\/\/(?:www\.)?(?:bidhero|portalzuk|superbid|sold\.superbid|megaleiloes|biasileiloes|frazaoleiloes|pestanaleiloes|sodresantoro|leiloesjudiciais|lancenoleilao|grupolance|resale|imoveiscaixa|vipleiloes|lancejudicial|zukerman|hastavip|d1lance|e-?leiloes)\./i;
 
 /** A amostra se declara leilão em algum campo? Aceita a amostra inteira ou só o nome da fonte. */
 export function ehAmostraDeLeilao(amostra) {
