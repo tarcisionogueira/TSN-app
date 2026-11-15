@@ -7,7 +7,7 @@
 --   · com p_apagar_leilao, apaga a amostra cujo destino é site de leilão (mesma régua de URL_LEILAO em _valor-mercado.js).
 create or replace function public.indice_aplicar_destinos(p_tarefa text, p_apagar_leilao boolean default false)
 returns jsonb language plpgsql security definer set search_path = public, net as $$
-declare v_trocadas int := 0; v_leilao int := 0;
+declare v_trocadas int := 0; v_leilao int := 0; v_expirados int := 0;
 begin
   create temp table if not exists pg_temp.dest (de text primary key, para text) on commit drop;
   insert into pg_temp.dest
@@ -24,7 +24,12 @@ begin
   end if;
   with y as (update public.indice_amostra a set url = d.para from pg_temp.dest d where a.url = d.de returning 1)
   select count(*) into v_trocadas from y;
-  return jsonb_build_object('destinos', (select count(*) from pg_temp.dest), 'urls_trocadas', v_trocadas, 'leilao_apagadas', v_leilao);
+  -- O redirecionador do grounding EXPIRA (medido 15/11: 60 de 70 antigos davam 404 do próprio Google). Link morto
+  -- vira nulo: a tela deixa de oferecer "ver anúncio" que abre um 404 e mostra só a busca. A amostra fica.
+  with z as (update public.indice_amostra a set url = null from bastidor.req b join net._http_response r on r.id = b.req
+              where b.tarefa = p_tarefa and r.status_code = 404 and a.url = b.extra and a.url ~ 'vertexaisearch\.cloud\.google\.com' returning 1)
+  select count(*) into v_expirados from z;
+  return jsonb_build_object('destinos', (select count(*) from pg_temp.dest), 'urls_trocadas', v_trocadas, 'leilao_apagadas', v_leilao, 'expirados_limpos', v_expirados);
 end $$;
 revoke all on function public.indice_aplicar_destinos(text, boolean) from public, anon, authenticated;
 grant execute on function public.indice_aplicar_destinos(text, boolean) to service_role;
