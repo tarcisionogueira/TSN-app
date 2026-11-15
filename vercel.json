@@ -265,6 +265,10 @@
       "schedule": "50 */4 * * *"
     },
     {
+      "path": "/api/indice-prova-cron",
+      "schedule": "25 * * * *"
+    },
+    {
       "path": "/api/limpar-documentos-cron",
       "schedule": "0 2 * * *"
     },

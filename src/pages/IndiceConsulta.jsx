@@ -408,10 +408,12 @@ export default function IndiceConsulta() {
             {res.prova && res.prova.unidades > 0 && (
               <div style={{ margin: '-4px 0 12px', fontSize: 11, color: '#475569', background: 'white', border: '1px solid #e2e8f0', borderRadius: 10, padding: '8px 12px', lineHeight: 1.6 }}>
                 <strong style={{ color: '#0f172a' }}>Base de prova:</strong> {res.prova.unidades} unidade(s) independente(s) ·{' '}
-                <span style={{ color: '#047857', fontWeight: 700 }}>{res.prova.link_proprio} com link do anúncio</span> ·{' '}
-                {res.prova.listagem} de página de busca de portal · {res.prova.sem_link} sem link
-                {res.prova.copias_fundidas > 0 ? ` · ${res.prova.copias_fundidas} repetição(ões) não contada(s)` : ''}.
-                {' '}<span style={{ color: '#94a3b8' }}>Preço pedido em anúncio, não valor de fechamento; links não conferidos um a um.</span>
+                <span style={{ color: '#047857', fontWeight: 700 }}>{res.prova.conferido || 0} anúncio(s) conferido(s){res.prova.conferido_em ? ` em ${new Date(res.prova.conferido_em).toLocaleDateString('pt-BR')}` : ''}</span>
+                {(res.prova.link_proprio || 0) + (res.prova.nao_conferivel || 0) > 0 ? ` · ${(res.prova.link_proprio || 0) + (res.prova.nao_conferivel || 0)} com link ainda não conferido` : ''}
+                {' '}· {res.prova.listagem} de página de busca de portal · {res.prova.sem_link} sem link
+                {res.prova.copias_fundidas > 0 ? ` · ${res.prova.copias_fundidas} repetição(ões) não contada(s)` : ''}
+                {res.prova.mortos_fora > 0 ? ` · ${res.prova.mortos_fora} fora do cálculo (link inexistente)` : ''}.
+                {' '}<span style={{ color: '#94a3b8' }}>Preço pedido em anúncio, não valor de fechamento.</span>
               </div>
             )}
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 12 }}>
@@ -565,7 +567,7 @@ export default function IndiceConsulta() {
                             </div>
                             <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 2 }}>
                               {a.proximidade}{a.distancia_m != null ? ` · ${a.distancia_m} m` : ''}
-                              {a.prova === 'listagem' ? ' · página de busca' : a.prova === 'sem_link' ? ' · sem link' : ''}
+                              {a.prova === 'conferido' ? ' · ✓ anúncio conferido' : a.prova === 'listagem' ? ' · página de busca' : a.prova === 'sem_link' ? ' · sem link' : ''}
                               {a.area_m2 ? ` · ${Math.round(a.area_m2)} m²` : ''}
                               {a.data_ref ? ` · ${String(a.data_ref).slice(0, 7)}` : ''}
                             </div>

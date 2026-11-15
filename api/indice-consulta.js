@@ -151,9 +151,13 @@ export default async function handler(req) {
     // (venda) e por natureza (locação) é aplicada em JS logo abaixo — tira o outlier da conta.
     // 15/11: unidades INDEPENDENTES (view indice_amostra_indep) — a mesma unidade anunciada em vários portais, ou gravada
     // 4× pelo mesmo relatório, conta uma vez. Ver supabase/migrations/20261115_indice_amostra_independente.sql.
-    const regCidade = semLeilao(await restGet('indice_amostra_indep',
-      `${filtro}&valor_m2=gte.1&valor_m2=lte.200000&select=especie,valor_m2,valor_total,area_m2,data_ref,fonte,criado_em,bairro_norm,geo_grid,lat,lng,coord_origem,endereco,condominio,url,n_copias,prova&order=data_ref.desc,criado_em.desc&limit=2000`))
+    const regLidas = semLeilao(await restGet('indice_amostra_indep',
+      `${filtro}&valor_m2=gte.1&valor_m2=lte.200000&select=especie,valor_m2,valor_total,area_m2,data_ref,fonte,criado_em,bairro_norm,geo_grid,lat,lng,coord_origem,endereco,condominio,url,n_copias,prova,prova_em&order=data_ref.desc,criado_em.desc&limit=2000`))
       .filter(amostraPlausivel);
+    // LINK MORTO NÃO SUSTENTA NÚMERO (15/11, conferência ao vivo — indice-prova-cron): 404/410, domínio inexistente ou
+    // página genérica no lugar do anúncio. Sai do cálculo e é contado à parte no selo.
+    const regCidade = regLidas.filter((a) => a.prova !== 'morto');
+    const mortosFora = regLidas.length - regCidade.length;
 
     // RECORTE POR RAIO (pedido do dono — classificar a ~250m, rua/condomínio). Com coordenada na
     // consulta, prioriza as amostras REAIS mais próximas: ≤250 m (rua) → ≤1 km (microrregião) →
@@ -402,10 +406,12 @@ export default async function handler(req) {
     const composicao = await rpc('indice_composicao', { p_cidade_norm: cidadeNormDb, p_uf: uf, p_bairro_norm: bairroNorm, p_lat: lat, p_lng: lng, p_tipo: tipo }).catch(() => null);
     // SELO DE PROVA (15/11, arena #484): do que é feito o número — sobre as MESMAS amostras que o calculam (regSamples,
     // já unidades independentes). `copias_fundidas` = anúncios repetidos que deixaram de contar em dobro.
-    const prova = { unidades: regSamples.length, link_proprio: 0, listagem: 0, sem_link: 0, copias_fundidas: 0 };
+    const prova = { unidades: regSamples.length, conferido: 0, link_proprio: 0, nao_conferivel: 0, listagem: 0, sem_link: 0,
+      copias_fundidas: 0, mortos_fora: mortosFora, conferido_em: null };
     for (const a of regSamples) {
       if (prova[a.prova] != null) prova[a.prova]++;
       prova.copias_fundidas += Math.max(0, (Number(a.n_copias) || 1) - 1);
+      if (a.prova === 'conferido' && a.prova_em && (!prova.conferido_em || a.prova_em > prova.conferido_em)) prova.conferido_em = a.prova_em;
     }
     return new Response(JSON.stringify({ ok: true, mapeado, regiao, valorizacao: valorizacao || null, amostras: Array.isArray(amostras) ? amostras : [], amostras_ano, periodos: (regiao && regiao.periodos) ? comp.periodos : [], aviso, regioes, composicao, prova }), { status: 200, headers });
   } catch (e) {
