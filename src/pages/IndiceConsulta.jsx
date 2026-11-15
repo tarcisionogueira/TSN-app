@@ -401,7 +401,7 @@ export default function IndiceConsulta() {
           <div style={{ borderRadius: 14, border: '1px solid #c7d2fe', background: '#eef2ff', padding: '16px 20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 14, fontWeight: 800, color: '#111' }}>{form.cidade}/{form.uf}{reg.bairro_norm ? ` · ${form.bairro}` : ''}</span>
-              <span style={{ fontSize: 11, color: '#64748b' }}>nível {nivelLabel} · {reg.n_amostras || 0} amostras</span>
+              <span style={{ fontSize: 11, color: '#64748b' }}>nível {nivelLabel} · {reg.n_amostras || 0} amostras{reg.n_venda != null ? ` (${reg.n_venda} venda · ${reg.n_locacao || 0} locação)` : ''}</span>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 12 }}>
               <div style={{ background: 'white', borderRadius: 12, padding: '14px 16px' }}>
@@ -461,12 +461,15 @@ export default function IndiceConsulta() {
             )}
             {res.composicao && (
               <div style={{ marginTop: 12, background: 'white', borderRadius: 12, padding: '12px 16px' }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#334155', marginBottom: 8 }}>COMPOSIÇÃO — amostras por dimensão</div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#334155', marginBottom: 2 }}>COMPOSIÇÃO — amostras de VENDA por distância</div>
+                {/* 15/11 (dono): "em cima 17 amostras e embaixo 0 e 8" — o topo soma venda + locação; aqui é só venda,
+                    contada em cada raio a partir do endereço (o estado é a referência ampla, não a base do valor). */}
+                <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: 8 }}>De onde vem o R$/m² de venda: quantos anúncios de venda há em cada raio. Locação não entra nesta conta.</div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(108px, 1fr))', gap: 10 }}>
                   <div><div style={{ fontSize: 10, color: '#64748b' }}>Localidade (≤250m)</div><div style={{ fontSize: 16, fontWeight: 800, color: '#0f172a' }}>{res.composicao.localidade?.n ?? 0}</div></div>
                   <div><div style={{ fontSize: 10, color: '#64748b' }}>Bairro</div><div style={{ fontSize: 16, fontWeight: 800, color: '#0f172a' }}>{res.composicao.bairro?.n ?? 0}</div></div>
                   <div><div style={{ fontSize: 10, color: '#64748b' }}>Cidade{res.composicao.cidade?.n_bairros ? ` · ${res.composicao.cidade.n_bairros} bairro(s)` : ''}</div><div style={{ fontSize: 16, fontWeight: 800, color: '#0f172a' }}>{res.composicao.cidade?.n ?? 0}</div></div>
-                  <div><div style={{ fontSize: 10, color: '#64748b' }}>Estado{res.composicao.estado?.n_cidades ? ` · ${res.composicao.estado.n_cidades} cidade(s)` : ''}</div><div style={{ fontSize: 16, fontWeight: 800, color: '#0f172a' }}>{res.composicao.estado?.n ?? 0}</div></div>
+                  <div><div style={{ fontSize: 10, color: '#64748b' }}>Estado (referência){res.composicao.estado?.n_cidades ? ` · ${res.composicao.estado.n_cidades} cidade(s)` : ''}</div><div style={{ fontSize: 16, fontWeight: 800, color: '#0f172a' }}>{res.composicao.estado?.n ?? 0}</div></div>
                 </div>
                 <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginTop: 10, fontSize: 11, color: '#334155' }}>
                   {res.composicao.por_tipo && Object.keys(res.composicao.por_tipo).length > 0 && (

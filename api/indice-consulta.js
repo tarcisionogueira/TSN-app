@@ -248,7 +248,7 @@ export default async function handler(req) {
         aluguel_origem: amplo ? amplo.origem : null,
         aluguel_mensal_mediano: locMensais.length >= 3 ? mediana(locMensais) : null,
         n_locacao_sem_area: locMensais.length,
-        n_amostras: vendaVals.length + locVals.length,
+        n_amostras: vendaVals.length + locVals.length, n_locacao: locVals.length,
         // PISO DE AMOSTRAS NA VENDA (07/08). `venda_m2` saía sem nenhuma exigência de volume:
         // DUAS amostras viravam "o R$/m² da região", com a mesma cara de um número medido sobre
         // dezenas. Gatilho do dono: Índice de TERRENO na Alameda Dourada mostrou quase METADE do
@@ -297,7 +297,7 @@ export default async function handler(req) {
           aluguel_indisponivel: aluFb == null,
           aluguel_indisponivel_motivo: aluFb == null ? semAluguelMotivo : null,
           aluguel_origem: amploFb ? amploFb.origem : null,
-          n_amostras: (pond.n_venda || 0) + (pond.n_locacao || 0),
+          n_amostras: (pond.n_venda || 0) + (pond.n_locacao || 0), n_venda: pond.n_venda || 0, n_locacao: pond.n_locacao || 0,
           nivel: Number(pond.nivel) === 1 ? 'rua' : Number(pond.nivel) === 2 ? 'grid' : 'cidade',
           nivel_label: Number(pond.nivel) === 1 ? 'rua/condomínio (~250 m)' : Number(pond.nivel) === 2 ? 'bairro e adjacências (~1 km)' : 'cidade',
           // BANDAS de padrão do ponderado (popular/médio/alto) — antes o fallback mostrava só um
@@ -318,7 +318,7 @@ export default async function handler(req) {
             aluguel_estimado_base: null,
             aluguel_indisponivel: true,
             aluguel_indisponivel_motivo: semAluguelMotivo,
-            n_amostras: est.n_venda || 0, nivel: 'estado', nivel_label: `estado ${uf} (referência ampla)`,
+            n_amostras: est.n_venda || 0, n_venda: est.n_venda || 0, n_locacao: 0, nivel: 'estado', nivel_label: `estado ${uf} (referência ampla)`,
             bandas: Number(est.venda_pop) > 0 ? { popular: est.venda_pop, medio: est.venda_med, alto: est.venda_alto } : null,
             bairro_norm: null };
         }
