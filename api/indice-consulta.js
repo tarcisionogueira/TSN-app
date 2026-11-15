@@ -165,6 +165,10 @@ export default async function handler(req) {
     // cidade, usando o 1º nível com amostras de VENDA suficientes. Amostras sem lat/lng (legado/seed
     // de cidade) só contam no nível cidade → sem regressão. Distância equirretangular (m), como no ponderado.
     const MIN_GEO = 6;
+    // PISO DE UNIDADES (15/11, arena #484 item 3): abaixo de 5 unidades INDEPENDENTES de venda o nível não sustenta
+    // número — sobe (vizinhança → 1 km → cidade → base ponderada/acervo → estado) e DIZ por quê (`nivel_aviso`).
+    const MIN_UNIDADES = 5;
+    let nivelAviso = null;
     let nivelGeo = 'cidade';
     let regSamples = regCidade;
     if (lat != null && lng != null) {
@@ -180,6 +184,11 @@ export default async function handler(req) {
       const vendaAte = (nv) => marc.filter(x => x.nv <= nv && x.a.especie === 'venda').length;
       const escolhido = vendaAte(1) >= MIN_GEO ? 1 : (vendaAte(2) >= MIN_GEO ? 2 : 3);
       if (escolhido < 3) { regSamples = marc.filter(x => x.nv <= escolhido).map(x => x.a); nivelGeo = escolhido === 1 ? 'rua' : 'grid'; }
+      if (escolhido > 1) {
+        nivelAviso = `Na vizinhança do endereço há ${vendaAte(1)} unidade(s) de venda independente(s)`
+          + (escolhido === 3 ? ` e até 1 km, ${vendaAte(2)}` : '')
+          + ` (mínimo ${MIN_GEO}) — o valor usa ${escolhido === 2 ? 'a microrregião (~1 km)' : 'a cidade inteira'}.`;
+      }
     }
     const num = (arr) => arr.map(Number).filter(v => v > 0).sort((a, b) => a - b);
     const vendaVals = num(regSamples.filter(a => a.especie === 'venda').map(a => a.valor_m2));
@@ -234,7 +243,7 @@ export default async function handler(req) {
     }
 
     let regiao = null;
-    if (vendaVals.length >= 4 || locVals.length >= 4) {
+    if (vendaVals.length >= MIN_UNIDADES) {
       // Valor de venda = composição temporal (recente OU projetado p/ hoje); locação segue mediana.
       let vMed = (comp.valor_m2 != null ? comp.valor_m2 : mediana(vendaVals));
       // Adota a referência ponderada+encolhida quando disponível, com GUARDA de sanidade: se
@@ -283,11 +292,10 @@ export default async function handler(req) {
         // poder marcar "base fraca" em vez de afirmar. Mesma regra do dono para o aluguel:
         // "ou valor medido, ou o selo com a base declarada — nunca um número mudo".
         n_venda: vendaVals.length,
-        venda_base_fraca: vendaVals.length > 0 && vendaVals.length < 3,
-        venda_base_motivo: vendaVals.length === 0
-          ? 'nenhuma amostra de venda deste tipo na região'
-          : (vendaVals.length < 3 ? `apenas ${vendaVals.length} amostra(s) de venda — insuficiente para média confiável` : null),
+        venda_base_fraca: false,   // o ramo exige MIN_UNIDADES; abaixo disso sobe de nível (else) e declara
+        venda_base_motivo: null,
         nivel: nivelGeo,
+        nivel_aviso: nivelAviso,
         // 15/11 (arena/medição): o nível 1 junta "≤250 m" com "mesmo bairro", e a coordenada da amostra é a DECLARADA pela
         // pesquisa (carimbo), não geocodificada — "rua/condomínio" prometia uma precisão que o dado não tem.
         nivel_label: nivelGeo === 'rua' ? 'bairro / vizinhança' : nivelGeo === 'grid' ? 'microrregião (~1 km)' : 'cidade (composição de mercado)',
@@ -309,6 +317,9 @@ export default async function handler(req) {
       };
     } else {
       // Fallback (região sem amostras de mercado): ponderado com geo → acervo.
+      // 15/11 (#484 item 3): também quando a cidade tem MENOS de MIN_UNIDADES unidades de venda — antes 4 bastavam (e
+      // 4 locações faziam entrar com 1 venda). Declara a subida em vez de imprimir número de base mínima.
+      const motivoSubida = `Na cidade há ${vendaVals.length} unidade(s) de venda independente(s) deste tipo (mínimo ${MIN_UNIDADES})`;
       const pond = await rpc('indice_regiao_ponderado', { p_cidade_norm: cidadeNormDb, p_uf: uf, p_bairro_norm: bairroNorm, p_lat: lat, p_lng: lng, p_tipo: tipo });
       if (pond && (Number(pond.venda_m2) > 0 || Number(pond.locacao_m2) > 0)) {
         // Mesma escada aqui: sem locação no ponderado, tenta os bairros já medidos da cidade
@@ -328,10 +339,14 @@ export default async function handler(req) {
           // BANDAS de padrão do ponderado (popular/médio/alto) — antes o fallback mostrava só um
           // número; cidades mapeadas pelo botão "Gerar índice" (tabela plural) caíam aqui sem faixa.
           bandas: Number(pond.venda_pop) > 0 ? { popular: pond.venda_pop, medio: pond.venda_med, alto: pond.venda_alto } : null,
+          venda_base_fraca: Number(pond.venda_m2) > 0 && (Number(pond.n_venda) || 0) < MIN_UNIDADES,
+          venda_base_motivo: Number(pond.venda_m2) > 0 && (Number(pond.n_venda) || 0) < MIN_UNIDADES
+            ? `apenas ${Number(pond.n_venda) || 0} amostra(s) de venda — insuficiente para média confiável` : null,
+          nivel_aviso: `${motivoSubida} — o valor usa a base ponderada (proximidade e padrão).`,
           bairro_norm: bairroNorm || null };
       } else {
         const acervo = await rpc('indice_bidpro_regiao', { p_cidade_norm: cidadeNormDb, p_uf: uf, p_bairro: bairroNorm, p_lat: null, p_lng: null, p_tipo: tipo });
-        if (acervo && (Number(acervo.venda_m2) > 0 || Number(acervo.aluguel_m2) > 0)) regiao = { fonte: 'acervo', ...acervo };
+        if (acervo && (Number(acervo.venda_m2) > 0 || Number(acervo.aluguel_m2) > 0)) regiao = { fonte: 'acervo', ...acervo, nivel_aviso: `${motivoSubida} — o valor usa os indicadores já consolidados da cidade, não as amostras desta consulta.` };
         else {
           // ÚLTIMO nível do cascata (250m → 1km → cidade → ESTADO): referência ampla do estado
           // quando a cidade ainda não tem base própria. Fica EXPLÍCITO que é do estado.
@@ -344,6 +359,7 @@ export default async function handler(req) {
             aluguel_indisponivel: true,
             aluguel_indisponivel_motivo: semAluguelMotivo,
             n_amostras: est.n_venda || 0, n_venda: est.n_venda || 0, n_locacao: 0, nivel: 'estado', nivel_label: `estado ${uf} (referência ampla)`,
+            nivel_aviso: `${motivoSubida} — o valor é a referência do estado ${uf}, não da cidade.`,
             bandas: Number(est.venda_pop) > 0 ? { popular: est.venda_pop, medio: est.venda_med, alto: est.venda_alto } : null,
             bairro_norm: null };
         }

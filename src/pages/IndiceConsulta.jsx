@@ -403,6 +403,13 @@ export default function IndiceConsulta() {
               <span style={{ fontSize: 14, fontWeight: 800, color: '#111' }}>{form.cidade}/{form.uf}{reg.bairro_norm ? ` · ${form.bairro}` : ''}</span>
               <span style={{ fontSize: 11, color: '#64748b' }}>nível {nivelLabel} · {reg.n_amostras || 0} amostras{reg.n_venda != null ? ` (${reg.n_venda} venda · ${reg.n_locacao || 0} locação)` : ''}</span>
             </div>
+            {/* SUBIU DE NÍVEL (15/11, #484 item 3): com menos de 5 unidades independentes no nível pedido, o valor vem do
+                nível acima — e o cliente lê isso aqui, em vez de achar que o número é da vizinhança. */}
+            {reg.nivel_aviso && (
+              <div style={{ background: '#fffbeb', border: '1px solid #fde68a', color: '#92400e', borderRadius: 10, padding: '8px 12px', fontSize: 11, lineHeight: 1.5, marginBottom: 10 }}>
+                {reg.nivel_aviso}
+              </div>
+            )}
             {/* SELO DE PROVA (15/11, arena #484): do que é feito o número — o cliente vê quanto tem link de anúncio,
                 quanto veio de página de busca de portal e quanto não tem link; e quantas repetições deixaram de contar. */}
             {res.prova && res.prova.unidades > 0 && (

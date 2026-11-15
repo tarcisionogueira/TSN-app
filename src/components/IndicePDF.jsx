@@ -126,6 +126,7 @@ ${cabecalhoBidPro({
 <div class="av" style="border:1px solid #c7d2fe;background:#eef2ff;border-radius:12px;padding:12px 16px;margin-bottom:14px;">
   <div style="font-size:13px;font-weight:800;color:#111;">${esc(local || `${form.cidade}/${form.uf}`)}</div>
   <div style="font-size:11px;color:#64748b;">Nível ${esc(nivelLabel)} · ${esc(reg.n_amostras || 0)} amostras · Tipo: ${esc(tipoLabel)}</div>
+  ${reg.nivel_aviso ? `<div style="font-size:10.5px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:6px 10px;margin-top:6px;">${esc(reg.nivel_aviso)}</div>` : ''}
 </div>
 ${avisoHtml}
 <div class="grid2 av">

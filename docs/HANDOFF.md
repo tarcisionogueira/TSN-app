@@ -6,6 +6,17 @@
 
 
 
+## 15/11 (noite, 3) — ÍNDICE: PISO DE 5 UNIDADES E SUBIDA DE NÍVEL DECLARADA (#484, item 3)
+
+- `api/indice-consulta.js`: o ramo de mercado exige `MIN_UNIDADES = 5` unidades INDEPENDENTES de venda (antes 4 vendas OU
+  4 locações — com 1 venda e 4 locações imprimia R$/m² de 1 anúncio). Abaixo disso cai na escada já existente (ponderado →
+  indicadores da cidade → estado) e grava `regiao.nivel_aviso` dizendo quantas unidades havia e de onde veio o valor.
+  Com coordenada, a subida vizinhança → 1 km → cidade também é declarada (contagens de cada nível).
+- Tela (`IndiceConsulta.jsx`) e PDF (`IndicePDF.jsx`) mostram o aviso em âmbar logo abaixo do nível.
+- Medido: 99 combinações cidade×tipo seguem no ramo de mercado; 4 (com 1–3 vendas) já caíam na escada e agora dizem por
+  quê; nenhuma estava no limiar de 4. O ganho visível é a declaração, sobretudo na consulta com endereço.
+- Falta do plano: item 4 (invariantes) e 5 (FipeZap/laudo como alarme).
+
 ## 15/11 (noite, 2) — ÍNDICE: PESO PELA PROVA + TETO DE 35% POR ORIGEM (#484, item 2)
 
 - `api/_indice-peso.js` (puro): conferido 1 · link próprio/não conferível 0,5 · busca 0,3 · sem link 0,2; nenhuma origem
