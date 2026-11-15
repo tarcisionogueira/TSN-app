@@ -6,6 +6,27 @@
 
 
 
+## 15/11 — #305: SERVICE_ROLE COM 45 s, CI VERDE DE NOVO, WR SEM "ENCERRA EM", RLS INITPLAN
+
+- **Causa dos 57014 (~30/dia desde 09/11), medida:** banco 1,5 GB, `shared_buffers` 256 MB (Micro). A contagem de
+  `live_plataforma_numeros_atualizar` leva **12,4 s com cache frio e 0,9 s quente** — disco, não SQL. Os máximos do
+  `pg_stat_statements` param em ~7,9 s: é o corte de 8 s que o service_role herda do `authenticator`.
+- **⚠️ `SET statement_timeout` na FUNÇÃO não dá teto maior** (testado: função com 10 s sob sessão de 2 s caiu aos 2 s). O
+  comentário de `anexos_expirados_timeout_resiliente.sql` e o `snapshot_metricas_fontes` acreditavam no contrário.
+- **Aplicado (decisão tomada nesta sessão a pedido do dono, "resolver tudo"; a nota de 08/11 deixava com ele):**
+  `alter role service_role set statement_timeout = '45s'` (migração `20261115_service_role_statement_timeout.sql`).
+  Só o servidor usa; anon 3 s e authenticated 8 s intactos. Reverter: `alter role service_role reset statement_timeout;
+  notify pgrst, 'reload config';`. **Não resolve** página pública/painel/alertas com cache frio → pendência 480 (compute).
+- Arquivo de inativos (`arquivar_lotes_inativos`) hoje rende só 3.130 linhas: 25,6 mil inativas têm resultado de leilão.
+- **RLS initplan (7 políticas) e 9 FKs sem índice** — `20261115_rls_initplan_e_indices_fk.sql`, aplicada.
+- **REVOKE pronto para o dono** (#479): `20261115_revogar_homio_leads_e_parcelamento_anon.sql`.
+- **CI "Testes" vermelho desde 13/11:** `sbidloja-parse` usava o relógio real e venceu com a praça de 13/11. Relógio fixo.
+- **WRLEILOES 13–14/11:** 12× "parser não leu a página". Parser agora aceita lote sem "Encerra em" usando o Encerramento da
+  página do leilão (#481 confere a rodada).
+- `espelhar-docs` guardava só "HTTP 500" — agora grava o corpo do erro.
+- **#471 fechada** (Homio já recebe: segredo na Vercel desde 11/11, 3 leads). Security definer views
+  (`imoveis_leilao_mascarado`, `veiculos_vitrine`) são de propósito: mascaram coluna para o anon.
+
 ## 12/11 (noite) — CÓDIGO DE VALIDAÇÃO EM TODAS AS PÁGINAS DOS DOCUMENTOS ASSINADOS
 
 - **Caso (dono):** pediu um código ligando todas as páginas do documento à folha de assinaturas, como nos serviços de assinatura, em todos os

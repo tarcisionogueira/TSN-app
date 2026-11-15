@@ -341,7 +341,9 @@ export default async function handler(req, res) {
     const tPub = Date.now();
     for (let k = 0; k < 10 && (k === 0 || (Date.now() - tPub < 40000 && Date.now() - t0 < 280000)); k++) {
       const r = await sb('rpc/registrar_anexos_do_espelho', { method: 'POST', body: JSON.stringify({ p_limite: LOTE_PUB }) });
-      if (!r.ok) { publicados = { ...somaPub, erro: `HTTP ${r.status}` }; break; }
+      // 15/11: o motivo do 500 ia embora (só "HTTP 500" em 7 rodadas de 24/10 a 13/11) — o corpo diz se é o 57014
+      // (statement timeout, mesmo sintoma dos outros crons até o service_role ganhar 45 s) ou outra coisa.
+      if (!r.ok) { publicados = { ...somaPub, erro: `HTTP ${r.status} ${(await r.text().catch(() => '')).slice(0, 160)}` }; break; }
       const j = await r.json().catch(() => null) || {};
       somaPub.chamadas++;
       for (const c of ['inseridos', 'preenchidos', 'outros_publicados']) somaPub[c] += Number(j[c]) || 0;

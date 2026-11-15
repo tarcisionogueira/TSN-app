@@ -1,7 +1,7 @@
 -- A RPC anexos_expirados (usada pelo limpar-documentos-cron) leva ~6,3s por lote de
 -- 500 (NOT EXISTS em analises_mercado/documental/laudo + reunioes + join imoveis) —
 -- perto/acima do teto de 8s que o PostgREST aplica às RPCs (authenticator=8s; o
--- service_role null herda esse teto na prática). Resultado: o cron recebia timeout,
+-- service_role null herda esse teto na prática). [15/11: o SET na função NÃO sobe esse teto — ver 20261115_service_role_statement_timeout.sql.] Resultado: o cron recebia timeout,
 -- quebrava no 1º lote e NÃO apagava nada — a limpeza praticamente nunca drenou
 -- (só ~364 de ~7,7 mil anexos limpos historicamente), por isso o bucket documentos
 -- inchou. Fix resiliente: teto de tempo próprio (60s), como no snapshot_metricas_fontes.

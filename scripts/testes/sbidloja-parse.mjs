@@ -30,7 +30,9 @@ assert.deepEqual([det.cidade, det.estado, det.valor_minimo, det.valor_avaliacao]
 assert.deepEqual([det.data_leilao, det.data_leilao_2, det.valor_minimo_2], ['2026-11-12', '2026-11-19T14:00:00-03:00', 41000]);
 assert.equal(det.modalidade, 'judicial');
 assert.equal(det.numero_processo, '5012023-85.2019.8.24.0064');
-assert.equal(det.encerrado, false);
+// Relógio FIXO no dia da fixture (27/10) para o "ainda aberto": com o relógio real o teste vencia junto com a
+// praça (13/11) e o CI ficou vermelho em todo push desde então sem nada ter mudado no parser.
+assert.equal((await import('../lib/sbidloja-parse.mjs')).detalheDaOferta(JSON.parse(txt).offers[0], Date.parse('2026-10-27T12:00:00-03:00')).encerrado, false);
 assert.ok(det.link_foto && det.fotos.length >= 1);
 assert.equal(detalhesDoCatalogo(txt, Date.parse('2026-11-20')).size, 1);
 const vencido = JSON.parse(txt).offers[0];

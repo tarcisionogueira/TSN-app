@@ -58,6 +58,13 @@ eq('antes dele, aberto', (await parseDetalhe(ler('lote-imovel'), uLote, { fetchF
 const semLeilao = await parseDetalhe(ler('lote-imovel'), uLote, { fetchFonte: async () => ({ html: null, via: 'dom-falha' }), agora: AGORA });
 eq('sem a página do leilão: lote lido, sem edital', [semLeilao.valor_minimo, semLeilao.data_leilao, semLeilao.link_edital], [320000, '2026-11-30', null]);
 
+// 5b. (15/11) Página do lote SEM "Encerra em" (13–14/11: os 12 lotes abertos voltaram "parser não leu"): a data vem do
+// "Encerramento" da página do leilão; sem data em lugar nenhum, continua null (não inventa).
+const semData = ler('lote-imovel').replace(/Encerra em/gi, 'Termina');
+const viaLeilao = await parseDetalhe(semData, uLote, { fetchFonte, agora: AGORA });
+eq('lote sem data → data do leilão', [viaLeilao?.data_leilao, viaLeilao?.valor_minimo], ['2026-11-30', 320000]);
+eq('lote sem data e leilão fora do ar → null', await parseDetalhe(semData, uLote, { fetchFonte: async () => ({ html: null, via: 'dom-falha' }), agora: AGORA }), null);
+
 // 6. Veículo e casca vazia
 eq('lote de veículo marcado como não imóvel', (await parseDetalhe(ler('lote-veiculo'), `${B}/lotes/cb074c02-4cae-4973-8423-cd6bb75003b1`, { fetchFonte, agora: AGORA })).naoImovel, true);
 eq('casca do app sem título → null (não consegui ler)', await parseDetalhe('<html><body><div id="root"></div></body></html>', uLote, { fetchFonte }), null);

@@ -139,9 +139,13 @@ export async function parseDetalhe(html, url, { fetchFonte = null, agora = new D
   const h = String(html || '');
   const titulo = textoDe((h.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i) || [])[1]).replace(/\n/g, ' ').slice(0, 200);
   const t = textoDe(h);
-  // Sem título e sem "Encerra em" a página não renderizou (casca do app): "não consegui ler", nunca lote vazio.
-  const encTxt = (t.match(/Encerra em\n?([^\n]*\d{2}\/\d{2}\/\d{4}[^\n]*(?:\nhor[áa]rio[^\n]*)?)/i) || [])[1];
-  if (!titulo || !encTxt) return null;
+  // Sem título a página não renderizou (casca do app): "não consegui ler", nunca lote vazio.
+  // 15/11: até aqui também se exigia "Encerra em" NA PÁGINA DO LOTE. Em 13 e 14/11 os 12 lotes abertos (praça 30/11, já
+  // no banco desde 12/11) voltaram todos "parser não leu a página" — com o leilão aberto para lances a página do lote
+  // deixou de trazer a data por extenso. A data é do LEILÃO: sem ela no lote, vale o "Encerramento" da página do leilão
+  // (já lida para o edital, uma vez por rodada). Sem data em nenhuma das duas, segue null (não inventa).
+  const encLote = (t.match(/Encerra(?:\s+em|mento)\n?([^\n]*\d{2}\/\d{2}\/\d{4}[^\n]*(?:\nhor[áa]rio[^\n]*)?)/i) || [])[1];
+  if (!titulo) return null;
 
   const corpo = ((t.match(/\nObserva[çc][õo]es\n([\s\S]*?)\nHist[óo]rico de lances/i) || [])[1] || '').replace(/\*\*/g, '').trim();
   const descricao = [titulo, corpo].filter(Boolean).join('\n').slice(0, 8000);
@@ -151,13 +155,14 @@ export async function parseDetalhe(html, url, { fetchFonte = null, agora = new D
   // Grava o DIA (local do leilão), como as outras fontes; a hora fica só para decidir "já encerrou". Motivo (11/11): no
   // TRT11 o site diz "Encerra em 30/11/2026, 12:00 horário de Manaus" e o texto do edital diz "no dia 30 de novembro de
   // 2026, às 9h30" — o dia bate, a hora não, e gravar uma hora que diverge do edital é exatamente o erro a evitar.
-  const encerraEm = dataComFuso(encTxt);
-  const dataLeilao = encerraEm ? encerraEm.slice(0, 10) : null;
-
   const hrefLeilao = (h.match(new RegExp(`href="(/leiloes/${UUID})"`, 'i')) || [])[1];
   const leilao = await leilaoDe(hrefLeilao ? `${BASE}${hrefLeilao}` : null, fetchFonte);
   if (leilao?.erro) console.log(`   [WRLEILOES] lote ${idDaUrl(url)}: página do leilão não abriu (${leilao.erro}) — segue sem edital`);
   const L = leilao && !leilao.erro ? leilao : null;
+
+  const encerraEm = (encLote && dataComFuso(encLote)) || L?.encerramento || null;
+  if (!encerraEm) return null;   // título sem data em lugar nenhum: ainda é "não consegui ler"
+  const dataLeilao = encerraEm.slice(0, 10);
 
   let local = cidadeDoBem(titulo);
   if (!local.cidade) local = cidadeDoBem(corpo);
