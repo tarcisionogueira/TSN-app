@@ -26,6 +26,16 @@ honesta (preço PEDIDO, nem tudo conferido, não substitui NBR 14653), rótulo "
 `indice_amostra` × plural `indice_amostras`, prova por amostra, ponderação por evidência, selo ao cliente, invariantes;
 FipeZap/laudo só como alarme). Mercadológico: comparáveis sem prova e carimbo de coordenada na **#482**.
 
+**Índice — P0/P1 da arena executados na mesma noite (#484):** corpus único (`indice_amostra`; a plural
+`indice_amostras` está congelada — REVOKE/DROP com o dono, comandos na #484); distância só com
+`coord_origem='geocodificada'` (o carimbo do relatório não conta mais como vizinhança; o geocodificador agora roda na
+tabela nova e pega também as carimbadas); view `indice_amostra_indep` = unidades independentes (mesmo preço+área+BAIRRO
+funde; 4.912 → 4.528; Salvador apto 12.867 → 8.867) com `prova` (sem_link / listagem / link_proprio) e `n_copias`;
+selo de prova na tela e no PDF. ⚠️ **Lição:** a cópia da plural trouxe de volta as 13 amostras de Capão que tinham
+sido apagadas só da singular — limpeza de dado tem de alcançar TODAS as tabelas que guardam a mesma coisa, ou esperar
+a unificação. O DELETE de correção travou no conector (confirmação do dono não aparece na sessão); o dono rodou no SQL
+Editor (13 rows).
+
 **Relatório do apto do Brooklin (MEGA X131536):** mostrava "Sinal 5%" e "Parcela do banco R$ 9.051". O edital (lido
 por inteiro via Firecrawl, 9 créditos) exige o preço TODO em 24 h, à vista, e PROÍBE FGTS. Cadeia: extrator lia
 `fgts:true` pela palavra na frase de proibição → `gerar-analise` (~linha 4438) reescreveu o lote à vista para
