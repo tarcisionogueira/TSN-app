@@ -78,11 +78,19 @@ export default async function handler(req) {
     // (indice_amostra: anúncios/revendas capturados pelos relatórios). Assim o número
     // reflete exatamente os comparáveis mostrados, e o dono confere a composição. Só cai
     // no ponderado-com-geo (indice_amostras) / acervo quando a região não tem amostras.
+    // "NÃO CONSEGUI LER" NÃO É "SEM AMOSTRAS" (15/11, achado do juiz da arena). Devolvia [] em HTTP não-2xx e em
+    // exceção: um 400 ou o timeout de 8 s virava "região sem amostras" e a tela caía calada no ponderado/acervo —
+    // número de outra base apresentado como se fosse o desta. Agora lança; quem chama decide (a leitura principal
+    // responde 503, a auxiliar segue sem o complemento e deixa rastro).
     const restGet = async (path, q) => {
+      let r;
       try {
-        const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}?${q}`, { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } });
-        return r.ok ? await r.json().catch(() => []) : [];
-      } catch { return []; }
+        r = await fetch(`${SUPABASE_URL}/rest/v1/${path}?${q}`, { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } });
+      } catch (e) { const err = new Error(`leitura de ${path} falhou: ${e?.message || e}`); err.leitura = true; throw err; }
+      if (!r.ok) { const err = new Error(`leitura de ${path} falhou: HTTP ${r.status} ${(await r.text().catch(() => '')).slice(0, 160)}`); err.leitura = true; throw err; }
+      const j = await r.json().catch(() => null);
+      if (!Array.isArray(j)) { const err = new Error(`leitura de ${path} devolveu corpo ilegível`); err.leitura = true; throw err; }
+      return j;
     };
     // Defesa em LEITURA anti-leilão (a base já é limpa na gravação; cobre legado).
     const semLeilao = (arr) => (Array.isArray(arr) ? arr : []).filter(a => !ehAmostraDeLeilao(a));
@@ -119,7 +127,9 @@ export default async function handler(req) {
       // Bairros JÁ medidos da mesma cidade (média ponderada pelo nº de amostras de cada um).
       // Só nivel='bairro': as linhas 'grid' repetem o mesmo valor e contariam em dobro.
       const linhas = await restGet('cidade_indicadores',
-        `nivel=eq.bairro&cidade_norm=eq.${encodeURIComponent(cidadeNormDb)}&uf=eq.${uf}&tipo=eq.${encodeURIComponent(tipo)}&aluguel_m2=not.is.null&select=bairro_norm,aluguel_m2,n_amostras&limit=200`);
+        `nivel=eq.bairro&cidade_norm=eq.${encodeURIComponent(cidadeNormDb)}&uf=eq.${uf}&tipo=eq.${encodeURIComponent(tipo)}&aluguel_m2=not.is.null&select=bairro_norm,aluguel_m2,n_amostras&limit=200`)
+        .catch((e) => { console.error('[indice-consulta] aluguel por bairros sem leitura:', e.message); return null; });
+      if (linhas === null) return null;   // não consegui ler: sem complemento (não é "nenhum bairro medido")
       const vals = (Array.isArray(linhas) ? linhas : [])
         .map(l => ({ v: Number(l.aluguel_m2), n: Math.max(1, Number(l.n_amostras) || 1) }))
         .filter(x => x.v >= 1 && x.v <= 500);
@@ -265,7 +275,9 @@ export default async function handler(req) {
           ? 'nenhuma amostra de venda deste tipo na região'
           : (vendaVals.length < 3 ? `apenas ${vendaVals.length} amostra(s) de venda — insuficiente para média confiável` : null),
         nivel: nivelGeo,
-        nivel_label: nivelGeo === 'rua' ? 'rua/condomínio (~250 m)' : nivelGeo === 'grid' ? 'microrregião (~1 km)' : 'cidade (composição de mercado)',
+        // 15/11 (arena/medição): o nível 1 junta "≤250 m" com "mesmo bairro", e a coordenada da amostra é a DECLARADA pela
+        // pesquisa (carimbo), não geocodificada — "rua/condomínio" prometia uma precisão que o dado não tem.
+        nivel_label: nivelGeo === 'rua' ? 'bairro / vizinhança' : nivelGeo === 'grid' ? 'microrregião (~1 km)' : 'cidade (composição de mercado)',
         bairro_norm: bairroNorm || null,
         // COMPOSIÇÃO TEMPORAL — frescor + projeção + quantitativo (pedido do dono).
         total_anuncios: comp.total_anuncios,
@@ -299,7 +311,7 @@ export default async function handler(req) {
           aluguel_origem: amploFb ? amploFb.origem : null,
           n_amostras: (pond.n_venda || 0) + (pond.n_locacao || 0), n_venda: pond.n_venda || 0, n_locacao: pond.n_locacao || 0,
           nivel: Number(pond.nivel) === 1 ? 'rua' : Number(pond.nivel) === 2 ? 'grid' : 'cidade',
-          nivel_label: Number(pond.nivel) === 1 ? 'rua/condomínio (~250 m)' : Number(pond.nivel) === 2 ? 'bairro e adjacências (~1 km)' : 'cidade',
+          nivel_label: Number(pond.nivel) === 1 ? 'bairro / vizinhança' : Number(pond.nivel) === 2 ? 'bairro e adjacências (~1 km)' : 'cidade',
           // BANDAS de padrão do ponderado (popular/médio/alto) — antes o fallback mostrava só um
           // número; cidades mapeadas pelo botão "Gerar índice" (tabela plural) caíam aqui sem faixa.
           bandas: Number(pond.venda_pop) > 0 ? { popular: pond.venda_pop, medio: pond.venda_med, alto: pond.venda_alto } : null,
@@ -385,6 +397,10 @@ export default async function handler(req) {
     const composicao = await rpc('indice_composicao', { p_cidade_norm: cidadeNormDb, p_uf: uf, p_bairro_norm: bairroNorm, p_lat: lat, p_lng: lng, p_tipo: tipo }).catch(() => null);
     return new Response(JSON.stringify({ ok: true, mapeado, regiao, valorizacao: valorizacao || null, amostras: Array.isArray(amostras) ? amostras : [], amostras_ano, periodos: (regiao && regiao.periodos) ? comp.periodos : [], aviso, regioes, composicao }), { status: 200, headers });
   } catch (e) {
+    if (e?.leitura) {
+      console.error('[indice-consulta] base ilegível:', e.message);
+      return new Response(JSON.stringify({ error: 'Não consegui ler a base do Índice agora. Tente de novo em instantes.', detalhe: e.message }), { status: 503, headers });
+    }
     return new Response(JSON.stringify({ error: e.message || 'Falha na consulta' }), { status: 500, headers });
   }
 }
