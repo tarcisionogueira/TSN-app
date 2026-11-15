@@ -6,6 +6,20 @@
 
 
 
+## 15/11 (noite, 12) — MEDIÇÃO EM SECO DO DECISOR NOS TEXTOS REAIS: três parceláveis viravam VETO (corrigido)
+
+Rodado `montarCondicoesPagamento` + extrator sobre 11 trechos reais de relatórios dos últimos 45 dias
+(scratchpad/seco/cond.mjs). Achado: a regra da manhã "à vista sem prova de parcelamento = vedado" + extrator que só
+conhecia "parcelament*" transformava em VETO (trava o botão do cenário parcelado):
+- LJUD Feira ("PAGAMENTO DE FORMA PARCELADA … poderá ser parcelado … 25% … restante parcelado em até 30 (trinta) meses");
+- MULLERLEIL ("propostas de arrematação parcelada", art. 895);
+- SUPERBID/Inter ("à vista ou financiado diretamente com o vendedor", "com financiamento junto a qualquer agente").
+Extrator agora reconhece parcelad[oa], "em prestações", "art. 895", "parcelado em até N (extenso) meses", "N% do lance à
+vista e o restante", e financiável "financiado diretamente com / com financiamento junto / ou financiado" (com guarda de
+negação). Os 5 textos reais viraram teste (`testar:condicoes-origem`). Resultado em seco: 7 parcelados com prova do
+trecho, 4 à vista (Brooklin, WINLEILOES, Itu 20%+80% em 24h, TURANI cujo trecho citado não fala de parcela — lado seguro).
+`CORTE_EXTRATOR_PAGAMENTO` movido para 15/11 22h45 UTC: o cache gravado pelo extrator da manhã também é relido.
+
 ## 15/11 (noite, 11) — DOCUMENTAL: só "consta no documento" confirma; lista de riscos na tela
 
 - `gerar-documental.js`: confirmado = `constaNaDoc === true` (ausente contava como confirmado e podia pintar

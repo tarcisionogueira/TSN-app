@@ -163,6 +163,8 @@ export function extrairPagamentoTexto(texto) {
       const m = t.match(/(?:em\s+at[ée]|parcelad[oa]\s+em|at[ée])\s+(\d{1,3})\s*(?:parcelas|vezes|x)\b/i)
              || t.match(/(?:\+|em)\s*(\d{1,3})\s*x\b/i)
              || t.match(/(?:\+|e|mais|em)\s+(\d{1,2})\s+parcelas\b/i)
+             // "o restante parcelado em até 30 (trinta) meses" (art. 895, editais LJUD) — o número por extenso entre parênteses.
+             || t.match(/parcelad[oa]\s+em\s+at[ée]\s+(\d{1,3})\s*(?:\([^)]{0,20}\)\s*)?(?:parcelas|meses|vezes|x)\b/i)
              // Faixa (15/11, SUPERBID/Banco Inter): "Saldo de 24 a 240 parcelas mensais" — vale o teto da faixa.
              || t.match(/\bde\s+\d{1,3}\s+a\s+(\d{1,3})\s+parcelas\b/i);
       let n = m ? Number(m[1]) : 0;
@@ -178,7 +180,9 @@ export function extrairPagamentoTexto(texto) {
     // Duas ordens: "sinal de 50%" e "50% de sinal" (16/10, documental do lote TJSP em Santana de Parnaíba).
     // "a partir de" (15/11, SUPERBID/Banco Inter): "Sinal a partir de 30% e Saldo Financiado em até 240x".
     sinalPct: pct(/(?:sinal|entrada)\s+(?:de\s+|m[íi]nim[oa]\s+de\s+|a\s+partir\s+de\s+)?(\d{1,2}(?:,\d{1,2})?)\s*%/i)
-      ?? pct(/(\d{1,2}(?:,\d{1,2})?)\s*%\s+(?:de|a\s+t[íi]tulo\s+de)\s+(?:sinal|entrada)\b/i),
+      ?? pct(/(\d{1,2}(?:,\d{1,2})?)\s*%\s+(?:de|a\s+t[íi]tulo\s+de)\s+(?:sinal|entrada)\b/i)
+      // "deverá pagar 25% do valor do lance à vista e o restante parcelado" (art. 895) — a entrada do parcelamento.
+      ?? pct(/(\d{1,2}(?:,\d{1,2})?)\s*%\s+do\s+(?:valor\s+do\s+)?lance\s+[àa]\s+vista\s+e\s+o\s+restante/i),
     caucaoPct: pct(/cau[çc][ãa]o\s+(?:de\s+)?(\d{1,2}(?:,\d{1,2})?)\s*%/i),
     // "mínimo de R$ 5.000,00 por parcela" (03/11, Peruíbe): limita o número de parcelas da projeção.
     parcelaMinima: parcelaMinimaDoTexto(t),
@@ -193,7 +197,12 @@ export function extrairPagamentoTexto(texto) {
       return v >= 0.5 && v <= 20 ? v : null;
     })(),
     prazoDias: (() => { const m = t.match(/prazo\s+(?:de|para)\s+(?:pagamento|dep[óo]sito|quita[çc][ãa]o)[^.;]{0,30}?(\d{1,3})\s*(?:dias?|horas?)/i); if (!m) return null; const n = Number(m[1]); const horas = /horas?/i.test(m[0]); return n > 0 ? (horas ? Math.max(1, Math.round(n / 24)) : n) : null; })(),
-    financiavel: /financiamento\s+(?:habitacional|banc[áa]rio|imobili[áa]rio)|aceita\s+financiamento|pode\s+ser\s+financiad/i.test(t) ? true
+    // 15/11: "poderão ser pagos à vista ou financiado diretamente com o vendedor", "com financiamento junto a qualquer
+    // agente financeiro" (Banco Inter/SUPERBID) não eram reconhecidos.
+    // Cada menção positiva passa pela guarda de negação próxima (40 caracteres antes): "não será aceito pagamento
+    // parcelado ou financiado" não é financiável.
+    financiavel: [...t.matchAll(/financiamento\s+(?:habitacional|banc[áa]rio|imobili[áa]rio)|aceita\s+financiamento|pode\s+ser\s+financiad|financiad[oa]\s+diretamente\s+com|com\s+financiamento\s+junto|ou\s+financiad[oa]\b/gi)]
+      .some((m) => !/n[ãa]o|vedad|proibid|sem\s+direito/i.test(t.slice(Math.max(0, m.index - 40), m.index))) ? true
       : (/n[ãa]o\s+(?:temos|h[áa]|ha|aceita|aceitamos|ser[áa]\s+aceito|[ée]\s+permitido|[ée]\s+aceito)\s+(?:o\s+)?financiamento|sem\s+financiamento|vedad[oa]\s+o\s+financiamento/i.test(t) ? false : null),
     fgts: mencao(/\bfgts\b/gi),
     // PARCELAMENTO GENÉRICO (17/09) — sinal PRÓPRIO, separado de `parcelas` (que exige o
@@ -206,7 +215,11 @@ export function extrairPagamentoTexto(texto) {
     // e o veto (condicoesDoEdital → somenteAVista) nunca disparava.
     parcelamentoPermitido: (() => {
       let negado = false;
-      for (const m of t.matchAll(/parcelament\w*/gi)) {
+      // 15/11 (medição em seco nos relatórios reais): só "parcelament*" contava. "PAGAMENTO DE FORMA PARCELADA: o pagamento
+      // poderá ser parcelado (art. 895)", "propostas de arrematação parcelada", "admitidas propostas em prestações" ficavam
+      // de fora — e a regra "à vista sem prova = vedado" (abaixo) transformava o silêncio em VETO, travando o cenário
+      // parcelado de lote judicial que o oferece.
+      for (const m of t.matchAll(/parcelament\w*|parcelad[oa]s?\b|em\s+presta[çc][õo]es|art(?:igo|\.)?\s*895\b/gi)) {
         const antes = t.slice(Math.max(0, m.index - 40), m.index);
         if (/n[ãa]o|vedad|proibid|sem\s+direito|indeferid/i.test(antes)) { negado = true; continue; }
         return true;

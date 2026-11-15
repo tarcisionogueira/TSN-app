@@ -19,7 +19,7 @@ import { classificarDocumento, blocoParaIA, temTextoUtil } from './_doc-leitura.
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
 // Deploy do conserto do extrator de pagamento (f6abb16 + dac5ae4, 15/11): `pagamento` em cache anterior é relido.
-export const CORTE_EXTRATOR_PAGAMENTO = '2026-11-15T19:00:00Z';
+export const CORTE_EXTRATOR_PAGAMENTO = '2026-11-15T22:45:00Z';   // 15/11 22h: + reconhecimento de "parcelado"/"art. 895"/"financiado com o vendedor" (o corte das 19h deixava em cache o veto errado da manhã)
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 /**

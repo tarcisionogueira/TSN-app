@@ -54,4 +54,19 @@ assert.equal(pagamentoNaoConfirmado({ ...dVazio, ...pcA }, false), true);
 assert.match(fraseCondicoesPagamento({ ...pcA, origem: pcA.origemCondicoesPagamento }), /NÃO confirmadas no edital.*anúncio/);
 // Do edital mesmo, continua 'edital'.
 assert.equal(aplicarCondicoesEdital(dVazio, { parcelas: 10, sinalPct: 25 }, '').origemCondicoesPagamento, 'edital');
+// 10. TEXTOS REAIS (medição em seco de 15/11 nos relatórios dos últimos 45 dias): parcelável de verdade não pode virar
+// veto. Antes do conserto, os três primeiros saíam "parcelamento vedado" e travavam o cenário parcelado.
+const reais = [
+  ['judicial', 'PAGAMENTO DE FORMA À VISTA: A arrematação far-se-á mediante pagamento à vista do preço pelo arrematante através de guia de depósito judicial, no prazo de 24 horas. PAGAMENTO DE FORMA PARCELADA: O pagamento poderá ser parcelado em primeiro leilão por valor não inferior ao da avaliação, conforme art. 895, I e II, do CPC: I – O arrematante deverá pagar 25% do valor do lance à vista e o restante parcelado em até 30 (trinta) meses', 'financiado', { parcelas: 30, sinalPct: 25 }],
+  ['judicial', 'As propostas de arrematação parcelada deverão ser enviadas por escrito ao leiloeiro antes do leilão. Caso haja lance à vista na plataforma, todas as propostas para pagamento parcelado serão desconsideradas (art. 895, §7º, CPC).', 'financiado', {}],
+  ['extrajudicial', 'FORMAS DE PAGAMENTO: Imóveis OCUPADOS poderão ser pagos à vista ou financiado diretamente com o vendedor. Imóveis DESOCUPADOS poderão ser pagos à vista ou com financiamento junto a qualquer agente financeiro. O uso do FGTS é possível.', 'financiado', { financiavel: true }],
+  ['extrajudicial', 'O PAGAMENTO DEVERÁ SER FEITO À VISTA acrescido da COMISSÃO DE 5% (CINCO POR CENTO) DO LEILOEIRO, AMBOS DEPOSITADOS EM CONTA CORRENTE DO LEILOEIRO em até 48 horas após o leilão.', 'aVista', { parcelamentoPermitido: false }],
+  ['judicial', 'Sobre a parte do(a) coproprietário(a) não se aplica parcelamento. Em caso de imóveis, o pagamento poderá ser parcelado em primeiro leilão.', 'financiado', {}],
+];
+for (const [mod, t, cen, esperado] of reais) {
+  const rr = extrairPagamentoTexto(t);
+  for (const [k, v] of Object.entries(esperado)) assert.equal(rr[k], v, `${k} em: ${t.slice(0, 60)}`);
+  assert.equal(montarCondicoesPagamento({ edital: { regras: rr, texto: t }, modalidade: mod }).cenarioInicial, cen, t.slice(0, 60));
+}
+assert.notEqual(extrairPagamentoTexto('Pagamento à vista. Não será aceito pagamento parcelado ou financiado.').financiavel, true, 'negação de financiado');
 console.log('condicoes-origem: ok');
