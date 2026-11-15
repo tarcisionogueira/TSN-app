@@ -3,7 +3,7 @@
  * custo Bright Data ZERO). Wrapper fino do motor; fonte em lib/motor/fontes/alfaleiloes.mjs;
  * parser puro em lib/alfa-parse.mjs.
  *
- * Env: ALFA_MAX_LOTES (40) · ALFA_MAX_PAGES (5) · ALFA_DRYRUN (default '1') · ALFA_DEBUG.
+ * Env: ALFA_MAX_LOTES (40) · ALFA_MAX_PAGES (30) · ALFA_DRYRUN (default '1') · ALFA_DEBUG.
  * Env infra: VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY.
  */
 import './lib/env-runner.mjs';   // carrega ~/.bidpro-runner.env quando rodado na mão
@@ -18,7 +18,7 @@ if (!SB_URL || !SB_KEY) { console.error('Faltam VITE_SUPABASE_URL / SUPABASE_SER
 rodarFonte(cfg, {
   supabase: createClient(SB_URL, SB_KEY),
   maxLotes: Number(process.env.ALFA_MAX_LOTES || 40),
-  maxPages: Number(process.env.ALFA_MAX_PAGES || 12), // 09/11: 5 ainda cortava (86 no site, 40 lidos); grátis, o laço para na 1ª página sem lote novo
+  maxPages: Number(process.env.ALFA_MAX_PAGES || 30), // 15/11: 12 ainda cortava (213 em 12 páginas, com próxima) e a limpeza de sumidos nunca rodava; grátis, o laço para na 1ª página sem lote novo
   dryrun: process.env.ALFA_DRYRUN !== '0',
   debug: process.env.ALFA_DEBUG === '1',
 }).catch(e => { console.error(e); process.exit(1); });

@@ -4619,7 +4619,25 @@ async function scraperPestana(browser) {
     // página vir incompleta, tenta 2× e, se ainda falhar, marca a coleta como PARCIAL.
     const QTD = 300;
     const falhas = [];
+    // PROVA DE VIDA + MENOS CHAMADAS (15/11, #461). O /api/v2/lote responde a página de captcha da Radware depois de
+    // poucas chamadas (29 de 32 leilões "não lidos" por dias seguidos), enquanto /api/v2/leilao segue aberto — e ele já
+    // traz os ids de lote de cada leilão (`lotes: [443438, …]`). Então: (a) todo id listado é lote VIVO para o sweep
+    // (vivosNaFonte, como o mapa do ZUK); (b) leilão cujos lotes já estão todos ativos e atualizados há < 3 dias não
+    // chama o endpoint protegido — só gasta chamada quem tem lote novo ou parado. Menos chamadas, menos captcha.
+    const vivosPestana = new Set();
+    for (const l of imovLeiloes) for (const lid of (Array.isArray(l.lotes) ? l.lotes : [])) vivosPestana.add(`pestana_${lid}`);
+    const frescos = new Set();
+    {
+      const desde = new Date(Date.now() - 3 * 86400000).toISOString();
+      const { data: fr, error: eFr } = await supabase.from('imoveis_leilao').select('fonte_id')
+        .eq('fonte', 'PESTANA').eq('ativo', true).gte('atualizado_em', desde).limit(5000);
+      if (eFr) console.log(`    Pestana: sem leitura dos lotes frescos (${eFr.message}) — lê todos os leilões`);
+      else for (const r of fr || []) frescos.add(r.fonte_id);
+    }
+    let pulados = 0;
     for (const leilao of imovLeiloes) {
+      const idsDoLeilao = (Array.isArray(leilao.lotes) ? leilao.lotes : []).map((lid) => `pestana_${lid}`);
+      if (idsDoLeilao.length && idsDoLeilao.every((f) => frescos.has(f))) { pulados++; continue; }
       let lotes = [];
       for (let pg = 1; pg <= 20; pg++) {
         const pagina = await paginaLotesPestana(page, leilao.id, pg, QTD);
@@ -4646,6 +4664,8 @@ async function scraperPestana(browser) {
       await new Promise(r => setTimeout(r, 120));
     }
     if (vendidosVistos.size) await registrarVendidosPestana(vendidosVistos);
+    console.log(`    Pestana: ${pulados} leilão(ões) sem lote novo nem parado — não consultados · ${vivosPestana.size} lote(s) vivos pela lista de leilões`);
+    if (vivosPestana.size) imoveis.vivosNaFonte = vivosPestana;
     if (falhas.length) {
       console.log(`    ⚠️ Pestana: coleta PARCIAL — ${falhas.length} leilão(ões) não lidos: ${falhas.slice(0, 5).join('; ')}`);
       imoveis.coletaParcial = `PESTANA: ${falhas.length} leilão(ões) não lidos`;

@@ -386,13 +386,17 @@ const RE_BEM_MOVEL_PALAVRA = P('ve[ií]culos?|motos?|sucatas?|renavam|chassi|mot
 const RE_MARCA_ANO = /\b(honda|yamaha|suzuki|fiat|volkswagen|chevrolet|ford|renault|toyota|hyundai|scania|iveco|mercedes|citroen|peugeot|nissan|mitsubishi|kia|jeep|bmw|audi|volvo)\b[^\n]{0,60}?(\b(19|20)\d{2}\b|\b\d{2}\s*\/\s*\d{2}\b)/i;
 const RE_MARCA_MODELO = /\b(honda|yamaha|suzuki|fiat|vw|volkswagen|chevrolet|gm|ford|renault|toyota|hyundai|scania|iveco|mercedes|reb|citroen|peugeot|nissan|mitsubishi)\s*\/\s*[a-z0-9]|\bplacas?[:\s]+[a-z]{3}[-\s]?\d/i;
 const RE_IMOVEL = P('im[oó]veis|im[oó]vel|terrenos?|casas?|apartamentos?|galp[aã]o|barrac[aã]o|sala comercial|pr[eé]dio|fazenda|s[ií]tio|ch[aá]cara|gleba|[aá]reas?|lotes? urbanos?|edifica[çc][aã]o|edif[ií]cio|garagem|vagas?|box|complexo industrial|m²|m2');
-const movel = (t) => RE_BEM_MOVEL_PALAVRA.test(t) || RE_MARCA_MODELO.test(t) || RE_MARCA_ANO.test(t);
+// "MOTOR CASA" (15/11, HASTA 12301 "RENAULT/MARIMAR MCA06.CH (MOTOR CASA)"): motorhome. O "CASA" casava no RE_IMOVEL e o
+// veículo entrava ativo como tipo casa. Veículo-habitação é bem MÓVEL e a palavra "casa" dele não conta como imóvel.
+const RE_VEICULO_HABITACAO = /motor[\s-]?casa|motor[\s-]?home|casa[\s-]rodante|trailer/gi;
+const semVeiculoHabitacao = (t) => String(t || '').replace(RE_VEICULO_HABITACAO, ' ');
+const movel = (t) => RE_BEM_MOVEL_PALAVRA.test(t) || RE_MARCA_MODELO.test(t) || RE_MARCA_ANO.test(t) || /motor[\s-]?casa|motor[\s-]?home|casa[\s-]rodante/i.test(t);
 // `titulo` (opcional) decide sozinho quando é bem móvel SEM palavra de imóvel: a descrição de máquina cita
 // o "galpão"/"área" onde ela está (Flex 2940/1, "01 Dobradeira Manual", 22/10) e o texto todo passava.
 export function naoEhImovel(texto, titulo) {
   const t = String(texto || '');
-  if (titulo && movel(String(titulo)) && !RE_IMOVEL.test(String(titulo))) return true;
-  return movel(t) && !RE_IMOVEL.test(t);
+  if (titulo && movel(String(titulo)) && !RE_IMOVEL.test(semVeiculoHabitacao(titulo))) return true;
+  return movel(t) && !RE_IMOVEL.test(semVeiculoHabitacao(t));
 }
 
 // Puro (testável): a MESMA foto em 3+ lotes DIFERENTES da mesma rodada não é foto do lote — é

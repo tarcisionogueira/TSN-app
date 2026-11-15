@@ -6,6 +6,23 @@
 
 
 
+## 15/11 (noite, 7) — #461: HASTA, ALFA E PESTANA (coleta "parcial" de três fontes)
+
+- **HASTA não estava perdendo imóvel.** 189 enumerados, 182 já no banco: o leilão 579 (Salvador, SAEB 006/2026) é de
+  veículos e sucata do Governo da BA, e os 196 `praca_vencida` são lotes "ENCERRADO — Sem licitante" (conferido no site,
+  lote 12183). Achado real: 2 motorhomes ("RENAULT/MARIMAR (MOTOR CASA)") ATIVOS como tipo casa — o "CASA" casava no
+  detector de imóvel. `naoEhImovel` (scripts/lib/dom-parse-util.mjs) trata motor casa/motorhome/casa rodante como bem
+  móvel (teste `scripts/testes/nao-imovel-motor-casa.mjs`); os 2 saíram (migração 20261115_hasta_motorhome_nao_imovel).
+- **ALFA:** 213 enumerados, 194 no banco, 0 novos — não perdia lote; o teto de 12 páginas só impedia a limpeza de
+  sumidos. `ALFA_MAX_PAGES` 12 → 30 (grátis; o laço para na 1ª página sem lote novo).
+- **PESTANA:** o `/api/v2/lote` devolve a página de captcha da Radware depois de poucas chamadas (conferido via pg_net:
+  3 de 3), e a coleta acusava 29 de 32 leilões "não lidos" todo dia. O `/api/v2/leilao` segue aberto e traz os ids de
+  lote de cada leilão. Agora: todo id da lista vira `vivosNaFonte` (prova de vida no sweep, como o mapa do ZUK) e leilão
+  com todos os lotes ativos e atualizados há < 3 dias NÃO chama o endpoint protegido. Conferir na próxima rodada:
+  log "N leilão(ões) sem lote novo nem parado — não consultados" e queda dos "não lidos".
+- Vistos de passagem no mesmo log: LUNELLI caiu de 55 para 0 (certificado TLS autoassinado, rotas grátis recusam) e
+  ALLIANCE em 403/desafio — fontes do motor, fora desta pendência.
+
 ## 15/11 (noite, 6) — P1: #485 FECHADA, #482 NO CÓDIGO, #371 MEDIDA
 
 - **#485 (fechada):** os 109 "financiado" só com fgts:true eram quase todos Banco Inter na SUPERBID — título da oferta
