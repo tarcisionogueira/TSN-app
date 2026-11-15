@@ -84,8 +84,11 @@ export function referenciaPonderada(amostras, alvo, opts = {}) {
     // CREDIBILIDADE só conta evidência COM localização: amostra sem coordenada entra fraca no
     // valor (peso-piso), mas NÃO infla a confiança "local" (senão muitas amostras sem geo dariam
     // credibilidade alta sem nada realmente perto). Sem geo → cred→0 → puxa p/ o ticket médio.
-    if (d != null) massa += wProx;
-    return { v, w: wProx * pesoPadrao(v, centro) };
+    // PESO PELA PROVA (15/11, #484): `a.peso` opcional (api/_indice-peso.js) — amostra sem link conta menos no valor
+    // e na credibilidade. Sem o campo (gerar-analise) = 1, comportamento anterior.
+    const wProva = Number.isFinite(Number(a.peso)) && Number(a.peso) > 0 ? Number(a.peso) : 1;
+    if (d != null) massa += wProx * wProva;
+    return { v, w: wProx * pesoPadrao(v, centro) * wProva };
   });
   const vLocal = medianaPonderada(pares) ?? ticket;
   const cred = massa / (massa + k);

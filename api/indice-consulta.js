@@ -11,6 +11,7 @@ import { getUser, unauthorized } from './_auth.js';
 import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
 import { composicaoTemporal, avisoFrescor } from './_indice-composicao.js';
 import { referenciaPonderada } from './_indice-ponderacao.js';
+import { aplicarPesos } from './_indice-peso.js';
 import { ehAmostraDeLeilao } from './_valor-mercado.js';
 
 // AMOSTRA SEM COORDENADA NÃO ESTÁ EM (0, 0) (15/11). `Number.isFinite(+null)` é true (+null === 0): a amostra sem
@@ -206,7 +207,10 @@ export default async function handler(req) {
     // COMPOSIÇÃO TEMPORAL (pedido do dono): períodos de 4 meses, quantitativo total e valor
     // RECENTE quando há amostra nova; senão PROJETA os anúncios antigos p/ hoje pela curva da região.
     // Amostras REAIS (sem sintéticas) + banda central (padrão consistente no tempo).
-    const vendaSamplesReais = regSamples.filter(a => a.especie === 'venda' && !ehSintetica(a)).map(a => ({ valor_m2: a.valor_m2, data_ref: a.data_ref }));
+    // 15/11 (#484): cada unidade pesa pela PROVA (conferido 1 · link próprio 0,5 · busca 0,3 · sem link 0,2) e nenhuma
+    // origem passa de 35% do peso — ver api/_indice-peso.js.
+    const vendaSamplesReais = aplicarPesos(regSamples.filter(a => a.especie === 'venda' && !ehSintetica(a)))
+      .map(a => ({ valor_m2: a.valor_m2, data_ref: a.data_ref, peso: a.peso }));
     const comp = composicaoTemporal(vendaSamplesReais, amostras_ano, Date.now(), bandaCentral);
 
     // REFERÊNCIA PONDERADA (pedido do dono): quando a LOCALIDADE tem poucas amostras, em vez do
@@ -223,9 +227,9 @@ export default async function handler(req) {
         const anos = m ? Math.max(0, Math.min(6, (agoraMs - Date.UTC(+m[1], +m[2] - 1, 15)) / (365 * 24 * 3600 * 1000))) : 0;
         return Number(a.valor_m2) * Math.pow(1 + taxaPond, anos);
       };
-      const poolPond = regCidade
-        .filter(a => a.especie === 'venda' && !ehSintetica(a) && Number(a.valor_m2) > 0)
-        .map(a => ({ valor_m2: projetaHoje(a), lat: a.lat, lng: a.lng }));
+      // Coordenada só vale se GEOCODIFICADA (temPosicao): a carimbada no centro da cidade virava "vizinha" de tudo.
+      const poolPond = aplicarPesos(regCidade.filter(a => a.especie === 'venda' && !ehSintetica(a) && Number(a.valor_m2) > 0))
+        .map(a => ({ valor_m2: projetaHoje(a), lat: temPosicao(a) ? a.lat : null, lng: temPosicao(a) ? a.lng : null, peso: a.peso }));
       ponderacao = referenciaPonderada(poolPond, { lat, lng });
     }
 

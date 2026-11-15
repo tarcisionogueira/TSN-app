@@ -10,6 +10,8 @@
  * das amostras e passa os arrays prontos.
  */
 
+import { medianaPonderada } from './_indice-peso.js';
+
 export const JANELA_DIAS = 120;         // "amostra recente" = últimos ~4 meses (o "de 120 dias" do dono)
 export const BUCKET_MESES = 4;          // separação por período (a cada 4 meses)
 export const MIN_RECENTES = 4;          // mínimo de amostras recentes p/ valor "cheio" sem projeção
@@ -63,8 +65,15 @@ export function taxaAnualDaCurva(amostrasAno) {
  */
 export function composicaoTemporal(vendaSamples, amostrasAno, nowMs, banda) {
   const rows = (vendaSamples || [])
-    .map(s => ({ m2: Number(s.valor_m2) || 0, dref: s.data_ref }))
+    .map(s => ({ m2: Number(s.valor_m2) || 0, dref: s.data_ref, p: Number(s.peso) }))
     .filter(r => r.m2 > 0);
+  // PESO PELA PROVA (15/11, #484 — api/_indice-peso.js): quando o chamador manda `peso`, o VALOR sai da mediana
+  // ponderada (conferido pesa mais que número sem link). Os períodos (série exibida) seguem pela mediana simples.
+  // Sem peso (chamador antigo, ex. gerar-analise) → mediana simples, como antes.
+  const ponderado = rows.some(r => Number.isFinite(r.p));
+  const medValor = (lista, val) => ponderado
+    ? medianaPonderada(lista.map(r => ({ v: val(r), p: Number.isFinite(r.p) ? r.p : 1 })))
+    : medianaNum(lista.map(val));
   const total = rows.length;
   if (!total) {
     return { total_anuncios: 0, n_recentes: 0, periodos: [], valor_m2: null, projetado: false, sem_amostras_recentes: true, taxa_aa: null, base_periodos: null };
@@ -113,22 +122,21 @@ export function composicaoTemporal(vendaSamples, amostrasAno, nowMs, banda) {
   let valor_m2, projetado = false, sem_recentes = false, base_periodos = null;
   if (recentes.length >= MIN_RECENTES) {
     // Tem amostra recente suficiente → valor REAL do momento.
-    valor_m2 = medianaNum(recentes.map(r => r.m2));
+    valor_m2 = medValor(recentes, r => r.m2);
   } else {
     sem_recentes = true;
     if (taxa != null) {
       // Sem recentes → PROJETA cada anúncio p/ hoje pela taxa a.a. da região e tira a mediana.
-      const proj = rowsVal.map(r => {
+      valor_m2 = medValor(rowsVal, r => {
         const anos = Math.max(0, Math.min(6, (nowMs - drefMs(r.dref)) / (365 * 24 * 3600 * 1000)));
         return r.m2 * Math.pow(1 + taxa, anos);
       });
-      valor_m2 = medianaNum(proj);
       projetado = true;
       const anos = periodos.map(p => p.ano);
       base_periodos = anos.length ? (Math.min(...anos) === Math.max(...anos) ? `${anos[0]}` : `${Math.min(...anos)}–${Math.max(...anos)}`) : null;
     } else {
       // Sem curva confiável p/ projetar → mediana geral, SEM projeção (fica sinalizado como sem recentes).
-      valor_m2 = medianaNum(rowsVal.map(r => r.m2));
+      valor_m2 = medValor(rowsVal, r => r.m2);
     }
   }
 

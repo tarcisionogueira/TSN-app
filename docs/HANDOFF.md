@@ -6,6 +6,22 @@
 
 
 
+## 15/11 (noite, 2) — ÍNDICE: PESO PELA PROVA + TETO DE 35% POR ORIGEM (#484, item 2)
+
+- `api/_indice-peso.js` (puro): conferido 1 · link próprio/não conferível 0,5 · busca 0,3 · sem link 0,2; nenhuma origem
+  (host; "sem link" é uma origem) passa de 35% do peso (só com 3+ origens). `medianaPonderada`.
+- `composicaoTemporal` usa a mediana ponderada no VALOR quando o chamador manda `peso` (períodos seguem simples);
+  `referenciaPonderada` multiplica o peso de proximidade e a credibilidade pela prova. `gerar-analise` não manda peso →
+  inalterado.
+- Conserto junto: o pool da referência ponderada passava lat/lng de QUALQUER amostra — coordenada carimbada no centro
+  da cidade contava como "vizinha". Agora só com `temPosicao` (geocodificada), como o recorte por raio.
+- Medido em seco (mediana simples → ponderada, cidade×tipo com 15+): SP apto 8.182→8.252, Santana casa 11.634→11.777,
+  Carapicuíba 6.972→6.792, Guarulhos ≈, Feira casa 2.960→3.167, Cotia casa 5.778→6.182, **Barueri apto 7.465→8.333**
+  (77 sem link a 7.179 × com link a 8.871) e **BH comercial 3.684→4.500** (18 sem link a 2.531). É o efeito pretendido:
+  número declarado pela IA sem link deixa de decidir sozinho.
+- Teste: `npm run testar:indice-peso`. Falta do plano: item 3 (subir de nível com <5 unidades e declarar), 4
+  (invariantes), 5 (FipeZap/laudo como alarme).
+
 ## 15/11 (noite) — ÍNDICE SEM PROVA, LEILÃO COMO COMPARÁVEL, "SINAL 5%" INVENTADO NO RELATÓRIO
 
 **Índice de Capão da Canoa (dono, arrematação na terça):** 0 de 17 links existiam (404 em série, IDs sequenciais em

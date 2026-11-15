@@ -202,7 +202,8 @@
     "testar:homio-lead": "node scripts/testes/homio-lead.mjs",
     "testar:data-edital-extenso": "node scripts/testes/data-edital-extenso.mjs",
     "testar:nome-cadastro-x-pagamento": "node scripts/testes/nome-cadastro-x-pagamento.mjs",
-    "testar:kleiloes": "node scripts/testes/kleiloes-parse.mjs"
+    "testar:kleiloes": "node scripts/testes/kleiloes-parse.mjs",
+    "testar:indice-peso": "node scripts/testes/indice-peso.mjs"
   },
   "dependencies": {
     "@sentry/node": "^10.74.0",
