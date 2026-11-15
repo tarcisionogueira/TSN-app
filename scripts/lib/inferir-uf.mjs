@@ -41,8 +41,23 @@ function doTexto(texto, cidadeNorm) {
       return { uf, cidadeNorm: cand, cidadeTexto: palavras.slice(i).join(' ') };
     }
   }
+  // "UF/ CIDADE - …" (15/11, #371): a LEILOTECH escreve a sigla ANTES ("AL/ ARAPIRACA - Casa em BOM SUCESSO",
+  // "BA/ LAURO DE FREITAS - Apartamento em CAJI") e saía sem UF nem cidade. Mesma prova: o par existe no IBGE; aqui o
+  // candidato é o MAIOR PREFIXO depois da barra.
+  for (const m of String(texto).matchAll(RE_UF_CIDADE)) {
+    const uf = m[1];
+    if (!UFS.has(uf)) continue;
+    const palavras = m[2].trim().split(/\s+/);
+    for (let n = palavras.length; n >= 1; n--) {
+      const cand = normCidade(palavras.slice(0, n).join(' '));
+      if (!cand || !existe(uf, cand)) continue;
+      if (cidadeNorm && cidadeNorm !== cand) continue;
+      return { uf, cidadeNorm: cand, cidadeTexto: palavras.slice(0, n).join(' ') };
+    }
+  }
   return null;
 }
+const RE_UF_CIDADE = /(?<![A-Za-z])([A-Z]{2})\s*\/\s*([A-Za-zÀ-ÿ'.]+(?:\s+[A-Za-zÀ-ÿ'.]+){0,5})/g;
 
 // ── Sinais extras (28/09) — os 20 lotes do invariante não tinham "Cidade-UF", mas tinham prova ──
 // "Comarca de Campo Mourão-Pr": UF em caixa baixa (a regex acima exige maiúscula de propósito,

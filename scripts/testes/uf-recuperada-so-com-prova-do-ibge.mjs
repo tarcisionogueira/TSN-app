@@ -37,4 +37,9 @@ for (const [ent, uf, cidade] of casos) {
 assert.equal(inferirUF({ cidade: 'Campinas', titulo: 'Apto | Santos-RJ' })?.via, 'cidade_unica');
 // UF que não é sigla brasileira nunca passa, mesmo com cara de "Cidade-XX"
 assert.equal(inferirUF({ titulo: 'Depto | San Martín De Porres - PR' }), null);
-console.log(`ok — ${n + 2} casos`);
+// #371 (15/11): LEILOTECH escreve "UF/ CIDADE - …" — a sigla vem antes; a prova continua sendo o par no IBGE.
+assert.deepEqual(inferirUF({ cidade: '', titulo: 'AL/ ARAPIRACA - Casa em BOM SUCESSO' }), { uf: 'AL', cidade: 'ARAPIRACA', via: 'texto' });
+assert.deepEqual(inferirUF({ cidade: '', titulo: 'BA/ LAURO DE FREITAS - Apartamento em CAJI' }), { uf: 'BA', cidade: 'LAURO DE FREITAS', via: 'texto' });
+assert.equal(inferirUF({ titulo: 'XX/ ARAPIRACA - Casa' }), null, 'sigla inexistente não passa');
+assert.equal(inferirUF({ titulo: 'SP/ ARAPIRACA - Casa' }), null, 'par que não existe no IBGE não passa');
+console.log(`ok — ${n + 6} casos`);
