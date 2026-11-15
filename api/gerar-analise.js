@@ -3531,6 +3531,26 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
         }
       } catch { /* best-effort */ }
     }
+    // FIPEZAP OFICIAL (15/11, arena — Fase 3): a "Referência FipeZAP" do relatório era o que a pesquisa da IA declarava
+    // (Salvador a R$ 12.434/m² com 2 valores; Goiânia "casa" — o índice é de apartamentos). Agora vem da série publicada
+    // pela Fipe (fipezap_cidade, scripts/fipezap-ingerir.mjs). Cidade fora da série: o número da IA fica, rotulado como
+    // não conferido. Não entra no valor — é referência.
+    if (mercado && imDb?.cidade_norm && imDb?.estado) {
+      try {
+        const rFz = await sb(`fipezap_cidade?cidade_norm=eq.${encodeURIComponent(imDb.cidade_norm)}&uf=eq.${encodeURIComponent(String(imDb.estado).toUpperCase())}&venda_m2=gt.0&select=mes,venda_m2,cidade_rotulo&order=mes.desc&limit=13`);
+        const serie = rFz.ok ? await rFz.json() : null;
+        if (!rFz.ok) console.error('[fipezap-oficial] leitura falhou: HTTP', rFz.status);
+        if (Array.isArray(serie) && serie.length) {
+          const ult = serie[0], ano = serie.find((x) => String(x.mes).slice(0, 7) === `${Number(String(ult.mes).slice(0, 4)) - 1}${String(ult.mes).slice(4, 7)}`);
+          mercado.referenciaFipeZap = { encontrado: true, oficial: true, precoMedioM2: Math.round(Number(ult.venda_m2)),
+            valorizacao12m: ano && Number(ano.venda_m2) > 0 ? Math.round((Number(ult.venda_m2) / Number(ano.venda_m2) - 1) * 1000) / 10 : null,
+            mesReferencia: String(ult.mes).slice(0, 7), localidade: `${ult.cidade_rotulo || imDb.cidade_norm} (média de apartamentos da cidade)`,
+            fonte: 'FipeZAP — série oficial da Fipe', url: 'https://www.fipe.org.br/pt-br/indices/fipezap/' };
+        } else if (mercado.referenciaFipeZap?.encontrado) {
+          mercado.referenciaFipeZap = { ...mercado.referenciaFipeZap, oficial: false, fonte: 'declarado pela pesquisa (cidade fora da série oficial; não conferido)' };
+        }
+      } catch (e) { console.error('[fipezap-oficial] falhou:', e?.message || e); }
+    }
     // UM DECISOR SÓ (15/11, arena): servidor monta as condições com origem por campo e decide o cenário inicial; a tela
     // abre nele. Sem prova forte (trecho citado do edital ou ficha da Caixa) abre À VISTA — o erro do lado seguro.
     if (mercado) {

@@ -73,6 +73,18 @@ const REGRAS = [
       && /fmt(?:Pct)?\(\s*[A-Za-z_$][\w$.?[\]'"]*\s*\|\|\s*0\s*[,)]/.test(linha),
   },
   {
+    id: 'default-de-pagamento-como-fato',
+    titulo: 'Default de pagamento (5% / 360 / 12%) usado fora do formulário vazio — premissa do sistema virando condição do lote',
+    // CLASSE BROOKLIN (15/11, arena dos relatórios): o apto do Brooklin era à vista e o relatório mostrou "Sinal (5%)" e
+    // 360 parcelas — os números do formulário VAZIO (src/pages/Analise.jsx), aplicados porque um falso FGTS abriu o
+    // cenário financiado. As condições de pagamento têm UMA origem (api/_condicoes-origem.js → condicoesPagamento) e o
+    // default só pode morar no VAZIO e no seu espelho em src/lib/condicoes-pagamento.js (DEFAULTS, que existem para
+    // RECONHECER o default, não para aplicá-lo). Literal novo de sinal 5 / prazo 360 / CET 12 em tela, PDF ou gerador é
+    // o mesmo defeito de novo: marque `// padrao-ok: <motivo>` se for outra coisa.
+    testar: (linha, rel) => /^(src\/(pages|components|lib)\/|api\/gerar-)/.test(rel || '')
+      && /\b(sinalPercentual|sinalPct)\s*[:=]\s*5\b|\bprazoMeses\s*[:=]\s*360\b|\bcetAnual\s*[:=]\s*12\b/.test(linha),
+  },
+  {
     id: 'delete-sem-select',
     titulo: 'DELETE sem .select() — não há como saber se a RLS deixou apagar',
     // `.delete(` seguido, na MESMA cadeia (até o fim do statement), sem `.select(`.

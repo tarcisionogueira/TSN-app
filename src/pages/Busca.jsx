@@ -1646,7 +1646,7 @@ export default function Busca() {
         // com outro. A régua única vive em src/lib/rentabilidade.js.
         itbiPercentual: ITBI_REGISTRO_PCT,
         somenteAVista: soAceitaAVista(im.pagamento),   // `hipotecado` é PARCELÁVEL (art. 895) — ver data/pagamento.js
-        prazoMeses: 360, cetAnual: 12, sinalPercentual: 5, prazoVendaMeses: 12,
+        prazoMeses: 360, cetAnual: 12, sinalPercentual: 5, prazoVendaMeses: 12, // padrao-ok: portfólio do arrematado nasce com o formulário padrão, origem vazia = premissa
       };
       saveImoveis([...imoveis, novo]);
     } else {

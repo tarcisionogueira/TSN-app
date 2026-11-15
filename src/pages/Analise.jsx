@@ -69,9 +69,16 @@ const VAZIO = {
   areaM2: 0, areaTerrenoM2: 0, valorMercado: 0, valorLocacao: 0,
   manutencaoEstimada: 0, prazoReformaMeses: 3, debitosAssumidos: 0,
   iptuMensal: 0, condominioMensal: 0, itbiPercentual: 5,
-  laudemio: 0, foreiro: 0, sinalPercentual: 5, prazoMeses: 360,
-  cetAnual: 12, prazoVendaMeses: 12, observacoes: '', riscos: [], lancamentos: [],
+  laudemio: 0, foreiro: 0, sinalPercentual: 5, prazoMeses: 360, // padrao-ok: formulário VAZIO — origemCondicoesPagamento vazia marca como premissa (aviso no cartão)
+  cetAnual: 12, prazoVendaMeses: 12, observacoes: '', riscos: [], lancamentos: [], // padrao-ok: formulário VAZIO — idem
 };
+
+// LINK DA AMOSTRA (15/11, arena — Fase 3): a amostra mostrava só o nome do portal; com o link (só http/https), o cliente
+// confere o anúncio. Mesmo critério do PDF (src/components/RelatorioPDF.jsx).
+function FonteAmostra({ a }) {
+  const url = typeof a?.url === 'string' && /^https?:\/\//i.test(a.url) ? a.url : null;
+  return url ? <a href={url} target="_blank" rel="noopener noreferrer" style={{ color:'#2563eb' }}>{a?.fonte || 'anúncio'} ↗</a> : <>{a?.fonte || '—'}</>;
+}
 
 // LOTE MANUAL (05/10, achado do dono: "o lote inserido manualmente não aparece nas análises").
 // Lote do acervo é relido do banco pelo uuid; o manual (`tsn_…`) só existe no que a análise gravou.
@@ -336,7 +343,7 @@ export default function Analise() {
       // 12/09 (achado do dono, relendo a projeção do galpão de Feira de Santana): o parcelamento
       // do art. 895 NÃO cobra JUROS — é saldo dividido em parcelas mensais sujeitas apenas a
       // CORREÇÃO MONETÁRIA (o índice vem do edital; sem ele publicado, tratar como 0% real é
-      // mais correto do que herdar uma taxa de financiamento bancário). Manter `cetAnual: 12`
+      // mais correto do que herdar uma taxa de financiamento bancário). Manter `cetAnual: 12` // padrao-ok: comentário histórico, não é atribuição
       // aqui inflava a parcela em ~28% (R$ 16.588 em vez de ~R$ 13.459 — a AMORTIZAÇÃO pura,
       // sem juros nenhum) e subestimava o lucro projetado na mesma proporção. Quando o edital
       // trouxer a taxa/índice real, `aplicarExtracao` sobrescreve; até lá, 0% descreve o
@@ -4688,7 +4695,12 @@ export default function Analise() {
                   <div style={{ borderRadius:12, border:`1px solid ${alinhado ? '#bbf7d0' : '#fed7aa'}`, background: alinhado ? '#f0fdf4' : '#fff7ed', padding:'12px 16px' }}>
                     <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8, flexWrap:'wrap' }}>
                       <span style={{ fontSize:12, fontWeight:800, color:'#111' }}>Validação FipeZAP</span>
-                      <span style={{ fontSize:10.5, color:'#64748b' }}>{mercado.referenciaFipeZap.localidade || ''} · {mercado.referenciaFipeZap.mesReferencia || 'recente'}</span>
+                      <span style={{ fontSize:10.5, color:'#64748b' }}>{mercado.referenciaFipeZap.localidade || ''} · {mercado.referenciaFipeZap.mesReferencia || 'recente'}
+                        {/* 15/11 (arena, Fase 3): de onde veio o número — série oficial com link, ou só a palavra da pesquisa. */}
+                        {mercado.referenciaFipeZap.oficial === true
+                          ? <> · <a href={mercado.referenciaFipeZap.url} target="_blank" rel="noopener noreferrer" style={{ color:'#2563eb' }}>série oficial da Fipe ↗</a></>
+                          : mercado.referenciaFipeZap.oficial === false ? <> · <span style={{ color:'#b45309' }}>não conferido na série oficial</span></> : null}
+                      </span>
                       <span style={{ marginLeft:'auto', fontSize:11, fontWeight:800, padding:'2px 8px', borderRadius:999, background: alinhado ? '#dcfce7' : '#ffedd5', color: alinhado ? '#166534' : '#9a3412' }}>
                         {alinhado ? '✓ Média alinhada' : `⚠ ${div > 0 ? '+' : ''}${div}% vs FipeZAP`}
                       </span>
@@ -5042,7 +5054,7 @@ export default function Analise() {
                       <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
                         {mercado.nivel1.vendas.map((v,i)=>(
                           <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'6px 10px', background:i%2===0?'#f8fafc':'white', borderRadius:6, fontSize:11 }}>
-                            <span style={{ color:'#334155', flex:1, marginRight:8 }}>{v.descricao} <span style={{ color:'#94a3b8' }}>({v.fonte}{v.data ? ` · ${fmtDataAnuncio(v.data)}` : ''})</span></span>
+                            <span style={{ color:'#334155', flex:1, marginRight:8 }}>{v.descricao} <span style={{ color:'#94a3b8' }}>(<FonteAmostra a={v}/>{v.data ? ` · ${fmtDataAnuncio(v.data)}` : ''})</span></span>
                             <span style={{ fontWeight:700, color:'#0D63DB', flexShrink:0 }}>R$ {fmt(v.valor)} · {fmt(v.valorM2)}/m²</span>
                           </div>
                         ))}
@@ -5059,7 +5071,7 @@ export default function Analise() {
                       <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
                         {mercado.nivel1.locacoes.map((l,i)=>(
                           <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'6px 10px', background:i%2===0?'#f8fafc':'white', borderRadius:6, fontSize:11 }}>
-                            <span style={{ color:'#334155' }}>{l.descricao} <span style={{ color:'#94a3b8' }}>({l.fonte}{l.data ? ` · ${fmtDataAnuncio(l.data)}` : ''})</span></span>
+                            <span style={{ color:'#334155' }}>{l.descricao} <span style={{ color:'#94a3b8' }}>(<FonteAmostra a={l}/>{l.data ? ` · ${fmtDataAnuncio(l.data)}` : ''})</span></span>
                             <span style={{ fontWeight:700, color:'#8b5cf6' }}>R$ {fmt(l.valorMensal)}/mês</span>
                           </div>
                         ))}
@@ -5102,7 +5114,7 @@ export default function Analise() {
                       <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
                         {mercado.nivel2.vendas.slice(0,8).map((v,i)=>(
                           <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'6px 10px', background:i%2===0?'#f8fafc':'white', borderRadius:6, fontSize:11 }}>
-                            <span style={{ color:'#334155', flex:1, marginRight:8 }}>{v.descricao} <span style={{ color:'#94a3b8' }}>({v.fonte}{v.data ? ` · ${fmtDataAnuncio(v.data)}` : ''})</span></span>
+                            <span style={{ color:'#334155', flex:1, marginRight:8 }}>{v.descricao} <span style={{ color:'#94a3b8' }}>(<FonteAmostra a={v}/>{v.data ? ` · ${fmtDataAnuncio(v.data)}` : ''})</span></span>
                             <span style={{ fontWeight:700, color:'#10b981', flexShrink:0 }}>R$ {fmt(v.valor)} · {fmt(v.valorM2)}/m²</span>
                           </div>
                         ))}
@@ -5119,7 +5131,7 @@ export default function Analise() {
                       <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
                         {mercado.nivel2.locacoes.map((l,i)=>(
                           <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'6px 10px', background:i%2===0?'#f8fafc':'white', borderRadius:6, fontSize:11 }}>
-                            <span style={{ color:'#334155' }}>{l.descricao} <span style={{ color:'#94a3b8' }}>({l.fonte}{l.data ? ` · ${fmtDataAnuncio(l.data)}` : ''})</span></span>
+                            <span style={{ color:'#334155' }}>{l.descricao} <span style={{ color:'#94a3b8' }}>(<FonteAmostra a={l}/>{l.data ? ` · ${fmtDataAnuncio(l.data)}` : ''})</span></span>
                             <span style={{ fontWeight:700, color:'#8b5cf6' }}>R$ {fmt(l.valorMensal)}/mês</span>
                           </div>
                         ))}
@@ -5154,7 +5166,7 @@ export default function Analise() {
                       <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
                         {mercado.nivel3.vendas.slice(0,8).map((v,i)=>(
                           <div key={i} style={{ display:'flex', justifyContent:'space-between', gap:10, padding:'6px 10px', background:i%2===0?'#f8fafc':'white', borderRadius:6, fontSize:11 }}>
-                            <span style={{ color:'#334155' }}>{v.descricao} <span style={{ color:'#94a3b8' }}>({v.fonte}{v.data ? ` · ${fmtDataAnuncio(v.data)}` : ''}{Number(v.distanciaKm) > 0 ? ` · ${Number(v.distanciaKm).toFixed(1)} km` : ''})</span></span>
+                            <span style={{ color:'#334155' }}>{v.descricao} <span style={{ color:'#94a3b8' }}>(<FonteAmostra a={v}/>{v.data ? ` · ${fmtDataAnuncio(v.data)}` : ''}{Number(v.distanciaKm) > 0 ? ` · ${Number(v.distanciaKm).toFixed(1)} km` : ''})</span></span>
                             <span style={{ fontWeight:700, color:'#d97706', whiteSpace:'nowrap' }}>R$ {fmt(v.valor)}</span>
                           </div>
                         ))}
@@ -5167,7 +5179,7 @@ export default function Analise() {
                       <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
                         {mercado.nivel3.locacoes.map((l,i)=>(
                           <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'6px 10px', background:i%2===0?'#f8fafc':'white', borderRadius:6, fontSize:11 }}>
-                            <span style={{ color:'#334155' }}>{l.descricao} <span style={{ color:'#94a3b8' }}>({l.fonte}{l.data ? ` · ${fmtDataAnuncio(l.data)}` : ''}{Number(l.distanciaKm) > 0 ? ` · ${Number(l.distanciaKm).toFixed(1)} km` : ''})</span></span>
+                            <span style={{ color:'#334155' }}>{l.descricao} <span style={{ color:'#94a3b8' }}>(<FonteAmostra a={l}/>{l.data ? ` · ${fmtDataAnuncio(l.data)}` : ''}{Number(l.distanciaKm) > 0 ? ` · ${Number(l.distanciaKm).toFixed(1)} km` : ''})</span></span>
                             <span style={{ fontWeight:700, color:'#8b5cf6' }}>R$ {fmt(l.valorMensal)}/mês</span>
                           </div>
                         ))}
@@ -5245,6 +5257,12 @@ export default function Analise() {
               </button>
             ))}
           </div>
+          {/* 15/11 (arena — classe Brooklin): o aviso também ao lado da ESCOLHA do cenário, não só no cartão do sinal. */}
+          {cenario === 'financiado' && pagamentoNaoConfirmado(d, isAVista) && (
+            <div style={{ fontSize:11.5, color:'#b91c1c', fontWeight:700, background:'#fef2f2', border:'1px solid #fecaca', borderRadius:8, padding:'8px 12px', marginTop:-6 }}>
+              ⚠ {AVISO_PAGAMENTO_NAO_CONFIRMADO}{mercado?.condicoesPagamento?.motivo ? ` (${mercado.condicoesPagamento.motivo})` : ''}
+            </div>
+          )}
 
           {/* Cenários de disputa, Sem disputa vs Com disputa (piso de 30% de lucro) */}
           {!isUsoProprio && d.valorArrematacao > 0 && d.valorMercado > 0 && (() => {
@@ -5464,7 +5482,9 @@ export default function Analise() {
               hipotecado ao juízo, dividido por lei, sem escolha de sistema — e com CET=0%
               (default judicial) os dois sistemas nem chegam a divergir. O cronograma mês a mês
               já aparece no Fluxo de Caixa Mensal, logo acima. */}
-          {!d.somenteAVista && !['padrao_legal', 'edital_incompleto'].includes(d.origemCondicoesPagamento) && <TabelaAmortizacao sacTabela={sacTab} priceTabela={priceTab} d={d}/>}
+          {/* 15/11 (arena, Fase 2): só com condição do EDITAL ou digitada pelo CLIENTE — sobre o default do sistema (5%/360/12%) a
+              tabela era um financiamento que ninguém ofereceu, com cara de cronograma real. */}
+          {!d.somenteAVista && ['edital', 'cliente'].includes(d.origemCondicoesPagamento) && <TabelaAmortizacao sacTabela={sacTab} priceTabela={priceTab} d={d}/>}
         </div>
       </Section>
 

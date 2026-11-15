@@ -15,7 +15,7 @@
 // Defaults que NÃO são escolha de ninguém: o financiamento bancário do formulário vazio e o piso do
 // art. 895 que a tela semeia em lote judicial.
 const DEFAULTS = [
-  { sinalPercentual: 5, prazoMeses: 360 },
+  { sinalPercentual: 5, prazoMeses: 360 }, // padrao-ok: DEFAULTS existem para RECONHECER o default, não para aplicá-lo
   { sinalPercentual: 25, prazoMeses: 30 },
 ];
 

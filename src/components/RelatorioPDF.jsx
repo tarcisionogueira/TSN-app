@@ -10,6 +10,11 @@ import { alertaAvaliacaoMercado } from '../utils/alertaAvaliacao';
 // Escape para o rodapé metodológico (texto montado dos dados da geração).
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
+// 15/11 (arena, Fase 3): amostra com o LINK do anúncio clicável no PDF (só http/https) e a data — antes só o nome do
+// portal, sem como o cliente conferir. Texto vindo da pesquisa passa por `esc`.
+const linkAmostra = (a) => (typeof a?.url === 'string' && /^https?:\/\//i.test(a.url))
+  ? `<a href="${esc(a.url)}" style="color:#2563eb;">${esc(a.fonte || 'anúncio')} ↗</a>` : esc(a?.fonte || '—');
+
 // CSS do documento (exportado para o PDF combinado reaproveitar). O `.bl` aqui é
 // "texto azul" (helper de tabela); o parecer final usa `.blk` para blocos, para
 // não colidir quando os estilos são unidos no combinado.
@@ -330,15 +335,15 @@ ${(() => {
   const vendasPdf = vendasDe(mercado);
   const lista = vendasPdf.length ? vendasPdf : (mercado.vendas||[]);
   return lista.length?`<h3>Amostras de Venda (${lista.length} encontradas)</h3>
-<table><tr><th>Imóvel</th><th class="r">Valor Total</th><th class="r">R$/m²</th><th>Fonte</th></tr>
-${lista.slice(0,12).map(v=>`<tr><td>${v.descricao}</td><td class="r g">R$ ${fmt(v.valor)}</td><td class="r">R$ ${fmt(v.valorM2)}</td><td style="font-size:9px;color:#94a3b8">${v.fonte}</td></tr>`).join('')}</table>`:'';
+<table><tr><th>Imóvel</th><th class="r">Valor Total</th><th class="r">R$/m²</th><th>Fonte · data</th></tr>
+${lista.slice(0,12).map(v=>`<tr><td>${esc(v.descricao)}</td><td class="r g">R$ ${fmt(v.valor)}</td><td class="r">R$ ${fmt(v.valorM2)}</td><td style="font-size:9px;color:#94a3b8">${linkAmostra(v)}${v.data ? ` · ${esc(String(v.data).slice(0, 7))}` : ''}</td></tr>`).join('')}</table>`:'';
 })()}
 ${(() => {
   const locPdf = locacoesDe(mercado);
   const lista = locPdf.length ? locPdf : (mercado.locacoes||[]);
   return lista.length?`<h3>Amostras de Locação</h3>
 <table><tr><th>Imóvel</th><th class="r">Aluguel/mês</th><th>Fonte</th></tr>
-${lista.map(l=>`<tr><td>${l.descricao}</td><td class="r" style="color:#7c3aed;font-weight:700;">R$ ${fmt(l.valorMensal)}</td><td style="font-size:9px;color:#94a3b8">${l.fonte}</td></tr>`).join('')}</table>`:'';
+${lista.map(l=>`<tr><td>${esc(l.descricao)}</td><td class="r" style="color:#7c3aed;font-weight:700;">R$ ${fmt(l.valorMensal)}</td><td style="font-size:9px;color:#94a3b8">${linkAmostra(l)}${l.data ? ` · ${esc(String(l.data).slice(0, 7))}` : ''}</td></tr>`).join('')}</table>`:'';
 })()}
 </div>`:''}
 
@@ -369,7 +374,7 @@ ${/* SAC VS PRICE NÃO SE APLICA AO PARCELAMENTO JUDICIAL (12/09, achado do dono
     SAC e PRICE dão a MESMA parcela — a própria seção imprimia "Diferença: R$ 0,00" sem dizer que
     o motivo é não haver escolha nenhuma). O cronograma mês a mês do parcelamento judicial já
     aparece no Fluxo de Caixa Mensal logo acima; esta seção só soma confusão para esse caso. */
-  !isAVista&&sacTab?.length>0&&!['padrao_legal','edital_incompleto'].includes(d.origemCondicoesPagamento)?`<div class="pb av">
+  !isAVista&&sacTab?.length>0&&['edital','cliente'].includes(d.origemCondicoesPagamento)?`<div class="pb av">
 <h2>Tabelas de Financiamento, SAC vs PRICE</h2>
 <p style="font-size:9px;color:#475569;margin-bottom:8px;">Principal: R$ ${fmt((d.valorArrematacao||0)*(1-(d.sinalPercentual||0)/100))} · CET: ${fmtPct(d.cetAnual)} a.a. · Prazo: ${d.prazoMeses} meses</p>
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px;">

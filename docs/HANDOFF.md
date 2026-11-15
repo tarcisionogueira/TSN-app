@@ -6,6 +6,21 @@
 
 
 
+## 15/11 (noite, 10) — ARENA DOS RELATÓRIOS: FASE 3 (fontes visíveis) + trava
+
+- **FipeZAP oficial no relatório** (gerar-analise.js): `referenciaFipeZap` vem de `fipezap_cidade` (último mês, 12m
+  pela série), com `oficial:true` e link; cidade fora da série mantém o número da IA com `oficial:false` ("não conferido").
+- **Amostras com link**: `FonteAmostra` (Analise.jsx) e `linkAmostra` (RelatorioPDF.jsx) — nome do portal clicável
+  (só http/https) e data no PDF; descrição da pesquisa passa por `esc` no PDF.
+- **Simulação financiada sem prova**: tabela SAC/PRICE só com condição do edital ou do cliente (tela e PDF); aviso
+  "NÃO confirmadas no edital" também junto dos botões de cenário, com o motivo do servidor.
+- **Trava `default-de-pagamento-como-fato`** (verificar:padroes): literal novo de sinal 5 / prazo 360 / CET 12 em tela,
+  PDF, lib ou gerador reprova o build; as 5 ocorrências legítimas (VAZIO, DEFAULTS de reconhecimento, portfólio do
+  arrematado, comentário) marcadas com `padrao-ok`. Testada: um literal novo reprova.
+- Restam da #488: campos em branco no financiado ligado pelo cliente (hoje default + aviso em 3 lugares);
+  `constaNaDoc` undefined = não confirmado (mexe na régua do documental → subir reguaVersao e o filtro de
+  documental_distribuicao juntos); lista de riscos com citação na tela do documental.
+
 ## 15/11 (noite, 9) — ARENA DOS RELATÓRIOS: FASE 2 (o que não fazia sentido)
 
 - **Desconto de 10% em dobro:** o valor de mercado por R$/m² × área (comparáveis, base, fallback do Índice) já saía
