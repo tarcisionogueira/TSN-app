@@ -34,7 +34,7 @@ export const ESTILOS_INDICE = `
 // Corpo (conteúdo do <body>). form = { cidade, uf, bairro, condominio, tipo }; reg =
 // { venda_m2, aluguel_m2, n_amostras, nivel, nivel_label }; amostrasAno = [{ano,n,m2}]
 // (gráfico); amostras = [{especie,valor_m2,valor_total,area_m2,data_ref,fonte,criado_em}].
-export function corpoIndice({ form = {}, reg = {}, amostras = [], amostrasAno = [], aviso = null, periodos = [], solicitante = {} }) {
+export function corpoIndice({ form = {}, reg = {}, prova = null, amostras = [], amostrasAno = [], aviso = null, periodos = [], solicitante = {} }) {
   const tipoLabel = TIPO_LABEL[form.tipo] || form.tipo || '';
   const local = [form.condominio, form.bairro, form.cidade].filter(Boolean).join(' · ') + (form.uf ? `/${form.uf}` : '');
   const nivelLabel = reg.nivel_label || (reg.nivel === 'bairro' ? 'bairro' : reg.nivel === 'grid' ? 'microrregião (~1 km)' : 'cidade');
@@ -98,6 +98,7 @@ export function corpoIndice({ form = {}, reg = {}, amostras = [], amostrasAno = 
   const samplesHtml = amRows ? `
 <h2>Relação dos imóveis da amostra (rastreabilidade)</h2>
 <div class="av" style="font-size:10px;color:#94a3b8;margin-bottom:6px;">Comparáveis de mercado (anúncios e revendas) do segmento na cidade que embasam o índice. "Data" = período de referência do anúncio; "capt." = quando entrou na base BidPro.</div>
+${prova && prova.unidades > 0 ? `<div class="av" style="font-size:10px;color:#334155;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:7px 10px;margin-bottom:8px;"><b>Base de prova:</b> ${esc(prova.unidades)} unidade(s) independente(s) · ${esc(prova.link_proprio)} com link do anúncio · ${esc(prova.listagem)} de página de busca de portal · ${esc(prova.sem_link)} sem link${prova.copias_fundidas > 0 ? ` · ${esc(prova.copias_fundidas)} repetição(ões) não contada(s)` : ''}. Preço pedido em anúncio, não valor de fechamento.</div>` : ''}
 <table class="av"><thead><tr><th>Descrição</th><th class="num">R$/m²</th><th>Portal (fonte)</th><th class="num">Data</th><th>Anúncio</th></tr></thead><tbody>${amRows}</tbody></table>` : '';
 
   // AVISO de frescor/projeção (quando não há amostra recente) + COMPOSIÇÃO POR PERÍODO (4 meses).

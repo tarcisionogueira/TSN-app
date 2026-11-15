@@ -403,6 +403,17 @@ export default function IndiceConsulta() {
               <span style={{ fontSize: 14, fontWeight: 800, color: '#111' }}>{form.cidade}/{form.uf}{reg.bairro_norm ? ` · ${form.bairro}` : ''}</span>
               <span style={{ fontSize: 11, color: '#64748b' }}>nível {nivelLabel} · {reg.n_amostras || 0} amostras{reg.n_venda != null ? ` (${reg.n_venda} venda · ${reg.n_locacao || 0} locação)` : ''}</span>
             </div>
+            {/* SELO DE PROVA (15/11, arena #484): do que é feito o número — o cliente vê quanto tem link de anúncio,
+                quanto veio de página de busca de portal e quanto não tem link; e quantas repetições deixaram de contar. */}
+            {res.prova && res.prova.unidades > 0 && (
+              <div style={{ margin: '-4px 0 12px', fontSize: 11, color: '#475569', background: 'white', border: '1px solid #e2e8f0', borderRadius: 10, padding: '8px 12px', lineHeight: 1.6 }}>
+                <strong style={{ color: '#0f172a' }}>Base de prova:</strong> {res.prova.unidades} unidade(s) independente(s) ·{' '}
+                <span style={{ color: '#047857', fontWeight: 700 }}>{res.prova.link_proprio} com link do anúncio</span> ·{' '}
+                {res.prova.listagem} de página de busca de portal · {res.prova.sem_link} sem link
+                {res.prova.copias_fundidas > 0 ? ` · ${res.prova.copias_fundidas} repetição(ões) não contada(s)` : ''}.
+                {' '}<span style={{ color: '#94a3b8' }}>Preço pedido em anúncio, não valor de fechamento; links não conferidos um a um.</span>
+              </div>
+            )}
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 12 }}>
               <div style={{ background: 'white', borderRadius: 12, padding: '14px 16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#0D63DB', fontSize: 11, fontWeight: 700, flexWrap: 'wrap' }}><Home size={13} /> VENDA{reg.projetado ? <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 800, padding: '1px 6px', borderRadius: 999, background: '#fff7ed', color: '#c2410c' }}>PROJETADO</span> : null}
@@ -554,6 +565,7 @@ export default function IndiceConsulta() {
                             </div>
                             <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 2 }}>
                               {a.proximidade}{a.distancia_m != null ? ` · ${a.distancia_m} m` : ''}
+                              {a.prova === 'listagem' ? ' · página de busca' : a.prova === 'sem_link' ? ' · sem link' : ''}
                               {a.area_m2 ? ` · ${Math.round(a.area_m2)} m²` : ''}
                               {a.data_ref ? ` · ${String(a.data_ref).slice(0, 7)}` : ''}
                             </div>
@@ -578,7 +590,7 @@ export default function IndiceConsulta() {
           )}
 
           <button
-            onClick={() => gerarIndicePDF({ form, reg, amostras: res?.amostras || [], amostrasAno: res?.amostras_ano || [], aviso: res?.aviso || null, periodos: reg?.periodos || [], solicitante: { nome, role: effectiveRole } })}
+            onClick={() => gerarIndicePDF({ form, reg, prova: res?.prova || null, amostras: res?.amostras || [], amostrasAno: res?.amostras_ano || [], aviso: res?.aviso || null, periodos: reg?.periodos || [], solicitante: { nome, role: effectiveRole } })}
             style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 20px', background: '#0D2A54', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>
             <FileText size={16} /> Gerar relatório do Índice (PDF)
           </button>

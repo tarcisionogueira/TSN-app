@@ -152,7 +152,7 @@ export default async function handler(req) {
     // 15/11: unidades INDEPENDENTES (view indice_amostra_indep) — a mesma unidade anunciada em vários portais, ou gravada
     // 4× pelo mesmo relatório, conta uma vez. Ver supabase/migrations/20261115_indice_amostra_independente.sql.
     const regCidade = semLeilao(await restGet('indice_amostra_indep',
-      `${filtro}&valor_m2=gte.1&valor_m2=lte.200000&select=especie,valor_m2,valor_total,area_m2,data_ref,fonte,criado_em,bairro_norm,geo_grid,lat,lng,coord_origem,endereco,condominio,url,n_copias&order=data_ref.desc,criado_em.desc&limit=2000`))
+      `${filtro}&valor_m2=gte.1&valor_m2=lte.200000&select=especie,valor_m2,valor_total,area_m2,data_ref,fonte,criado_em,bairro_norm,geo_grid,lat,lng,coord_origem,endereco,condominio,url,n_copias,prova&order=data_ref.desc,criado_em.desc&limit=2000`))
       .filter(amostraPlausivel);
 
     // RECORTE POR RAIO (pedido do dono — classificar a ~250m, rua/condomínio). Com coordenada na
@@ -382,7 +382,7 @@ export default async function handler(req) {
       .map(a => ({
         especie: a.especie, valor_m2: a.valor_m2, valor_total: a.valor_total, area_m2: a.area_m2,
         data_ref: a.data_ref, fonte: a.fonte, bairro_norm: a.bairro_norm,
-        endereco: a.endereco || null, condominio: a.condominio || null, url: a.url || null,
+        endereco: a.endereco || null, condominio: a.condominio || null, url: a.url || null, prova: a.prova || null,
         distancia_m: a.__dist != null ? Math.round(a.__dist) : null,
         proximidade: ['mesmo condomínio', 'mesmo endereço', 'até 250 m', 'até 1 km', 'mesmo bairro', 'região'][a.__rank],
       }));
@@ -400,7 +400,14 @@ export default async function handler(req) {
     // COMPOSIÇÃO por NÍVEL (localidade ≤250m · bairro · cidade · estado) triada por tipologia e
     // padrão — responde "quantas amostras em cada dimensão" no card do índice.
     const composicao = await rpc('indice_composicao', { p_cidade_norm: cidadeNormDb, p_uf: uf, p_bairro_norm: bairroNorm, p_lat: lat, p_lng: lng, p_tipo: tipo }).catch(() => null);
-    return new Response(JSON.stringify({ ok: true, mapeado, regiao, valorizacao: valorizacao || null, amostras: Array.isArray(amostras) ? amostras : [], amostras_ano, periodos: (regiao && regiao.periodos) ? comp.periodos : [], aviso, regioes, composicao }), { status: 200, headers });
+    // SELO DE PROVA (15/11, arena #484): do que é feito o número — sobre as MESMAS amostras que o calculam (regSamples,
+    // já unidades independentes). `copias_fundidas` = anúncios repetidos que deixaram de contar em dobro.
+    const prova = { unidades: regSamples.length, link_proprio: 0, listagem: 0, sem_link: 0, copias_fundidas: 0 };
+    for (const a of regSamples) {
+      if (prova[a.prova] != null) prova[a.prova]++;
+      prova.copias_fundidas += Math.max(0, (Number(a.n_copias) || 1) - 1);
+    }
+    return new Response(JSON.stringify({ ok: true, mapeado, regiao, valorizacao: valorizacao || null, amostras: Array.isArray(amostras) ? amostras : [], amostras_ano, periodos: (regiao && regiao.periodos) ? comp.periodos : [], aviso, regioes, composicao, prova }), { status: 200, headers });
   } catch (e) {
     if (e?.leitura) {
       console.error('[indice-consulta] base ilegível:', e.message);
