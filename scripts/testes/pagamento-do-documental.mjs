@@ -8,5 +8,6 @@ assert.equal(a.sinalPct, 50); assert.equal(a.parcelas, 2);
 const b = extrairPagamentoTexto('À vista (guia de depósito judicial no dia útil seguinte) ou parcelado: sinal mínimo de 50% em 24h + duas parcelas de 25% nos meses subsequentes.');
 assert.equal(b.sinalPct, 50); assert.equal(b.parcelas, 2);
 const c = extrairPagamentoTexto('Pagamento à vista, não é permitido o parcelamento do valor da arrematação conforme edital.');
-assert.equal(c.parcelas, null); assert.equal(c.parcelamentoPermitido, null);
+// 15/11: negação é PROIBIÇÃO (false), não silêncio (null) — com null o veto ao parcelado nunca disparava.
+assert.equal(c.parcelas, null); assert.equal(c.parcelamentoPermitido, false);
 console.log('ok pagamento do documental');

@@ -132,8 +132,26 @@ export function extrairPagamentoTexto(texto) {
   const t = String(texto || '').replace(/\s+/g, ' ');
   if (t.length < 40) return null;
   const pct = (re) => { const m = t.match(re); const v = m ? numBr(m[1]) : 0; return v > 0 && v <= 100 ? v : null; };
+  // NEGAÇÃO É INFORMAÇÃO, NÃO SILÊNCIO (15/11, edital MEGA X131536 — Brooklin). "Não é permitida a utilização do FGTS"
+  // virava `fgts: true` (bastava a palavra), e o relatório, vendo FGTS num lote à vista, REESCREVEU o lote para
+  // 'financiado' e projetou 5% de sinal + 360 parcelas num leilão que exige o preço TODO em 24 h. Cada menção agora é
+  // lida com o trecho anterior da MESMA frase: negada → false (proibido), afirmada → true, ausente → null (não sei).
+  const NEG = /(?:\bn[ãa]o\b|\bnem\b|vedad[oa]s?|proibid[oa]s?|\bsem\b|inadmitid|n[ãa]o\s+se\s+admite)[^.;]{0,45}$/i;
+  const mencao = (re) => {
+    let algum = false;
+    for (const m of t.matchAll(re)) {
+      const antes = t.slice(Math.max(0, m.index - 60), m.index);
+      if (!NEG.test(antes)) return true;
+      algum = true;
+    }
+    return algum ? false : null;
+  };
   const out = {
-    aVista: /(?:pagamento|arremata[çc][ãa]o|lance)[^.;]{0,60}[àa]\s*vista|[àa]\s*vista[^.;]{0,40}(?:pagamento|arremata)/i.test(t) || null,
+    // À VISTA: além de "pagamento … à vista", a redação de edital fiduciário/bancário — "valor TOTAL da arrematação",
+    // "TOTALIDADE do preço", "pagamento integral" (o X131536 diz as duas e escapava: "pagará … a importância
+    // equivalente ao valor total da arrematação … à vista, através de transferência").
+    aVista: (/(?:pagamento|arremata[çc][ãa]o|lance|import[âa]ncia|pre[çc]o|valor)[^.;]{0,160}[àa]\s*vista|[àa]\s*vista[^.;]{0,40}(?:pagamento|arremata)/i.test(t)
+      || /totalidade\s+do\s+pre[çc]o|valor\s+total\s+da\s+arremata[çc][ãa]o|pagamento\s+integral|integralmente\s+(?:à|a)\s+vista/i.test(t)) || null,
     // Duas redações. A primeira é a do EDITAL ("em até 60 parcelas"). A segunda é a do
     // TÍTULO DO LOTE, e faltava: o leiloeiro anuncia "Entrada 30% + 240x" na própria
     // chamada da oferta. Medido em 15/08: 132 lotes ativos têm entrada/parcelamento no
@@ -172,22 +190,33 @@ export function extrairPagamentoTexto(texto) {
       return v >= 0.5 && v <= 20 ? v : null;
     })(),
     prazoDias: (() => { const m = t.match(/prazo\s+(?:de|para)\s+(?:pagamento|dep[óo]sito|quita[çc][ãa]o)[^.;]{0,30}?(\d{1,3})\s*(?:dias?|horas?)/i); if (!m) return null; const n = Number(m[1]); const horas = /horas?/i.test(m[0]); return n > 0 ? (horas ? Math.max(1, Math.round(n / 24)) : n) : null; })(),
-    financiavel: /financiamento\s+(?:habitacional|banc[áa]rio|imobili[áa]rio)|aceita\s+financiamento|pode\s+ser\s+financiad/i.test(t) || null,
-    fgts: /\bfgts\b/i.test(t) || null,
+    financiavel: /financiamento\s+(?:habitacional|banc[áa]rio|imobili[áa]rio)|aceita\s+financiamento|pode\s+ser\s+financiad/i.test(t) ? true
+      : (/n[ãa]o\s+(?:temos|h[áa]|ha|aceita|aceitamos|ser[áa]\s+aceito|[ée]\s+permitido|[ée]\s+aceito)\s+(?:o\s+)?financiamento|sem\s+financiamento|vedad[oa]\s+o\s+financiamento/i.test(t) ? false : null),
+    fgts: mencao(/\bfgts\b/gi),
     // PARCELAMENTO GENÉRICO (17/09) — sinal PRÓPRIO, separado de `parcelas` (que exige o
     // número explícito de vezes). O edital do lote ZUK dizia "é permitido o parcelamento
     // do valor..." sem citar quantas parcelas, e nem `parcelas` nem `financiavel` (que só
     // reconhece financiamento bancário) casavam — o campo estruturado saía inteiro `null`
     // com a palavra "parcelamento" presente no texto. Guarda contra negação próxima
     // ("não é permitido o parcelamento", "vedado o parcelamento") para não inverter o sinal.
+    // Negação devolve FALSE (15/11): era `null` — "não é permitido o parcelamento" ficava igual a "o edital não diz",
+    // e o veto (condicoesDoEdital → somenteAVista) nunca disparava.
     parcelamentoPermitido: (() => {
-      const m = t.match(/parcelament\w*/i);
-      if (!m) return null;
-      const antes = t.slice(Math.max(0, m.index - 40), m.index);
-      if (/n[ãa]o|vedad|proibid|sem\s+direito|indeferid/i.test(antes)) return null;
-      return true;
+      let negado = false;
+      for (const m of t.matchAll(/parcelament\w*/gi)) {
+        const antes = t.slice(Math.max(0, m.index - 40), m.index);
+        if (/n[ãa]o|vedad|proibid|sem\s+direito|indeferid/i.test(antes)) { negado = true; continue; }
+        return true;
+      }
+      return negado ? false : null;
     })(),
   };
+  // À vista SEM nenhuma prova de parcelamento/financiamento = parcelamento vedado. É o que leva a projeção a NÃO
+  // inventar sinal e parcelas. Qualquer indício positivo (parcelas, sinal, financiável, "é permitido o parcelamento")
+  // mantém o caminho do parcelado — o edital que oferece as duas formas continua oferecendo as duas.
+  if (out.aVista === true && out.parcelamentoPermitido == null && out.parcelas == null && out.sinalPct == null && out.financiavel !== true) {
+    out.parcelamentoPermitido = false;
+  }
   return Object.values(out).some((v) => v !== null) ? out : null;
 }
 
