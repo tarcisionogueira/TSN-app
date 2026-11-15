@@ -27,4 +27,9 @@ assert.notEqual(duas.parcelamentoPermitido, false); assert.equal(duas.parcelas, 
 assert.equal(condicoesDoEdital(duas, '').permite, true, 'continua parcelável na projeção');
 const cef = extrairPagamentoTexto('Imóvel aceita financiamento habitacional e utilização do FGTS. Pagamento à vista ou financiado pela CAIXA.');
 assert.equal(cef.financiavel, true); assert.equal(cef.fgts, true); assert.notEqual(cef.parcelamentoPermitido, false);
+// 15/11 (#485): redações reais da SUPERBID/Banco Inter que escapavam do sinal e das parcelas.
+const inter1 = extrairPagamentoTexto('Casa de 130m² - Jardim Petrópolis, Arapongas/PR | Sinal a partir de 30% e Saldo Financiado em até 240x com Correção pelo Banco Inter');
+assert.equal(inter1.sinalPct, 30); assert.equal(inter1.parcelas, 240);
+const inter2 = extrairPagamentoTexto('CONDIÇÕES DE PAGAMENTO DO LEILÃO: À vista; Financiado: Imóvel Desocupado, Sinal de 30% + Saldo de 24 a 240 parcelas mensais com juros de 10,47% a.a + IPCA');
+assert.equal(inter2.sinalPct, 30); assert.equal(inter2.parcelas, 240); assert.notEqual(inter2.parcelamentoPermitido, false);
 console.log('edital-a-vista-sem-fgts: ok');

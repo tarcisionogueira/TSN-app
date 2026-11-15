@@ -162,7 +162,9 @@ export function extrairPagamentoTexto(texto) {
     parcelas: (() => {
       const m = t.match(/(?:em\s+at[ée]|parcelad[oa]\s+em|at[ée])\s+(\d{1,3})\s*(?:parcelas|vezes|x)\b/i)
              || t.match(/(?:\+|em)\s*(\d{1,3})\s*x\b/i)
-             || t.match(/(?:\+|e|mais|em)\s+(\d{1,2})\s+parcelas\b/i);
+             || t.match(/(?:\+|e|mais|em)\s+(\d{1,2})\s+parcelas\b/i)
+             // Faixa (15/11, SUPERBID/Banco Inter): "Saldo de 24 a 240 parcelas mensais" — vale o teto da faixa.
+             || t.match(/\bde\s+\d{1,3}\s+a\s+(\d{1,3})\s+parcelas\b/i);
       let n = m ? Number(m[1]) : 0;
       // Número POR EXTENSO (15/10, lote judicial TJSP em Santana de Parnaíba): "sinal de 50% + duas parcelas
       // de 25%" — o relatório saía à vista com o parcelamento escrito no documental.
@@ -174,7 +176,8 @@ export function extrairPagamentoTexto(texto) {
       return n >= 2 && n <= 420 ? n : null;
     })(),
     // Duas ordens: "sinal de 50%" e "50% de sinal" (16/10, documental do lote TJSP em Santana de Parnaíba).
-    sinalPct: pct(/(?:sinal|entrada)\s+(?:de\s+|m[íi]nim[oa]\s+de\s+)?(\d{1,2}(?:,\d{1,2})?)\s*%/i)
+    // "a partir de" (15/11, SUPERBID/Banco Inter): "Sinal a partir de 30% e Saldo Financiado em até 240x".
+    sinalPct: pct(/(?:sinal|entrada)\s+(?:de\s+|m[íi]nim[oa]\s+de\s+|a\s+partir\s+de\s+)?(\d{1,2}(?:,\d{1,2})?)\s*%/i)
       ?? pct(/(\d{1,2}(?:,\d{1,2})?)\s*%\s+(?:de|a\s+t[íi]tulo\s+de)\s+(?:sinal|entrada)\b/i),
     caucaoPct: pct(/cau[çc][ãa]o\s+(?:de\s+)?(\d{1,2}(?:,\d{1,2})?)\s*%/i),
     // "mínimo de R$ 5.000,00 por parcela" (03/11, Peruíbe): limita o número de parcelas da projeção.
