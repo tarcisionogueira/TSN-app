@@ -149,8 +149,10 @@ export default async function handler(req) {
     // Busca ARROJADA (teto 2000, era 800) + faixa ampla p/ INCLUIR locação (R$/m²/mês ~1–500,
     // antes barrada pelo piso 200 → locação caía num sintético 0,4%). A plausibilidade POR TIPO
     // (venda) e por natureza (locação) é aplicada em JS logo abaixo — tira o outlier da conta.
-    const regCidade = semLeilao(await restGet('indice_amostra',
-      `${filtro}&valor_m2=gte.1&valor_m2=lte.200000&select=especie,valor_m2,valor_total,area_m2,data_ref,fonte,criado_em,bairro_norm,geo_grid,lat,lng,coord_origem,endereco,condominio,url&order=data_ref.desc,criado_em.desc&limit=2000`))
+    // 15/11: unidades INDEPENDENTES (view indice_amostra_indep) — a mesma unidade anunciada em vários portais, ou gravada
+    // 4× pelo mesmo relatório, conta uma vez. Ver supabase/migrations/20261115_indice_amostra_independente.sql.
+    const regCidade = semLeilao(await restGet('indice_amostra_indep',
+      `${filtro}&valor_m2=gte.1&valor_m2=lte.200000&select=especie,valor_m2,valor_total,area_m2,data_ref,fonte,criado_em,bairro_norm,geo_grid,lat,lng,coord_origem,endereco,condominio,url,n_copias&order=data_ref.desc,criado_em.desc&limit=2000`))
       .filter(amostraPlausivel);
 
     // RECORTE POR RAIO (pedido do dono — classificar a ~250m, rua/condomínio). Com coordenada na
