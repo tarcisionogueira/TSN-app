@@ -28,7 +28,11 @@ a hora do EDITAL) e `eventStatus`. A página do lote tem JSON-LD `Product`, sem 
 `politica_parcelamento` sem EXECUTE de anon/PUBLIC (authenticated e service_role mantidos). `auditoria_seguranca()` =
 **total 0**.
 
-**#305 (statement timeouts)** — ver o fechamento/estado no fim desta entrada.
+**#305 (statement timeouts) — resolvida às 12:41 UTC.** Desde ~11:35 (service_role com 45 s): 0 "statement timeout"
+nos `postgres_logs`, nenhum 57014 no `get_runtime_errors` da Vercel, e os ciclos :37 de 11h e 12h do
+`desativar-encerrados` passaram limpos (`edge_logs` 12:37–12:39: 6.443 requisições, status máximo 204). O que ainda
+cair em 57014 vem de `anon`/`authenticated` → depende da #480. Ruído novo visto, fora do escopo: `proximidades-imovel`
+estourou os 25 s da Vercel uma vez às 12:35 (grupo antigo, desde 17/06).
 
 **#480 (dono)** segue aberta: compute Small no Supabase. É o que resta para os 57014 de `anon`/`authenticated`
 (página pública `/api/publico`, `acervo_cidades_uf`, painel admin) — esses têm o teto de 8 s por desenho e o cache
