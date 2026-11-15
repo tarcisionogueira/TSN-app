@@ -190,6 +190,24 @@ async function amostrarVazio(tenant, cfg, htmlPagina1, htmlEvento1) {
   } catch (e) { console.log(`   [${tenant.fonte}] amostra do vazio falhou: ${String(e?.message || e).slice(0, 120)}`); }
 }
 
+// AMOSTRA DO ILEGÍVEL (15/11). "parser não leu a página" diz QUE o detalhe voltou null, não O QUE veio: o WRLEILOES
+// ficou 13–15/11 com 12× isso e nenhum HTML para olhar (a fonte é React renderizado no Chromium do runner — o pg_net não
+// reproduz). Mesmo desenho do vazio: 1 página por fonte a cada 20 h em recon_dump, nunca derruba a coleta.
+async function amostrarIlegivel(tenant, url, html) {
+  const SB = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL, SK = process.env.SUPABASE_SERVICE_KEY;
+  if (!SB || !SK || !html) return;
+  const h = { apikey: SK, Authorization: `Bearer ${SK}`, 'Content-Type': 'application/json' };
+  const chave = `ilegivel:${tenant.fonte}`;
+  try {
+    const desde = new Date(Date.now() - 20 * 3600e3).toISOString();
+    const ja = await fetch(`${SB}/rest/v1/recon_dump?origem=eq.motor-ilegivel&chave=eq.${encodeURIComponent(chave)}&criado_em=gte.${desde}&select=id&limit=1`, { headers: h });
+    if (!ja.ok || (await ja.json()).length) return;
+    const r = await fetch(`${SB}/rest/v1/recon_dump`, { method: 'POST', headers: { ...h, Prefer: 'return=minimal' },
+      body: JSON.stringify({ origem: 'motor-ilegivel', chave, conteudo: { url, html: String(html).slice(0, 200000) } }) });
+    console.log(`   [${tenant.fonte}] detalhe ilegível — amostra ${r.ok ? 'gravada em recon_dump (motor-ilegivel)' : `NÃO gravada (HTTP ${r.status})`}`);
+  } catch (e) { console.log(`   [${tenant.fonte}] amostra do ilegível falhou: ${String(e?.message || e).slice(0, 120)}`); }
+}
+
 // A RELEITURA GASTA A SOBRA DO ORÇAMENTO, E SÓ ELA (29/08).
 // `alvo` era `novos.length ? novos : urls` — tudo-ou-nada. Com a fonte já coletada, um punhado
 // de lotes novos consumia `novos.length` do teto e **o resto do teto era jogado fora**: medido
@@ -340,6 +358,7 @@ export async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLote
     let pararReleitura = false;
     console.log(`[${tenant.fonte}] no banco ${meta.size} · novos ${novos.length} · releitura ${releitura.length}${recusados.size ? ` · ${recusados.size} recusado(s) recentemente, pulados` : ''} · processando ${alvo.length}`);
     const t0 = Date.now();
+    let amostrouIlegivel = false;
     for (let i = 0; i < alvo.length; i++) {
       // SINAL DE VIDA (30/08). O laço não imprimia NADA por lote. Com 13 lotes isso durava um
       // minuto e ninguém notava; com 592 são ~50 min de tela imóvel — e tela imóvel é
@@ -398,7 +417,7 @@ export async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLote
       const det = detPronto || await cfg.parse.parseDetalhe(html, url, { fetchFonte, tenant });
       // Parser que devolve null = "não consegui ler esta página" (ex.: MGL sem render) — conta como
       // sem detalhe; antes disto o `det.encerrado` derrubava a coleta inteira.
-      if (!det) { sem++; contarSem('parser não leu a página'); continue; }
+      if (!det) { sem++; contarSem('parser não leu a página'); if (!amostrouIlegivel && html) { amostrouIlegivel = true; await amostrarIlegivel(tenant, url, html); } continue; }
       if (det.encerrado) {
         encerrados++;
         const fid = idFonte(tenant, cfg.parse.idDaUrl(url));
