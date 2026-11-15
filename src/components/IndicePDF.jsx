@@ -126,6 +126,7 @@ ${cabecalhoBidPro({
 <div class="av" style="border:1px solid #c7d2fe;background:#eef2ff;border-radius:12px;padding:12px 16px;margin-bottom:14px;">
   <div style="font-size:13px;font-weight:800;color:#111;">${esc(local || `${form.cidade}/${form.uf}`)}</div>
   <div style="font-size:11px;color:#64748b;">Nível ${esc(nivelLabel)} · ${esc(reg.n_amostras || 0)} amostras · Tipo: ${esc(tipoLabel)}</div>
+  ${reg.referencia_externa ? `<div style="font-size:10.5px;color:${reg.referencia_externa.alarme ? '#991b1b' : '#475569'};background:${reg.referencia_externa.alarme ? '#fef2f2' : '#ffffff'};border:1px solid ${reg.referencia_externa.alarme ? '#fecaca' : '#e2e8f0'};border-radius:8px;padding:6px 10px;margin-top:6px;">${esc(reg.referencia_externa.alarme || `Referência ${reg.referencia_externa.fonte}: R$ ${Number(reg.referencia_externa.valor_m2).toLocaleString('pt-BR')}/m² (${reg.referencia_externa.divergencia_pct > 0 ? '+' : ''}${reg.referencia_externa.divergencia_pct}% em relação ao Índice).`)} Não entra no cálculo.</div>` : ''}
   ${reg.nivel_aviso ? `<div style="font-size:10.5px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:6px 10px;margin-top:6px;">${esc(reg.nivel_aviso)}</div>` : ''}
 </div>
 ${avisoHtml}

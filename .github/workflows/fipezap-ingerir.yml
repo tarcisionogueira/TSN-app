@@ -3,6 +3,9 @@ name: FipeZAP oficial (série histórica → alarme do Índice)
 # Baixa a planilha pública da Fipe (grátis) e grava o R$/m² de venda por cidade. Só serve de ALARME no Índice.
 # seco=1 imprime a estrutura sem gravar (recon). 0 Bright Data, 0 Firecrawl.
 on:
+  # Mensal: a Fipe publica no começo do mês; dia 12 dá folga. No agendamento não há input → grava (não é seco).
+  schedule:
+    - cron: '17 11 12 * *'
   workflow_dispatch:
     inputs:
       seco:

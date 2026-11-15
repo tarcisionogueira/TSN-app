@@ -365,6 +365,28 @@ export default async function handler(req) {
         }
       }
     }
+    // REFERÊNCIA EXTERNA SÓ COMO ALARME (15/11, arena #484 item 5). FipeZAP OFICIAL (fipezap_cidade, série publicada pela
+    // Fipe — scripts/fipezap-ingerir.mjs) vira termômetro: mostra o número e acusa divergência acima de 35%, sem mexer no
+    // valor. NÃO usa o "FipeZAP" que a pesquisa da IA declarava (Salvador a R$ 12.434/m² com 2 valores). É média da
+    // CIDADE e de APARTAMENTOS: só compara apartamento, e só ACUSA no nível cidade — no bairro, divergir é esperado e o
+    // número aparece como informação. Sem FipeZAP para a cidade, não diz nada (ausência não é "ok").
+    if (regiao && Number(regiao.venda_m2) > 0 && tipo === 'apartamento') {
+      const fz = await restGet('fipezap_cidade', `cidade_norm=eq.${encodeURIComponent(cidadeNormDb)}&uf=eq.${uf}&venda_m2=gt.0&select=mes,venda_m2,locacao_m2&order=mes.desc&limit=1`)
+        .catch((e) => { console.error('[indice-consulta] FipeZAP sem leitura:', e.message); return null; });
+      const ref = Array.isArray(fz) && fz[0] ? fz[0] : null;
+      if (ref) {
+        const refM2 = Number(ref.venda_m2);
+        const div = Number(regiao.venda_m2) / refM2 - 1;
+        const nivelCidade = !regiao.nivel || regiao.nivel === 'cidade';
+        regiao.referencia_externa = {
+          fonte: 'FipeZAP (média de apartamentos da cidade)', valor_m2: Math.round(refM2), mes: ref.mes,
+          divergencia_pct: Math.round(div * 100), entra_no_calculo: false,
+          alarme: nivelCidade && Math.abs(div) > 0.35
+            ? `O valor do Índice está ${Math.abs(Math.round(div * 100))}% ${div > 0 ? 'acima' : 'abaixo'} da média FipeZAP de apartamentos da cidade (R$ ${Math.round(refM2).toLocaleString('pt-BR')}/m², ${String(ref.mes).slice(5, 7)}/${String(ref.mes).slice(0, 4)}). As amostras podem estar concentradas em poucas regiões — confira antes de usar.`
+            : null,
+        };
+      }
+    }
     const valorizacao = await rpc('indice_valorizacao_anual', { p_cidade_norm: cidadeNormDb, p_uf: uf, p_tipo: tipo, p_bairro_norm: bairroNorm, p_especie: 'venda', p_anos: 6 });
 
     // LISTA (rastreabilidade) — da MESMA base regSamples (coerente com o valor). O gráfico por

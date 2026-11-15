@@ -6,6 +6,22 @@
 
 
 
+## 15/11 (noite, 5) — ÍNDICE: FIPEZAP OFICIAL SÓ COMO ALARME (#484, item 5 — plano da arena concluído)
+
+- O "FipeZAP" que a pesquisa da IA declarava (64 amostras sintéticas, 4 cidades) NÃO serve de régua: Salvador a
+  R$ 12.434/m² com 2 valores, Goiânia "casa" (o índice é de apartamentos). Trocado pela série OFICIAL da Fipe:
+  `scripts/fipezap-ingerir.mjs` + Action `fipezap-ingerir.yml` (manual com seco=1/0 e mensal, dia 12) → tabela
+  `fipezap_cidade` (56 cidades × 24 meses, venda e locação R$/m²). Leitor de xlsx próprio em `scripts/lib/xlsx-leve.mjs`
+  (fflate isolado no runner). A rede da sessão não alcança fipe.org.br; o pg_net baixa, mas trunca binário no NUL.
+- Estrutura conferida em seco ANTES de gravar (runs 43747855482 e 43748038242): aba por cidade, venda col. 17, locação
+  col. 37; UF por `municipio_norm` (homônimo só com UF declarada — 0 de 56 ficaram de fora). Out/2026: SP 12.254, Rio
+  11.372, Curitiba 11.716, BH 10.696, Salvador 8.696. Locação vem nula nos meses mais recentes (defasagem da Fipe).
+- `api/indice-consulta.js`: `regiao.referencia_externa` (só apartamento; NÃO entra no valor). Acusa (`alarme`) só no
+  nível cidade e acima de 35%; no bairro mostra como informação. Tela e PDF exibem.
+- Medido (mediana do Índice × FipeZAP, apartamento, cidades com 5+): acusaria Barueri −39%, SP −37%, Campinas −36%;
+  Fortaleza/Cuiabá −33%. **12 de 16 cidades ficam ABAIXO do FipeZAP** — o acervo concentra amostras nas regiões dos
+  lotes de leilão (mais baratas). É viés do corpus, não erro de conta: no nível cidade o Índice não representa a cidade.
+
 ## 15/11 (noite, 4) — ÍNDICE: INVARIANTES + A #444 EXPLICADA (#484, item 4)
 
 - Migração `20261115_indice_invariantes.sql` (aplicada): `indice_suspeitas()` (motivo por amostra: `parece_leilao` = área E

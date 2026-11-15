@@ -410,6 +410,13 @@ export default function IndiceConsulta() {
                 {reg.nivel_aviso}
               </div>
             )}
+            {/* REFERÊNCIA EXTERNA (15/11, #484 item 5): FipeZAP só como termômetro — não entra no valor. */}
+            {reg.referencia_externa && (
+              <div style={{ background: reg.referencia_externa.alarme ? '#fef2f2' : 'white', border: `1px solid ${reg.referencia_externa.alarme ? '#fecaca' : '#e2e8f0'}`, color: reg.referencia_externa.alarme ? '#991b1b' : '#475569', borderRadius: 10, padding: '8px 12px', fontSize: 11, lineHeight: 1.5, marginBottom: 10 }}>
+                {reg.referencia_externa.alarme || `Referência ${reg.referencia_externa.fonte}: ${brl(reg.referencia_externa.valor_m2)}/m² (${reg.referencia_externa.divergencia_pct > 0 ? '+' : ''}${reg.referencia_externa.divergencia_pct}% em relação ao Índice).`}
+                {' '}<span style={{ color: '#94a3b8' }}>Não entra no cálculo.</span>
+              </div>
+            )}
             {/* SELO DE PROVA (15/11, arena #484): do que é feito o número — o cliente vê quanto tem link de anúncio,
                 quanto veio de página de busca de portal e quanto não tem link; e quantas repetições deixaram de contar. */}
             {res.prova && res.prova.unidades > 0 && (
