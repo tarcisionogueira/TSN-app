@@ -6,6 +6,42 @@
 
 
 
+## 15/11 (fim da tarde) — P1 DO CLAUDE: ZUK RELIGADO PELO MAPA, MOTOR RELIGA "SUMIU", UF DA LEILOTECH
+
+**#462 fechada / #428 conserto no ar (commit 8a7f45d).** Os `sumiu_da_fonte` com praça futura tinham disparado
+(ZUK 198, SUPERBID 194, FRAZAO 189, LJUD 52). Medido AO VIVO pelo pg_net, fonte a fonte:
+- **FRAZAO 180 (09/11): correto.** A página diz "lote pertence a leilão encerrado" + "vendido por outro leiloeiro
+  parceiro do Banco".
+- **SUPERBID 148 (10/11): correto.** Amostra: 3× "oferta não encontrada" + 1 cancelada.
+- **ZUK: ERRADO.** A 1ª página de `/leilao-de-imoveis` embute o JSON do MAPA com o acervo inteiro
+  (`{"il":<leilão>,"ilo":<lote>,…}`, 1.124 lotes; 784 dos 789 ativos estão nele). **184 dos 202 "sumidos" estavam
+  no mapa**. Causa (log do job, via agente): a lista do "Carregar mais" oscila com o 429 — 1.058 cards em 13/11,
+  858 em 14/11 — sem acusar corte; a trava de proporção passa (858 > metade da mediana) e o sweep de 14/11 desligou
+  os vivos. Detalhe que confunde: o sweep NÃO toca `atualizado_em`, então os desligados aparecem com a data da
+  ÚLTIMA GRAVAÇÃO (13/11), não do desligamento.
+  - Coletor (`scraper-puppeteer.mjs`): lê o mapa (`codigosMapaZuk`, em `lib/sweep-trava.mjs`) e o sweep não desliga
+    lote presente nele (`semOsVivos`); fração ideal barrada na rodada continua saindo. Log novo:
+    "PortalZuk: mapa da listagem com N lote(s)" e "· N poupados (vivos no mapa da fonte)".
+  - Migração `20261115_zuk_religa_vivos_no_mapa.sql`: **171 religados (789 → 960 ativos)**; 13 de fração ideal fora.
+  - `/imovel/<il>-<ilo>` abre o lote sem o resto do slug: dá para coletar os **64 do mapa que nunca coletamos**
+    (próximo passo, não feito) e reler a data dos vivos fora da lista de cards (hoje ficam com a data antiga).
+- **Motor (#428):** `planejarAlvo` só relia ATIVO e lote do banco nunca contava como novo — `sumiu_da_fonte` que
+  reaparecia no catálogo ficava desligado para sempre. Agora entra com os novos (`voltaram`); a gravação religa e
+  limpa o motivo só de quem ficou ativo (gatilhos de fração/não-imóvel/praça vencida seguem valendo). Log "♻️".
+  Teste 13/13. Conferir após 2 rodadas (revisar 17/11).
+
+**#371 (commit 8d66025):** `inferirUF` lê "UF/ CIDADE - …" (LEILOTECH: "AL/ ARAPIRACA - Casa em …"), só com par
+existente no IBGE. 178 ativos sem UF; corrige 18 na próxima rodada. Resto por fonte na pendência.
+
+**Fechadas:** #457 (link com produto ativou 09/11; cron da página inicial 14/11), #374 (os 3 que a régua acusa são a
+cidade da COMARCA na descrição, não imóvel fantasma). **Travadas no dono:** #143/#198 (advogado do Dr. José Roberto).
+**Aguardando evento real:** #431 (1ª cobrança Inter), #440 (próximo pagamento com URL www), #456 (busca fraca).
+
+**Próximas P1 do Claude, em ordem sugerida:** #427 (scraper-dom vermelho: D1LANCE 41× "não leu", Leilão Eletrônico,
+Parque dos Leilões, Baston — ALLIANCE é 403 de fora), #429 (achados 3-8 e 10 de pagamentos), #461 (PESTANA
+"degradado": 29 leilões não lidos), #402 (VERONALEIL zerada — "1 recusado recentemente"), #373 (CEF 45 vencidas,
+depende de cota Bright Data), #410/#412/#444/#216.
+
 ## 15/11 (tarde) — WR PELO JSON-LD, REVOKE #479 APLICADO, #305 CONFERIDA
 
 **#481 WRLEILOES — resolvida (commit 94cf4c3).** O fallback da manhã (data do "Encerramento" da página do leilão) não
