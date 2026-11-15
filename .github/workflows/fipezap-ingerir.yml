@@ -18,7 +18,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: '22' }
-      - run: npm i --no-save --no-package-lock fflate@0.8.2
+      - name: fflate (isolado, sem instalar o projeto inteiro)
+        run: mkdir -p /tmp/fz && cd /tmp/fz && npm init -y >/dev/null && npm i fflate@0.8.2 && ln -s /tmp/fz/node_modules "$GITHUB_WORKSPACE/node_modules"
       - name: FipeZAP
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
