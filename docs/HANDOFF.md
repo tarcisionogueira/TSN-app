@@ -6,6 +6,13 @@
 
 
 
+## 16/11 — RETENÇÃO NÃO APAGA RELATÓRIO DE ASSESSORADO (#421)
+
+- `analise_retencao_protegida(user_id)` (papel assessorado/assessorado_anual ou cliente de `casos`) entra em
+  `limpar_analises_orfas` e no invariante `analise_vencida_nao_limpa` (senão ele acusaria como "retenção parada" o que
+  agora é guardado de propósito). Medido: 6 clientes, 8 mercadológicos + 5 documentais; nenhum vencido ainda.
+  auditoria_seguranca 0/0 depois da função nova.
+
 ## 15/11 (noite, 13) — PAGAMENTOS: achados 3–8 do bug bounty de 07/11 (#429)
 
 - **3 · processarRecusado sem guardas** (`_webhook-core.js`): ganhou as guardas de `suspenderPlanoDireto` via
