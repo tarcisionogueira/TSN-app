@@ -288,6 +288,11 @@ rodar GLOBOLEILOES env GLOBO_DRYRUN=0 node scripts/scraper-globo.mjs
 # não — ver lib/motor/fontes/leje.mjs). Não estava aqui: ficou zerado sem nenhum caminho vivo.
 rodar LEJE env LEJE_DRYRUN=0 node scripts/scraper-leje.mjs
 
+# BAYIT (16/11) — era a única fonte no caminho PAGO: o site recusa IP de datacenter (400 pelo pg_net), mas de IP
+# residencial o /sitemap.xml (feed XML completo) abre direto. Aqui sai de graça; o scraper-bayit.yml da CI continua
+# pelo Bright Data como rede de segurança.
+rodar BAYIT env BAYIT_NO_BD=1 BAYIT_DRYRUN=0 node scripts/scraper-bayit.mjs
+
 # DEGRAU_RESIDENCIAL (04/11) — LeilãoNet e Positivo Leilões, plataforma Degrau (mesmo coletor do LEILAOELETRONICO).
 # O feed /sitemap.xml dá 400 ao servidor do banco e 200 daqui; ficam fora da rodada do GitHub (`soResidencial`).
 # Fetch direto, grátis (semBD). Dry-run de 04/11: 22 + 13 imóveis prontos.

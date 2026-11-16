@@ -83,7 +83,22 @@ const UFS_BR = new Set(['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'M
 // separa "a fonte mudou" de "eu não fui olhar" na hora de gravar fonte_saude.
 let semCotaVisto = false;
 
+// MODO DIRETO (16/11): o site bloqueia só IP de DATACENTER — o /sitemap.xml respondeu 200 com 198 KB de um IP
+// residencial e 400 pelo pg_net do banco no mesmo minuto. No runner residencial (`BAYIT_NO_BD=1`) a busca é fetch
+// puro, grátis; o workflow da CI segue pelo Bright Data como rede de segurança semanal. Sem fallback pago aqui:
+// quem pediu o modo grátis não pode gastar cota sem saber.
+const DIRETO = process.env.BAYIT_NO_BD === '1';
+const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
+async function direto(url, timeoutMs) {
+  try {
+    const r = await fetch(url, { headers: { 'User-Agent': UA, Accept: '*/*' }, signal: AbortSignal.timeout(timeoutMs) });
+    if (!r.ok) { console.error(`  [direto] ${url}: HTTP ${r.status}`); return null; }
+    return r;
+  } catch (e) { console.error(`  [direto] ${url}: ${e?.message || e}`); return null; }
+}
+
 async function bd(url, { timeoutMs = 45000 } = {}) {
+  if (DIRETO) { const r = await direto(url, timeoutMs); return r ? await r.text() : null; }
   try {
     const r = await buscarViaBrightData(url, { proposito: 'bayit', timeoutMs, exigirOk: false });
     if (!r || !r.ok) return null;
@@ -98,6 +113,10 @@ async function bd(url, { timeoutMs = 45000 } = {}) {
 
 // Binário (foto) — mesmo caminho pago do bd(), mas sem forçar .text() (corromperia o JPEG).
 async function bdBinario(url, { timeoutMs = 45000 } = {}) {
+  if (DIRETO) {
+    const r = await direto(url, timeoutMs);
+    return r ? { buffer: Buffer.from(await r.arrayBuffer()), contentType: r.headers.get('content-type') || null } : null;
+  }
   try {
     const r = await buscarViaBrightData(url, { proposito: 'bayit', timeoutMs, exigirOk: false });
     if (!r || !r.ok) return null;
@@ -602,8 +621,9 @@ async function main() {
   await registrarConhecimento(supabase, {
     fonte: 'BAYIT',
     plataforma: 'Motor próprio (jQuery/AJAX, Cloudflare) + feed XML Dynamic-Ads-for-Real-Estate em /sitemap.xml',
-    acesso: 'brightdata', custo: 'pago',
-    anti_bot: 'cloudflare (navegação); feed XML acessível via Web Unlocker sem bloqueio real',
+    // 16/11: no runner residencial o feed vem por fetch direto (grátis); a CI segue pelo Bright Data.
+    acesso: DIRETO ? 'residencial' : 'brightdata', custo: DIRETO ? 'gratis' : 'pago',
+    anti_bot: 'bloqueia IP de datacenter; de IP residencial o /sitemap.xml abre direto',
     enumeracao: '/sitemap.xml (feed XML)', url_lote: '<url> de cada <listing> do feed',
     scraper: 'scraper-bayit.mjs', qualidade: qualidadeColeta(prontos),
   });

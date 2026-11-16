@@ -60,4 +60,11 @@ jobs:
           BAYIT_BUSCAR: ${{ github.event.inputs.buscar || '' }}
           BAYIT_INSPECIONAR: ${{ github.event.inputs.inspecionar || '' }}
           BAYIT_FORCAR_TODOS: ${{ github.event.inputs.forcar_todos || '0' }}
-        run: node scripts/scraper-bayit.mjs
+        # 16/11: o runner residencial coleta o BAYIT de graça (BAYIT_NO_BD=1). No agendamento, esta rodada PAGA só
+        # acontece se ele não concluiu coleta em 7 dias (exit 3 = coletou; 0 = atrasada; outro = não deu para ler → roda).
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            rc=0; node scripts/coleta-gate.mjs atrasada BAYIT 168 || rc=$?
+            if [ "$rc" = "3" ]; then echo "Runner residencial coletou o BAYIT nos últimos 7 dias — rodada paga pulada."; exit 0; fi
+          fi
+          node scripts/scraper-bayit.mjs
