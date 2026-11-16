@@ -26,6 +26,7 @@ import { ehFracaoIdeal, extrairAreaM2, ehForaDoAcervo } from './lib/scraper-core
 import { metricasColeta } from './_saude-fonte.mjs';
 import MUNICIPIOS from '../api/_municipios.js';
 import { inferirUF } from './lib/inferir-uf.mjs';
+import { cidadeDoSlugLote } from './lib/cidade-slug-lote.mjs';
 import { parseLeilaoHasta } from './lib/hastapublica-parse.mjs';
 import { urlDiretaDoDocumento } from '../api/_anexo-nome.js';
 import { cortarOutrosLotes, datasLjud } from '../api/enriquecer-lote.js';
@@ -6034,6 +6035,8 @@ function mapLoteSuporte(l, tenant, datas = null) {
     dm = dm || cands[0] || null;
     if (dm) { cidade = cidade || dm[1].trim(); uf = uf || dm[2].toUpperCase(); }
   }
+  // 16/11 (#371): título "Apto 701" e local vazio → a cidade do SLUG DO LOTE (nunca o do evento, que é a comarca).
+  if (!cidade && !uf) { const s = cidadeDoSlugLote(l.href || ''); cidade = s.cidade || ''; uf = s.estado || ''; }
   const ext = extrairDaDescricao(titulo);
   const tenantKey = tenant.domain.replace(/\..*/, '');
   const link = l.href ? (l.href.startsWith('http') ? l.href : `https://${tenant.domain}${l.href}`) : `https://${tenant.domain}/buscador?categoria=2`;

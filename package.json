@@ -207,7 +207,8 @@
     "testar:condicoes-origem": "node scripts/testes/condicoes-origem.mjs",
     "testar:recusa-recorrencia": "node scripts/testes/recusa-recorrencia-guardas.mjs",
     "testar:reconciliar-antes-da-recusa": "node scripts/testes/reconciliar-pagamento-antes-da-recusa.mjs",
-    "testar:nao-imovel-motor-casa": "node scripts/testes/nao-imovel-motor-casa.mjs"
+    "testar:nao-imovel-motor-casa": "node scripts/testes/nao-imovel-motor-casa.mjs",
+    "testar:cidade-slug-lote": "node scripts/testes/cidade-slug-lote.mjs"
   },
   "dependencies": {
     "@sentry/node": "^10.74.0",

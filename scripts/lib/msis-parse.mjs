@@ -145,6 +145,30 @@ const unicaUf = (c) => {
   }
   return achou;
 };
+// BAIRRO DO RIO COM "/RJ" EXPLÍCITO (16/11, #371): "VAGA … HADDOCK LOBO, Nº 72 - ESTÁCIO/RJ" (Alexandre Costa) e
+// "RUA SANTO AMARO, Nº 172 GLORIA/RJ" (Ana Lúcia) ficavam sem cidade e sumiam de /leiloes. Bairro OFICIAL da capital
+// seguido de UF=RJ É prova de Rio de Janeiro/RJ. Só vale com a UF escrita; "Barra da Tijuca" solto continua sem cidade.
+// "Centro" fica FORA: toda cidade do RJ tem um ("Centro/RJ" não diz qual).
+const BAIRROS_RIO = new Set(['abolicao','acari','agua santa','alto da boa vista','anchieta','andarai','anil','bancarios','bangu',
+  'barra da tijuca','barra de guaratiba','barros filho','benfica','bento ribeiro','bonsucesso','botafogo','bras de pina',
+  'cachambi','cacuia','caju','camorim','campinho','campo dos afonsos','campo grande','cascadura','catete','catumbi','cavalcanti',
+  'cidade de deus','cidade nova','cidade universitaria','cocota','coelho neto','colegio','comendador soares','copacabana',
+  'cordovil','cosme velho','cosmos','costa barros','curicica','del castilho','deodoro','encantado','engenheiro leal',
+  'engenho da rainha','engenho de dentro','engenho novo','estacio','flamengo','freguesia','galeao','gamboa','gardenia azul',
+  'gavea','gloria','grajau','grumari','guadalupe','guaratiba','higienopolis','honorio gurgel','humaita','inhauma','inhoaiba',
+  'ipanema','iraja','itanhanga','jacare','jacarepagua','jacarezinho','jardim america','jardim botanico','jardim carioca',
+  'jardim guanabara','jardim sulacap','joa','lagoa','lapa','laranjeiras','leblon','leme','lins de vasconcelos','madureira',
+  'magalhaes bastos','mangueira','manguinhos','maracana','mare','marechal hermes','maria da graca','meier','monero',
+  'olaria','oswaldo cruz','paciencia','padre miguel','paqueta','parada de lucas','parque anchieta','parque columbia','pavuna',
+  'pechincha','pedra de guaratiba','penha','penha circular','piedade','pilares','pitangueiras','portuguesa','praca da bandeira',
+  'praca seca','praia da bandeira','quintino bocaiuva','ramos','realengo','recreio dos bandeirantes','riachuelo','ribeira',
+  'ricardo de albuquerque','rio comprido','rocha','rocha miranda','rocinha','sampaio','santa cruz','santa teresa','santissimo',
+  'santo cristo','sao conrado','sao cristovao','sao francisco xavier','saude','senador camara','senador vasconcelos','sepetiba',
+  'tanque','taquara','taua','tijuca','todos os santos','tomas coelho','turiacu','urca','vargem grande','vargem pequena',
+  'vasco da gama','vaz lobo','vicente de carvalho','vidigal','vigario geral','vila da penha','vila isabel','vila kosmos',
+  'vila militar','vila valqueire','vista alegre','zumbi','botafogo','humaita','leblon']);
+const ehBairroRio = (c) => BAIRROS_RIO.has(normCidade(c));
+
 function cidadeUfDoTexto(txt) {
   const s = String(txt || '');
   // "…, Copacabana, Rio de Janeiro/RJ." e "Ofício da Cidade do Rio de Janeiro/RJ": o maior sufixo que é município.
@@ -152,6 +176,7 @@ function cidadeUfDoTexto(txt) {
     if (!UFS_BR.test(x[2])) continue;
     const pal = x[1].replace(/^.*,\s*/, '').replace(/^.*\s-\s/, '').trim().split(/\s+/);
     for (let k = 0; k < pal.length; k++) { const c = pal.slice(k).join(' '); if (ehMun(c, x[2])) return { cidade: titleCase(c), estado: x[2] }; }
+    if (x[2] === 'RJ') for (let k = 0; k < pal.length; k++) { if (ehBairroRio(pal.slice(k).join(' '))) return { cidade: 'Rio de Janeiro', estado: 'RJ' }; }
   }
   // "…VERBO DIVINO, BARRA MANSA, RJ." (Sérgio Represas) e "Santa Efigênia, São Paulo| SP" (Vianna).
   for (const x of s.matchAll(/(?:^|[,.;:]\s*)([A-Za-zÀ-ÿ'][A-Za-zÀ-ÿ' ]{2,40}?)\s*[,|-]\s*([A-Z]{2})\b(?![a-zà-ÿ])/g)) {
@@ -217,7 +242,9 @@ export function parseLote(blocoHtml, leilaoHtml, base, { hoje = new Date().toISO
   // diretamente…", "LAUDO DE AVALIAÇÃO:"); o título do leilão é o processo ou "Itens Diversos".
   const frases = String(descricao || '').replace(/^LAUDO DE AVALIA[ÇC][ÃA]O\s*:\s*/i, '').split(/(?<=[a-zà-ú0-9)]{3})[.;](?:\s|$)|_{5,}/i).map((f) => f.trim()).filter((f) => f.length >= 12);
   const RE_BEM = /\b(apartamento|apto|casa|sobrado|terreno|lote|gleba|sala|loja|pr[ée]dio|galp[ãa]o|im[óo]ve(?:l|is)|fazenda|s[íi]tio|ch[áa]cara|[áa]rea|cinema|edif[íi]cio|unidade|cobertura|box|vaga|kitnet|resid[êe]ncia|constru[çc][ãa]o)/i;
-  const frase = frases.find((f) => RE_BEM.test(f) && !/proposta|desconsiderar|aten[çc][ãa]o/i.test(f.slice(0, 40))) || frases[0] || '';
+  const frase = frases.find((f) => RE_BEM.test(f) && !/proposta|desconsiderar|aten[çc][ãa]o/i.test(f.slice(0, 40))
+    // "No TERCEIRO LEILÃO a VAGA será vendida pela MAIOR OFERTA…" (Alexandre Costa, 16/11): regra do leilão, não o bem.
+    && !/^n[oa]\s+(?:primeir|segund|terceir|[123]\s*[°ºª])\S*\s+leil|maior\s+oferta|condicionad[ao]\s+[àa]\s+aprecia/i.test(f)) || frases[0] || '';
   const titulo = (frase || descricao || tituloLeilao || '').slice(0, 180).replace(/[\s,;:–_-]+$/, '') || null;
   let { cidade, estado } = cidadeUfDoTexto(descricao);
   if (!cidade) ({ cidade, estado } = cidadeUfDoTexto(tituloLeilao));

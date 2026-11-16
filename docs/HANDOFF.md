@@ -6,6 +6,18 @@
 
 
 
+## 16/11 (madrugada, 2) — #371: cidade pelo bairro do Rio e pelo slug do lote (SUPORTE)
+- **MSIS (21 leiloeiros do RJ):** "…HADDOCK LOBO, Nº 72 - ESTÁCIO/RJ" e "…Nº 172 GLORIA/RJ" ficavam sem cidade (bairro não é
+  município no IBGE). Agora um bairro OFICIAL da capital seguido de "/RJ" vale Rio de Janeiro/RJ. "Centro/RJ" fica fora,
+  porque toda cidade do RJ tem Centro, e bairro sem UF continua sem cidade. Junto: o título do ALEXANDRECOSTA saía como o
+  aviso "No TERCEIRO LEILÃO a VAGA será vendida pela MAIOR OFERTA…" (a palavra VAGA passava no filtro de "fala do bem").
+  Agora essa regra de leilão é pulada. Teste em `testar:msis` com o texto real.
+- **SUPORTE:** `scripts/lib/cidade-slug-lote.mjs` lê a cidade do slug do LOTE ("apto-no-centro-de-gov-valadares-701") e,
+  quando não acha, do slug do EVENTO, mas só se o evento não for de foro (comarca/vara/juizado/tribunal/trt/judicial
+  nomeiam o juízo: "leilao-judicial-de-ipatinga-mg" vende casa em Trancoso/BA). Dry-run sobre as 23 URLs reais: 6
+  resolvidas, todas certas. As outras ficam sem cidade de propósito: "em-sarandi" (RS e PR), "em-poa", Copacabana sem
+  UF, eventos de TRT/comarca. Teste em `testar:cidade-slug-lote`. Os lotes do banco se corrigem na próxima coleta (upsert).
+
 ## 16/11 (madrugada) — #373: a data vencida da venda online vinha do GATILHO, não da página
 A rodada manual do `enriquecer-datas-cef` (00:30, depois do commit 378c137) visitou 32 dos 45 lotes de venda online com
 data vencida, e a página da Caixa **não mostra data nenhuma** (`sem-data 50`). A Caixa bloqueou o runner com 139 processados.

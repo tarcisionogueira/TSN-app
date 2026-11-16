@@ -83,6 +83,16 @@ const blocoPc = '<div id="divLote46"><div class="Letra14 CorCinzaEsc" align="jus
 const dPc = parseLote(blocoPc, '', M, { hoje: '2026-10-29' });
 assert.equal(dPc.valor_minimo, 8000000);
 assert.equal(dPc.data_leilao, '2026-12-31');
+// Alexandre Costa (16/11, #371, texto real lido pelo banco): o 1º parágrafo é a regra do 3º leilão e citava "VAGA";
+// o bairro só aparece no título do leilão ("ESTÁCIO/RJ"). Título = o bem; cidade = Rio de Janeiro pelo bairro + "/RJ".
+const blocoAc = '<div id="divLote7475"><div class="Letra14 CorCinzaEsc" align="justify">No TERCEIRO LEILÃO a VAGA será vendida pela MAIOR OFERTA, a quem mais der, ficando a conclusão da venda condicionada à apreciação do Juiz. Ele analisará se o preço é vil ou não para decidir se efetivará a venda. VAGA DE GARAGEM Nº 15, SITUADA NO PRIMEIRO PAVIMENTO DO EDIFÍCIO JÓIA EMPRESARIAL SITUADO NA RUA HADDOCK LOBO, 72, BAIRRO ESTÁCIO. APRESENTA UMA ÁREA DE 4 M².</div>'
+  + '1° Leilão Abertura dos lances: 30/10/2026 a partir das 17:00 Fechamento: 24/11/2026 às 12:00 Lance inicial 12.750,00</div>';
+const dAc = parseLote(blocoAc, '<span class="Letra26 CorAzul">VAGA DE GARAGEM Nª15 COM 4 mª RUA HADDOCK LOBO, Nº 72 - ESTÁCIO/RJ</span>', M, { hoje: '2026-11-16' });
+assert.match(dAc.titulo, /^VAGA DE GARAGEM/);
+assert.equal(dAc.cidade, 'Rio de Janeiro'); assert.equal(dAc.estado, 'RJ');
+// Ana Lúcia: "GLORIA/RJ" na descrição. "Centro/RJ" NÃO vira Rio (toda cidade do RJ tem Centro).
+assert.equal(parseLote('<div id="divLote1"><div class="Letra14 CorCinzaEsc" align="justify">APARTAMENTO 205, SITUADO NA RUA SANTO AMARO, Nº 172 GLORIA/RJ com 62m2.</div>1° Leilão Fechamento: 24/11/2026 Lance inicial 1.000,00</div>', '', M).cidade, 'Rio de Janeiro');
+assert.equal(parseLote('<div id="divLote2"><div class="Letra14 CorCinzaEsc" align="justify">Sala 313, situada à Praça Almirante Jaceguay, nº 72, Centro/RJ, com 12 m2.</div>1° Leilão Fechamento: 24/11/2026 Lance inicial 1.000,00</div>', '', M).cidade, null);
 // Status encerrado no lote.
 assert.equal(parseLote(blocoMk.replace('ABERTO PARA LANCES', 'ARREMATADO'), leilaoMk, M).encerrado, true);
 
