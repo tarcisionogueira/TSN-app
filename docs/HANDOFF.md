@@ -6,6 +6,13 @@
 
 
 
+## 16/11 — #371 (sem UF): TURANI não publica a cidade
+
+Os 32 TURANI sem UF: o JSON do lote (`/lotes/<id>/atualiza-pagina`) traz `cidade_id`, `latitude`, `longitude` e
+`edital_texto` NULOS, título sem cidade ("TERRENO … LOTE Nº 3, ANTIGO LOTE 28 DA QUADRA 2031") e observações só com as
+regras do leilão; `informacoes` vazio. A cidade só está no PDF do edital — não é defeito do parser. Sai quando o edital for
+lido (geração de relatório já lê). Próximos da #371: SUPORTE 29 (slug "gov-valadares-mg"), ALEXANDRECOSTA 11.
+
 ## 16/11 — Lacuna de captação sem falso alarme (#410) e datas CEF vencidas (#373)
 
 - `fonte_captacao_lacuna()` media "listado no site" e reportava "deixamos de capturar" (forma nº 10). Agora desconta:
