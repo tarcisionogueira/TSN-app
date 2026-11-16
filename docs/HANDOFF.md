@@ -6,6 +6,14 @@
 
 
 
+## 16/11 (madrugada) — #373: a data vencida da venda online vinha do GATILHO, não da página
+A rodada manual do `enriquecer-datas-cef` (00:30, depois do commit 378c137) visitou 32 dos 45 lotes de venda online com
+data vencida, e a página da Caixa **não mostra data nenhuma** (`sem-data 50`). A Caixa bloqueou o runner com 139 processados.
+Não havia data nova para pegar: o CSV não traz data e `preservar_data_leilao()` devolvia a data ANTIGA a cada upsert
+(só `venda_direta` soltava). Migração `20261116_venda_online_solta_data_vencida`: em `venda_online`, uma data já vencida
+há mais de 2 dias e sem 2ª praça não é mais preservada, e o nulo do CSV passa. Data futura continua preservada. Os 45 se
+limpam no próximo upsert do CSV CEF (~16h UTC), sem UPDATE manual. Fechar o #373 depois de conferir a contagem (=0).
+
 ## 16/11 — #371 (sem UF): TURANI não publica a cidade
 
 Os 32 TURANI sem UF: o JSON do lote (`/lotes/<id>/atualiza-pagina`) traz `cidade_id`, `latitude`, `longitude` e
