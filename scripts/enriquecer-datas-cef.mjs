@@ -223,6 +223,20 @@ async function novaPagina(browser) {
 async function buscarCandidatos() {
   const PAG = 1000;
   const out = [];
+  // DATA VENCIDA PRIMEIRO (16/11, #373): a Caixa bloqueia o IP do runner depois de ~3 min, então a ordem decide quem é
+  // visitado. Lote à venda mostrando data passada é o defeito que o cliente vê — vai na frente da fila.
+  {
+    const corte = new Date(Date.now() - 2 * 86400000).toISOString().slice(0, 10);
+    const { data, error } = await supabase.from('imoveis_leilao')
+      .select('id, link_edital, url_lote, ficha_cef, valor_minimo, valor_avaliacao, valor_minimo_2')
+      .eq('fonte', 'CEF').eq('ativo', true).lt('data_leilao', corte).is('data_leilao_2', null)
+      .not('modalidade', 'ilike', '%venda%direta%').not('url_lote', 'is', null)
+      .order('enriquecido_em', { ascending: true, nullsFirst: true }).limit(300);
+    if (error) console.error('query de data vencida falhou (segue a fila normal):', error.message);
+    else out.push(...(data || []));
+  }
+  const jaNaFila = new Set(out.map((c) => c.id));
+  let off = 0;   // deslocamento da fila NORMAL (independe dos vencidos que já entraram na frente)
   while (out.length < LIMITE) {
     const { data, error } = await supabase.from('imoveis_leilao')
       .select('id, link_edital, url_lote, ficha_cef, valor_minimo, valor_avaliacao, valor_minimo_2')
@@ -230,14 +244,17 @@ async function buscarCandidatos() {
       // Precisa de enriquecimento se falta a DATA, o EDITAL REAL (PDF em /editais/),
       // a FICHA técnica OU a 2ª PRAÇA (valor_minimo_2). Uma única visita à página
       // captura tudo (data + 2ª praça + edital + ficha), sem custo extra.
-      .or('data_leilao.is.null,link_edital.is.null,link_edital.not.ilike.*/editais/*,ficha_cef.is.null,valor_minimo_2.is.null')
+      // + DATA VENCIDA (16/11, #373): venda online da Caixa fecha a rodada e reabre com data nova, o lote segue no CSV e
+      // a tela mostrava a data VELHA (45 lotes, de 20/07 a 11/11). Lote com data já preenchida nunca voltava à fila.
+      .or(`data_leilao.is.null,data_leilao.lt.${new Date(Date.now() - 2 * 86400000).toISOString().slice(0, 10)},link_edital.is.null,link_edital.not.ilike.*/editais/*,ficha_cef.is.null,valor_minimo_2.is.null`)
       .not('modalidade', 'ilike', '%venda%direta%')
       .not('url_lote', 'is', null)
       .order('enriquecido_em', { ascending: true, nullsFirst: true })
-      .range(out.length, out.length + PAG - 1);
+      .range(off, off + PAG - 1);
     if (error) { console.error('query erro:', error.message); break; }
     if (!data?.length) break;
-    out.push(...data);
+    off += data.length;
+    out.push(...data.filter((c) => !jaNaFila.has(c.id)));
     if (data.length < PAG) break;
   }
   return out.slice(0, LIMITE);
