@@ -6,6 +6,36 @@
 
 
 
+## 16/11 — FECHAMENTO DA SESSÃO (15–16/11): onde parou e o que a próxima faz primeiro
+**Entregue nesta sessão:** Índice BidPro (peso por prova, piso de 5 unidades, invariantes, FipeZAP como alarme); arena
+dos relatórios mercadológico/documental (origem das condições de pagamento, decisor único do cenário, Brooklin não se
+repete); pagamentos #429; retenção de assessorado #421; datas CEF #373 (gatilho de venda online); cidade sem UF #371
+(bairro do Rio no MSIS, slug do lote no SUPORTE); lacuna por ID #410 (SOLEON + motor); relatórios antes do envio e
+autorização de lance #419/#420; bairro carioca #368.
+
+**Conferências agendadas (se esta sessão não as executar, a próxima faz):**
+- **16/11 ~17:15 UTC, #373:** contar CEF ativos com data vencida sem 2ª praça (era 45, esperado 0 após o upsert do
+  CSV das ~16h). Zerou → `pendencia_fechar(373, …)`.
+- **16/11 ~21:45 UTC, #410:** `fonte_saude.fora_do_acervo` dos tenants soleon depois da rodada residencial das ~20:24
+  UTC. Se veio nulo, o runner residencial está com código antigo (sem git pull). Se veio, o que sobra é lacuna real.
+- **17/11, #428:** motor, lote `sumiu_da_fonte` que reaparece.
+- **18/11, #371 e #410:** contagem sem cidade/UF por fonte depois das coletas (TURANI 32 · SUPORTE 29 · ALFA 16 ·
+  RYMER 14 · ALEXANDRECOSTA 11 em 16/11). **19/11, #368:** Rymer sem cidade (era 14, esperado ~5).
+
+**Esperando o dono:**
+- **#472 Homio, antes do lançamento de 26/11:** definir `HOMIO_WEBHOOK_URL` na Vercel ou seguir sem o aviso de volta.
+- **#198/#143:** gerar convite novo para o Dr. José Roberto (o de 0b5cd053 venceu em 19/10). Isso destrava o vínculo
+  do advogado aos 3 casos e o repasse do honorário da arrematação fb02770c.
+- **#262/#263, roteiro na nota:** teste com compra real de Veículos/Combo e conferência de 2 minutos das telas.
+- Comandos de dados já entregues e pendentes: BAYIT `00e95b8e` (forma_pagamento a_vista); conferir arrematado
+  `db5939a5` (guia 1 venceu em 21/08); certificado TLS do LUNELLI; rota residencial do ALLIANCE.
+
+**Esperando caso real:** #440 (próximo pagamento do checkout MP), #431 (1ª cobrança Inter), #456 (busca fraca), #482
+(relatório novo com comparáveis conferidos), #489 (1º uso da autorização de lance).
+
+**Próximas P2 que a sessão faz sozinha:** #289/#290 (fotos e documentos faltando por leiloeiro), #385 (envio ao
+contador), #389 (espelho de e-mail enviado fora do app), #310 (parsers sem cidade: MILAN, RIGOLON, CASSIANO, NAKAKOGUE).
+
 ## 16/11 — #368: bairro do Rio pela lista oficial no gatilho do banco
 `bairro_carioca()` (usada por `trg_local_do_texto`) só conhecia ~50 bairros. RYMER ("em Vigário Geral", "na Penha
 Circular", ", São Cristóvão") e PORTELLA ficavam com UF=RJ e sem cidade. Migração `20261116_bairro_carioca_lista_oficial`:
