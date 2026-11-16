@@ -6,6 +6,15 @@
 
 
 
+## 16/11 — Pendências fechadas por verificação (#412, #216, #427)
+
+- #412: trava do documental sem efeito colateral em 7 dias (2 pedidos a leiloeiro, 4 docs aguardando, 1 recusa).
+- #216: guia 2 do arrematado 74fa22f6 aprovada pela tela e enviada em 12/11 (aprovado_por preenchido). Obs.: arrematado
+  db5939a5 tem guia 1 (venc. 21/08) sem envio registrado — conferir se foi tratada fora do sistema.
+- #427: D1LANCE/Leilão Eletrônico/Baston ok; Parque dos Leilões vazio é legítimo (só eventos encerrados 19–30/10).
+  Vermelho restante do scraper-dom: LUNELLI (certificado TLS inválido no site, para qualquer cliente — explicação gravada em
+  fonte_regressao_explicada; não se desliga TLS) e ALLIANCE (403 ao IP do runner; nunca coletou, sem baseline).
+
 ## 16/11 — RETENÇÃO NÃO APAGA RELATÓRIO DE ASSESSORADO (#421)
 
 - `analise_retencao_protegida(user_id)` (papel assessorado/assessorado_anual ou cliente de `casos`) entra em
