@@ -27,6 +27,13 @@ gatilho considera o fim já gravado na linha de mesmo `fonte_id`; e religou os 4
 posterior ao gravado; BIASI/FRAZAO exibem só a data já passada, ZUK deu 404, GESTAO 403, PESTANA exige navegador.
 Não é prova de ausência: são sites que não expõem o fechamento por lote numa leitura simples.
 
+**Pelo navegador (pedido do dono, mesma noite):** GESTAO — Vinco 7466 (22/10) está **VENDIDO** no site, ExtraJust 477
+já saiu do ar: desligamento correto, a data bate. ZUK — 38206-238991 fechou em 11/11 14h (data certa), mas o site diz
+"encerrado, mas ainda aceita propostas" e a apuração gravou `sem_lance`. **Mesmo mecanismo, outro campo:** o coletor
+não manda `resultado_leilao`, o BEFORE INSERT não via a exceção de 15 dias do "sem lance" e desligava pelo EXCLUDED —
+ZUK 0 ativos × 72 desligados, todos regravados depois da apuração. `20261116b_praca_vencida_le_resultado_da_linha_existente.sql`
+(aplicada): o gatilho também lê o resultado gravado; religou 72 (ZUK 71 ativos). Teste revertido: ZUK e SUPORTE `ativo=t`.
+
 ## 16/11 (noite, 2) — MILAN IMÓVEIS DE VÁRIOS LOTES SAEM DO BRIGHT DATA
 
 Dono: "Sim, troque". Os eventos de imóveis de vários lotes (tipoLeilao 7) agora vêm do mesmo `/leiloes/{cod}/catalogo`
