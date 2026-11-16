@@ -6,6 +6,18 @@
 
 
 
+## 16/11 (madrugada, 3) — #410: a lacuna do SOLEON era a janela de 10 dias, não captação perdida
+GOLD "42%", CASSIANO "34%", WMS "59%", PATIOROCHA, JV, ISAIAS, CERULI, ALEMAO, RECH e ORO são todos da plataforma soleon e
+foram medidos no mesmo minuto. No banco, a maior parte do "faltando" já está lá INATIVA, por motivo legítimo:
+GOLD 42 vendido_na_fonte + 63 praca_vencida, CASSIANO 35 gemeo_matricula + 31 gemeo_entre_leiloeiros + 15
+duplicata_comprei, WMS 30 duplicata_comprei. `fonte_captacao_lacuna()` só contava inativo explicado com
+`atualizado_em` nos últimos 10 dias, e o soleon não relê lote inativo (`planejarAlvo`). Resultado: lote que o site
+continua listando envelhece e vira "faltando" (forma nº 10).
+Conserto: o coletor mede por ID (`contarForaDoAcervo`), ou seja, quantos IDs enumerados hoje não existem no banco em
+estado nenhum, e grava em `fonte_saude.fora_do_acervo`. Leitura que falha dá null, nunca 0. A função prefere esse número
+quando ele vem (migração `20261116_lacuna_por_id`). As outras plataformas seguem pela contagem antiga e podem ganhar a
+mesma medida quando forem investigadas (EMILIOMATOS, PECINI, SUBLIME, LEILAOBRASIL).
+
 ## 16/11 (madrugada, 2) — #371: cidade pelo bairro do Rio e pelo slug do lote (SUPORTE)
 - **MSIS (21 leiloeiros do RJ):** "…HADDOCK LOBO, Nº 72 - ESTÁCIO/RJ" e "…Nº 172 GLORIA/RJ" ficavam sem cidade (bairro não é
   município no IBGE). Agora um bairro OFICIAL da capital seguido de "/RJ" vale Rio de Janeiro/RJ. "Centro/RJ" fica fora,

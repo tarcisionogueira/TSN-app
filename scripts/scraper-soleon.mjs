@@ -852,6 +852,24 @@ async function coletarTenant(tenant) {
   return prontos;
 }
 
+// LACUNA POR ID, NÃO POR CONTAGEM (16/11, #410). fonte_captacao_lacuna() comparava `enumerados` com a CONTAGEM do acervo
+// (ativos + inativos explicados nos últimos 10 dias). Mas `planejarAlvo` não relê lote inativo: o vendido/vencido/gêmeo
+// que o site continua listando envelhece no banco e sai da janela — e passava a contar como "faltando". GOLD "42%",
+// CASSIANO "34%", WMS "59%" eram em boa parte isso (42 vendido_na_fonte, 63 praca_vencida, 30 duplicata_comprei…).
+// Aqui a pergunta é a certa: quantos IDs que o site lista HOJE não existem no banco em estado nenhum. Leitura que falha
+// devolve null (sem medida), nunca 0 — 0 seria "captação completa" sem ter conferido.
+async function contarForaDoAcervo(fonte) {
+  const ids = [...(ENUM_IDS.get(fonte) || [])];
+  if (!ids.length) return null;
+  const achados = new Set();
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data, error } = await supabase.from('imoveis_leilao').select('fonte_id').in('fonte_id', ids.slice(i, i + 200));
+    if (error) { console.error(`  [${fonte}] lacuna por id não medida: ${error.message}`); return null; }
+    for (const r of data || []) achados.add(r.fonte_id);
+  }
+  return ids.length - achados.size;
+}
+
 // VARREDURA DE SUMIDOS (28/09). A família Soleon nunca desativava lote que saiu do site: a
 // DANIELGARCIA tinha 9 ativos com a página em 404, um deles (59450, sem data) fora do site desde
 // 08/09. Só a limpeza por DATA aposentava — e lote sem data nunca vence. Regra IGUAL à de
@@ -1138,8 +1156,10 @@ async function main() {
     // pelo orçamento devolve lotes de verdade, então cai aqui — e sem este número a linha
     // sairia como medição sadia da fonte.
     const cotaNegada = COTA_NEGADA.get(tenant.fonte) || 0;
+    const foraDoAcervo = await contarForaDoAcervo(tenant.fonte);
     await registrarSaude(supabase, tenant.fonte, rows, 'soleon',
-      rows.length ? { enumerados, cotaNegada } : {
+      rows.length ? { enumerados, cotaNegada, foraDoAcervo } : {
+        foraDoAcervo,
         cotaNegada,
         ok: false,
         semCota: SEM_COTA.has(tenant.fonte),

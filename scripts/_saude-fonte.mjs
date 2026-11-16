@@ -188,6 +188,9 @@ export async function registrarSaude(supabase, fonte, imoveis, estrategia, valid
       // 16/11 (#410): quantos dos enumerados são CANDIDATOS a imóvel (passaram pelo filtro por URL). `enumerados` segue
       // sendo tudo o que o site lista (é o que a regressão compara); a lacuna de captação usa este.
       ...(Number.isFinite(validacao?.candidatos) ? { candidatos: validacao.candidatos } : {}),
+      // 16/11 (#410): enumerados que NÃO existem no banco em estado nenhum (medido por id pelo coletor). Quando vem,
+      // é a lacuna verdadeira; fonte_captacao_lacuna() prefere este número à comparação de contagens.
+      ...(Number.isFinite(validacao?.foraDoAcervo) ? { fora_do_acervo: validacao.foraDoAcervo } : {}),
       uf_pct: m.uf_pct, valor_pct: m.valor_pct, link_pct: m.link_pct, foto_pct: m.foto_pct,
       status, motivo: motivo || null,
     });
