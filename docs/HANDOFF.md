@@ -6,6 +6,19 @@
 
 
 
+## 16/11 — Lacuna de captação sem falso alarme (#410) e datas CEF vencidas (#373)
+
+- `fonte_captacao_lacuna()` media "listado no site" e reportava "deixamos de capturar" (forma nº 10). Agora desconta:
+  (a) lote no banco, inativo por motivo legítimo (praça vencida, gêmeo, duplicata, vaga, fração, não-imóvel) e tocado
+  nos últimos 10 dias — `sumiu_da_fonte` NÃO desconta; (b) o que o motor já descarta pela URL (veículo/sucata):
+  coluna nova `fonte_saude.candidatos` (runner → _saude-fonte), lacuna usa `coalesce(candidatos, enumerados)`;
+  `enumerados` segue sendo tudo o que o site lista (a regressão compara ele). HASTA saiu da lista; NORDESTE (139 de 144
+  fora pela URL) sai na próxima coleta. Lacunas reais que sobram: EMILIOMATOS 212, GOLD 148, PW 128, PECINI 105,
+  CASSIANO 90, LEILAOBRASIL 71, SUBLIME 57 + veículos (SAVOY 2.039).
+- #373: `scripts/enriquecer-datas-cef.mjs` só revisitava CEF sem data/edital/ficha/2ª praça; venda online com rodada
+  vencida (45 lotes) nunca voltava. Agora data vencida > 2 dias entra e vai na FRENTE da fila (bloqueio do runner em ~3
+  min); paginação da fila normal com deslocamento próprio.
+
 ## 16/11 — Pendências fechadas por verificação (#412, #216, #427)
 
 - #412: trava do documental sem efeito colateral em 7 dias (2 pedidos a leiloeiro, 4 docs aguardando, 1 recusa).

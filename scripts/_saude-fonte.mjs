@@ -185,6 +185,9 @@ export async function registrarSaude(supabase, fonte, imoveis, estrategia, valid
     }
     await supabase.from('fonte_saude').insert({
       fonte, total: m.n, enumerados, estrategia: estrategia || null,
+      // 16/11 (#410): quantos dos enumerados são CANDIDATOS a imóvel (passaram pelo filtro por URL). `enumerados` segue
+      // sendo tudo o que o site lista (é o que a regressão compara); a lacuna de captação usa este.
+      ...(Number.isFinite(validacao?.candidatos) ? { candidatos: validacao.candidatos } : {}),
       uf_pct: m.uf_pct, valor_pct: m.valor_pct, link_pct: m.link_pct, foto_pct: m.foto_pct,
       status, motivo: motivo || null,
     });
