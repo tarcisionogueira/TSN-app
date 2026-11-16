@@ -25,8 +25,8 @@ import MUNICIPIOS from './_municipios.js';
 import { encerradoPorDatas } from './_leilao-encerrado.js';
 import { ajustarFiltrosPorIntencao } from '../src/lib/intencao.js';
 import { TIPOS_POR_PERFIL, TETO_FAIXA, PERFIL_ROTULO, FAIXA_ROTULO, pontuarCandidato, resumoComportamento, distanciaKm } from './_curadoria.js';
-import { SEL_LOTE as SEL, proximaPraca, visaoDaOportunidade } from './_oportunidade-selecionada.js';
-import { sb, emailDaConta, emailAoClienteOportunidade } from './_atendimento-canal.js';
+import { SEL_LOTE as SEL, proximaPraca, visaoDaOportunidade, relatoriosDoCliente } from './_oportunidade-selecionada.js';
+import { sb, lerLista, emailDaConta, emailAoClienteOportunidade } from './_atendimento-canal.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -83,6 +83,13 @@ async function selecionar(body, user) {
   const [lote] = await sbGet(`imoveis_leilao?id=eq.${body.imovel_id}&select=${SEL},ativo&limit=1`);
   if (!lote) return json({ error: 'Lote não encontrado.' }, 404);
   if (lote.ativo === false || encerradoPorDatas(lote).encerrado) return json({ error: 'Este lote não está mais em disputa.' }, 409);
+  // RELATÓRIOS ANTES DO ENVIO (16/11, #420, decisão do dono): o cliente precisa ter o mercadológico e o documental
+  // CONCLUÍDOS deste lote na conta dele. O gatilho oportunidade_exige_relatorios confere de novo no banco.
+  const rel = (await relatoriosDoCliente(lerLista, clienteId, [lote.id], { comHash: true })).get(String(lote.id)) || {};
+  const faltam = [!rel.mercado && 'mercadológico', !rel.documental && 'documental'].filter(Boolean);
+  if (faltam.length) {
+    return json({ error: `Falta o relatório ${faltam.join(' e o ')} do cliente para este lote. Gere em nome dele antes de enviar.`, precisa_relatorios: true, faltam }, 409);
+  }
   const { dataLeilao } = proximaPraca(lote);
   const dias = dataLeilao ? (Date.parse(dataLeilao) - Date.now()) / 864e5 : null;
   const semData = dias == null || !Number.isFinite(dias);
@@ -104,7 +111,8 @@ async function selecionar(body, user) {
   const ri = await sb('oportunidades_selecionadas', { method: 'POST', prefer: 'return=representation', body: {
     cliente_id: clienteId, imovel_id: lote.id, motivo_equipe: motivo, selecionada_por: user.id, selecionada_por_nome: autor?.nome || null,
     prazo_curto_confirmado: prazoCurto,
-    retrato: { lote, perfil, filtros: filtros[0] || null, motivos: (motivos || []).slice(0, 3), capturado_em: new Date().toISOString() },
+    retrato: { lote, perfil, filtros: filtros[0] || null, motivos: (motivos || []).slice(0, 3), capturado_em: new Date().toISOString(),
+      relatorios: { mercado: rel.mercado, documental: rel.documental } },
   } });
   if (ri.status === 409) return json({ error: 'Este lote já está selecionado para o cliente.' }, 409);
   if (!ri.ok) throw new Error(`seleção HTTP ${ri.status}`);
@@ -170,7 +178,9 @@ async function handler(req) {
     const linhasSel = await sbGet(`oportunidades_selecionadas?cliente_id=eq.${clienteId}&select=*&order=selecionada_em.desc&limit=50`);
     const idsSel = [...new Set(linhasSel.map((l) => l.imovel_id))];
     const vivosSel = new Map((idsSel.length ? await sbGet(`imoveis_leilao?id=in.(${idsSel.join(',')})&select=${SEL},ativo`) : []).map((l) => [l.id, l]));
-    const selecionadas = linhasSel.map((l) => visaoDaOportunidade(l, vivosSel.get(l.imovel_id)));
+    // Autorizações de lance (#419): a equipe consulta aqui o valor máximo vigente de cada oportunidade.
+    const autorizacoes = linhasSel.length ? await sbGet(`autorizacoes_lance?cliente_id=eq.${clienteId}&select=id,oportunidade_id,valor_maximo,criada_em,revogada_em&order=criada_em.desc&limit=200`) : [];
+    const selecionadas = linhasSel.map((l) => visaoDaOportunidade(l, vivosSel.get(l.imovel_id), autorizacoes));
     const [perfil] = await sbGet(`perfis?id=eq.${clienteId}&select=id,nome,perfil_investidor,faixa_capital,forma_pagamento,endereco_cidade,endereco_uf,cidades_interesse,triagem_em&limit=1`);
     if (!perfil) return json({ error: 'Cliente não encontrado' }, 404);
 
@@ -253,6 +263,9 @@ async function handler(req) {
       };
     // TODOS os que cabem (05/10, dono: o corte em 15 escondia 33 de 48). Ordem = encaixe.
     }).sort((a, b) => b.pontos - a.pontos);
+    // Quais candidatos já têm os dois relatórios do cliente (#420): sem eles o envio é recusado.
+    const relPorLote = await relatoriosDoCliente(sbGet, clienteId, oportunidades.map((o) => o.id));
+    for (const o of oportunidades) { const r = relPorLote.get(String(o.id)) || {}; o.relatorios = { mercado: !!r.mercado, documental: !!r.documental }; }
 
     // Cliente 360 (02/10, dono): a busca fica na linha do tempo DO CLIENTE, com a equipe como
     // autora — a navegação de quem buscou já cai no 360 dela, mas no do cliente não aparecia nada.

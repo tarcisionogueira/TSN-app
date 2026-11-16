@@ -209,7 +209,8 @@
     "testar:reconciliar-antes-da-recusa": "node scripts/testes/reconciliar-pagamento-antes-da-recusa.mjs",
     "testar:nao-imovel-motor-casa": "node scripts/testes/nao-imovel-motor-casa.mjs",
     "testar:cidade-slug-lote": "node scripts/testes/cidade-slug-lote.mjs",
-    "testar:lacuna-por-id": "node scripts/testes/lacuna-por-id.mjs"
+    "testar:lacuna-por-id": "node scripts/testes/lacuna-por-id.mjs",
+    "testar:autorizacao-lance": "node scripts/testes/autorizacao-lance.mjs"
   },
   "dependencies": {
     "@sentry/node": "^10.74.0",

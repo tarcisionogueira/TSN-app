@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Target } from 'lucide-react';
 import { apiCall } from '../utils/apiCall';
+import { textoAutorizacao } from '../lib/autorizacao-lance';
 
 // OPORTUNIDADE SELECIONADA PELA EQUIPE (07/11, termo de assessoria, cláusula 1.3): o cliente aprova para a reunião
 // ou recusa. Aprovar NÃO é lance (1.5), e por isso o aviso vem ANTES dos botões, que têm o mesmo peso.
@@ -9,6 +10,8 @@ import { apiCall } from '../utils/apiCall';
 // em modo suporte (`clienteId` preenchido) o cartão é só leitura, e o servidor recusaria de qualquer forma.
 const brl = (v) => (v ? 'R$ ' + Math.round(v).toLocaleString('pt-BR') : null);
 const dataBr = (d) => { const t = Date.parse(d || ''); return Number.isFinite(t) ? new Date(t).toLocaleDateString('pt-BR') : null; };
+// "250.000,00", "250000" ou "250.000" → 250000. Vazio ou inválido → null.
+const lerValor = (t) => { const n = Number(String(t || '').replace(/[^\d,]/g, '').replace(',', '.')); return Number.isFinite(n) && n > 0 ? n : null; };
 const botao = { flex: '1 1 150px', minHeight: 46, padding: '11px 14px', borderRadius: 10, fontWeight: 800, fontSize: 14.5, cursor: 'pointer', background: 'white', color: '#0f172a', border: '2px solid #0D63DB' };
 
 export default function OportunidadesDecisao({ clienteId = null, onPendentes }) {
@@ -20,6 +23,9 @@ export default function OportunidadesDecisao({ clienteId = null, onPendentes }) 
   const [motivo, setMotivo] = useState('');
   const [recibos, setRecibos] = useState({});
   const [erroAcao, setErroAcao] = useState({});
+  const [autorizando, setAutorizando] = useState(null); // id da oportunidade com o formulário de autorização aberto
+  const [valorTxt, setValorTxt] = useState('');
+  const [concordo, setConcordo] = useState(false);
   const vistos = useRef(new Set());
 
   const carregar = useCallback(async () => {
@@ -58,6 +64,33 @@ export default function OportunidadesDecisao({ clienteId = null, onPendentes }) 
       if (!r.ok || !j.ok) throw new Error(j.error || `Erro ${r.status}`);
       setRecibos((x) => ({ ...x, [o.id]: j.recibo }));
       setRecusando(null); setMotivo('');
+      await carregar();
+    } catch (e) { setErroAcao((x) => ({ ...x, [o.id]: e.message })); }
+    setOcupado(null);
+  }
+
+  // AUTORIZAÇÃO DE LANCE (16/11, #419, termo 1.5). O texto mostrado é montado pelo MESMO módulo do servidor e vai
+  // junto no pedido: o servidor só grava se for idêntico ao que ele monta. Sem atualização otimista.
+  async function autorizar(o, texto, valor) {
+    setOcupado(o.id); setErroAcao((x) => ({ ...x, [o.id]: null }));
+    try {
+      const r = await apiCall('/api/minhas-oportunidades', { method: 'POST', body: JSON.stringify({ acao: 'autorizar', id: o.id, valor_maximo: valor, texto, versao: dados.textos?.versao_autorizacao }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.ok) throw new Error(j.error || `Erro ${r.status}`);
+      setRecibos((x) => ({ ...x, [o.id]: j.recibo }));
+      setAutorizando(null); setValorTxt(''); setConcordo(false);
+      await carregar();
+    } catch (e) { setErroAcao((x) => ({ ...x, [o.id]: e.message })); }
+    setOcupado(null);
+  }
+  async function revogar(o) {
+    if (!window.confirm('Revogar a autorização de lance deste imóvel? A equipe não poderá dar lance com ela.')) return;
+    setOcupado(o.id); setErroAcao((x) => ({ ...x, [o.id]: null }));
+    try {
+      const r = await apiCall('/api/minhas-oportunidades', { method: 'POST', body: JSON.stringify({ acao: 'revogar', autorizacao_id: o.autorizacao.id }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.ok) throw new Error(j.error || `Erro ${r.status}`);
+      setRecibos((x) => ({ ...x, [o.id]: j.recibo }));
       await carregar();
     } catch (e) { setErroAcao((x) => ({ ...x, [o.id]: e.message })); }
     setOcupado(null);
@@ -120,13 +153,51 @@ export default function OportunidadesDecisao({ clienteId = null, onPendentes }) 
         </article>
       ))}
 
-      {respondidas.map((o) => (
+      {respondidas.map((o) => {
+        const valor = lerValor(valorTxt);
+        const texto = valor ? textoAutorizacao({ titulo: o.titulo, cidade: o.cidade, uf: o.uf, valorMaximo: valor, relatorios: o.relatorios }) : null;
+        return (
         <div key={o.id} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '10px 14px', fontSize: 14, color: '#334155', lineHeight: 1.5 }}>
           <b style={{ overflowWrap: 'anywhere' }}>{o.titulo}</b>: {recibos[o.id] || (o.status === 'aprovada'
-            ? (o.reuniao_em ? `aprovada para reunião. Reunião marcada para ${new Date(o.reuniao_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}.` : 'aprovada para reunião. A equipe vai propor a data. Nenhum lance foi autorizado.')
+            ? (o.autorizacao ? `lance autorizado até ${brl(o.autorizacao.valor_maximo)} em ${dataBr(o.autorizacao.criada_em)}.`
+              : o.reuniao_em ? `aprovada para reunião. Reunião marcada para ${new Date(o.reuniao_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}. Nenhum lance foi autorizado.` : 'aprovada para reunião. A equipe vai propor a data. Nenhum lance foi autorizado.')
             : 'você recusou. Nenhum lance será dado neste imóvel.')}
+
+          {o.status === 'aprovada' && o.relatorios && (
+            <div style={{ fontSize: 13.5, marginTop: 6 }}>
+              Relatórios entregues: mercadológico de {dataBr(o.relatorios.mercado_em) || '—'} e documental de {dataBr(o.relatorios.documental_em) || '—'}.{' '}
+              <button onClick={() => nav(`/analise?imovel=${encodeURIComponent(o.imovel_id)}`)} style={{ background: 'none', border: 'none', padding: 0, color: '#0D63DB', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', textDecoration: 'underline' }}>Abrir os relatórios</button>
+            </div>
+          )}
+
+          {o.status === 'aprovada' && !dados.somente_leitura && o.estado !== 'expirada' && (
+            o.autorizacao ? (
+              <button disabled={ocupado === o.id} onClick={() => revogar(o)} style={{ background: 'none', border: 'none', padding: '6px 0 0', color: '#b91c1c', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', textDecoration: 'underline' }}>{ocupado === o.id ? 'Revogando…' : 'Revogar a autorização'}</button>
+            ) : !o.relatorios ? (
+              <div style={{ fontSize: 13.5, color: '#92400e', marginTop: 6 }}>Esta oportunidade foi enviada antes dos relatórios. Para autorizar lance, peça à equipe para reenviá-la com o mercadológico e o documental.</div>
+            ) : autorizando === o.id ? (
+              <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
+                <label htmlFor={`valor-${o.id}`} style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>Valor máximo do lance (R$)</label>
+                <input id={`valor-${o.id}`} inputMode="decimal" value={valorTxt} onChange={(e) => { setValorTxt(e.target.value); setConcordo(false); }} placeholder="Ex.: 250.000,00" style={{ padding: 10, fontSize: 16, border: '1px solid #cbd5e1', borderRadius: 8, maxWidth: 260 }} />
+                {texto && <div style={{ fontSize: 13.5, color: '#0f172a', background: 'white', border: '1px solid #cbd5e1', borderRadius: 8, padding: '10px 12px', lineHeight: 1.55 }}>{texto}</div>}
+                {texto && (
+                  <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 14 }}>
+                    <input type="checkbox" checked={concordo} onChange={(e) => setConcordo(e.target.checked)} style={{ marginTop: 3 }} /> Li o texto acima e autorizo nestes termos.
+                  </label>
+                )}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                  <button disabled={!texto || !concordo || ocupado === o.id} onClick={() => autorizar(o, texto, valor)} style={{ ...botao, opacity: !texto || !concordo ? 0.5 : 1 }}>{ocupado === o.id ? 'Registrando…' : 'Registrar autorização'}</button>
+                  <button disabled={ocupado === o.id} onClick={() => { setAutorizando(null); setValorTxt(''); setConcordo(false); }} style={{ ...botao, border: '1px solid #cbd5e1', fontWeight: 700 }}>Voltar</button>
+                </div>
+              </div>
+            ) : (
+              <button onClick={() => { setAutorizando(o.id); setValorTxt(''); setConcordo(false); }} style={{ ...botao, marginTop: 10, flex: 'none' }}>Autorizar lance</button>
+            )
+          )}
+          {erroAcao[o.id] && <div role="alert" style={{ fontSize: 14, color: '#b91c1c', fontWeight: 600, marginTop: 8 }}>{erroAcao[o.id]}</div>}
         </div>
-      ))}
+        );
+      })}
     </section>
   );
 }

@@ -6,6 +6,29 @@
 
 
 
+## 16/11 — Oportunidade do assessorado: relatórios antes do envio (#420) e autorização de lance registrada (#419)
+Decisão do dono (16/11): "Precisa ter os dois relatórios para poder enviar para aprovação. O trecho do aceite você pode redigir."
+- **Envio:** `api/oportunidades-cliente.js` só seleciona o lote se o CLIENTE tiver o mercadológico e o documental
+  concluídos daquele lote, gerados em nome dele (`paraUserId`, só admin/analista), para que ele os abra na própria conta.
+  O retrato congela `relatorios.{mercado,documental} = {id, gerado_em, sha256 do result}`, e o gatilho
+  `oportunidade_exige_relatorios` confere de novo no banco. Na tela da equipe, o candidato sem os dois relatórios mostra
+  "Gerar relatórios para <cliente>" (abre /analise com autoGerar) no lugar de Selecionar.
+- **Autorização:** tabela `autorizacoes_lance` (RLS: o cliente lê só as dele; escrita só pela rota). O cliente, com a
+  oportunidade APROVADA, informa o valor máximo, lê o texto e marca "li e autorizo". O texto vem de
+  `src/lib/autorizacao-lance.js`, módulo puro usado pela tela e pelo servidor, sem toLocaleString. O servidor só grava se
+  o texto enviado for idêntico ao que ele monta, e guarda texto, versão (`rascunho-2026-11-16`, redação da sessão),
+  sha256, IP e navegador. O gatilho `autorizacao_lance_proteger` exige oportunidade aprovada, mesmo cliente e lote e os
+  relatórios da oportunidade. Não se reescreve, só se revoga, com uma vigente por oportunidade (índice parcial). A equipe
+  recebe e-mail ao autorizar ou revogar e vê "lance autorizado até R$ X" na lista de enviadas.
+- **Regras novas em `regra_negocio`:** `oportunidade.relatorios_antes_do_envio` e
+  `oportunidade.autorizacao_lance_registrada`. Auditorias de regras e de segurança: 0 achados.
+- **Prova em seco no banco (desfeita, 0 registros sobrando):** envio sem relatório, com relatório de outro usuário e
+  autorização sem aprovação são barrados; envio com os dois relatórios é aceito; autorização com relatórios
+  diferentes, segunda vigente, reescrita de valor e segunda revogação são barradas; autorização válida e revogação
+  passam. Teste do texto: `testar:autorizacao-lance`.
+- **Pendente de caso real:** o fluxo na tela, de ponta a ponta, com um assessorado. A única oportunidade existente (07/11)
+  foi enviada antes da regra: para autorizar, a equipe tem de retirá-la e reenviar com os relatórios.
+
 ## 16/11 (madrugada, 3) — #410: a lacuna do SOLEON era a janela de 10 dias, não captação perdida
 GOLD "42%", CASSIANO "34%", WMS "59%", PATIOROCHA, JV, ISAIAS, CERULI, ALEMAO, RECH e ORO são todos da plataforma soleon e
 foram medidos no mesmo minuto. No banco, a maior parte do "faltando" já está lá INATIVA, por motivo legítimo:

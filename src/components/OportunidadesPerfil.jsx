@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiCall } from '../utils/apiCall';
+import { useAuth } from '../contexts/AuthContext';
 
 // OPORTUNIDADES PELO PERFIL (02/10, pedido do dono): para quem contratou e ainda não arrematou,
 // lotes que cabem na triagem dele (intenção, faixa de capital, pagamento, cidades), na mesma
@@ -10,6 +11,8 @@ import { apiCall } from '../utils/apiCall';
 const brl = (v) => (v ? 'R$ ' + Math.round(v).toLocaleString('pt-BR') : '—');
 export default function OportunidadesPerfil({ cliente }) {
   const nav = useNavigate();
+  const { role } = useAuth();
+  const geraEmNome = role === 'admin' || role === 'analista'; // o mesmo critério do servidor para paraUserId
   const [res, setRes] = useState(null);
   const [erro, setErro] = useState(null);
   const [selecionando, setSelecionando] = useState(null); // imovel_id com o formulário aberto
@@ -80,7 +83,10 @@ export default function OportunidadesPerfil({ cliente }) {
           <div style={{ fontSize: 12, fontWeight: 800, color: '#6b21a8', marginBottom: 4 }}>Enviadas ao cliente</div>
           {selecionadas.map((s) => (
             <div key={s.id} style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', justifyContent: 'space-between', fontSize: 12.5, color: '#334155', padding: '5px 0', borderTop: '1px solid #f3e8ff' }}>
-              <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}><b>{s.titulo}</b> · {ROTULO[s.estado] || s.estado}{s.visto_em ? ' · visto' : ''}{s.aviso_status && s.aviso_status !== 'aceito' ? ` · aviso ${s.aviso_status}` : ''}{s.motivo_recusa ? ` · motivo: ${s.motivo_recusa}` : ''}</span>
+              <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}><b>{s.titulo}</b> · {ROTULO[s.estado] || s.estado}{s.visto_em ? ' · visto' : ''}{s.aviso_status && s.aviso_status !== 'aceito' ? ` · aviso ${s.aviso_status}` : ''}{s.motivo_recusa ? ` · motivo: ${s.motivo_recusa}` : ''}
+                {s.autorizacao && <b style={{ color: '#15803d' }}> · lance autorizado até {brl(s.autorizacao.valor_maximo)} ({new Date(s.autorizacao.criada_em).toLocaleDateString('pt-BR')})</b>}
+                {s.status === 'aprovada' && !s.autorizacao && <span style={{ color: '#92400e' }}> · sem autorização de lance{s.autorizacoes_revogadas ? ` (${s.autorizacoes_revogadas} revogada${s.autorizacoes_revogadas > 1 ? 's' : ''})` : ''}</span>}
+              </span>
               {['selecionada', 'aprovada'].includes(s.status) && <button onClick={() => retirar(s.id)} style={{ background: 'none', border: 'none', padding: 0, color: '#b91c1c', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Retirar</button>}
             </div>
           ))}
@@ -111,6 +117,17 @@ export default function OportunidadesPerfil({ cliente }) {
         </a>
         {vivas.has(o.id)
           ? <div style={{ fontSize: 12, color: '#6b21a8', fontWeight: 700 }}>Já enviada ao cliente</div>
+          // RELATÓRIOS ANTES DO ENVIO (16/11, #420, decisão do dono): sem o mercadológico e o documental DO CLIENTE, não
+          // há Selecionar — há Gerar, em nome dele (paraUserId: só admin/analista; o servidor ignora para os demais).
+          : !(o.relatorios?.mercado && o.relatorios?.documental)
+            ? (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', fontSize: 12, color: '#92400e' }}>
+                <span>Falta o relatório {[!o.relatorios?.mercado && 'mercadológico', !o.relatorios?.documental && 'documental'].filter(Boolean).join(' e o ')} do cliente para enviar.</span>
+                {geraEmNome
+                  ? <button onClick={() => nav(`/analise?imovel=${encodeURIComponent(o.id)}`, { state: { paraUserId: cliente.id, autoGerar: true } })} style={{ background: 'none', border: 'none', padding: 0, color: '#7c3aed', fontSize: 12.5, fontWeight: 800, cursor: 'pointer' }}>Gerar relatórios para {cliente.nome}</button>
+                  : <span>Peça a um analista para gerar em nome do cliente.</span>}
+              </div>
+            )
           : selecionando === o.id
             ? (
               <div style={{ background: 'white', border: '1px solid #e9d5ff', borderRadius: 10, padding: 8, display: 'grid', gap: 6 }}>

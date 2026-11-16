@@ -153,6 +153,23 @@ export function emailAEquipeOportunidade({ decisao, titulo, clienteEmail, motivo
   });
 }
 
+// Autorização de lance registrada ou revogada pelo cliente (#419). A equipe precisa saber na hora: é o limite do lance.
+export function emailAEquipeAutorizacao({ acao, titulo, clienteEmail, valorMaximo }) {
+  const registrou = acao === 'autorizada';
+  const valor = Number(valorMaximo || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  const { html, text } = carta([
+    'Olá,',
+    registrou
+      ? `${clienteEmail} autorizou lance no imóvel ${titulo}, até o valor máximo de ${valor}.`
+      : `${clienteEmail} REVOGOU a autorização de lance no imóvel ${titulo} (era até ${valor}). Nenhum lance pode ser dado com ela.`,
+    `O registro, com o texto aceito, está na tela de oportunidades do cliente: ${APP_URL}/#/assessorados`,
+  ]);
+  return enviarEmail({
+    from: 'BidPro Brasil <noreply@bidprobrasil.com.br>', to: [ADMIN_EMAIL],
+    subject: `${registrou ? 'Lance autorizado' : 'Autorização de lance revogada'} — ${titulo}`.slice(0, 180), html, text, meta: { tipo: 'autorizacao_lance' },
+  });
+}
+
 export async function emailAEquipe({ chamado, clienteNome, texto, motivo, prazo }) {
   const { html, text } = carta([
     'Olá,',

@@ -12,6 +12,24 @@ export const TEXTOS_DECISAO = {
 };
 export const sha256 = (t) => createHash('sha256').update(t, 'utf8').digest('hex');
 
+// AUTORIZAÇÃO DE LANCE (16/11, #419): o texto mora num módulo puro, o mesmo que o navegador usa para mostrar.
+export { VERSAO_AUTORIZACAO, textoAutorizacao } from '../src/lib/autorizacao-lance.js';
+
+// RELATÓRIOS DO CLIENTE PARA O LOTE (16/11, #420): o mercadológico e o documental CONCLUÍDOS do próprio cliente. `ler`
+// tem de LANÇAR em não-2xx (lerLista): "não consegui ler" não pode virar "não tem relatório" — nem o contrário.
+// `comHash` lê o conteúdo para o hash (só no envio, um lote); a lista de candidatos pede só id e data.
+export async function relatoriosDoCliente(ler, clienteId, imovelIds, { comHash = false } = {}) {
+  const ids = [...new Set((imovelIds || []).map(String))].filter((i) => /^[0-9a-f-]{36}$/i.test(i));
+  const out = new Map();
+  if (!ids.length) return out;
+  const filtro = `user_id=eq.${clienteId}&imovel_id=in.(${ids.join(',')})&status=eq.concluida&select=id,imovel_id,updated_at${comHash ? ',result' : ''}&order=updated_at.desc`;
+  const [merc, doc] = await Promise.all([ler(`analises_mercado?${filtro}`), ler(`analises_documental?${filtro}`)]);
+  // Mais recente primeiro: se houver mais de um do mesmo lote, vale o último gerado.
+  const por = (lista, chave) => { for (const r of lista) { const e = out.get(r.imovel_id) || {}; if (e[chave]) continue; e[chave] = { id: r.id, gerado_em: r.updated_at, ...(comHash ? { sha256: sha256(JSON.stringify(r.result ?? null)) } : {}) }; out.set(r.imovel_id, e); } };
+  por(merc, 'mercado'); por(doc, 'documental');
+  return out;
+}
+
 export const SEL_LOTE = 'id,titulo,endereco,cidade,estado,tipo,modalidade,valor_minimo,valor_minimo_ref,valor_avaliacao,desconto_percentual,data_leilao,data_leilao_2,data_fim,praca1_fim,praca2_fim,link_foto,fonte,latitude,longitude,score_financeiro,score_localizacao,ocupacao,forma_pagamento';
 
 // A data que importa é a PRÓXIMA praça, não a 1ª (02/10, print do dono: lotes com 1ª praça em 22/09 e
@@ -37,7 +55,7 @@ export function estadoDaOportunidade(linha, loteVivo) {
   return encerradoPorDatas(loteVivo).encerrado ? 'expirada' : 'aguardando';
 }
 
-export function visaoDaOportunidade(linha, loteVivo) {
+export function visaoDaOportunidade(linha, loteVivo, autorizacoes = []) {
   const r = linha.retrato?.lote || {};
   const base = loteVivo || r;
   const valorRetrato = valorDoLote(r);
@@ -53,5 +71,14 @@ export function visaoDaOportunidade(linha, loteVivo) {
     selecionada_em: linha.selecionada_em, decidida_em: linha.decidida_em, visto_em: linha.visto_em,
     motivo_recusa: linha.motivo_recusa, retirada_em: linha.retirada_em, retirada_motivo: linha.retirada_motivo,
     aviso_status: linha.aviso_status, selecionada_por_nome: linha.selecionada_por_nome,
+    // Os relatórios entregues com a oportunidade (congelados no envio). Linha anterior a 16/11 não tem: null.
+    relatorios: linha.retrato?.relatorios ? {
+      mercado_em: linha.retrato.relatorios.mercado?.gerado_em || null, documental_em: linha.retrato.relatorios.documental?.gerado_em || null,
+    } : null,
+    autorizacao: (() => {
+      const v = (autorizacoes || []).find((a) => a.oportunidade_id === linha.id && !a.revogada_em);
+      return v ? { id: v.id, valor_maximo: Number(v.valor_maximo), criada_em: v.criada_em } : null;
+    })(),
+    autorizacoes_revogadas: (autorizacoes || []).filter((a) => a.oportunidade_id === linha.id && a.revogada_em).length,
   };
 }
