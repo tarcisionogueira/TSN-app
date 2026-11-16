@@ -22,11 +22,14 @@ const COR = { critico: '#dc2626', atencao: '#d97706', info: '#0D63DB' };
 // Camada LLM (economia: 1 chamada Haiku/semana, só se CLAUDE_KEY existir). Sintetiza
 // os insights determinísticos num parecer executivo + direcionamentos por especialista.
 async function sintetizarComIA(insights) {
-  if (!insights.length || !(CLAUDE_KEY || process.env.GEMINI_API_KEY)) return null;
+  // O parecer da semana ANTERIOR (chave sintese:semana) fica fora da entrada: em 16/11 o
+  // "colapso crítico" de uma semana voltava como insight na seguinte e a IA o amplificava.
+  const entrada = insights.filter(i => i.categoria !== 'sintese');
+  if (!entrada.length || !(CLAUDE_KEY || process.env.GEMINI_API_KEY)) return null;
   const prompt = `Você é o AGENTE MODERADOR de uma plataforma de leilões. Abaixo, insights determinísticos da semana (JSON). Escreva em PT-BR, curto e acionável:
 1) Um parecer executivo (2-3 frases) do estado da operação.
 2) Até 3 DIRECIONAMENTOS concretos no formato "→ [agente]: [ação]".
-Não invente dados além dos insights. Insights:\n${JSON.stringify(insights).slice(0, 6000)}`;
+Não invente dados além dos insights. Use SÓ números e percentuais que estejam escritos no texto dos insights — nunca calcule nem estime um percentual a partir de uma lista de nomes. Fonte "sem leilão aberto agora" é estado normal, não falha. A gravidade é a do campo severidade: não promova atenção a crise. Insights:\n${JSON.stringify(entrada).slice(0, 6000)}`;
   // Claude primeiro, Gemini de reserva (iaTexto) — o parecer sai mesmo com uma IA fora.
   const ia = await iaTexto({ prompt, maxTokens: 500, timeoutMs: 25000, primario: 'claude' });
   return ia?.texto.trim() || null;
@@ -103,7 +106,8 @@ export default async function handler(req, res) {
     const cr = await fetch(`${SUPABASE_URL}/rest/v1/moderador_insights?select=categoria,severidade,agente,titulo,detalhe&order=severidade.asc`, {
       headers: h, signal: AbortSignal.timeout(15000),
     });
-    const todos = cr.ok ? (await cr.json().catch(() => [])) : [];
+    // sintese:semana é o parecer da semana passada: não entra na tabela nem na IA (16/11).
+    const todos = (cr.ok ? (await cr.json().catch(() => [])) : []).filter(i => i.categoria !== 'sintese');
     const ordem = { critico: 0, atencao: 1, info: 2 };
     todos.sort((a, b) => (ordem[a.severidade] ?? 9) - (ordem[b.severidade] ?? 9));
     const sintese = await sintetizarComIA(todos);
