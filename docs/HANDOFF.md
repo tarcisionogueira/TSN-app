@@ -15,7 +15,13 @@ com edital PDF tirado do `comentarioCatalogo`) e 15704 (1 de 1). Foto e edital d
 - **Bright Data virou reserva**: só entra se o catálogo falhar, com o teto `MILAN_MAX_EVENTOS`, e nunca com o leilão
   em andamento quando os lotes já estão no acervo. Rodada normal = 0 requisições pagas.
 - **Data do lote = ENCERRAMENTO** (`fechamento` do lote, senão `dataFim` do evento). O caminho pago gravava o INÍCIO:
-  os 24 lotes do 15666 (lances de 12 a 16/11) saíram do acervo em 12/11, e o 15704 (lances até 16/12) sairia amanhã.
+  o 15704 (lances até 16/12) sairia do acervo amanhã. **CORREÇÃO (16/11, mais tarde):** escrevi aqui que os 24 do
+  15666 tinham saído cedo demais — ERRADO. Lido o catálogo depois do fim: 22 de 25 lotes FECHARAM em 12/11 (um a cada
+  ~2 min, 16h00–16h52 UTC) e a limpeza das 19h05 desligou-os certo. O `dataFim` 16/11 era o fim do evento, não dos
+  lotes. Só o 002 (fechou 13/11) e o 019 (15/11, prorrogado) saíram antes da hora; hoje todos estão encerrados, então
+  NÃO há o que reativar. Achado do mesmo exame: lote fechado continua `estadoLote: 101` e `venda: null` no catálogo —
+  sem olhar o `fechamento`, a coleta grátis reativaria lote encerrado. `loteAberto`/`loteDisponivel` agora exigem
+  `fechamento` futuro (imóveis e veículos).
   Na próxima rodada, 15701 passa de 24/11 para 26/11 e 15704 de 16/11 para 16/12.
 - **Descrição completa** do lote (matrícula, ocupação, débitos de IPTU) no lugar do título curto.
 - **Lote vendido/retirado** que o catálogo ainda lista é desligado na hora (`.select()` prova).

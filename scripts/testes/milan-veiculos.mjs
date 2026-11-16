@@ -2,7 +2,7 @@
 // 029 e 052 com mínimo · 001 sem mínimo publicado · 223 empilhadeira · 061 sucata · 064 com `venda` forçada (encerrado).
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { veiculoMilan, eventosEncerrados, textoLimpo, ufDoLocal } from '../lib/milan-veiculos.mjs';
+import { veiculoMilan, eventosEncerrados, textoLimpo, ufDoLocal, loteDisponivel } from '../lib/milan-veiculos.mjs';
 
 const cat = JSON.parse(readFileSync(new URL('./fixtures/milan-catalogo-veiculos-15692.json', import.meta.url), 'utf8'));
 const ev = { codLeilao: 15692, dataInicio: cat.dataInicio, localFotos: '15692', nProcesso: '',
@@ -41,4 +41,8 @@ const ativos = [
   { fonte_id: 'milan_veic_15700_003', data_leilao: '2026-11-10T12:30:00Z' }, // passou mas ainda listado → fica
 ];
 assert.deepEqual([...eventosEncerrados(ativos, new Set(['15700']), agora)], ['15692']);
+// Lote com `fechamento` passado não é disponível, mesmo com estadoLote 101 e venda nula (15666, 16/11).
+{ const l = { ...cat.lotes.conteudo[0], fechamento: '2026-11-18T13:00:00.000+00:00' };
+  assert.equal(loteDisponivel(l, Date.parse('2026-11-18T12:00:00Z')), true);
+  assert.equal(loteDisponivel(l, Date.parse('2026-11-18T14:00:00Z')), false); }
 console.log('milan-veiculos: ok');

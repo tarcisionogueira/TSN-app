@@ -38,9 +38,11 @@ export function ufDoLocal(local) {
   return null;
 }
 
-/** Lote encerrado/retirado não entra (o catálogo continua listando depois do pregão). */
-export function loteDisponivel(l) {
-  return !!l && !l.retirado && !l.naoVendido && !l.vendaRecusada && l.venda == null && Number(l.estadoLote) === 101;
+/** Lote encerrado/retirado não entra (o catálogo continua listando depois do pregão, com `estadoLote` 101 e `venda` nula
+ * — só o `fechamento` passado denuncia; ver lib/milan-siteback.mjs#loteAberto). */
+export function loteDisponivel(l, agora = Date.now()) {
+  return !!l && !l.retirado && !l.naoVendido && !l.vendaRecusada && l.venda == null && Number(l.estadoLote) === 101
+    && !(l.fechamento && Date.parse(l.fechamento) <= agora);
 }
 
 /**

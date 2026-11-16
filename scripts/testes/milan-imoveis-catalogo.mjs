@@ -3,7 +3,7 @@
 // `venda` forçada (encerrado).
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { eventoDoCatalogo, editalDoCatalogo, textoDoHtml } from '../lib/milan-siteback.mjs';
+import { eventoDoCatalogo, editalDoCatalogo, textoDoHtml, loteAberto } from '../lib/milan-siteback.mjs';
 import { TENANTS, montarRow, checarQualidade } from '../lib/milan-parse.mjs';
 
 const cat = JSON.parse(readFileSync(new URL('./fixtures/milan-catalogo-imoveis-15701.json', import.meta.url), 'utf8'));
@@ -32,6 +32,13 @@ assert.equal(row.cidade, 'Rio de Janeiro'); assert.equal(row.estado, 'RJ');
 assert.equal(row.valor_minimo, 14000); assert.equal(row.data_leilao, '2026-11-26');
 assert.equal(row.link_edital, ev.edital);
 assert.equal(checarQualidade(row, { estrito: false }).descartar, false);
+
+// LOTE FECHADO CONTINUA "101" (15666, lido em 16/11 depois do fim): só o `fechamento` passado denuncia.
+const bruto = cat.lotes.conteudo[0];
+const fechou = { ...bruto, fechamento: '2026-11-12T16:02:00.000+00:00' };
+assert.equal(loteAberto(fechou, Date.parse('2026-11-12T15:00:00Z')), true);
+assert.equal(loteAberto(fechou, Date.parse('2026-11-16T21:00:00Z')), false);
+assert.equal(eventoDoCatalogo({ ...cat, lotes: { conteudo: [fechou] } }, Date.parse('2026-11-16T21:00:00Z')).lotes[0].encerrado, true);
 
 // Sem link .pdf no comentário → sem edital (e nunca lança).
 assert.equal(editalDoCatalogo({ comentarioCatalogo: '<p>sem edital</p>' }), null);

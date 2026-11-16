@@ -97,8 +97,10 @@ export async function catalogoSiteback(cod, fetchImpl = fetch) {
  * em andamento, quando a página do evento pelo Bright Data vinha como desafio. O edital está no `comentarioCatalogo`
  * (link relativo `/CKFiles/files/…pdf`, servido pelo adm).
  *
- * DATA = ENCERRAMENTO do lote (`fechamento`, senão `dataFim` do evento). O caminho pago gravava o INÍCIO, e a limpeza
- * por data desligava o lote no primeiro dia de lances: os 24 do 15666 (lances de 12 a 16/11) saíram do acervo em 12/11.
+ * DATA = ENCERRAMENTO do lote (`fechamento`, senão `dataFim` do evento). O caminho pago gravava o INÍCIO do evento.
+ * No evento de vários lotes quase tudo fecha no 1º dia, minuto a minuto (15666: 22 de 25 em 12/11), e o `dataFim` é só
+ * o fim do evento — mas lote prorrogado fecha depois (15666: o 002 em 13/11 e o 019 em 15/11, desligados em 12/11 com
+ * lances ainda abertos), e no evento on-line longo (15704) o fechamento é semanas depois do início.
  *
  * Devolve o formato de lib/milan-parse.mjs#parseEvento (cod, tituloEvento, inicio, edital, judicial, lotes[]), com
  * `descricao` (texto completo do lote: matrícula, ocupação, débitos) e `encerrado` por lote.
@@ -121,10 +123,15 @@ export function editalDoCatalogo(cat) {
   try { return new URL(m[1].replace(/&amp;/g, '&'), ADM).href; } catch { return null; } // href malformado = sem edital, a falha É a resposta
 }
 
-/** Lote com lances abertos. O catálogo continua listando o lote depois de vendido/retirado. */
-export const loteAberto = (l) => !!l && !l.retirado && !l.naoVendido && !l.vendaRecusada && l.venda == null && Number(l.estadoLote) === 101;
+/**
+ * Lote com lances abertos. O catálogo continua listando o lote depois de vendido/retirado — e depois de FECHADO: no
+ * 15666 (consultado em 16/11, após o fim) os 25 lotes seguiam com `estadoLote: 101` e `venda: null`, cada um com o
+ * seu `fechamento` já passado (22 em 12/11, entre 16h00 e 16h52 UTC). Sem a hora, lote encerrado voltaria ao acervo.
+ */
+export const loteAberto = (l, agora = Date.now()) => !!l && !l.retirado && !l.naoVendido && !l.vendaRecusada && l.venda == null
+  && Number(l.estadoLote) === 101 && !(l.fechamento && Date.parse(l.fechamento) <= agora);
 
-export function eventoDoCatalogo(cat) {
+export function eventoDoCatalogo(cat, agora = Date.now()) {
   const cod = String(cat.codLeilao);
   const tituloEvento = String(cat.tituloLeilao || '').trim();
   const nProc = String(cat.nProcesso || '').trim();
@@ -136,7 +143,7 @@ export function eventoDoCatalogo(cat) {
       minimo: Number(l.minimo) > 0 ? Number(l.minimo) : 0,
       foto: arq && cat.localFotos ? `${ADM}/Fotos/${cat.localFotos}/${arq}` : null,
       data: dia(l.fechamento || cat.dataFim || cat.dataInicio),
-      encerrado: !loteAberto(l),
+      encerrado: !loteAberto(l, agora),
     };
   });
   return {
