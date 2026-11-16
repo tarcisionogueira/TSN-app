@@ -15,8 +15,10 @@ duplicata_comprei, WMS 30 duplicata_comprei. `fonte_captacao_lacuna()` só conta
 continua listando envelhece e vira "faltando" (forma nº 10).
 Conserto: o coletor mede por ID (`contarForaDoAcervo`), ou seja, quantos IDs enumerados hoje não existem no banco em
 estado nenhum, e grava em `fonte_saude.fora_do_acervo`. Leitura que falha dá null, nunca 0. A função prefere esse número
-quando ele vem (migração `20261116_lacuna_por_id`). As outras plataformas seguem pela contagem antiga e podem ganhar a
-mesma medida quando forem investigadas (EMILIOMATOS, PECINI, SUBLIME, LEILAOBRASIL).
+quando ele vem (migração `20261116_lacuna_por_id`). O contador mora em `_saude-fonte.mjs` (`contarForaDoAcervo`, teste
+`testar:lacuna-por-id`) e já serve também ao MOTOR genérico (`runner.mjs`: EMILIOMATOS e as fontes do motor). No motor,
+recusa registrada em `coleta_lote_recusado` (não-imóvel, descarte de qualidade) conta como vista; descarte por valor
+segue contando como falta, como antes. Coletores próprios (PECINI, SUBLIME, LEILAOBRASIL…) seguem pela contagem antiga.
 
 ## 16/11 (madrugada, 2) — #371: cidade pelo bairro do Rio e pelo slug do lote (SUPORTE)
 - **MSIS (21 leiloeiros do RJ):** "…HADDOCK LOBO, Nº 72 - ESTÁCIO/RJ" e "…Nº 172 GLORIA/RJ" ficavam sem cidade (bairro não é

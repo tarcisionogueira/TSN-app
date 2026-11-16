@@ -41,7 +41,7 @@ import { viaBanco } from './lib/motor/fetch-fonte.mjs';
 import { extrairGenerico, extrairData, checarQualidade } from './lib/scraper-core.mjs';
 import { registrarConhecimento, qualidadeColeta } from './lib/conhecimento.mjs';
 // Monitor de fontes: sem esta linha a fonte fica INVISÍVEL ao bug bounty (ver _saude-fonte.mjs).
-import { registrarSaude } from './_saude-fonte.mjs';
+import { registrarSaude, contarForaDoAcervo as contarForaDoAcervoIds } from './_saude-fonte.mjs';
 // `planejarAlvo` (10/09): reaproveita o planejador novos+releitura já testado (8 cenários em
 // planejar-alvo.test.mjs) que o runner.mjs ganhou em 29/08 pela MESMA razão descrita aqui —
 // ver o comentário completo acima de `coletarTenant`.
@@ -858,17 +858,7 @@ async function coletarTenant(tenant) {
 // CASSIANO "34%", WMS "59%" eram em boa parte isso (42 vendido_na_fonte, 63 praca_vencida, 30 duplicata_comprei…).
 // Aqui a pergunta é a certa: quantos IDs que o site lista HOJE não existem no banco em estado nenhum. Leitura que falha
 // devolve null (sem medida), nunca 0 — 0 seria "captação completa" sem ter conferido.
-async function contarForaDoAcervo(fonte) {
-  const ids = [...(ENUM_IDS.get(fonte) || [])];
-  if (!ids.length) return null;
-  const achados = new Set();
-  for (let i = 0; i < ids.length; i += 200) {
-    const { data, error } = await supabase.from('imoveis_leilao').select('fonte_id').in('fonte_id', ids.slice(i, i + 200));
-    if (error) { console.error(`  [${fonte}] lacuna por id não medida: ${error.message}`); return null; }
-    for (const r of data || []) achados.add(r.fonte_id);
-  }
-  return ids.length - achados.size;
-}
+const contarForaDoAcervo = (fonte) => contarForaDoAcervoIds(supabase, ENUM_IDS.get(fonte));
 
 // VARREDURA DE SUMIDOS (28/09). A família Soleon nunca desativava lote que saiu do site: a
 // DANIELGARCIA tinha 9 ativos com a página em 404, um deles (59450, sem data) fora do site desde

@@ -14,7 +14,7 @@
  *   conhecimento — metadados p/ registrarConhecimento (plataforma, anti_bot, url_lote, scraper…)
  */
 import { registrarConhecimento, qualidadeColeta } from '../conhecimento.mjs';
-import { registrarSaude } from '../../_saude-fonte.mjs';
+import { registrarSaude, contarForaDoAcervo } from '../../_saude-fonte.mjs';
 import { criarMotorFetch } from './fetch-fonte.mjs';
 import { criarMotorDom } from './fetch-dom.mjs';
 import { criarMotorFirecrawl } from './fetch-firecrawl.mjs';
@@ -521,7 +521,7 @@ export async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLote
   // Forte…), o ruído que treina a ignorar o painel. Queda real continua pega: a saúde compara a LISTA
   // (enumerados) com a execução anterior e promove a 'degradado'.
   const zeroExplicado = fetchOk && enumerado.urls.length > 0 && !sem && !cotaNegada && !prontos.length;
-  return { prontos, encerrados, fonteVazia: fetchOk && enumerado.urls.length === 0, vazioDeclarado, enumerados: enumerado.urls.length, candidatos: urls.length, cotaNegada, eventosCount, viaCatalogo: via, naoImovelIds, idsEnumerados, listaCompleta: enumerado.completa, listaCortada: enumerado.cortada, porqueZero, encerradosAtivos, zeroExplicado, voltaramIds };
+  return { prontos, encerrados, fonteVazia: fetchOk && enumerado.urls.length === 0, vazioDeclarado, enumerados: enumerado.urls.length, candidatos: urls.length, cotaNegada, eventosCount, viaCatalogo: via, naoImovelIds, idsEnumerados, idsCandidatos: new Set(urls.map(u => idFonte(tenant, cfg.parse.idDaUrl(u)))), listaCompleta: enumerado.completa, listaCortada: enumerado.cortada, porqueZero, encerradosAtivos, zeroExplicado, voltaramIds };
 }
 
 // Roda a coleta de uma fonte inteira (todos os tenants). opts:
@@ -549,7 +549,7 @@ export async function rodarFonte(cfg, opts) {
   console.log(`${rotulo} ${dryrun ? '(DRY-RUN — não grava)' : '(GRAVANDO)'} · tenants: ${tenants.map(t => t.fonte).join(',')} · max ${maxLotes}/tenant`);
 
   for (const tenant of tenants) {
-    const { prontos, encerrados, fonteVazia, vazioDeclarado, enumerados, candidatos, cotaNegada, eventosCount, viaCatalogo, naoImovelIds = [], idsEnumerados, listaCompleta, listaCortada, porqueZero, encerradosAtivos = [], zeroExplicado, voltaramIds = new Set() } = await coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debug, semBD, dryrun });
+    const { prontos, encerrados, fonteVazia, vazioDeclarado, enumerados, candidatos, cotaNegada, eventosCount, viaCatalogo, naoImovelIds = [], idsEnumerados, idsCandidatos, listaCompleta, listaCortada, porqueZero, encerradosAtivos = [], zeroExplicado, voltaramIds = new Set() } = await coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debug, semBD, dryrun });
 
     if (!prontos.length) {
       // ⚠️ 29/08 — FONTE VAZIA PRECISA VIRAR LINHA, NÃO SILÊNCIO. Isto era um `continue` que
@@ -681,7 +681,9 @@ export async function rodarFonte(cfg, opts) {
     // Lista cortada vai para a LINHA da saúde (06/11): até aqui só aparecia no log da varredura de sumidos, e a busca
     // por "leiloeiro que só lê a 1ª página" dependia de baixar o log. Palavra 'cortada', nunca 'parcial' (o stale lê
     // 'parcial' no motivo como coleta incompleta).
-    await registrarSaude(supabase, tenant.fonte, prontos, cfg.chave, { enumerados, candidatos, cotaNegada, ...(listaCortada ? { motivo: `lista cortada: ${listaCortada}` } : {}) });
+    // #410 (16/11): lacuna por ID — candidato que não está no acervo nem foi recusado de propósito (não-imóvel etc.).
+    const foraDoAcervo = semBD || dryrun ? null : await contarForaDoAcervo(supabase, idsCandidatos, { descontarRecusados: true });
+    await registrarSaude(supabase, tenant.fonte, prontos, cfg.chave, { enumerados, candidatos, cotaNegada, foraDoAcervo, ...(listaCortada ? { motivo: `lista cortada: ${listaCortada}` } : {}) });
     await desligarEncerrados(supabase, tenant, encerradosAtivos);
     // VARREDURA DE SUMIDOS, opt-in (10/10, #195). O motor só revisita o que o CATÁLOGO lista: lote
     // que saiu do site nunca é reaberto, e sem data de leilão nunca expira — LEJE tinha 12 de 15

@@ -90,6 +90,32 @@ export function ehEscopoReduzido(estrategia) {
   return /escopo-reduzido/i.test(String(estrategia || ''));
 }
 
+/**
+ * LACUNA POR ID (16/11, #410): quantos dos `ids` (fonte_id que o site lista HOJE) não existem no banco em estado nenhum.
+ * Com `descontarRecusados`, recusa registrada em `coleta_lote_recusado` (não-imóvel, descarte de qualidade) conta como
+ * "visto e decidido", não como captação perdida — exceto o descarte por valor, que a lacuna sempre contou como falta.
+ * Leitura que falha → null (sem medida), nunca 0: 0 seria "captação completa" sem ter conferido.
+ */
+export async function contarForaDoAcervo(supabase, ids, { descontarRecusados = false } = {}) {
+  const lista = [...(ids || [])];
+  if (!lista.length) return null;
+  const achados = new Set();
+  for (let i = 0; i < lista.length; i += 200) {
+    const parte = lista.slice(i, i + 200);
+    const { data, error } = await supabase.from('imoveis_leilao').select('fonte_id').in('fonte_id', parte);
+    if (error) { console.error(`  lacuna por id não medida: ${error.message}`); return null; }
+    for (const r of data || []) achados.add(r.fonte_id);
+    if (descontarRecusados) {
+      const resto = parte.filter(id => !achados.has(id));
+      if (!resto.length) continue;
+      const { data: rec, error: eRec } = await supabase.from('coleta_lote_recusado').select('fonte_id, motivo').in('fonte_id', resto);
+      if (eRec) { console.error(`  lacuna por id não medida (recusados): ${eRec.message}`); return null; }
+      for (const r of rec || []) if (!/^descartado: valor/.test(r.motivo || '')) achados.add(r.fonte_id);
+    }
+  }
+  return lista.length - achados.size;
+}
+
 export async function registrarSaude(supabase, fonte, imoveis, estrategia, validacao) {
   const m = validacao?.metricas || metricasColeta(imoveis || []);
   // REDE DE SEGURANÇA (31/08): a flag booleana é a fonte primária, o TEXTO é o desempate.
