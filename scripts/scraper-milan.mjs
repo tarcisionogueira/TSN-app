@@ -105,9 +105,22 @@ async function main() {
   const prontos = [];
   let enumerados = 0, encerrados = 0, reprovados = 0, eventosFalhos = 0, semLote = 0, recusaCota = null, viaBD = 0;
   const multi = [];
+  // LEILÃO EM ANDAMENTO (16/11, dono: "o Milan zera e reabastece os lotes conforme o ciclo do evento"). Enquanto o
+  // evento de vários lotes está no ar (dataInicio ≤ agora < dataFim), a página dele vem como desafio/corpo vazio:
+  // o 15666 (25 imóveis Bradesco, 12–16/11) foi lido em 11/11 e deu `pagina_invalida` em toda rodada depois, gastando
+  // 2 requisições pagas por dia e marcando a fonte como degradada de quinta a domingo. Os lotes dele já estão no
+  // acervo desde a leitura anterior; a coleta não desativa lote não visto, então pular não perde nada.
+  const agora = Date.now();
+  // Só pelas datas: `emLeilao` da agenda veio nulo em todos os eventos de 16/11 (formato desconhecido).
+  const emAndamento = (item) => Date.parse(item.dataInicio) <= agora && agora < Date.parse(item.dataFim || item.dataInicio);
+  const itemPorCod = new Map(agenda.map((e) => [String(e.codLeilao), e]));
+  let andamento = 0;
   for (const item of agenda) {
     const cod = String(item.codLeilao);
-    if (Number(item.tipoLeilao) === 7) { multi.push(cod); continue; }
+    if (Number(item.tipoLeilao) === 7) {
+      if (emAndamento(item) && loteConhecido.has(cod)) { andamento++; console.log(`  evento ${cod}: leilão em andamento, lotes já no acervo — não buscado`); continue; }
+      multi.push(cod); continue;
+    }
     // LOTE ÚNICO — tudo grátis: detalhe na siteback, lote pela foto no repositório.
     let ev;
     try { ev = await eventoSiteback(cod); }
@@ -135,6 +148,10 @@ async function main() {
       viaBD++;
       html = await pagina(`${T.base}/leilao/imoveis/${cod}`);
     } catch (e) {
+      // Página inválida DURANTE o leilão é o ciclo do evento, não falha de acesso (ver `emAndamento` acima).
+      if (e.motivo === 'pagina_invalida' && emAndamento(itemPorCod.get(cod) || {})) {
+        andamento++; console.log(`  evento ${cod}: página indisponível com o leilão em andamento — não conta como falha`); continue;
+      }
       eventosFalhos++;
       console.error(`  evento ${cod}: FALHA (${e.motivo || e.message})`);
       if (e.semCota) { recusaCota = e.motivo; console.log('  ⛔ parou por COTA — o resto fica para a próxima rodada'); break; }
@@ -179,7 +196,7 @@ async function main() {
     await sleep(500);
   }
   if (semLote) console.log(`  ${semLote} evento(s) de lote único sem lote descoberto.`);
-  console.log(`\nResumo: ${prontos.length} pronto(s) · ${enumerados} enumerado(s) · ${encerrados} encerrado(s) · ${reprovados} reprovado(s) · ${eventosFalhos} evento(s) sem acesso.`);
+  console.log(`\nResumo: ${prontos.length} pronto(s) · ${enumerados} enumerado(s) · ${encerrados} encerrado(s) · ${reprovados} reprovado(s) · ${eventosFalhos} evento(s) sem acesso · ${andamento} em andamento (não buscado).`);
 
   if (!prontos.length) {
     // Nenhum evento abriu: falha de ACESSO (ou cota), nunca "fonte vazia".
