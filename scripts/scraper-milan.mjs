@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 /**
- * Scraper MILAN LEILÕES (milanleiloes.com.br) — Bright Data Web Unlocker (propósito `milan`).
+ * Scraper MILAN LEILÕES (milanleiloes.com.br) — imóveis.
+ *
+ * DESDE 16/11 É GRÁTIS: agenda, evento de lote único e catálogo dos eventos de vários lotes saem da API pública
+ * `siteback` (lib/milan-siteback.mjs). O Bright Data (propósito `milan`) ficou só de RESERVA, quando o catálogo falha.
+ * O histórico abaixo explica por que ele existia.
  *
  * Por que pago: o Cloudflare do site dá challenge até para o IP RESIDENCIAL do dono (recon do
  * PC, 27/09, recon_dump 62: "Just a moment..." nas 3 rotas). O Unlocker passa (ids 57/64).
@@ -20,7 +24,7 @@ import { buscarViaBrightData, brightDataDisponivel, ErroBrightData } from '../ap
 import { registrarSaude } from './_saude-fonte.mjs';
 import { TENANTS, extrairEventosImoveis, parseEvento, montarRow, checarQualidade, ehDesafio } from './lib/milan-parse.mjs';
 import { confirmarMatriculas, copiarMatriculas } from './lib/milan-docs.mjs';
-import { agendaImoveis, eventoSiteback, descobrirLote, cardDoEvento } from './lib/milan-siteback.mjs';
+import { agendaImoveis, eventoSiteback, descobrirLote, cardDoEvento, catalogoSiteback, eventoDoCatalogo } from './lib/milan-siteback.mjs';
 
 const T = TENANTS.milan;
 const DRYRUN = process.env.MILAN_DRYRUN !== '0';
@@ -79,8 +83,32 @@ async function amostrarSemValor(cod, ev, cards) {
   } catch (e) { console.log(`    (amostra sem valor falhou: ${String(e?.message || e).slice(0, 120)})`); }
 }
 
+// RESERVA PAGA (só quando o catálogo da siteback falha): página do evento pelo Unlocker + paginação ?pagina=N.
+// PAGINAÇÃO (06/11, dono: "lote 022 do 15666 não aparece"): a página mostra 20 lotes; segue enquanto a anterior tem
+// link para ?pagina=N ou veio quase cheia (a 1ª rodada parou com 19 de 20 lidos). Cada página = 1 requisição paga.
+async function eventoPeloBrightData(cod) {
+  const html = await pagina(`${T.base}/leilao/imoveis/${cod}`);
+  const ev = parseEvento(html, cod, T.base);
+  const vistos = new Set(ev.lotes.map((l) => l.lote));
+  const temProxima = (h, n) => new RegExp(`[?&]pagina=${n}(?!\\d)`).test(String(h || '').replace(/&amp;/g, '&'));
+  let htmlAnt = html;
+  for (let p = 2, ultima = ev.lotes.length; p <= MAX_PAGINAS_EVENTO && (ultima >= 15 || temProxima(htmlAnt, p)); p++) {
+    let h;
+    try { h = await pagina(`${T.base}/leilao/imoveis/${cod}?pagina=${p}`); }
+    catch (e) { console.error(`  evento ${cod} pág. ${p}: FALHA (${e.motivo || e.message}) — segue com ${ev.lotes.length} lote(s)`); break; }
+    htmlAnt = h;
+    const novos = parseEvento(h, cod, T.base).lotes.filter((l) => !vistos.has(l.lote));
+    for (const l of novos) { vistos.add(l.lote); ev.lotes.push(l); }
+    ultima = novos.length;
+    console.log(`  evento ${cod} pág. ${p}: +${novos.length} lote(s)`);
+    if (!novos.length) break;
+    await sleep(500);
+  }
+  return ev;
+}
+
 async function main() {
-  console.log(`MILAN ${DRYRUN ? '(DRY-RUN — não grava)' : '(GRAVANDO)'} · agenda pela siteback (grátis) · até ${MAX_EVENTOS} evento(s) de vários lotes pelo Bright Data`);
+  console.log(`MILAN ${DRYRUN ? '(DRY-RUN — não grava)' : '(GRAVANDO)'} · agenda e catálogos pela siteback (grátis) · Bright Data só de reserva (até ${MAX_EVENTOS} evento(s))`);
 
   // AGENDA PELA SITEBACK (05/11): grátis e completa. A home pelo Bright Data listava no máximo 10 eventos e falhava
   // (3 rodadas zeradas desde 05/10) — 14 dos 17 eventos de imóveis da agenda de 05/11 nunca tinham entrado.
@@ -117,10 +145,7 @@ async function main() {
   let andamento = 0;
   for (const item of agenda) {
     const cod = String(item.codLeilao);
-    if (Number(item.tipoLeilao) === 7) {
-      if (emAndamento(item) && loteConhecido.has(cod)) { andamento++; console.log(`  evento ${cod}: leilão em andamento, lotes já no acervo — não buscado`); continue; }
-      multi.push(cod); continue;
-    }
+    if (Number(item.tipoLeilao) === 7) { multi.push(cod); continue; }
     // LOTE ÚNICO — tudo grátis: detalhe na siteback, lote pela foto no repositório.
     let ev;
     try { ev = await eventoSiteback(cod); }
@@ -140,61 +165,48 @@ async function main() {
     prontos.push(row);
   }
 
-  // VÁRIOS LOTES — a lista só sai pela página do evento (desafio do Cloudflare): Bright Data, com teto.
-  if (multi.length && !brightDataDisponivel()) console.log(`  ${multi.length} evento(s) de vários lotes sem Bright Data configurado — pulados`);
-  for (const cod of (brightDataDisponivel() ? multi.slice(0, MAX_EVENTOS) : [])) {
-    let html;
-    try {
-      viaBD++;
-      html = await pagina(`${T.base}/leilao/imoveis/${cod}`);
-    } catch (e) {
-      // Página inválida DURANTE o leilão é o ciclo do evento, não falha de acesso (ver `emAndamento` acima).
-      if (e.motivo === 'pagina_invalida' && emAndamento(itemPorCod.get(cod) || {})) {
-        andamento++; console.log(`  evento ${cod}: página indisponível com o leilão em andamento — não conta como falha`); continue;
+  // VÁRIOS LOTES — pelo CATÁLOGO da siteback (16/11, grátis; ver lib/milan-siteback.mjs#eventoDoCatalogo). Abre também
+  // com o leilão em andamento, então o evento no ar é relido e lote vendido/retirado sai do acervo. O Bright Data
+  // virou só RESERVA: entra se o catálogo falhar, com o teto MAX_EVENTOS e fora do leilão em andamento.
+  const encerradosIds = [];
+  let viaCatalogo = 0, bdUsados = 0;
+  for (const cod of multi) {
+    let ev = null, comoLeu = 'catálogo';
+    try { ev = eventoDoCatalogo(await catalogoSiteback(cod)); viaCatalogo++; }
+    catch (e) { console.error(`  evento ${cod}: catálogo da siteback falhou (${e.message})`); }
+    if (!ev) {
+      if (emAndamento(itemPorCod.get(cod) || {}) && loteConhecido.has(cod)) {
+        andamento++; console.log(`  evento ${cod}: leilão em andamento, lotes já no acervo — reserva paga não tentada`); continue;
       }
-      eventosFalhos++;
-      console.error(`  evento ${cod}: FALHA (${e.motivo || e.message})`);
-      if (e.semCota) { recusaCota = e.motivo; console.log('  ⛔ parou por COTA — o resto fica para a próxima rodada'); break; }
-      continue;
-    }
-    const ev = parseEvento(html, cod, T.base);
-    // PAGINAÇÃO DO EVENTO (06/11, dono: "lote 022 do 15666 não aparece"): a página mostra 20 lotes e as seguintes ficam
-    // em ?pagina=N (mapeamento do dono, 05/11). Só a 1ª era lida — o 15666 entrou até o 020. Segue enquanto a página
-    // vem cheia e traz lote novo; cada página é 1 requisição do Bright Data, por isso o teto MAX_PAGINAS_EVENTO.
-    const vistos = new Set(ev.lotes.map((l) => l.lote));
-    // Segue se a página anterior tem link para ?pagina=N ou veio quase cheia: a 1ª rodada (06/11) parou porque a 1ª página
-    // rendeu 19 cards lidos de 20 (o 007 não foi lido) e "< 20" foi tomado como última página.
-    const temProxima = (html, n) => new RegExp(`[?&]pagina=${n}(?!\\d)`).test(String(html || '').replace(/&amp;/g, '&'));
-    let htmlAnt = html;
-    for (let p = 2, ultima = ev.lotes.length; p <= MAX_PAGINAS_EVENTO && (ultima >= 15 || temProxima(htmlAnt, p)); p++) {
-      let h;
-      try { viaBD++; h = await pagina(`${T.base}/leilao/imoveis/${cod}?pagina=${p}`); }
+      if (!brightDataDisponivel() || bdUsados >= MAX_EVENTOS || recusaCota) {
+        eventosFalhos++; console.error(`  evento ${cod}: sem leitura (catálogo falhou${recusaCota ? ', sem cota' : brightDataDisponivel() ? ', teto da reserva' : ', sem Bright Data'})`); continue;
+      }
+      try { bdUsados++; ev = await eventoPeloBrightData(cod); comoLeu = 'Bright Data'; }
       catch (e) {
-        console.error(`  evento ${cod} pág. ${p}: FALHA (${e.motivo || e.message}) — segue com ${ev.lotes.length} lote(s)`);
-        if (e.semCota) recusaCota = e.motivo;
-        break;
+        // Página inválida DURANTE o leilão é o ciclo do evento, não falha de acesso.
+        if (e.motivo === 'pagina_invalida' && emAndamento(itemPorCod.get(cod) || {})) {
+          andamento++; console.log(`  evento ${cod}: página indisponível com o leilão em andamento — não conta como falha`); continue;
+        }
+        eventosFalhos++;
+        console.error(`  evento ${cod}: FALHA (${e.motivo || e.message})`);
+        if (e.semCota) { recusaCota = e.motivo; console.log('  ⛔ reserva paga sem COTA — os próximos ficam para a próxima rodada'); }
+        continue;
       }
-      htmlAnt = h;
-      const novos = parseEvento(h, cod, T.base).lotes.filter((l) => !vistos.has(l.lote));
-      for (const l of novos) { vistos.add(l.lote); ev.lotes.push(l); }
-      ultima = novos.length;
-      console.log(`  evento ${cod} pág. ${p}: +${novos.length} lote(s)`);
-      if (!novos.length) break;
-      await sleep(500);
     }
     enumerados += ev.lotes.length;
-    const semValor = ev.lotes.filter(l => l.htmlSemValor && !l.encerrado);
-    if (semValor.length) await amostrarSemValor(cod, ev, semValor);
-    console.log(`  evento ${cod} "${ev.tituloEvento}" · início ${ev.inicio || '?'} · ${ev.lotes.length} lote(s) (Bright Data)`);
+    if (comoLeu === 'Bright Data') { const semValor = ev.lotes.filter(l => l.htmlSemValor && !l.encerrado); if (semValor.length) await amostrarSemValor(cod, ev, semValor); }
+    console.log(`  evento ${cod} "${ev.tituloEvento}" · ${ev.inicio || '?'} · ${ev.lotes.length} lote(s) (${comoLeu})`);
     for (const card of ev.lotes) {
-      if (card.encerrado) { encerrados++; continue; }
-      const row = montarRow(ev, card, T);
+      if (card.encerrado) { encerrados++; encerradosIds.push(`${T.fonte.toLowerCase()}_${cod}_${card.lote}`); continue; }
+      const row = montarRow({ ...ev, inicio: card.data || ev.inicio }, card, T);
+      if (card.descricao && card.descricao.length > (row.descricao || '').length) row.descricao = card.descricao;
+      if (ev.processo) row.numero_processo = ev.processo;
       const q = checarQualidade(row, { estrito: false });
       if (q.descartar) { reprovados++; console.log(`    ${card.lote} DESCARTADO (${q.faltando.join(',')})`); continue; }
       prontos.push(row);
     }
-    await sleep(500);
   }
+  viaBD = bdUsados;
   if (semLote) console.log(`  ${semLote} evento(s) de lote único sem lote descoberto.`);
   console.log(`\nResumo: ${prontos.length} pronto(s) · ${enumerados} enumerado(s) · ${encerrados} encerrado(s) · ${reprovados} reprovado(s) · ${eventosFalhos} evento(s) sem acesso · ${andamento} em andamento (não buscado).`);
 
@@ -211,7 +223,7 @@ async function main() {
   console.log(`  ${placar}`);
 
   if (DRYRUN) {
-    console.log('DRY-RUN: não gravei. Amostra:');
+    console.log(`DRY-RUN: não gravei (${encerradosIds.length} lote(s) encerrado(s) seriam desativados). Amostra:`);
     console.log(JSON.stringify(prontos.slice(0, 3), null, 2));
     return { gravados: 0, dryrun: true, prontos: prontos.length };
   }
@@ -221,13 +233,20 @@ async function main() {
   if (error) throw new FalhaDeAcesso('supabase', `upsert: ${error.message}`);
   if (!data?.length) throw new FalhaDeAcesso('supabase', 'upsert não devolveu nenhuma linha');
   console.log(`✅ ${data.length} imóvel(is) MILAN gravados/atualizados.`);
+  // Lote vendido/retirado que o catálogo ainda lista: sai do acervo agora, não na data do leilão. `.select()` prova o
+  // que mudou (forma nº 3); falhar aqui não derruba a coleta, mas o motivo vai para o log.
+  if (encerradosIds.length) {
+    const { data: off, error: eOff } = await supabase.from('imoveis_leilao').update({ ativo: false, atualizado_em: new Date().toISOString() })
+      .eq('fonte', T.fonte).eq('ativo', true).in('fonte_id', encerradosIds).select('fonte_id');
+    console.log(eOff ? `  encerrados: NÃO desativei (${eOff.message})` : `  encerrados: ${off.length} de ${encerradosIds.length} desativado(s) agora (o resto já estava fora ou nunca entrou)`);
+  }
   console.log(`  ${await copiarMatriculas(supabase, data, achados)}`);
 
   const parcial = eventosFalhos > 0 || semLote > 0;
   await registrarSaude(supabase, T.fonte, prontos, 'milan', parcial
     ? { ok: false, semCota: !!recusaCota, enumerados, motivo: `coleta parcial: ${eventosFalhos} evento(s) sem acesso${recusaCota ? ' (cota)' : ''}${semLote ? ` · ${semLote} lote(s) único(s) sem número descoberto` : ''}` }
     : { enumerados });
-  return { gravados: data.length, enumerados, eventosFalhos, semLote, viaBrightData: viaBD };
+  return { gravados: data.length, enumerados, eventosFalhos, semLote, viaCatalogo, viaBrightData: viaBD };
 }
 
 main()

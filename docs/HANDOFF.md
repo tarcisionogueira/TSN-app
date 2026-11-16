@@ -6,6 +6,22 @@
 
 
 
+## 16/11 (noite, 2) — MILAN IMÓVEIS DE VÁRIOS LOTES SAEM DO BRIGHT DATA
+
+Dono: "Sim, troque". Os eventos de imóveis de vários lotes (tipoLeilao 7) agora vêm do mesmo `/leiloes/{cod}/catalogo`
+grátis dos veículos (`lib/milan-siteback.mjs#eventoDoCatalogo`). Medido em 16/11: 15701 (16 de 16 lotes prontos,
+com edital PDF tirado do `comentarioCatalogo`) e 15704 (1 de 1). Foto e edital do catálogo conferidos (200).
+
+- **Bright Data virou reserva**: só entra se o catálogo falhar, com o teto `MILAN_MAX_EVENTOS`, e nunca com o leilão
+  em andamento quando os lotes já estão no acervo. Rodada normal = 0 requisições pagas.
+- **Data do lote = ENCERRAMENTO** (`fechamento` do lote, senão `dataFim` do evento). O caminho pago gravava o INÍCIO:
+  os 24 lotes do 15666 (lances de 12 a 16/11) saíram do acervo em 12/11, e o 15704 (lances até 16/12) sairia amanhã.
+  Na próxima rodada, 15701 passa de 24/11 para 26/11 e 15704 de 16/11 para 16/12.
+- **Descrição completa** do lote (matrícula, ocupação, débitos de IPTU) no lugar do título curto.
+- **Lote vendido/retirado** que o catálogo ainda lista é desligado na hora (`.select()` prova).
+- Teste: `npm run testar:milan-imoveis` (fixture real do 15701). Primeira rodada real: cron do `scraper-milan.yml`.
+  Verificar `fonte_saude` MILAN e `data_leilao` do milan_15701_* = 2026-11-26.
+
 ## 16/11 (noite) — MILAN VEÍCULOS, GRÁTIS PELA SITEBACK
 
 Pedido do dono ("inclua a coleta de veículos do Milan"). `scripts/scraper-milan-veiculos.mjs` + `lib/milan-veiculos.mjs`,
