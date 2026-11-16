@@ -105,7 +105,9 @@ export const TENANTS = {
   michelli: { fonte: 'MICHELLILEIL', leiloeiro: 'Michelli Leilões', base: 'https://www.michellileiloes.com.br', sufixo: 'Michelli Leilões' }, //  3
   clovis: { fonte: 'CLOVISLEIL', leiloeiro: 'Clóvis Leiloeiro (José Clóvis Vaz de Souza)', base: 'https://www.clovisleiloeiro.com.br', sufixo: 'Clóvis Leiloeiro' }, //  2
   feliperotta: { fonte: 'FELIPEROTTA', leiloeiro: 'Felipe Rotta Leilões', base: 'https://www.feliperottaleiloes.com.br', sufixo: 'Felipe Rotta Leilões' }, //  2
-  eduardovivian: { fonte: 'EDUARDOVIVIAN', leiloeiro: 'Eduardo Vivian Leiloeiro', base: 'https://www.eduardovivian.com.br', sufixo: 'Eduardo Vivian' }, //  1
+  // 16/11: /leilao/lotes/imoveis vem VAZIO neste site; os imóveis ficam em categorias próprias do menu. Coletava 1 de 9.
+  eduardovivian: { fonte: 'EDUARDOVIVIAN', leiloeiro: 'Eduardo Vivian Leiloeiro', base: 'https://www.eduardovivian.com.br', sufixo: 'Eduardo Vivian',
+    catalogosExtras: ['/leilao/lotes/apartamentos', '/leilao/lotes/casas', '/leilao/lotes/terrenos', '/leilao/lotes/casa-na-praia', '/leilao/lotes/predio-comercial'] },
   farias: { fonte: 'FARIASLEIL', leiloeiro: 'Farias Leilões (Dediana Farias)', base: 'https://www.fariasleiloes.com.br', sufixo: 'Farias Leilões' }, //  1
   // 24/10 (pendência 356): Trevisan — todos os links da listagem são /lote_id/N/alienacao (venda por alienação
   // particular); entrou quando extrairUrlsDeLote passou a aceitar o sufixo (antes enumerava 0).

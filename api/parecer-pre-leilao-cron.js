@@ -197,7 +197,9 @@ async function handler(req) {
       alvos = await ler(`email_caixa?id=eq.${forcado}&select=${campos}`);
     } else {
       const desde = new Date(Date.now() - 60 * 864e5).toISOString();
-      const novas = await ler(`email_caixa?direcao=eq.entrada&categoria=eq.juridico&caso_id=is.null&resposta_de=not.is.null&criado_em=gte.${desde}&select=${campos}&order=criado_em.asc&limit=100`);
+      // Só e-mail do JURÍDICO sobre a PASTA de um lote (dono, 16/11): categoria jurídico, resposta a um envio nosso
+      // (resposta_de, que leva ao lote) e fora de spam/lixeira. O remetente ainda passa pelo filtro de escritório ativo.
+      const novas = await ler(`email_caixa?direcao=eq.entrada&categoria=eq.juridico&caso_id=is.null&resposta_de=not.is.null&pasta=not.in.(spam,lixeira)&criado_em=gte.${desde}&select=${campos}&order=criado_em.asc&limit=100`);
       const ids = novas.map((n) => n.id);
       const controle = ids.length ? await ler(`parecer_pre_leilao_lido?email_id=in.(${ids.join(',')})&select=email_id,motivo,tentativas`) : [];
       const porId = new Map(controle.map((c) => [c.email_id, c]));

@@ -143,6 +143,7 @@
     "testar:dian": "node scripts/testes/dian-parse.mjs",
     "testar:parquedosleiloes": "node scripts/testes/parquedosleiloes-parse.mjs",
     "testar:campolina": "node scripts/testes/campolina-parse.mjs",
+    "testar:catalogos-extras": "node scripts/testes/catalogos-extras.mjs",
     "testar:parecer-pre-leilao": "node scripts/testes/parecer-pre-leilao.mjs",
     "testar:botelho": "node scripts/testes/botelho-parse.mjs",
     "testar:triacca": "node scripts/testes/triacca-parse.mjs",

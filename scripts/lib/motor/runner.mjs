@@ -53,20 +53,30 @@ export async function enumerar(fetchFonte, tenant, cfg, { maxPages, debug, semBD
   // (BASTON, ALBERTOMACEDO) ou cujo catálogo cabe no teto acusava "lista incompleta" toda rodada (23/10) e a
   // varredura nunca rodava. Paginação só por script não deixa link — aí vale o freio relativo da varredura.
   const temProxima = (html, p) => new RegExp(`[?&]${cfg.paginaParam || 'page'}=${p + 1}(?!\\d)`).test(String(html || '').replace(/&amp;/g, '&'));
+  // CATÁLOGOS EXTRAS DO TENANT (16/11, EDUARDOVIVIAN): site que não usa a categoria padrão e espalha os imóveis em
+  // categorias próprias (/leilao/lotes/apartamentos, /casas, /terrenos…). A padrão vinha vazia e a fonte coletava
+  // 1 de 9 lotes há semanas. Cada extra é lido com a mesma paginação; tenant sem o campo: laço idêntico ao de antes.
+  const catalogos = [tenant.catalogo ?? cfg.catalogo, ...(tenant.catalogosExtras || [])];
+  for (const [ci, cat] of catalogos.entries()) {
+  htmlAnterior = null;
   for (let p = 1; p <= maxPages; p++) {
     // Catálogo que já traz querystring (`/busca?tipo=Imoveis`, `/lotes/?&cate[]=111`) pagina com `&`: o `?` fixo gerava
     // `/busca?tipo=Imoveis?page=2` — o servidor lê tipo="Imoveis?page=2" e a página 2 nunca vinha (24/10, Suporte oferta).
-    const cat = tenant.catalogo ?? cfg.catalogo;
     const url = `${tenant.base}${cat}${p > 1 ? `${cat.includes('?') ? '&' : '?'}${cfg.paginaParam}=${p}` : ''}`; // tenant.catalogo: id de categoria varia por site (Viva, 10/10)
     const r = await fetchFonte(url, { semBD });
     // Página 1 recusada: guarda o `via` da FALHA (ex.: 'dom-403') para o motivo em fonte_saude.
     // Página SEGUINTE que não abre é lista cortada, não fim do catálogo (26/10): sem isto a varredura de sumidos
     // tratava os lotes das páginas não lidas como "saíram do site".
     // Só conta se a página anterior LINKAVA esta: o pedido de uma página além da última (404 em alguns sites) é o fim.
-    if (!r.html) { if (p === 1) via = r.via || null; else if (temProxima(htmlAnterior, p - 1)) cortada = `página ${p} do catálogo não abriu`; break; }
+    if (!r.html) {
+      if (p === 1 && ci > 0) cortada = `catálogo ${cat} não abriu`; // extra que falha: lista incompleta, não fonte fora
+      else if (p === 1) via = r.via || null;
+      else if (temProxima(htmlAnterior, p - 1)) cortada = `página ${p} do catálogo não abriu`;
+      break;
+    }
     htmlAnterior = r.html;
     fetchOk = true; via = via || r.via;
-    if (p === 1) htmlPagina1 = r.html;
+    if (p === 1 && ci === 0) htmlPagina1 = r.html;
     const antes = urls.size, antesEv = eventosPaginas.size;
     for (const [id, u] of cfg.parse.extrairUrlsDeLote(r.html, tenant.base)) urls.set(id, u);
     // `eventosEmTodasPaginas` (22/10, Baston): o catálogo PAGINADO lista leilões, não lotes — sem isto o
@@ -77,6 +87,7 @@ export async function enumerar(fetchFonte, tenant, cfg, { maxPages, debug, semBD
     if (urls.size === antes && eventosPaginas.size === antesEv) break;
     if (p === maxPages && temProxima(r.html, p)) cortada = `catálogo no teto de ${maxPages} página(s)`;
     await sleep(400);
+  }
   }
   // TOTAL DECLARADO PELO SITE (26/10, lição do FREITAS: rolagem infinita lida como uma página). Fonte que expõe o
   // contador ("Exibindo 1–12 de 26") declara `parse.totalDoCatalogo(html)`: enumerar menos que isso é lista cortada
