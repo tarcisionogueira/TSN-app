@@ -6,6 +6,14 @@
 
 
 
+## 16/11 — #368: bairro do Rio pela lista oficial no gatilho do banco
+`bairro_carioca()` (usada por `trg_local_do_texto`) só conhecia ~50 bairros. RYMER ("em Vigário Geral", "na Penha
+Circular", ", São Cristóvão") e PORTELLA ficavam com UF=RJ e sem cidade. Migração `20261116_bairro_carioca_lista_oficial`:
+lista completa com "/RJ" explícito; regra nova de título terminando em "em/na/no <bairro>" ou ", <bairro>" (só fonte só-RJ);
+a regra antiga segue igual. A lista exclui palavra comum e nome que toda cidade tem (Centro, Lagoa, Saúde, Penha solta…).
+Medido sobre os ativos do RJ com cidade conhecida: 80 casos, nenhum de outra cidade. Ganho: 9 lotes, que se corrigem no
+próximo upsert da coleta. Bairro também no parser MSIS (`scripts/lib/msis-parse.mjs`, mesma lista, só com "/RJ").
+
 ## 16/11 — Oportunidade do assessorado: relatórios antes do envio (#420) e autorização de lance registrada (#419)
 Decisão do dono (16/11): "Precisa ter os dois relatórios para poder enviar para aprovação. O trecho do aceite você pode redigir."
 - **Envio:** `api/oportunidades-cliente.js` só seleciona o lote se o CLIENTE tiver o mercadológico e o documental
