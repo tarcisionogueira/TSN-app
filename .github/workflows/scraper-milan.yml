@@ -44,3 +44,13 @@ jobs:
           MILAN_DRYRUN: ${{ github.event.inputs.dryrun || '0' }}
           MILAN_MAX_EVENTOS: ${{ github.event.inputs.max_eventos || '10' }}
         run: node scripts/scraper-milan.mjs
+      # VEÍCULOS (16/11, pedido do dono): agenda + catálogo pela siteback — grátis, sem Bright Data. Roda mesmo se a
+      # coleta de imóveis falhar (cota paga, Cloudflare): são caminhos independentes. Diário por causa do ciclo do
+      # leilão semanal (zera quarta→quinta, reabastece na segunda) e do mínimo que a Milan publica aos poucos.
+      - name: Rodar scraper MILAN — veículos
+        if: ${{ !cancelled() }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          MILAN_VEIC_DRYRUN: ${{ github.event.inputs.dryrun || '0' }}
+        run: node scripts/scraper-milan-veiculos.mjs

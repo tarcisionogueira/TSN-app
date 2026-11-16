@@ -6,6 +6,25 @@
 
 
 
+## 16/11 (noite) — MILAN VEÍCULOS, GRÁTIS PELA SITEBACK
+
+Pedido do dono ("inclua a coleta de veículos do Milan"). `scripts/scraper-milan-veiculos.mjs` + `lib/milan-veiculos.mjs`,
+2º passo do `scraper-milan.yml` (diário 11h35 UTC, roda mesmo se o passo de imóveis falhar). **Custo zero:**
+`siteback.milanleiloes.com.br/leiloes/agenda?tipoCat=1` (agenda de veículos) e **`/leiloes/{cod}/catalogo`** (todos os lotes
+do evento num JSON só — 209 no 15692, sem paginação). Gravação em `veiculos_leilao` fonte `MILAN`, `fonte_id`
+`milan_veic_<evento>_<lote>`, saúde em `MILAN_VEICULOS`. Teste: `testar:milan-veiculos` (fixture real do catálogo).
+
+- **Dry-run real (16/11): 55 gravam de 260.** 195 ficam fora por **sem valor** — a Milan não publica o mínimo desses
+  (15692: 57 de 209 com mínimo; Ford 15698: 0 de 51). É a regra de todo coletor de veículo; a rodada diária pega o
+  mínimo quando ele aparecer. 10 fora por não serem veículo inteiro (sucata, trator, colheitadeira, empilhadeiras).
+- **Pátio:** sem a visitação do evento ("no local do leilão — Rod. Raposo Tavares km 20") os 55 saíam `indefinido`
+  (escondidos na busca). A visitação vai para a descrição → `nao_confirmado` (aparece com selo). UF = SP pela SP-270;
+  cidade não vem escrita e fica nula.
+- **Ciclo (quarta→quinta zera, segunda reabastece):** lote de evento que saiu da agenda depois da data é desligado;
+  lote que deixou o catálogo de evento ainda listado (vendido/retirado) também.
+- **Achado para os IMÓVEIS:** o mesmo `/catalogo` devolve o evento de vários lotes de imóveis (15704 testado) — hoje
+  lido pelo Bright Data (pago, e indisponível com o leilão em andamento). Trocar é o próximo passo natural.
+
 ## 16/11 (tarde) — MODERADOR SEM ALARME FALSO · PARECER PRÉ-LEILÃO VIRA APRENDIZADO (#492, #493)
 - **Moderador (c4ec6b64):** o semanal dizia "98% das fontes vazias". Real: 440 ok (38.164 lotes), 268 sem leilão aberto
   (normal), 14 falharam (35), 8 parciais (1.628) = 4,1% do acervo. `fonte:saude` agora tem denominador e peso no acervo;

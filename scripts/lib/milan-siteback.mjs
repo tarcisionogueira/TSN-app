@@ -72,3 +72,21 @@ export function cardDoEvento(ev, { lote, foto }, agora = new Date()) {
     data_leilao: dia(passouP1 ? d2 : d1), data_leilao_2: !passouP1 && d2 ? d2 : null,
   };
 }
+
+/**
+ * VEÍCULOS (16/11, pedido do dono). `tipoCat=1` = agenda de veículos (o leilão semanal de quarta, frotas…); os
+ * lotes saem INTEIROS e grátis em `/leiloes/{cod}/catalogo` (`lotes.conteudo`, 209 lotes do 15692 numa resposta,
+ * sem paginação). `tipoCat` 2/3/6/7 misturam patinete e material — ficam de fora.
+ */
+export async function agendaVeiculos(fetchImpl = fetch) {
+  const a = await json(`${SITEBACK}/leiloes/agenda?tipoCat=1&limit=0`, fetchImpl);
+  if (!Array.isArray(a)) throw new FalhaSiteback('agenda veículos', 'formato inesperado (não é lista)');
+  return a.filter((e) => e && e.codLeilao && !e.suspenso);
+}
+
+export async function catalogoSiteback(cod, fetchImpl = fetch) {
+  const c = await json(`${SITEBACK}/leiloes/${encodeURIComponent(cod)}/catalogo`, fetchImpl);
+  // Sem a lista, o catálogo NÃO é "evento vazio" (forma nº 2): lança.
+  if (!Array.isArray(c?.lotes?.conteudo)) throw new FalhaSiteback(`catalogo ${cod}`, 'sem lotes.conteudo');
+  return c;
+}
