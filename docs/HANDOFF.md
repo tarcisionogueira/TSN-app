@@ -6,6 +6,27 @@
 
 
 
+## 16/11 (noite, 3) — LOTE EM 2ª PRAÇA DESLIGADO A CADA COLETA (SUPORTE; gatilho, não coletor)
+
+Dono: "verifique as outras fontes com o mesmo problema de data". Régua usada (custo zero): lote `praca_vencida` que
+o PRÓPRIO banco diz estar aberto — `not ativo and suprimido_motivo='praca_vencida' and not
+leilao_ja_encerrado(data_leilao, data_leilao_2, data_fim, modalidade)`. Deu **45 da SUPORTE** (todos relidos pela
+coleta nos últimos 3 dias) e 12 sobras velhas de outras fontes (venda direta sem data, fora da coleta — não é isto).
+Dos 33 lotes SUPORTE com `praca2_fim` futura e `data_leilao_2` passada, **0 estavam ativos**. Conferido no site:
+Kleiber 2147 (R$ 1,5 mi), 2º leilão de 10/11 a 23/11 08h00, fora da busca.
+
+**Causa (gatilho):** o coletor manda só a ABERTURA das praças; o FECHAMENTO (`praca1_fim`/`praca2_fim`) vem de outra
+rotina. No upsert o BEFORE INSERT roda sobre a linha PROPOSTA (sem `praca*_fim`) → `data_fim` = abertura da 2ª praça,
+já passada → `trg_desativa_leilao_encerrado` desliga, e o Postgres leva isso no `EXCLUDED`. O `ativo:true` do coletor
+morria a cada rodada. **Conserto** (`20261116_praca_vencida_le_fim_da_linha_existente.sql`, aplicada): no INSERT o
+gatilho considera o fim já gravado na linha de mesmo `fonte_id`; e religou os 45. Provado com upsert real revertido
+(DO + raise): `ativo=t, data_fim=2026-11-23`.
+
+**Tipo Milan (data de início no lugar do fechamento do lote):** amostrei lotes desligados que a coleta ainda vê
+(GESTAO 475, LJUD 129, BIASI 84, ZUK, PESTANA, LEILOTECH, FRAZAO, BAYIT) — nenhum mostrou no site fechamento
+posterior ao gravado; BIASI/FRAZAO exibem só a data já passada, ZUK deu 404, GESTAO 403, PESTANA exige navegador.
+Não é prova de ausência: são sites que não expõem o fechamento por lote numa leitura simples.
+
 ## 16/11 (noite, 2) — MILAN IMÓVEIS DE VÁRIOS LOTES SAEM DO BRIGHT DATA
 
 Dono: "Sim, troque". Os eventos de imóveis de vários lotes (tipoLeilao 7) agora vêm do mesmo `/leiloes/{cod}/catalogo`
