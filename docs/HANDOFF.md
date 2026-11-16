@@ -20,6 +20,16 @@
   (hipoteca não é débito do arrematante; avaliação sem "validade de 12 meses"; ciência do débito condominial; consulta
   automática não é certidão negativa; erro de modelo no edital). O e-mail 36029d22 está marcado como lido.
 - **#373 e #410:** não venceram na hora da sessão (CEF sem upsert até 16:37 UTC; rodada residencial às ~20:24).
+- **Fontes com problema (16/11):** MILAN (b2c9caf7) — evento de vários lotes fica com a página inválida enquanto o
+  leilão está no ar (15666, 12–16/11); agora não é buscado nem conta como falha (os lotes ficam do ciclo anterior).
+  Observação do dono: leiloeiros esvaziam/reabastecem eventos conforme o ciclo semanal. BAYIT (2e4ebacb) — feed pelo
+  runner residencial (`BAYIT_NO_BD=1`), CI paga só se o residencial ficar 7 dias sem coletar. EDUARDOVIVIAN (e551ced0)
+  — `tenant.catalogosExtras` no runner do motor; enumerou 16 contra 1. LUNELLI — certificado renovado em 15/11 17:19
+  (Let's Encrypt); a falha de 15/11 16:12 é anterior; volta sozinho na próxima coleta.
+- **Convites (16/11):** 25 leiloeiros (campanha `conexao_direta_1611`), cada um com cadastro em `leiloeiros_parceiros`
+  (status convidado) e registro em `email_caixa` (Enviados). Mesmo texto do convite da João Emílio.
+- **CEF:** o `scraper.yml` (cron 9h UTC) vem rodando 6–8 h atrasado pelo GitHub (15:57 em 15/11); em 16/11 até 17:45
+  UTC não tinha começado. O #373 depende dessa rodada.
 
 ## 16/11 — FECHAMENTO DA SESSÃO (15–16/11): onde parou e o que a próxima faz primeiro
 **Entregue nesta sessão:** Índice BidPro (peso por prova, piso de 5 unidades, invariantes, FipeZAP como alarme); arena
