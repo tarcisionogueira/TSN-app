@@ -233,6 +233,10 @@
       "schedule": "25 11,21 * * *"
     },
     {
+      "path": "/api/parecer-pre-leilao-cron",
+      "schedule": "50 12,17,22 * * *"
+    },
+    {
       "path": "/api/parcelas-documentos-cron",
       "schedule": "50 * * * *"
     },

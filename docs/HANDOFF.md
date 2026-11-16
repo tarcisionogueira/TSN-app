@@ -6,6 +6,21 @@
 
 
 
+## 16/11 (tarde) — MODERADOR SEM ALARME FALSO · PARECER PRÉ-LEILÃO VIRA APRENDIZADO (#492, #493)
+- **Moderador (c4ec6b64):** o semanal dizia "98% das fontes vazias". Real: 440 ok (38.164 lotes), 268 sem leilão aberto
+  (normal), 14 falharam (35), 8 parciais (1.628) = 4,1% do acervo. `fonte:saude` agora tem denominador e peso no acervo;
+  o parecer da semana anterior não volta como entrada da IA. Conferir o e-mail de 23/11 (#493).
+- **Parecer pré-leilão:** resposta ao "Apoio jurídico" (email_caixa sem caso, `resposta_de` = envio) não era lida por
+  cron nenhum. `api/parecer-pre-leilao-cron.js` (12:50, 17:50, 22:50 UTC): só remetente de domínio ATIVO em
+  `juridico_destinatarios`; lote pelo envio (`caso_emails_enviados.resend_id`); texto sem citação + PDFs do bucket
+  `documentos`; confronta com o documental que existia no envio e grava divergências/lições em `juridico_aprendizado`
+  (fonte `parecer_pre_leilao`, `uf` nulo quando é lei federal). Controle: `parecer_pre_leilao_lido` (falha volta até 3×).
+  Teste: `testar:parecer-pre-leilao` (pegou o cabeçalho de citação do Gmail quebrado em 2 linhas).
+- **Capão da Canoa (lote a07f2306):** parecer da Cajado (16/11) confrontado à mão com o documental d2cd3b89: 5 lições
+  (hipoteca não é débito do arrematante; avaliação sem "validade de 12 meses"; ciência do débito condominial; consulta
+  automática não é certidão negativa; erro de modelo no edital). O e-mail 36029d22 está marcado como lido.
+- **#373 e #410:** não venceram na hora da sessão (CEF sem upsert até 16:37 UTC; rodada residencial às ~20:24).
+
 ## 16/11 — FECHAMENTO DA SESSÃO (15–16/11): onde parou e o que a próxima faz primeiro
 **Entregue nesta sessão:** Índice BidPro (peso por prova, piso de 5 unidades, invariantes, FipeZAP como alarme); arena
 dos relatórios mercadológico/documental (origem das condições de pagamento, decisor único do cenário, Brooklin não se
