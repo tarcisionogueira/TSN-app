@@ -12,3 +12,15 @@ export function pareceImovelSemCategoria(textoLote, tituloLeilao = '') {
   const t = `${textoLote || ''} ${tituloLeilao || ''}`;
   return RE_TITULO_IMOVEL.test(t) && !RE_TITULO_NAO_IMOVEL.test(t);
 }
+
+// Tipo pelo título do lote (era local em scraper-gestao.mjs). 17/11: `residenc` não casava "residência" (com acento)
+// e "mansão" não existia — o lote único do leilão 500 da Vinco saía "outros" e era descartado.
+export function inferirTipo(txt = '') {
+  const t = txt.toLowerCase();
+  if (/apartament|apto|flat|kitnet|studio|unidade aut/.test(t)) return 'apartamento';
+  if (/casa|sobrado|resid[eê]nc|mans[aã]o/.test(t)) return 'casa';
+  if (/terreno|lote de terreno|gleba|data de terra/.test(t)) return 'terreno';
+  if (/comercial|loja|sala|gal[pã]|pr[ée]dio|escrit[óo]rio|barrac/.test(t)) return 'comercial';
+  if (/rural|fazenda|s[íi]tio|ch[áa]cara/.test(t)) return 'rural';
+  return 'outros';
+}

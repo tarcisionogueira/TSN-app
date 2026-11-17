@@ -47,7 +47,7 @@
  * Env: BRIGHTDATA_API_TOKEN, BRIGHTDATA_ZONE, VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY.
  */
 import './lib/env-runner.mjs';   // carrega ~/.bidpro-runner.env quando rodado na mão
-import { RE_ENCERRAMENTO, pareceImovelSemCategoria } from './lib/gestao-datas.mjs';
+import { RE_ENCERRAMENTO, pareceImovelSemCategoria, inferirTipo } from './lib/gestao-datas.mjs';
 import { createClient } from '@supabase/supabase-js';
 import { decodificarEntidades } from '../api/_texto-imovel.js';
 // CORRIGIDO (18/08). A nota de 11/08 dizia que o `null` do `fetchViaBrightData` era um
@@ -205,16 +205,6 @@ async function fetchHome(dom) {
   return h;
 }
 
-function inferirTipo(txt = '') {
-  const t = txt.toLowerCase();
-  if (/apartament|apto|flat|kitnet|studio|unidade aut/.test(t)) return 'apartamento';
-  if (/casa|sobrado|residenc/.test(t)) return 'casa';
-  if (/terreno|lote de terreno|gleba|data de terra/.test(t)) return 'terreno';
-  if (/comercial|loja|sala|gal[pã]|pr[ée]dio|escrit[óo]rio|barrac/.test(t)) return 'comercial';
-  if (/rural|fazenda|s[íi]tio|ch[áa]cara/.test(t)) return 'rural';
-  return 'outros';
-}
-
 const STATUS_EVENTO_VIVO = /aberto para lances|aguardando abertura|em loteamento|em andamento/i;
 
 // Extrai os idLeilao de uma home: links diretos + links de compartilhamento (whatsapp).
@@ -317,12 +307,18 @@ function parseCardGrade(card, ctx) {
   // feita byte a byte no servidor ("PARAISóPOLIS") e às vezes cortado ("BOM JESUS/P").
   const titulo = decodificarEntidades((card.html.match(/lote-miniatura[^"]*"\s+alt="([^"]+)"/) || card.html.match(/lote-nome[^>]*>\s*<span[^>]*>([^<]+)</) || [])[1] || '')
     .replace(/\s+/g, ' ').trim();
-  const tipo = inferirTipo(titulo);
+  // O título do LEILÃO completa o do lote (17/11, Vinco 500: lote "RESIDêNCIA COM 3 SUíTES…" sem cidade; o leilão
+  // é "Mansão no Cond. Reserva Santa Anna …, Santana de Parnaíba / SP"). Só quando o leilão tem um lote só — num
+  // leilão de vários lotes o título dele não descreve cada um.
+  const tituloEvento = ctx.lotesNoEvento === 1 ? (ctx.tituloEvento || '') : '';
+  let tipo = inferirTipo(titulo);
+  if (tipo === 'outros' && tituloEvento && pareceImovelSemCategoria(titulo, tituloEvento)) tipo = inferirTipo(`${titulo} ${tituloEvento}`);
   if (!titulo || tipo === 'outros' || NAO_IMOVEL.test(titulo)) return null;
   const txt = decodificarEntidades(card.html.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ');
   const valorAval = num((txt.match(/Avalia[çc][ãa]o:\s*R\$\s*([\d.]+,\d{2})/i) || [])[1]);
   const valorMinimo = num((txt.match(/Lance m[íi]nimo:\s*R\$\s*([\d.]+,\d{2})/i) || [])[1]);
   let { cidade, estado, bairro } = localDoTexto(titulo);
+  if (!estado && tituloEvento) ({ cidade, estado, bairro } = localDoTexto(tituloEvento));
   if (!estado) {
     const x = inferirUF({ cidade, titulo, endereco: null, descricao: titulo });
     if (x) { estado = x.uf; if (x.cidade && !cidade) cidade = tituloCase(x.cidade); }
@@ -402,7 +398,7 @@ function parseCard(card, ctx) {
     || (txt.match(/CATEGORIA:\s*([A-Za-zÀ-ÿ]+)/i) || [])[1] || '';
   const temLocal = /ESTADO:\s*[A-Z]{2}\s*-\s*CIDADE:/i.test(txt);
   const ehImovel = /im[óo]ve/i.test(categoria) || temLocal
-    || (!categoria && pareceImovelSemCategoria(txt, ctx.tituloEvento));
+    || (!categoria && pareceImovelSemCategoria(txt, ctx.lotesNoEvento === 1 ? ctx.tituloEvento : ''));
   if (!ehImovel) return null;
 
   // Valores rotulados. Fontes, em ordem de confiabilidade:
@@ -742,6 +738,8 @@ async function coletarEvento(dominio, idLeilao) {
     ctx.totalDeclarado = total;
     parse = parseCardPadrao;
   }
+  // Leilão de lote único: o título do leilão descreve o lote (ver parseCardGrade/parseCard).
+  ctx.lotesNoEvento = cards.length;
   const rows = [];
   for (const c of cards) {
     const row = parse(c, ctx);
