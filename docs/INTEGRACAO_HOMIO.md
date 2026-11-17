@@ -137,7 +137,7 @@ automação da Homio nesse caso.
    timeout (8 s) → o cron reenvia a cada 10 min, até 10 tentativas.
    Inscrições anteriores à URL: `select * from homio_leads_enfileirar_retroativo();` depois de cadastrar
    a URL (põe na fila `conta_criada` de quem não ativou e `ja_tinha_conta`; quem já ativou recebe só
-   `conta_ativada`).
+   `conta_ativada`). Avisos que esgotaram as 10 tentativas (destino fora do ar): `select public.homio_leads_reabrir_avisos();`
 4. Uso sugerido na Homio: se em 24 h não chegar `conta_ativada`, mandar lembrete no WhatsApp
    *"Falta ativar sua conta: confira o e-mail"*; ao chegar `conta_ativada`, parar o lembrete e seguir a
    sequência do lançamento. Quem é `ja_tinha_conta` vai direto para a sequência.
