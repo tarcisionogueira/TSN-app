@@ -47,7 +47,7 @@
  * Env: BRIGHTDATA_API_TOKEN, BRIGHTDATA_ZONE, VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY.
  */
 import './lib/env-runner.mjs';   // carrega ~/.bidpro-runner.env quando rodado na mão
-import { RE_ENCERRAMENTO } from './lib/gestao-datas.mjs';
+import { RE_ENCERRAMENTO, pareceImovelSemCategoria } from './lib/gestao-datas.mjs';
 import { createClient } from '@supabase/supabase-js';
 import { decodificarEntidades } from '../api/_texto-imovel.js';
 // CORRIGIDO (18/08). A nota de 11/08 dizia que o `null` do `fetchViaBrightData` era um
@@ -400,7 +400,9 @@ function parseCard(card, ctx) {
   // CATEGORIA (filtro imóvel × móveis/veículos).
   const categoria = (txt.match(/CATEGORIA:\s*([A-Za-zÀ-ÿ ]+?)\s+(?:ESTADO|ID\d|[A-Z]{2,})/i) || [])[1]
     || (txt.match(/CATEGORIA:\s*([A-Za-zÀ-ÿ]+)/i) || [])[1] || '';
-  const ehImovel = /im[óo]ve/i.test(categoria) || /ESTADO:\s*[A-Z]{2}\s*-\s*CIDADE:/i.test(txt);
+  const temLocal = /ESTADO:\s*[A-Z]{2}\s*-\s*CIDADE:/i.test(txt);
+  const ehImovel = /im[óo]ve/i.test(categoria) || temLocal
+    || (!categoria && pareceImovelSemCategoria(txt, ctx.tituloEvento));
   if (!ehImovel) return null;
 
   // Valores rotulados. Fontes, em ordem de confiabilidade:
@@ -679,6 +681,8 @@ async function coletarEvento(dominio, idLeilao) {
   const ctx = {
     dominio, idLeilao, prefixoId: prefixoIdProprio(dominio),
     leiloeiro: leiloeiroDoTitulo(html, dominio),
+    // Título do leilão ("Leilão Particular - Mansão no Cond. …"): decide imóvel quando o card vem sem categoria.
+    tituloEvento: (textoCompleto.match(/([^|]{10,160}?)\s*\(C[ÓO]DIGO\s*\d+\)/i) || [])[1] || '',
     data_leilao: dataEvento(mEnc ? mEnc[1] : textoData),
     htmlEvento: html, // p/ resolver a foto pelo idLote no HTML INTEIRO (ver parseCard)
   };
