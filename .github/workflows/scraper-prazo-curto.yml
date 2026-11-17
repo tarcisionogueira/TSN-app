@@ -1,0 +1,76 @@
+name: Scraper — fontes de prazo curto (2ª coleta do dia)
+
+# Pendência 504 (17/11). `fonte_perfil_publicacao()` mostrou que estas fontes publicam o lote poucos dias antes da
+# praça: VIP com mediana de 3 dias, e os 10% mais curtos de VIP/ZUK/FRAZAO/LEILOTECH com 0–1 dia. Coletadas uma vez
+# por dia (o diário grava entre 18h e 21h UTC), um lote publicado de manhã só aparecia para o cliente à noite — num
+# prazo de 3 dias, isso é um terço da janela. Esta é a 2ª coleta, ~12 h depois da principal. Zero Bright Data (as
+# quatro são grátis, puppeteer/fetch direto); custo = minutos do Actions (repositório público).
+# A lista sai da classe 'curta' da função: revise com
+#   select fonte, antec_p10, coleta_sugerida_h from fonte_perfil_publicacao(30) where classe_antecedencia = 'curta';
+on:
+  schedule:
+    - cron: '23 7 * * *'   # 07:23 UTC — ~12 h depois de quando o diário costuma gravar estas fontes
+  workflow_dispatch:
+    inputs:
+      fontes:
+        description: 'Fontes (vazio = as de prazo curto)'
+        required: false
+        default: ''
+
+jobs:
+  prazo-curto:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      FONTES: ${{ github.event.inputs.fontes || 'VIP,ZUK,FRAZAO,LEILOTECH' }}
+    steps:
+      - name: Marca o início do job
+        run: echo "INICIO_JOB=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            libatk-bridge2.0-0 libdrm2 libxkbcommon0 libxcomposite1 \
+            libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64 \
+            libpango-1.0-0 libcairo2 libatspi2.0-0 libgtk-3-0
+
+      - name: Coleta das fontes de prazo curto
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          SCRAPER_FONTES: ${{ env.FONTES }}
+        run: node scripts/scraper-puppeteer.mjs
+
+      # Trava de fim de job (auditoria 17/11, item 5): verde só se alguma fonte coletou.
+      - name: Alguma fonte coletou?
+        if: ${{ !cancelled() }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: node scripts/verificar-gravou.mjs "$INICIO_JOB" "$FONTES"
+
+      - name: Notify on failure
+        if: failure() || cancelled()
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+          JOB_STATUS: ${{ job.status }}
+          MOTIVO: "${{ job.status == 'cancelled' && 'TIMEOUT ou cancelamento na coleta de prazo curto - confira o log.' || 'Erro na coleta de prazo curto (VIP/ZUK/FRAZAO/LEILOTECH).' }}"
+        run: |
+          curl -s -L --post301 --post302 --post303 -X POST "${APP_BASE_URL:-https://bidprobrasil.com.br}/api/notify-scraper" \
+            -H "x-cron-secret: ${CRON_SECRET}" \
+            -H "Content-Type: application/json" \
+            -d '{"tipo":"Scraper prazo curto","etapa":"'"$JOB_STATUS"'","mensagem":"'"$MOTIVO"'","run_id":"'$GITHUB_RUN_ID'","run_url":"https://github.com/'$GITHUB_REPOSITORY'/actions/runs/'$GITHUB_RUN_ID'"}' || true
+        continue-on-error: true
