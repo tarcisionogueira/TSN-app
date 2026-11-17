@@ -20,12 +20,20 @@ on:
         required: false
         default: ''
 
+# Uma fonte por job, em paralelo (17/11). O 1º teste rodou as quatro em fila num job de 60 min: VIP/ZUK/FRAZAO
+# gravaram e a LEILOTECH (~1 min por tenant, 20+ tenants) foi cortada no meio. Em matriz, a lenta não derruba as
+# outras e cada uma tem o seu veredito e o seu aviso de falha.
 jobs:
   prazo-curto:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: ${{ contains(matrix.fonte, 'LEILOTECH') && 120 || 45 }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Disparo manual com `fontes` preenchido = um job só com a lista inteira (SCRAPER_FONTES aceita vírgula).
+        fonte: ${{ fromJSON(github.event.inputs.fontes && format('["{0}"]', github.event.inputs.fontes) || '["VIP","ZUK","FRAZAO","LEILOTECH"]') }}
     env:
-      FONTES: ${{ github.event.inputs.fontes || 'VIP,ZUK,FRAZAO,LEILOTECH' }}
+      FONTES: ${{ matrix.fonte }}
     steps:
       - name: Marca o início do job
         run: echo "INICIO_JOB=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
@@ -70,10 +78,10 @@ jobs:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
           JOB_STATUS: ${{ job.status }}
-          MOTIVO: "${{ job.status == 'cancelled' && 'TIMEOUT ou cancelamento na coleta de prazo curto - confira o log.' || 'Erro na coleta de prazo curto (VIP/ZUK/FRAZAO/LEILOTECH).' }}"
+          MOTIVO: "${{ job.status == 'cancelled' && 'TIMEOUT ou cancelamento na coleta de prazo curto - confira o log.' || 'Erro na coleta de prazo curto.' }}"
         run: |
           curl -s -L --post301 --post302 --post303 -X POST "${APP_BASE_URL:-https://bidprobrasil.com.br}/api/notify-scraper" \
             -H "x-cron-secret: ${CRON_SECRET}" \
             -H "Content-Type: application/json" \
-            -d '{"tipo":"Scraper prazo curto","etapa":"'"$JOB_STATUS"'","mensagem":"'"$MOTIVO"'","run_id":"'$GITHUB_RUN_ID'","run_url":"https://github.com/'$GITHUB_REPOSITORY'/actions/runs/'$GITHUB_RUN_ID'"}' || true
+            -d '{"tipo":"Scraper prazo curto ('"$FONTES"')","etapa":"'"$JOB_STATUS"'","mensagem":"'"$MOTIVO"'","run_id":"'$GITHUB_RUN_ID'","run_url":"https://github.com/'$GITHUB_REPOSITORY'/actions/runs/'$GITHUB_RUN_ID'"}' || true
         continue-on-error: true
