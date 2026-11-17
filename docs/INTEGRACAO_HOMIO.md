@@ -131,7 +131,13 @@ automação da Homio nesse caso.
 | `ja_tinha_conta` | e-mail já era cliente | — |
 | `conta_ativada` | a pessoa criou a senha | — |
 
-   Todos levam `email`, `nome`, `telefone`, `contact_id` (o da Homio), `campanha` e `em`.
+   Todos levam `evento` (repetido em `event`), `email`, `nome`, `telefone`, `contact_id` (o da Homio),
+   `campanha`, `em` (quando o aviso foi gerado, ISO UTC) e `inscrito_em` (quando a pessoa se inscreveu).
+   Cabeçalho `x-webhook-secret` = `HOMIO_WEBHOOK_SECRET` (o mesmo segredo da ida). Resposta não-2xx ou
+   timeout (8 s) → o cron reenvia a cada 10 min, até 10 tentativas.
+   Inscrições anteriores à URL: `select * from homio_leads_enfileirar_retroativo();` depois de cadastrar
+   a URL (põe na fila `conta_criada` de quem não ativou e `ja_tinha_conta`; quem já ativou recebe só
+   `conta_ativada`).
 4. Uso sugerido na Homio: se em 24 h não chegar `conta_ativada`, mandar lembrete no WhatsApp
    *"Falta ativar sua conta: confira o e-mail"*; ao chegar `conta_ativada`, parar o lembrete e seguir a
    sequência do lançamento. Quem é `ja_tinha_conta` vai direto para a sequência.

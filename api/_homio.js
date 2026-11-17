@@ -120,10 +120,16 @@ export function decidirAtivacao(lead, agora = Date.now(), senhaPendente = true) 
   return 'gerar_link';
 }
 
-/** Corpo do aviso à Homio. O link só vai no evento `conta_criada` (é ele que a Homio pode mandar por e-mail). */
+/**
+ * Corpo do aviso à Homio. O link só vai no evento `conta_criada` (é ele que a Homio pode mandar por
+ * e-mail ou WhatsApp). O evento sai em `evento` E em `event` (17/11): o endpoint deles foi escrito
+ * lendo `event`, e um nome divergente aqui viraria aviso "recebido" e ignorado, sem erro de nenhum lado.
+ * `em` = quando o aviso foi gerado; `inscrito_em` = quando a pessoa se inscreveu (difere no reenvio).
+ */
 export function corpoAvisoHomio(evento, lead, linkAtivacao = null) {
   return {
     evento,
+    event: evento,
     campanha: lead?.campanha || null,
     email: lead?.email || null,
     nome: lead?.nome || null,
@@ -131,5 +137,6 @@ export function corpoAvisoHomio(evento, lead, linkAtivacao = null) {
     contact_id: lead?.homio_contact_id || null,
     ...(evento === 'conta_criada' && linkAtivacao ? { link_ativacao: linkAtivacao } : {}),
     em: new Date().toISOString(),
+    inscrito_em: lead?.recebido_em || null,
   };
 }

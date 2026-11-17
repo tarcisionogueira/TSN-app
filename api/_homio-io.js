@@ -6,8 +6,9 @@
  * Variáveis (nomes; valores só no painel da Vercel — o repositório é público):
  *   HOMIO_WEBHOOK_SECRET  segredo que a Homio manda no cabeçalho `x-homio-secret` ao chamar
  *                         /api/homio-lead; também deriva o token do link de ativação
- *   HOMIO_WEBHOOK_URL     (opcional) URL do "webhook de entrada" de uma automação da Homio, para
- *                         onde avisamos `conta_criada` (com o link), `ja_tinha_conta` e `conta_ativada`
+ *   HOMIO_WEBHOOK_URL     (opcional) URL do endpoint do desenvolvedor da Homio, para onde avisamos
+ *                         `conta_criada` (com o link), `ja_tinha_conta` e `conta_ativada` — com o
+ *                         HOMIO_WEBHOOK_SECRET no cabeçalho `x-webhook-secret`
  */
 import { enviarEmail } from './_email.js';
 import { tokenAtivacao, corpoAvisoHomio } from './_homio.js';
@@ -111,7 +112,9 @@ export async function avisarHomio(evento, lead) {
   try {
     const r = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      // Autenticação do aviso (pedido do desenvolvedor da Homio, 17/11): o MESMO segredo compartilhado
+      // que eles já usam para chamar /api/homio-lead, no cabeçalho `x-webhook-secret`.
+      headers: { 'Content-Type': 'application/json', ...(SEGREDO() ? { 'x-webhook-secret': SEGREDO() } : {}) },
       body: JSON.stringify(corpoAvisoHomio(evento, lead, evento === 'conta_criada' ? linkAtivacao(lead) : null)),
       signal: AbortSignal.timeout(8000),
     });

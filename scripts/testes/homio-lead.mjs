@@ -78,5 +78,8 @@ eq('conta_criada leva o link', corpoAvisoHomio('conta_criada', l, 'https://x/ati
 eq('conta_ativada não leva link', 'link_ativacao' in corpoAvisoHomio('conta_ativada', l, 'https://x/ativar'), false);
 eq('aviso leva o contact_id da Homio', corpoAvisoHomio('ja_tinha_conta', l).contact_id, 'h1');
 
+eq('aviso leva o evento também em `event`', corpoAvisoHomio('conta_ativada', l).event, 'conta_ativada');
+eq('aviso leva a data da inscrição', corpoAvisoHomio('conta_ativada', { ...l, recebido_em: '2026-11-11T21:33:12Z' }).inscrito_em, '2026-11-11T21:33:12Z');
+
 console.log(`homio-lead: ${ok} ok, ${falhas} falha(s)`);
 if (falhas) process.exit(1);
