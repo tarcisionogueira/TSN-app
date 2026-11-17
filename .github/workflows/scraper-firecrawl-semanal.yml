@@ -40,6 +40,8 @@ jobs:
       DRYRUN_PADRAO: ${{ (github.event_name == 'schedule' || github.event.inputs.gravar == '1') && '0' || '1' }}
       FONTES: ${{ github.event.inputs.fontes || 'leje,mgl,emiliomatos' }}
     steps:
+      - name: Marca o início do job
+        run: echo "INICIO_JOB=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
@@ -107,3 +109,12 @@ jobs:
           EMILIOMATOS_DRYRUN: ${{ env.DRYRUN_PADRAO }}
           EMILIOMATOS_MAX_LOTES: '300'
         run: node scripts/scraper-emiliomatos.mjs
+
+      # 17/11 (auditoria de captura): o job ficava verde com as 4 fontes em firecrawl-500. Reprova quando
+      # nenhuma fonte coletou. Só no modo que grava (dry-run não escreve fonte_saude).
+      - name: Alguma fonte coletou?
+        if: ${{ !cancelled() && env.DRYRUN_PADRAO == '0' }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: node scripts/verificar-gravou.mjs "$INICIO_JOB" LEJE,FERNANDOLEILOEIRO,JONASLEILOEIRO,LUCASLEILOEIRO,FERNANDOLEILOEIRO_VEICULOS,LUCASLEILOEIRO_VEICULOS,EMILIOMATOS

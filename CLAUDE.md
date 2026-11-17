@@ -246,6 +246,13 @@ curto (5–8 linhas) antes de seguir:
    > explicado_em=now(), explicado_ate=excluded.explicado_ate;`. A verdade crua continua em
    > `fonte_regressao_suspeita()`.
 
+   > **Explicação AUTOMÁTICA (17/11):** o `monitor-fontes-cron` roda `fonte_explicar_automatico()` todo dia: fonte com
+   > as 3 últimas medições falhando por ACESSO (403/5xx, desafio, timeout, certificado, firecrawl-5xx) ou vazias com o
+   > scraper AFIRMANDO "site sem imóvel/veículo em aberto" ganha explicação `[auto]` de 7 dias (renovada enquanto a prova
+   > durar). Nunca sobrescreve explicação manual vigente. "Respondeu 200 e enumerou 0" NÃO entra (pode ser parser).
+   > O e-mail diário de fontes vem em 3 baldes (`api/_baldes-fontes.js`): **agir** · **fora do ar** · **sem lote**
+   > (informativo, não dispara e-mail sozinho).
+
    > **Mesmo desenho para os INVARIANTES de lote (04/10):** caso investigado e aceito de propósito (ex.: lote
    > sem cidade porque inventar seria pior) vai para `qa_invariante_explicada (chave, imovel_id, explicacao,
    > explicado_ate)` e sai da conta por 30 dias. Hoje só `estado_fora_do_padrao` lê a tabela; ao estender a

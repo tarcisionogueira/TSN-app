@@ -204,6 +204,7 @@
     "testar:motor-freio": "node scripts/testes/motor-freio-banco.mjs",
     "testar:motor-encerrado": "node scripts/testes/motor-encerrado-na-pagina.mjs",
     "testar:homio-lead": "node scripts/testes/homio-lead.mjs",
+    "testar:baldes-fontes": "node scripts/testes/baldes-fontes.mjs",
     "testar:data-edital-extenso": "node scripts/testes/data-edital-extenso.mjs",
     "testar:nome-cadastro-x-pagamento": "node scripts/testes/nome-cadastro-x-pagamento.mjs",
     "testar:kleiloes": "node scripts/testes/kleiloes-parse.mjs",

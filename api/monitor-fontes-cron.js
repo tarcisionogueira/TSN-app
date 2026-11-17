@@ -21,6 +21,7 @@ import { isCronAuthorized } from './_auth.js';
 import { createClient } from '@supabase/supabase-js';
 import MUNICIPIOS from './_municipios.js';
 import { repetirSeTimeout } from './_nova-tentativa.js';
+import { separarEmBaldes } from './_baldes-fontes.js';
 
 const RESEND_KEY  = process.env.RESEND_API_KEY;
 const FROM_EMAIL  = process.env.APP_FROM_EMAIL || 'noreply@bidprobrasil.com.br';
@@ -478,6 +479,21 @@ async function handler(req) {
   } catch (e) { console.error('snapshot_acervo_estoque:', e?.message); }
   // Comparação com o piso APRENDIDO (mediana*0.5; tem_baseline já exige volume >= 20 p/ não
   // falsar em fonte minúscula). Compara o TOTAL do último scrape (imune à Seção D).
+  // Auditoria 17/11, item 6: site fora do ar / leiloeiro sem lote com prova nas 3 últimas medições
+  // vira explicação '[auto]' (7 dias) — sai da lista de suspeitas sem investigação manual.
+  try {
+    const { data: auto, error: eAuto } = await supabase.rpc('fonte_explicar_automatico');
+    if (eAuto) console.error('fonte_explicar_automatico:', eAuto.message);
+    else if (auto?.length) console.log('[monitor-fontes] explicadas automaticamente:', auto.map(a => `${a.fonte}:${a.tipo}`).join(', '));
+  } catch (e) { console.error('fonte_explicar_automatico:', e?.message); }
+  // Lista da função que DESCONTA expiração legítima: o que ela não acusa vai para o balde
+  // informativo. Não leu → null, e tudo fica em "agir" (falha fechada, não silêncio).
+  let pendentes = null;
+  try {
+    const { data: pend, error: ePend } = await supabase.rpc('fonte_regressao_pendente');
+    if (ePend) console.error('fonte_regressao_pendente:', ePend.message);
+    else pendentes = new Set((pend || []).map(r => r.fonte));
+  } catch (e) { console.error('fonte_regressao_pendente:', e?.message); }
   try {
     const { data: aprend } = await supabase.rpc('fonte_baseline_aprendida');
     for (const b of aprend || []) {
@@ -620,24 +636,27 @@ async function handler(req) {
     }
   } catch { /* varredura é aditiva — nunca derruba o monitor */ }
 
-  if (!problemas.length) {
-    // condição limpa: zera o estado p/ que uma recorrência futura volte a avisar.
+  const baldes = separarEmBaldes(problemas, pendentes);
+  const relevantes = [...baldes.agir, ...baldes.fora];
+  if (!relevantes.length) {
+    // condição limpa (o balde informativo "sem lote" sozinho não dispara e-mail): zera o estado p/ que uma recorrência futura volte a avisar.
     const st = await lerEstadoAlerta(supabase, 'monitor_fontes');
     if (!st || st.assinatura !== '') await gravarEstadoAlerta(supabase, 'monitor_fontes', '', null);
-    return new Response(JSON.stringify({ ok: true, problemas: 0, fontes: Object.keys(ultima).length, gemeos, gemeosLeiloeiro, gemeosVlance, gemeosMesmaFonte, gemeosEntreLeiloeiros, gemeosMatricula, gemeosCoanuncio, gemeosVeiculos }), {
+    return new Response(JSON.stringify({ ok: true, problemas: 0, sem_lote: baldes.sem_lote.length, fontes: Object.keys(ultima).length, gemeos, gemeosLeiloeiro, gemeosVlance, gemeosMesmaFonte, gemeosEntreLeiloeiros, gemeosMatricula, gemeosCoanuncio, gemeosVeiculos }), {
       headers: { 'Content-Type': 'application/json' },
     });
   }
 
   // Dedup: assinatura = conjunto ordenado de (fonte:tipo). Ignora o texto volátil do
   // detalhe (contadores de horas/imóveis) p/ não parecer "mudança" a cada dia.
-  const assinatura = problemas.map(p => `${p.fonte}:${p.tipo}`).sort().join('|');
+  // Só os baldes que pedem atenção entram: leiloeiro que esvaziou não reabre o e-mail.
+  const assinatura = relevantes.map(p => `${p.fonte}:${p.tipo}`).sort().join('|');
   const estado = await lerEstadoAlerta(supabase, 'monitor_fontes');
   const mudou = !estado || estado.assinatura !== assinatura;
   // `invariantes NAO avaliados` entra aqui de proposito: sem o heartbeat, o dedup por
   // assinatura mandaria UM e-mail no dia em que a trava de corretude caiu e depois ficaria
   // quieto enquanto ela seguisse caida — silencio de novo, so que mais educado.
-  const outageSerio = problemas.some(p => /coleta parada|falhou|sem coleta|sem acervo|invariantes NAO avaliados/i.test(p.tipo));
+  const outageSerio = baldes.agir.some(p => /coleta parada|falhou|sem coleta|sem acervo|invariantes NAO avaliados/i.test(p.tipo));
   const heartbeat = outageSerio && estado?.enviado_em &&
     (Date.now() - new Date(estado.enviado_em).getTime()) > REENVIO_DIAS * 86400000;
   const enviar = mudou || heartbeat;
@@ -645,26 +664,27 @@ async function handler(req) {
 
   const agora = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
   if (enviar && RESEND_KEY) {
-    const linhasHtml = problemas.map(p => `
+    const linha = (p, cor) => `
       <tr>
         <td style="padding:8px 12px;border-bottom:1px solid #eee;font-weight:700">${p.fonte}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #eee;color:#dc2626">${p.tipo}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #eee;color:${cor}">${p.tipo}</td>
         <td style="padding:8px 12px;border-bottom:1px solid #eee">${p.detalhe}</td>
-      </tr>`).join('');
+      </tr>`;
+    const secao = (titulo, nota, lista, cor) => !lista.length ? '' : `
+          <h3 style="margin:20px 0 4px;color:${cor}">${titulo} (${lista.length})</h3>
+          <p style="margin:0 0 8px;color:#64748b;font-size:13px">${nota}</p>
+          <table style="width:100%;border-collapse:collapse;font-size:14px"><tbody>${lista.map(p => linha(p, cor)).join('')}</tbody></table>`;
     const html = `
       <div style="font-family:sans-serif;max-width:640px;margin:0 auto">
-        <div style="background:#dc2626;color:white;padding:20px;border-radius:8px 8px 0 0">
-          <h2 style="margin:0">🔴 Fontes de leilão com problema (${problemas.length})</h2>
+        <div style="background:${baldes.agir.length ? '#dc2626' : '#d97706'};color:white;padding:20px;border-radius:8px 8px 0 0">
+          <h2 style="margin:0">Fontes de leilão: ${baldes.agir.length} para agir · ${baldes.fora.length} fora do ar</h2>
           <p style="margin:8px 0 0;opacity:.9">${agora} (BRT)</p>
         </div>
         <div style="background:#fff;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px;padding:20px">
-          <table style="width:100%;border-collapse:collapse;font-size:14px">
-            <thead><tr style="text-align:left;color:#64748b">
-              <th style="padding:8px 12px">Fonte</th><th style="padding:8px 12px">Problema</th><th style="padding:8px 12px">Detalhe</th>
-            </tr></thead>
-            <tbody>${linhasHtml}</tbody>
-          </table>
-          <p style="margin-top:16px;color:#64748b;font-size:13px">O acervo de imóveis dessas fontes continua no ar (o scraper não apaga em coleta ruim); o alerta é para reconectar/ajustar o parser.</p>
+          ${secao('🔴 Agir — quebrou do nosso lado', 'Parser, API ou coleta parada: é aqui que se conserta.', baldes.agir, '#dc2626')}
+          ${secao('🟠 Site fora do ar ou bloqueando o robô', 'Não há parser a consertar. Se persistir, é caso de pedir feed ao leiloeiro.', baldes.fora, '#d97706')}
+          ${secao('⚪ Sem lote — leilão aconteceu ou já explicado', 'Informativo: acervo abaixo do normal que a checagem com expiração não acusa. Não dispara e-mail sozinho.', baldes.sem_lote, '#64748b')}
+          <p style="margin-top:16px;color:#64748b;font-size:13px">O acervo dessas fontes continua no ar (o scraper não apaga em coleta ruim).</p>
           <a href="${APP_URL}/#/admin" style="display:inline-block;margin-top:8px;background:#0D63DB;color:white;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:700">Abrir Admin →</a>
         </div>
       </div>`;
@@ -672,7 +692,7 @@ async function handler(req) {
       const rEmail = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ from: FROM_EMAIL, to: ADMIN_EMAIL, subject: `🔴 BidPro — ${problemas.length} fonte(s) de leilão com problema`, html }),
+        body: JSON.stringify({ from: FROM_EMAIL, to: ADMIN_EMAIL, subject: `${baldes.agir.length ? '🔴' : '🟠'} BidPro — fontes: ${baldes.agir.length} para agir · ${baldes.fora.length} fora do ar`, html }),
       });
       emailEnviado = rEmail.ok;
       if (!rEmail.ok) console.error('[monitor-fontes] Resend HTTP', rEmail.status, String(await rEmail.text().catch(() => '')).slice(0, 200));
@@ -685,7 +705,7 @@ async function handler(req) {
   // Uma fonte degradada perdia a única boca que tinha. Sem envio, não grava → re-tenta amanhã.
   if (enviar && emailEnviado) await gravarEstadoAlerta(supabase, 'monitor_fontes', assinatura, new Date().toISOString());
 
-  return new Response(JSON.stringify({ ok: true, problemas: problemas.length, enviado: emailEnviado, alerta_pendente: enviar && !emailEnviado, detalhes: problemas, gemeos, gemeosLeiloeiro, gemeosVlance, gemeosMesmaFonte, gemeosEntreLeiloeiros, gemeosMatricula, gemeosCoanuncio, gemeosVeiculos }), {
+  return new Response(JSON.stringify({ ok: true, problemas: problemas.length, agir: baldes.agir.length, fora: baldes.fora.length, sem_lote: baldes.sem_lote.length, enviado: emailEnviado, alerta_pendente: enviar && !emailEnviado, detalhes: problemas, gemeos, gemeosLeiloeiro, gemeosVlance, gemeosMesmaFonte, gemeosEntreLeiloeiros, gemeosMatricula, gemeosCoanuncio, gemeosVeiculos }), {
     headers: { 'Content-Type': 'application/json' },
   });
 }

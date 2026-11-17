@@ -1,0 +1,18 @@
+import { baldeDoProblema, separarEmBaldes } from '../../api/_baldes-fontes.js';
+let ok = 0, falhas = 0;
+const eq = (n, a, b) => { if (a === b) ok++; else { falhas++; console.log(`✗ ${n}: ${a} ≠ ${b}`); } };
+const pend = new Set(['CURIAULEIL']);
+eq('503 é fora do ar', baldeDoProblema({ tipo: 'falhou (0 imóveis)', detalhe: 'catálogo não abriu: sem-bd (grátis: HTTP 503 · banco: HTTP 503)' }, pend), 'fora');
+eq('certificado é fora do ar', baldeDoProblema({ tipo: 'falhou (0 imóveis)', detalhe: 'rede: DEPTH_ZERO_SELF_SIGNED_CERT' }, pend), 'fora');
+eq('firecrawl-500 é fora do ar', baldeDoProblema({ tipo: 'falhou (0 imóveis)', detalhe: 'catálogo não abriu: firecrawl-500 — acesso do runner, não parser' }, pend), 'fora');
+eq('parser que não leu é agir', baldeDoProblema({ tipo: 'falhou (0 imóveis)', detalhe: 'sem lote pronto: 12 sem detalhe (12× parser não leu a página)' }, pend), 'agir');
+eq('nenhum lote lido é agir', baldeDoProblema({ tipo: 'falhou (0 imóveis)', detalhe: 'sem lote pronto: nenhum lote lido' }, pend), 'agir');
+eq('abaixo do normal e ainda pendente é agir', baldeDoProblema({ fonte: 'CURIAULEIL', tipo: 'acervo abaixo do normal aprendido' }, pend), 'agir');
+eq('abaixo do normal fora da pendente é sem_lote', baldeDoProblema({ fonte: 'TURANI', tipo: 'acervo abaixo do normal aprendido' }, pend), 'sem_lote');
+eq('sem a lista, abaixo do normal fica em agir', baldeDoProblema({ fonte: 'TURANI', tipo: 'acervo abaixo do normal aprendido' }, null), 'agir');
+eq('tenant parado é agir', baldeDoProblema({ tipo: 'tenant parado', detalhe: 'nenhum tocado há 168 h' }, pend), 'agir');
+eq('campo regrediu é agir', baldeDoProblema({ tipo: 'campo "foto" regrediu', detalhe: '6%' }, pend), 'agir');
+const b = separarEmBaldes([{ tipo: 'tenant parado' }, { tipo: 'falhou (0 imóveis)', detalhe: 'HTTP 403' }, { fonte: 'X', tipo: 'acervo abaixo do normal aprendido' }], pend);
+eq('separa nos 3', `${b.agir.length}${b.fora.length}${b.sem_lote.length}`, '111');
+console.log(`baldes-fontes: ${ok} ok, ${falhas} falha(s)`);
+if (falhas) process.exit(1);
