@@ -1,17 +1,51 @@
 name: Scraper Diário de Leilões
+run-name: ${{ inputs.origem == 'agenda' && format('{0} [agenda]', github.workflow) || github.workflow }}
 
 on:
   schedule:
     - cron: '0 9 * * *'  # DIÁRIO, 9h UTC — CEF (CSV grátis, ~7 min/run). Era 2x/semana; leilões venciam antes do próximo scrape.
   workflow_dispatch:       # Permite rodar manualmente (e via botão do Admin → /api/trigger-scraper)
     inputs:
+      origem:
+        description: 'Quem disparou (agenda = cron da Vercel). Deixe vazio no disparo manual.'
+        required: false
+        default: ''
       ufs:
         description: 'Estados CEF (ex: SP,RJ,BA) — vazio = todos'
         required: false
         default: ''
 
 jobs:
+  # REDE DE SEGURANÇA (pendência 507): quem acorda esta coleta na hora é o cron da Vercel (api/disparar-coletas-cron.js,
+  # título "[agenda]"); o `schedule` do GitHub atrasa 9–10 h. Se o agendado do GitHub chega e o disparo da agenda já
+  # rodou nas últimas 20 h, pula — senão a mesma coleta rodaria duas vezes. Falhou a consulta → roda (não checar não
+  # é "já rodou").
+  gate:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    outputs:
+      rodar: ${{ steps.g.outputs.rodar }}
+    steps:
+      - id: g
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENTO: ${{ github.event_name }}
+        run: |
+          if [ "$EVENTO" != "schedule" ]; then echo "rodar=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          wf="${GITHUB_WORKFLOW_REF%%@*}"; wf="${wf##*/}"
+          desde=$(date -u -d '-20 hours' +%Y-%m-%dT%H:%M:%SZ)
+          if n=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$wf/runs?event=workflow_dispatch&created=%3E$desde&per_page=50" \
+               --jq '[.workflow_runs[] | select(.display_title | endswith("[agenda]")) | select(.conclusion != "failure" and .conclusion != "cancelled")] | length'); then
+            if [ "$n" -gt 0 ]; then echo "agenda da Vercel já rodou ($n) nas últimas 20 h — agendado do GitHub pulado"; echo "rodar=false" >> "$GITHUB_OUTPUT"; exit 0; fi
+          else
+            echo "::warning::não consegui consultar as execuções — rodando por segurança"
+          fi
+          echo "rodar=true" >> "$GITHUB_OUTPUT"
+
   scraper:
+    needs: gate
+    if: needs.gate.outputs.rodar == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 90
 

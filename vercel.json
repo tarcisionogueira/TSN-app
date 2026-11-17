@@ -521,6 +521,10 @@
       "schedule": "25 * * * *"
     },
     {
+      "path": "/api/disparar-coletas-cron",
+      "schedule": "3 9,10,22 * * *"
+    },
+    {
       "path": "/api/homio-reenvio-cron",
       "schedule": "*/10 * * * *"
     }
