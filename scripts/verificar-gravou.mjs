@@ -4,14 +4,21 @@
  * dele tinham voltado `firecrawl-500` — sucesso carimbado sem nada gravado (forma nº 5).
  *
  * Uso: node scripts/verificar-gravou.mjs <ISO do início do job> FONTE1,FONTE2,...
+ *      node scripts/verificar-gravou.mjs <ISO> '*' [EXCLUIR1,EXCLUIR2]   (pendência 502)
+ * `*` = toda fonte que reportou desde o início, menos as excluídas: para job multi-scraper sem lista fechada
+ * (scraper-dom, grupo "c" do leiloeiros-puppeteer). Pode enxergar linha de outro workflow que rodou junto — isso
+ * só pode ESCONDER uma falha, nunca inventar uma; por isso é o modo dos jobs sem lista, não o padrão.
  * Reprova (exit 1) quando: nenhuma das fontes reportou saúde desde o início (o passo nem chegou a
  * medir), ou TODAS as que reportaram vieram `falhou`. `sem_cota` é decisão de orçamento: não
  * reprova, mas é dito no log. Não consegue ler o banco → exit 2 (não checar não é "está tudo bem").
  */
 import './lib/env-runner.mjs';
 
-const [desde, lista] = process.argv.slice(2);
-const fontes = String(lista || '').split(',').map((f) => f.trim()).filter(Boolean);
+const [desde, lista, excluirCsv] = process.argv.slice(2);
+const csv = (x) => String(x || '').split(',').map((f) => f.trim()).filter(Boolean);
+const todas = String(lista || '').trim() === '*';
+const fontes = todas ? ['*'] : csv(lista);
+const excluir = new Set(csv(excluirCsv));
 const SB_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
 if (!desde || !fontes.length || !SB_URL || !SB_KEY) {
@@ -20,7 +27,7 @@ if (!desde || !fontes.length || !SB_URL || !SB_KEY) {
 }
 
 const url = `${SB_URL}/rest/v1/fonte_saude?select=fonte,status,motivo,total&executado_em=gte.${encodeURIComponent(desde)}`
-  + `&fonte=in.(${fontes.map(encodeURIComponent).join(',')})&order=executado_em.desc`;
+  + (todas ? '' : `&fonte=in.(${fontes.map(encodeURIComponent).join(',')})`) + '&order=executado_em.desc';
 let linhas;
 try {
   const r = await fetch(url, { headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` }, signal: AbortSignal.timeout(20000) });
@@ -32,8 +39,8 @@ try {
 }
 
 const ultima = new Map();
-for (const l of linhas) if (!ultima.has(l.fonte)) ultima.set(l.fonte, l);
-for (const f of fontes) {
+for (const l of linhas) if (!ultima.has(l.fonte) && !excluir.has(l.fonte)) ultima.set(l.fonte, l);
+for (const f of (todas ? [...ultima.keys()] : fontes)) {
   const l = ultima.get(f);
   console.log(`${f}: ${l ? `${l.status} (${l.total ?? 0}) ${String(l.motivo || '').slice(0, 120)}` : 'NÃO REPORTOU'}`);
 }

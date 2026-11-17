@@ -184,6 +184,9 @@ jobs:
       DRYRUN_PADRAO: ${{ (github.event_name == 'schedule' || github.event.inputs.gravar == '1') && '0' || '1' }}
       RODA_TUDO: ${{ github.event_name == 'push' || github.event_name == 'schedule' }}
     steps:
+      - name: Marca o início do job
+        run: echo "INICIO_JOB=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+
       - name: Checkout
         uses: actions/checkout@v4
       - name: Setup Node.js
@@ -712,6 +715,15 @@ jobs:
       # VEÍCULOS das fontes do motor deste job (21/10, pedido do dono): JE/K Leilões (/veiculos), Simon
       # (/leiloes/veiculos), Nakakogue (/lotes/consulta/2). Mesmo parser de cada fonte; conversão e pátio em
       # lib/veiculo-do-lote.mjs. Só via grátis (VEIC_BD desligado).
+      # Trava de fim de job (pendência 502): verde só se alguma fonte gravou. Job com dezenas de scrapers e sem lista
+      # fechada → modo '*'. Só quando GRAVA: o dry-run (push / dispatch sem gravar=1) não escreve fonte_saude.
+      - name: Alguma fonte coletou?
+        if: ${{ !cancelled() && env.DRYRUN_PADRAO == '0' }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: node scripts/verificar-gravou.mjs "$INICIO_JOB" '*'
+
       - name: Notify on failure
         # `cancelled()` também: estourar o timeout-minutes não é `failure()` pro GitHub, e sem
         # isto uma rodada agendada cortada no meio termina sem aviso nenhum (mesma lição já

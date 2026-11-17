@@ -67,6 +67,9 @@ jobs:
     timeout-minutes: 150
 
     steps:
+      - name: Marca o início do job
+        run: echo "INICIO_JOB=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -109,6 +112,17 @@ jobs:
           BRIGHTDATA_ISP_PASS: ${{ secrets.BRIGHTDATA_ISP_PASS }}
           SUPERBID_FORCAR_ISP: ${{ github.event.inputs.superbid_forcar_isp || '0' }}
         run: node scripts/scraper-puppeteer.mjs
+
+      # Trava de fim de job (pendência 502): verde só se alguma fonte do grupo gravou. Grupo c não tem lista fechada
+      # (é "todo o resto"), então confere qualquer fonte que reportou, tirando as dos grupos a/b (o seu `excluir`).
+      - name: Alguma fonte coletou? (grupo ${{ matrix.grupo }})
+        if: ${{ !cancelled() && (github.event.inputs.fontes == '' || github.event.inputs.fontes == null || matrix.grupo == 'a') }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          LISTA: ${{ github.event.inputs.fontes || matrix.fontes || '*' }}
+          EXCLUIR: ${{ matrix.excluir }}
+        run: node scripts/verificar-gravou.mjs "$INICIO_JOB" "$LISTA" "$EXCLUIR"
 
       # `cancelled()` junto com `failure()`: estourar o timeout-minutes NAO e failure para o
       # GitHub, e o job termina `cancelled` — com este passo pulado. Foi assim que 3 dias de
