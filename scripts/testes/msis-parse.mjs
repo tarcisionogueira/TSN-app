@@ -18,9 +18,9 @@ const leilaoBsp = fx('msis-bsp-leilao-8432.html');
 const leilaoMk = fx('msis-mklance-leilao-674.html');
 const catDavi = fx('msis-davimattos-catalogo-externo.html');
 
-// Tenants: 21, fonte única, base no domínio da triagem.
-assert.equal(Object.keys(TENANTS).length, 21);
-assert.equal(new Set(Object.values(TENANTS).map((t) => t.fonte)).size, 21, 'fonte duplicada');
+// Tenants: 20 (eram 21; Gabriel saiu em 17/11 — site desativado), fonte única, base no domínio da triagem.
+assert.equal(Object.keys(TENANTS).length, 20);
+assert.equal(new Set(Object.values(TENANTS).map((t) => t.fonte)).size, 20, 'fonte duplicada');
 assert.ok(Object.values(TENANTS).every((t) => /^https:\/\/www\.[a-z.]+$/.test(t.base) && t.catalogo === '/Principal.asp'));
 
 // Catálogo: 12 cards abertos, seletor até a página 2.
@@ -101,7 +101,8 @@ assert.equal(parseLote(blocoMk.replace('ABERTO PARA LANCES', 'ARREMATADO'), leil
 //  • Vianna: lote da Comprei/PGFN, card "DESCONSIDERAR AS DATAS NESTE SITE", "Avaliação | Valor Mínimo" no texto.
 //  • Sérgio Represas: descrição em "CorBranca" e cidade "…, BARRA MANSA, RJ." (vírgula, conferida no IBGE).
 const comCard = (h, c) => `<!-- msis-card: ${c} -->\n${h}`;
-const G = TENANTS.gabriel.base;
+// Gabriel saiu dos TENANTS em 17/11 (site desativado); a fixture continua valendo para o formato "RS" no lugar de "R$".
+const G = 'https://www.gabrielleiloeiro.com.br';
 const gab = comCard(fx('msis-gabriel-leilao-venda-direta.html'), 'VENDA DIRETA | Sala comercial na Barra');
 const dGab = [...detalhesDoCatalogo(gab, G).values()][0];
 assert.equal(dGab.modalidade, 'venda_direta');
@@ -167,4 +168,4 @@ const rf = await criarMotorMsis().fetchFonte('https://www.falha.exemplo/Principa
 assert.equal(rf.html, null);
 assert.match(rf.via, /página 2\/2 não abriu/);
 
-console.log('ok — msis: 21 tenants, catálogo 12 cards/2 páginas, BSP 8432 e MK 674 parseados, Davi Mattos 0 (externo), POST + via banco + falha que não vira lista parcial');
+console.log('ok — msis: 20 tenants, catálogo 12 cards/2 páginas, BSP 8432 e MK 674 parseados, Davi Mattos 0 (externo), POST + via banco + falha que não vira lista parcial');

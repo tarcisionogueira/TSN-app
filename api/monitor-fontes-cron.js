@@ -86,6 +86,9 @@ const FONTES_SEM_SAUDE = { PECINI: 12, RJLEILOES: 12, GESTAOLEILOES: 12, CALIL: 
 // Ficava alertando todo dia como "falhou (0 imóveis)" por 9 dias seguidos, treinando o dono
 // a ignorar o e-mail do monitor — que é o pior efeito possível num alarme.
 const FONTES_PARADAS = new Set(['SATO', 'CREPALDI']);
+// Fontes TIRADAS do coletor de propósito (site desativado): param de reportar, e sem isto viravam "coleta parada"
+// no balde "agir" por até 15 dias (a janela de `ultima`). GABRIELLEILOEIRO: site da MSIS desativado (17/11).
+const FONTES_REMOVIDAS = new Set(['GABRIELLEILOEIRO']);
 // Frescor máximo tolerado (h) para as fontes grátis que reportam saúde (Seção A).
 // Elas rodam 2x/semana — seg e qui (cron '1,4' em scraper.yml e leiloeiros-puppeteer.yml).
 // O MAIOR gap NORMAL é quinta→segunda = 96h; com este monitor às 11h UTC e o scrape às
@@ -316,7 +319,7 @@ async function handler(req) {
 
   // A) TODAS as fontes que reportam saúde: coleta parada / falhou / degradado.
   for (const [fonte, u] of Object.entries(ultima)) {
-    if (FONTES_INTERNAS.includes(fonte)) continue;
+    if (FONTES_INTERNAS.includes(fonte) || FONTES_REMOVIDAS.has(fonte)) continue;
     const idadeH = (agoraMs - new Date(u.executado_em).getTime()) / 3600000;
     if (idadeH > MAX_IDADE_H) {
       problemas.push({ fonte, tipo: 'coleta parada', detalhe: `última coleta há ${idadeH.toFixed(0)}h (${u.total} imóveis)` });

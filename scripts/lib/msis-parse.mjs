@@ -37,7 +37,9 @@ export const TENANTS = {
   bsp: t('BSPLEILOES', 'BSP Leilões', 'bspleiloes.com.br'),
   davimattos: t('DAVIMATTOS', 'Davi Mattos Leiloeiro', 'davimattosleiloeiro.com.br'),
   frederico: t('FREDERICOLEILOES', 'Frederico Leilões', 'fredericoleiloes.com.br'),
-  gabriel: t('GABRIELLEILOEIRO', 'Gabriel Leiloeiro', 'gabrielleiloeiro.com.br'),
+  // gabriel (GABRIELLEILOEIRO) SAIU em 17/11: a home responde "Ops! Esta página não está disponível" (página genérica da
+  // MSIS) e /Principal.asp dá 404 — site desativado na plataforma. Nunca coletou (15 de 15 rodadas "nenhum lote lido",
+  // 0 ativos). Volta para cá se o site voltar: t('GABRIELLEILOEIRO', 'Gabriel Leiloeiro', 'gabrielleiloeiro.com.br').
   gp: t('GPLEILAO', 'GP Leilão', 'gpleilao.com.br'),
   jj: t('JJLEILOEIRO', 'JJ Leiloeiro', 'jjleiloeiro.com.br'),
   silvani: t('SILVANI', 'Leiloeira Silvani', 'leiloeirasilvani.com.br'),
