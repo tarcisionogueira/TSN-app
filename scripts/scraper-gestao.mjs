@@ -47,6 +47,7 @@
  * Env: BRIGHTDATA_API_TOKEN, BRIGHTDATA_ZONE, VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY.
  */
 import './lib/env-runner.mjs';   // carrega ~/.bidpro-runner.env quando rodado na mão
+import { RE_ENCERRAMENTO } from './lib/gestao-datas.mjs';
 import { createClient } from '@supabase/supabase-js';
 import { decodificarEntidades } from '../api/_texto-imovel.js';
 // CORRIGIDO (18/08). A nota de 11/08 dizia que o `null` do `fetchViaBrightData` era um
@@ -671,7 +672,10 @@ async function coletarEvento(dominio, idLeilao) {
   // Gravar a 1ª data da janela punha a abertura em `data_leilao`, e o gatilho de praça vencida
   // desligava o lote NA GRAVAÇÃO: granado/extrajust/lancetotal com 0 ativos, 195 lotes do cluster
   // gravados inativos em 21/10. Sem "Encerramento" (vinco: "Data: 22/Out/2026"), segue a 1ª data.
-  const mEnc = textoData.match(/Encerramento\s*(\d{1,2}\/[A-Za-zç]{3}\/\d{4})/i);
+  // 17/11: a Vinco escreve "Data: Abertura: 10/Nov/2026 … Encerramento: 11/Dez/2026" — com DOIS-PONTOS. Sem o `:?`
+  // a regra não casava, a abertura virava data_leilao e o lote saía desligado como vencido com o leilão aberto
+  // (5 imóveis da Vinco, ex. a fazenda de Vila Rica/MT do evento 506, encerramento 11/12).
+  const mEnc = textoData.match(RE_ENCERRAMENTO);
   const ctx = {
     dominio, idLeilao, prefixoId: prefixoIdProprio(dominio),
     leiloeiro: leiloeiroDoTitulo(html, dominio),

@@ -206,6 +206,7 @@
     "testar:homio-lead": "node scripts/testes/homio-lead.mjs",
     "testar:baldes-fontes": "node scripts/testes/baldes-fontes.mjs",
     "testar:suporte-lei": "node scripts/testes/suporte-lei.mjs",
+    "testar:gestao-encerramento": "node scripts/testes/gestao-encerramento.mjs",
     "testar:data-edital-extenso": "node scripts/testes/data-edital-extenso.mjs",
     "testar:nome-cadastro-x-pagamento": "node scripts/testes/nome-cadastro-x-pagamento.mjs",
     "testar:kleiloes": "node scripts/testes/kleiloes-parse.mjs",
