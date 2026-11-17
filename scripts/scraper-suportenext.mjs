@@ -7,6 +7,8 @@
  *   vixleiloes       → VIXLEILOES        (lib/motor/fontes/vixleiloes.mjs)
  *   portaldosleiloes → PORTALDOSLEILOES  (lib/motor/fontes/portaldosleiloes.mjs)
  *   suporteclassico  → SIMOESLEILOES, VJLEILOES, MARCOLEILOES (lib/motor/fontes/suporteclassico.mjs)
+ *   suportelei       → SARAIVALEILOES, ANANDALEILOES (lib/motor/fontes/suportelei.mjs; 17/11, saíram do SUPORTE)
+ *   suedpeter        → SUEDPETER (lib/motor/fontes/suedpeter.mjs; 17/11, saiu do SUPORTE)
  * Só via grátis (`semBD`): fetch direto e, se o runner for barrado, pelo banco. Nunca Bright Data nem Firecrawl.
  *
  * Env: SUPORTENEXT_FONTES (csv das chaves acima; vazio = todas) · SUPORTENEXT_MAX_LOTES (120) ·
@@ -19,12 +21,14 @@ import lancevip from './lib/motor/fontes/lancevip.mjs';
 import vixleiloes from './lib/motor/fontes/vixleiloes.mjs';
 import portaldosleiloes from './lib/motor/fontes/portaldosleiloes.mjs';
 import suporteclassico from './lib/motor/fontes/suporteclassico.mjs';
+import suportelei from './lib/motor/fontes/suportelei.mjs';
+import suedpeter from './lib/motor/fontes/suedpeter.mjs';
 
 const SB_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
 if (!SB_URL || !SB_KEY) { console.error('Faltam VITE_SUPABASE_URL / SUPABASE_SERVICE_KEY'); process.exit(1); }
 
-const TODAS = [lancevip, vixleiloes, portaldosleiloes, suporteclassico];
+const TODAS = [lancevip, vixleiloes, portaldosleiloes, suporteclassico, suportelei, suedpeter];
 const PEDIDAS = String(process.env.SUPORTENEXT_FONTES || '').split(',').map((s) => s.trim()).filter(Boolean);
 const fontes = PEDIDAS.length ? TODAS.filter((c) => PEDIDAS.includes(c.chave)) : TODAS;
 if (!fontes.length) { console.error(`nenhuma fonte para: ${PEDIDAS.join(',')}`); process.exit(1); }

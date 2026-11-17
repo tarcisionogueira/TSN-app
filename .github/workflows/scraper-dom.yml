@@ -758,7 +758,7 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          VEIC_FONTES: globo,jeleiloes,kleiloes,simon,nakakogue,suportev2,vixleiloes,lancevip,portaldosleiloes
+          VEIC_FONTES: globo,jeleiloes,kleiloes,simon,nakakogue,suportev2,vixleiloes,lancevip,portaldosleiloes,suportelei,suedpeter
           VEIC_DRYRUN: ${{ env.DRYRUN_PADRAO }}
           VEIC_MAX_LOTES: '80'
         run: node scripts/scraper-veiculos-motor.mjs

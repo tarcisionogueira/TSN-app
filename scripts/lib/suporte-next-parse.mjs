@@ -111,6 +111,8 @@ function linha(url, det, tenant) {
     link_edital: det.link_edital || url,
     endereco: det.endereco || null, bairro: det.bairro || null, numero_processo: det.numero_processo || null,
     valor_minimo_2: det.valor_minimo_2 || null,
+    // Leiloeiro lido NA PÁGINA do lote (17/11, front "lei-" multi-site): a vitrine não é prova de quem leiloa.
+    ...(det.leiloeiro ? { leiloeiro: det.leiloeiro } : {}),
     ...(det.cep ? { cep: det.cep } : {}),
     ...(det.fotos?.length ? { fotos: det.fotos } : {}),
   };
@@ -369,8 +371,16 @@ export const PORTAL = (() => {
     const ufCampo = String(sp.get('UF') || '').toUpperCase();
     const uf = UFS.has(ufCampo) ? ufCampo : null;
     const doTexto = cidadeDoTexto(`${titulo} | ${sp.get('Cidade') || ''} | ${descricao || ''}`, uf);
-    const fotos = unicos([...(Array.isArray(ld?.image) ? ld.image : []), ...(String(html).match(/https:\/\/static\.suporteleiloes\.com\.br\/portaldosleiloes\/[^"'\\\s)]+\.(?:jpe?g|png|webp)/gi) || [])]);
     const docs = [...b.matchAll(/<a[^>]+href="(https:\/\/static\.suporteleiloes\.com\.br\/[^"]+\.pdf)"[^>]*>([\s\S]*?)<\/a>/gi)].map((m) => anexo(umaLinha(m[2]), m[1]));
+    // Fotos (17/11): o caminho tem a pasta do SITE (portaldosleiloes, saraivaleiloescombr…) e, nos sites com
+    // "Veja também", fotos de OUTROS lotes. Com o id do bem (tirado do edital ou da 1ª foto do JSON-LD) só entra
+    // `/bens/<id>/` deste lote; sem ele, o padrão antigo do Portal (pasta própria, sem bens/).
+    const bem = ([...docs.map((d) => d.url), ...(Array.isArray(ld?.image) ? ld.image : [])].join(' ').match(/\/bens\/(\d+)\//) || [])[1];
+    const reFoto = bem
+      ? new RegExp(`https://static\\.suporteleiloes\\.com\\.br/[a-z0-9]+/bens/${bem}/[^"'\\\\\\s)]+\\.(?:jpe?g|png|webp)`, 'gi')
+      : /https:\/\/static\.suporteleiloes\.com\.br\/portaldosleiloes\/[^"'\\\s)]+\.(?:jpe?g|png|webp)/gi;
+    const fotos = unicos([...(Array.isArray(ld?.image) ? ld.image : []), ...(String(html).match(reFoto) || [])]);
+    const leiloeiro = umaLinha((b.match(/<div class="lei-lote-com__leiloeiro">([\s\S]*?)(?:<span|<\/div>)/) || [])[1]) || null;
     const fechadoPeloSite = !!status && !/aberto|em\s+breve|dispon[íi]vel|recebendo|andamento/i.test(status) && RE_FECHADO.test(status);
     return {
       id: idDaUrl(url), titulo: titulo.slice(0, 180), status, categoria,
@@ -378,7 +388,7 @@ export const PORTAL = (() => {
       valor_avaliacao: avaliacao, valor_minimo: minimo, valor_minimo_2: null,
       data_leilao: Number.isFinite(t) ? new Date(t - 3 * 3600e3).toISOString().slice(0, 10) : null, data_leilao_2: null, modalidade,
       tipo: ehImovel === false ? null : tipoDaCategoria(categoria) || inferirTipo(titulo, url),
-      area_m2: extrairArea(titulo, descricao || ''), descricao, comitente: sp.get('Comitente') || null,
+      area_m2: extrairArea(titulo, descricao || ''), descricao, comitente: sp.get('Comitente') || null, leiloeiro,
       anexos: docs, link_edital: docs.find((a) => a.tipo === 'edital')?.url || null, link_matricula: docs.find((a) => a.tipo === 'matricula')?.url || null,
       link_foto: fotos[0] || null, fotos, eh_imovel: ehImovel !== false,
       encerrado: fechadoPeloSite || (Number.isFinite(t) && t < +agora && modalidade !== 'venda_direta'),
@@ -445,10 +455,15 @@ export const PORTAL = (() => {
     const cards = cartoes(html, base);
     registrarPagina(html, cards);
     const out = new Map();
-    for (const c of cards) { out.set(c.slug, c.url); ABERTO.set(c.url, (ABERTO.get(c.url) || false) || c.aberto); }
+    for (const c of cards) { out.set(c.slug, c.url); ABERTO.set(c.url, (ABERTO.get(c.url) || false) || c.aberto); if (c.categoria) CATEG.set(c.url, c.categoria); }
     return out;
   }
   const abertoNoCard = (url) => ABERTO.get(url) === true;
+  // IMÓVEIS pelos leilões abertos (17/11, Saraiva/Ananda): o `/lotes?categoria=Imóveis` desses sites mistura o
+  // histórico inteiro (479 páginas). Card aberto + categoria do card que é imóvel; card sem categoria entra e o
+  // detalhe decide (perder imóvel por card sem rótulo é pior que ler uma página a mais).
+  const CATEG = new Map();
+  const imovelAbertoNoCard = (url) => ABERTO.get(url) === true && ehImovelPelaCategoria(CATEG.get(url)) !== false;
   const cobertura = {
     zerar: () => { COB.clear(); ABERTO.clear(); },
     medir: () => {
@@ -457,13 +472,107 @@ export const PORTAL = (() => {
       return { eventos, declarado, lidos, ocultos: eventos.reduce((a, e) => a + Math.max(0, e.publicado - e.declarado), 0), pct: declarado ? lidos / declarado : null };
     },
   };
-  return { TENANTS, extrairUrlsDeLote, idDaUrl, parseDetalhe, montarRow, checarQualidade, painel, eventosAbertos, cartoes, extrairUrlsDeLoteVeiculo, abertoNoCard, cobertura };
+  return { TENANTS, extrairUrlsDeLote, idDaUrl, parseDetalhe, montarRow, checarQualidade, painel, eventosAbertos, cartoes, extrairUrlsDeLoteVeiculo, abertoNoCard, imovelAbertoNoCard, cobertura };
 })();
 
 // ══ VEÍCULOS (LanceVIP e VIX) ════════════════════════════════════════════════════════════════════
 // O título do lote de veículo raramente diz o tipo ("HONDA/NXR150 BROS ESD — 2011/2011", "FORD/CARGO 1933") e o
 // classificador de veículo decide o tipo PELO TÍTULO — a moto e o caminhão saíam "carro". A categoria que a própria
 // página declara ("Motos", "Caminhão") vira prefixo do título quando ele não diz o tipo.
+// ══ FICHA (front Next.js "lote__"/"gcard" da Suporte — Sued Peter, 17/11) ══════════════════════════════════════
+// O `/buscador` do template antigo passou a dar 404 (tenant parado desde 08/11 com 14 ativos). Catálogo
+// `/lotes?categoria=Imóveis&page=N` com cards `a.gcard` (pílula de situação: "Aberto", "Encerrado"…); lote
+// `/lote/<id>-<slug>`: título `h1.lote__titulo`, situação `span.lote__status`, "Ficha técnica" em pares
+// `span.rotulo`/`strong`, processo, descrição, `ul.docs` e as PRAÇAS nas props RSC do painel
+// (`{"loteId":…,"statusLeilao":…,"pracas":[{n,valor,data,ativa}],"valorInicial":…}`).
+export const FICHA = (() => {
+  const TENANTS = { suedpeter: { fonte: 'SUEDPETER', leiloeiro: 'Sued Peter Leilões (Sued Peter Bastos Dyna)', base: 'https://suedpeterleiloes.com.br' } };
+  const RE_CARD = /<a class="gcard" href="(\/lote\/(\d+)-[^"]*)"/g;
+  const ABERTO = new Map();
+  function extrairUrlsDeLote(html, base) {
+    const b = corpo(html);
+    const pos = [...b.matchAll(RE_CARD)];
+    const out = new Map();
+    pos.forEach((m, i) => {
+      const seg = b.slice(m.index, i + 1 < pos.length ? pos[i + 1].index : m.index + 5000);
+      const pilula = umaLinha((seg.match(/<span class="pilula pilula--caps[^"]*"[^>]*>([\s\S]*?)<\/span>/) || [])[1]);
+      const url = new URL(m[1], base).href;
+      ABERTO.set(url, !RE_FECHADO.test(pilula));
+      out.set(m[2], url);
+    });
+    return out;
+  }
+  // Card sem pílula entra (o detalhe decide pela praça); só o card que o site declara fechado fica de fora.
+  const urlCandidata = (url) => ABERTO.get(url) !== false;
+  const idDaUrl = (url) => (String(url).match(/\/lote\/(\d+)/) || [])[1] || null;
+  // O payload RSC tem VÁRIOS objetos `{"loteId":…}` (cabeçalho com valorAtual, links de outros lotes, o painel de
+  // lance): as praças moram no que tem `"pracas":[…]` — pegar o primeiro `loteId` (como o PORTAL) perde a praça.
+  function pracasDoPainel(html) {
+    let fluxo = '';
+    for (const m of String(html || '').matchAll(/self\.__next_f\.push\(\[1,("(?:[^"\\]|\\.)*")\]\)/g)) {
+      try { fluxo += JSON.parse(m[1]); } catch { /* pedaço ilegível: sem praça, o detalhe usa a avaliação */ }
+    }
+    let pracas = [];
+    try { pracas = JSON.parse((fluxo.match(/"pracas":(\[[^\]]*\])/) || [])[1] || '[]'); } catch { pracas = []; }
+    return { pracas, valorInicial: Number((fluxo.match(/"pracas":\[[^\]]*\],"valorInicial":([\d.]+)/) || [])[1]) || null };
+  }
+  function ficha(b) {
+    const out = new Map();
+    for (const m of b.matchAll(/<span class="rotulo">([\s\S]*?)<\/span>\s*<strong>([\s\S]*?)<\/strong>/g)) {
+      const k = umaLinha(m[1]); if (k && !out.has(k)) out.set(k, umaLinha(m[2]));
+    }
+    return out;
+  }
+  function parseDetalhe(html, url, { agora = new Date() } = {}) {
+    const b = corpo(html);
+    const titulo = umaLinha((b.match(/<h1 class="lote__titulo"[^>]*>([\s\S]*?)<\/h1>/) || [])[1]);
+    if (!titulo) return null;
+    const f = ficha(b);
+    const p = pracasDoPainel(html);
+    const status = umaLinha((b.match(/<span class="lote__status"[^>]*>([\s\S]*?)<\/span>/) || [])[1]);
+    const pracas = (Array.isArray(p.pracas) ? p.pracas : []).map((x) => ({ n: Number(x.n), valor: plaus(Number(x.valor)) || null, t: Date.parse(x.data || ''), data: x.data || null }))
+      .filter((x) => Number.isFinite(x.t)).sort((a, c) => a.t - c.t);
+    const vig = pracas.find((x) => x.t >= +agora) || null;
+    const prox = vig ? pracas[pracas.indexOf(vig) + 1] || null : null;
+    const ultima = pracas[pracas.length - 1] || null;
+    const ref = vig || ultima;
+    const avaliacao = plaus(brl(f.get('Avaliação')));
+    const [cid, ufBruta] = String(f.get('Cidade') || '').split(/\s*\/\s*/);
+    const uf = UFS.has(String(ufBruta || '').trim().toUpperCase()) ? String(ufBruta).trim().toUpperCase() : null;
+    const descricao = semTags((b.match(/<h2 class="painel__titulo">Descrição<\/h2>\s*<div[^>]*>([\s\S]*?)<\/div>\s*<\/div>/) || [])[1]).slice(0, 8000) || null;
+    const doTexto = cidadeDoTexto(`${titulo} | ${f.get('Cidade') || ''} | ${descricao || ''}`, uf);
+    const docs = [...((b.match(/<ul class="docs">([\s\S]*?)<\/ul>/) || [])[1] || '').matchAll(/<a href="(https?:\/\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/g)]
+      .map((m) => anexo(umaLinha(m[2]), m[1]));
+    const bem = (docs.map((d) => d.url).join(' ').match(/\/bens\/(\d+)\//) || String(html).match(/"bemId":(\d+)/) || [])[1];
+    const fotos = bem ? unicos(String(html).match(new RegExp(`https://static\\.suporteleiloes\\.com\\.br/[a-z0-9]+/bens/${bem}/arquivos/[^"'\\\\\\s)]+\\.(?:jpe?g|png|webp)`, 'gi')) || []) : [];
+    const processo = f.get('Processo judicial') || (`${titulo} ${descricao || ''}`.match(/\b\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}\b/) || [])[0] || null;
+    const comitente = f.get('Comitente') || null;
+    const modalidade = /venda\s*direta/i.test(`${status} ${titulo}`) ? 'venda_direta'
+      : (processo || /vara|justi[çc]a|tribunal|ju[íi]zo/i.test(comitente || '') ? 'judicial' : 'extrajudicial');
+    const fechadoPeloSite = !!status && !/aberto|em\s+breve|dispon[íi]vel|andamento|aguard/i.test(status) && RE_FECHADO.test(status);
+    const vencida = pracas.length > 0 && !vig && modalidade !== 'venda_direta';
+    const iso = (x) => (x?.data ? new Date(x.t - 3 * 3600e3).toISOString().slice(0, 10) : null);
+    const categoria = f.get('Tipo') || null;
+    const ehImovel = categoria ? (RE_CAT_VEICULO.test(categoria) ? false : true) : null;
+    return {
+      id: idDaUrl(url), titulo: titulo.slice(0, 180), status, categoria,
+      cidade: cidadeIbge(cid, uf) || doTexto?.cidade || null, estado: uf || doTexto?.estado || null,
+      bairro: f.get('Bairro') || null,
+      valor_avaliacao: avaliacao, valor_minimo: ref?.valor || plaus(Number(p.valorInicial)) || avaliacao, valor_minimo_2: prox?.valor || null,
+      data_leilao: iso(ref), data_leilao_2: iso(prox), modalidade,
+      tipo: ehImovel === false ? null : tipoDaCategoria(categoria) || inferirTipo(`${titulo} ${descricao || ''}`.slice(0, 300), url),
+      area_m2: extrairArea(titulo, descricao || ''), descricao, comitente, numero_processo: processo,
+      numero_matricula: (`${docs.map((d) => d.nome).join(' ')} ${descricao || ''}`.match(/matr[íi]cula\s*(?:n[º°.o]*\s*)?:?\s*([\d][\d.]{2,})/i) || [])[1]?.replace(/\.$/, '') || null,
+      anexos: docs, link_edital: docs.find((a) => a.tipo === 'edital')?.url || docs[0]?.url || null,
+      link_matricula: docs.find((a) => a.tipo === 'matricula')?.url || null,
+      link_foto: fotos[0] || null, fotos, eh_imovel: ehImovel !== false,
+      encerrado: fechadoPeloSite || vencida,
+    };
+  }
+  const montarRow = (url, det, tenant) => linha(url, det, tenant);
+  return { TENANTS, extrairUrlsDeLote, urlCandidata, idDaUrl, parseDetalhe, montarRow, checarQualidade };
+})();
+
 const PREFIXO_VEICULO = [[/^motos?$|motocicleta/i, 'Moto'], [/caminhonete|camionete|pick/i, 'Caminhonete'],
   [/caminh[õoã]/i, 'Caminhão'], [/[ôo]nibus/i, 'Ônibus'], [/reboque|carreta/i, 'Reboque'], [/utilit|\bvan\b|furg/i, 'Utilitário']];
 export function tituloVeiculo(html) {

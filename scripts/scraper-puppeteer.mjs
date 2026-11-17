@@ -5827,10 +5827,8 @@ const SUPORTE_TENANTS = [
   // com imóveis reais e SEM redirect PGFN. leilaobrasil ficou de fora (voltou 0 lotes — mudou de
   // estrutura ou catálogo em outro lugar; precisa de recon próprio antes de entrar).
   { domain: 'vecchileiloes.com.br', leiloeiro: 'Vecchi Leilões' },
-  { domain: 'saraivaleiloes.com.br', leiloeiro: 'Saraiva Leilões' },
   // ES/JUCEES (recon-leiloeiros-es + recon-suporte 21/08): white-label confirmada com 12 lotes
   // na 1ª página — único do lote JUCEES com atividade (21 leilões no histórico da junta).
-  { domain: 'suedpeterleiloes.com.br', leiloeiro: 'Sued Peter Leilões' },
 
   // ─── JUCEMG (triagem 29/08) ────────────────────────────────────────────────────────────
   // O dono trouxe a lista oficial da Junta Comercial de MG (236 leiloeiros). A triagem
@@ -5854,14 +5852,11 @@ const SUPORTE_TENANTS = [
   // ⚠️ Os cinco marcados PGFN têm link para `comprei.pgfn.gov.br` na home. Isso NÃO os torna
   // 100% PGFN — e o run confirmou: DOIS deles (marcoantonio, rodrigo) trouxeram 12 imóveis
   // cada. Barrá-los por suposição teria custado 24 lotes.
-  { domain: 'anandaleiloes.com.br', leiloeiro: 'Ananda Leilões' },
   // 28/10: era `donizetteleiloes.com.br`, que redireciona /buscador para a HOME do .leilao.br (path perdido) — 0 lote
   // desde 29/08. O .leilao.br direto devolve 24 `lote-main` na 1ª página. Mesmo tenantKey (antes do 1º ponto) → mesmos fonte_id.
   { domain: 'donizetteleiloes.leilao.br', leiloeiro: 'Donizette Leilões' },
   { domain: 'goldenlance.com.br', leiloeiro: 'Golden Lance Leilões' },
   { domain: 'lilianportugal.com.br', leiloeiro: 'Lilian Portugal Leilões' },
-  { domain: 'marianoleiloes.com.br', leiloeiro: 'Mariano Leilões' },
-  { domain: 'mjleiloes.com.br', leiloeiro: 'MJ Leilões' },
   { domain: 'pelesleiloes.com.br', leiloeiro: 'Peles Leilões' },
   { domain: 'portoleiloes.com.br', leiloeiro: 'Porto Leilões' },
   { domain: 'rofremleiloes.com.br', leiloeiro: 'Rofrem Leilões' },
@@ -5874,8 +5869,13 @@ const SUPORTE_TENANTS = [
   // marcoantonioleiloeiro.com.br e rodrigoleiloeiro.com.br SAÍRAM daqui (24/10, pendência 296): migraram para o front
   // Next.js novo da Suporte (sem `lote-main`; 0 lote desde 13/09 e 25/09). Coleta agora em scraper-suportev2.mjs
   // (fonte MARCOANTONIO — um banco, quatro vitrines, junto com Anna Luiza e DCM).
-  { domain: 'rafaelleiloeiro.com.br', leiloeiro: 'Rafael Araújo Leilões' },            // PGFN na home
   { domain: 'wermelingerleiloes.com.br', leiloeiro: 'Wermelinger Leilões' },           // PGFN na home
+  // 17/11 (auditoria de captura, varredura dos 43 tenants pelo banco): SAÍRAM daqui
+  //   • saraivaleiloes e anandaleiloes — migraram para o front "lei-" do Portal dos Leilões (`/buscador` dá 404).
+  //     Coleta agora em scraper-suportenext.mjs, fontes SARAIVALEILOES e ANANDALEILOES (lib/motor/fontes/suportelei.mjs).
+  //   • suedpeterleiloes — front Next.js próprio ("lote__/gcard"); fonte SUEDPETER (lib/motor/fontes/suedpeter.mjs).
+  //   • marianoleiloes, mjleiloes e rafaelleiloeiro — o site responde "An Error Occurred: Not Found" em qualquer
+  //     caminho; nenhum lote ativo no acervo. Voltam se o domínio voltar a ter catálogo.
   // ─── JUNTAS (levantamento 24/10, leiloeiro_triagem `junta_2410`) ──────────────────────────────
   // Mesmo template `article.lote-main` em /buscador?categoria=2. Seco do coletor REAL (scraperSuporteTenant em
   // Chrome, páginas lidas pelo banco) sobre catálogo + lotes de 24/10: Bueno 9 imóveis (GO/DF), Façanha 4 (RJ; 1 sai
