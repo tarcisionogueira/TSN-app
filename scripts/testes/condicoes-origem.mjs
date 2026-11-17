@@ -70,3 +70,23 @@ for (const [mod, t, cen, esperado] of reais) {
 }
 assert.notEqual(extrairPagamentoTexto('Pagamento à vista. Não será aceito pagamento parcelado ou financiado.').financiavel, true, 'negação de financiado');
 console.log('condicoes-origem: ok');
+
+// 11. SELO DO SISTEMA DE LANCES (17/11, REGIONALLEIL 902 — Porto Alegre). Judicial sem edital lido + "ACEITA LANCE
+// PARCELADO" na página → abre parcelado (art. 895). Fora do judicial, o selo não traz número: fica à vista.
+const selo = { parcelamentoPermitido: true, selo: 'ACEITA LANCE PARCELADO', tipo: 'lance', fonte: 'leilaopro' };
+const cSeloJ = montarCondicoesPagamento({ plataforma: selo, modalidade: 'judicial' });
+assert.equal(cSeloJ.cenarioInicial, 'financiado');
+assert.equal(cSeloJ.tipoParcelamento, 'parcelado_judicial');
+assert.equal(cSeloJ.campos.parcelamentoPermitido.origem, 'plataforma_leiloeiro');
+assert.match(cSeloJ.motivo, /art\. 895/);
+const cSeloX = montarCondicoesPagamento({ plataforma: { ...selo, selo: 'ACEITA PROPOSTA PARCELADA', tipo: 'proposta' }, modalidade: 'extrajudicial' });
+assert.equal(cSeloX.cenarioInicial, 'aVista', 'extrajudicial: selo sem números não abre o 5%/360 bancário');
+assert.equal(cSeloX.campos.parcelamentoPermitido.origem, 'plataforma_proposta');
+// Edital que VEDA, citado, manda sobre o selo.
+const tVeda = 'O pagamento será exclusivamente à vista, não sendo admitido parcelamento.';
+const rVeda = extrairPagamentoTexto(tVeda);
+if (rVeda.parcelamentoPermitido === false) {
+  assert.equal(montarCondicoesPagamento({ edital: { regras: rVeda, texto: tVeda }, plataforma: selo, modalidade: 'judicial' }).cenarioInicial, 'aVista');
+}
+assert.equal(montarCondicoesPagamento({ plataforma: null, modalidade: 'judicial' }).cenarioInicial, 'aVista');
+console.log('ok — selo do sistema de lances');

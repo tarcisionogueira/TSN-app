@@ -112,3 +112,19 @@ assert.deepEqual(sl('https://www.santayanaleiloes.com.br/leilao/imovel-onde-atua
 assert.deepEqual(sl('https://www.swleiloes.com.br/venda-direta/bem_id/152'), [null, null]);
 
 console.log('leilaopro-preco-e-cidade: todos os casos passaram');
+
+// SELO DE PARCELAMENTO (17/11, REGIONALLEIL 902): HTML real do card. O padrão {25, 30} do <script> está em TODA
+// página (inclusive sem selo) e não pode virar prova.
+{
+  const script = `<script>var entradaParcelasPadraoAntecipado = { entrada: '25', parcelas: '30' };</script>`;
+  const comSelo = `<html><head><title>APTO 411 (PORTO ALEGRE/RS)</title></head><body>${script}<div class="card-lote-badges">
+      <span class="badge badge-parcelado">ACEITA LANCE PARCELADO</span>
+  </div><div>LANCE INICIAL R$ 350.000,00 Processo nº 123 juiz</div></body></html>`;
+  const semSelo = comSelo.replace(/<span class="badge badge-parcelado">[^<]*<\/span>/, '');
+  const proposta = comSelo.replace('ACEITA LANCE PARCELADO', 'ACEITA PROPOSTA PARCELADA');
+  const u = 'https://www.regionalleiloes.com.br/leilao/x/lote_id/902';
+  assert.deepEqual(parseDetalhe(comSelo, u).condicoes_plataforma, { parcelamentoPermitido: true, selo: 'ACEITA LANCE PARCELADO', tipo: 'lance', fonte: 'leilaopro' });
+  assert.equal(parseDetalhe(semSelo, u).condicoes_plataforma, null, 'sem selo: o {25,30} do script não conta');
+  assert.equal(parseDetalhe(proposta, u).condicoes_plataforma.tipo, 'proposta');
+  console.log('ok — selo de parcelamento LeilãoPro');
+}

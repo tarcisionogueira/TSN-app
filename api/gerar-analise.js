@@ -3080,7 +3080,7 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
     let avalDb = 0, fonteDb = '', areaFonte = areaDoEdital > 0 && areaM2 === areaDoEdital ? 'edital' : 'informada';
     let imDb = null; // reusado depois para semear/ler o Índice BidPro da microrregião
     try {
-      [imDb] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=fonte,modalidade,valor_avaliacao,valor_minimo,valor_minimo_2,data_leilao,data_leilao_2,area_m2,ficha_juridica,cidade_norm,estado,bairro,latitude,longitude,tem_matricula_doc,forma_pagamento,doc_fatos,ficha_cef,titulo,correcao_edital&limit=1`)).json();
+      [imDb] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=fonte,modalidade,valor_avaliacao,valor_minimo,valor_minimo_2,data_leilao,data_leilao_2,area_m2,ficha_juridica,cidade_norm,estado,bairro,latitude,longitude,tem_matricula_doc,forma_pagamento,doc_fatos,ficha_cef,condicoes_plataforma,titulo,correcao_edital&limit=1`)).json();
       const n = Number(imDb?.valor_avaliacao) || 0;
       const vminDb = Number(imDb?.valor_minimo) || 0;
       const sentinela = [999999999, 99999999, 9999999999, 111111111, 123456789].includes(n);
@@ -3555,7 +3555,7 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
     // abre nele. Sem prova forte (trecho citado do edital ou ficha da Caixa) abre À VISTA — o erro do lado seguro.
     if (mercado) {
       try {
-        mercado.condicoesPagamento = montarCondicoesPagamento({ ...camadasPag, fichaCef: imDb?.ficha_cef || null, modalidade: imDb?.modalidade || imovel?.modalidade || '' });
+        mercado.condicoesPagamento = montarCondicoesPagamento({ ...camadasPag, fichaCef: imDb?.ficha_cef || null, plataforma: imDb?.condicoes_plataforma || null, modalidade: imDb?.modalidade || imovel?.modalidade || '' });
         console.log('[condicoes-pagamento]', JSON.stringify({ imovel: String(imovelId), cenario: mercado.condicoesPagamento.cenarioInicial, campos: Object.fromEntries(Object.entries(mercado.condicoesPagamento.campos).map(([k, v]) => [k, v.origem])) }));
       } catch (e) { console.error('[condicoes-pagamento] não montado:', e?.message || e); }
     }

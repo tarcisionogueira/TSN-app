@@ -220,14 +220,14 @@ ${(() => {
   const cp = mercado?.condicoesPagamento;
   if (!cp || !cp.campos || !Object.keys(cp.campos).length) return '';
   const ROT = { aVista: 'À vista', parcelamentoPermitido: 'Parcelamento permitido', parcelas: 'Parcelas', sinalPct: 'Entrada (%)', financiavel: 'Financiamento', fgts: 'FGTS', prazoDias: 'Prazo para pagar (dias)', comissaoPct: 'Comissão do leiloeiro (%)' };
-  const ORIG = { edital_texto: 'edital', edital_sem_trecho: 'edital (sem trecho citado)', ficha_cef: 'ficha da Caixa', documental_ia: 'documental (IA)', anuncio: 'anúncio do leiloeiro', padrao_leiloeiro: 'padrão do leiloeiro' };
+  const ORIG = { edital_texto: 'edital', edital_sem_trecho: 'edital (sem trecho citado)', ficha_cef: 'ficha da Caixa', plataforma_leiloeiro: 'sistema de lances do leiloeiro', plataforma_proposta: 'selo do leiloeiro (sem condições)', documental_ia: 'documental (IA)', anuncio: 'anúncio do leiloeiro', padrao_leiloeiro: 'padrão do leiloeiro' };
   const val = (v) => v === true ? 'sim' : v === false ? 'não' : esc(String(v).replace('.', ','));
-  const linhas = Object.entries(cp.campos).map(([k, c]) => `<tr><td style="padding:3px 6px;">${esc(ROT[k] || k)}</td><td style="padding:3px 6px;font-weight:700;">${val(c.valor)}</td><td style="padding:3px 6px;color:${['edital_texto','ficha_cef'].includes(c.origem) ? '#047857' : '#b45309'};">${esc(ORIG[c.origem] || 'não verificado')}</td></tr>`).join('');
+  const linhas = Object.entries(cp.campos).map(([k, c]) => `<tr><td style="padding:3px 6px;">${esc(ROT[k] || k)}</td><td style="padding:3px 6px;font-weight:700;">${val(c.valor)}</td><td style="padding:3px 6px;color:${['edital_texto','ficha_cef','plataforma_leiloeiro'].includes(c.origem) ? '#047857' : '#b45309'};">${esc(ORIG[c.origem] || 'não verificado')}</td></tr>`).join('');
   const trechoEd = Object.values(cp.campos).find((c) => c.origem === 'edital_texto' && c.trecho)?.trecho;
   return `<div class="av" style="margin-bottom:10px;"><h3>Condições de pagamento — de onde veio cada uma</h3>
   <table style="width:100%;font-size:8.5px;border-collapse:collapse;"><tr style="color:#64748b;"><td style="padding:3px 6px;">Condição</td><td style="padding:3px 6px;">Valor</td><td style="padding:3px 6px;">Origem</td></tr>${linhas}</table>
   ${trechoEd ? `<div style="font-size:8px;color:#475569;margin-top:4px;">Trecho do edital: “${esc(String(trechoEd).slice(0, 300))}”</div>` : ''}
-  <div style="font-size:8px;color:#64748b;margin-top:4px;">Cenário inicial do relatório: <strong>${cp.cenarioInicial === 'financiado' ? 'parcelado (comprovado)' : 'à vista'}</strong> — ${esc(cp.motivo || '')}. Só edital citado e ficha da Caixa contam como prova.</div></div>`;
+  <div style="font-size:8px;color:#64748b;margin-top:4px;">Cenário inicial do relatório: <strong>${cp.cenarioInicial === 'financiado' ? 'parcelado (comprovado)' : 'à vista'}</strong> — ${esc(cp.motivo || '')}. Contam como prova: edital citado, ficha da Caixa e, em leilão judicial, o lance parcelado aceito no sistema do leiloeiro.</div></div>`;
 })()}
 <h2>Detalhamento Financeiro Completo</h2>
 <div class="av">

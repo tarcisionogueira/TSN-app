@@ -10,13 +10,23 @@
  * abrem o cenário financiado sozinhos: o cliente liga a simulação, e ela vem marcada como premissa.
  *
  * Origens: edital_texto (o trecho citado, relido pelo extrator, dá o mesmo valor) · edital_sem_trecho (veio do texto
- * do edital, mas o trecho citado não o sustenta) · ficha_cef · documental_ia · anuncio · padrao_leiloeiro.
+ * do edital, mas o trecho citado não o sustenta) · ficha_cef · plataforma_leiloeiro · plataforma_proposta ·
+ * documental_ia · anuncio · padrao_leiloeiro.
+ *
+ * SELO DO SISTEMA DE LANCES (17/11, caso Like Open Concept — REGIONALLEIL 902, Porto Alegre). O lote judicial
+ * tinha o selo "ACEITA LANCE PARCELADO" na página (o sistema de lances do LeilãoPro aceita o lance do art. 895),
+ * nenhum PDF de edital publicado, e o relatório abriu À VISTA: "condições não lidas". O selo é dado ESTRUTURADO do
+ * próprio leiloeiro — mesma natureza da ficha da Caixa — e é condicional (medido: lotes sem ele no mesmo sistema).
+ * Vale como prova forte SÓ em lote JUDICIAL, porque ali a lei dá os números (25% + 30 meses, a semente da tela).
+ * Fora do judicial ("ACEITA PROPOSTA PARCELADA") não há número nenhum: abrir financiado cairia no 5%/360 bancário
+ * do formulário vazio — o próprio Brooklin. Lá ele aparece com o nome dele (`plataforma_proposta`) e não decide.
+ * O `entradaParcelasPadraoAntecipado = {25, 30}` do script da página NÃO é prova: está em toda página, com ou sem selo.
  */
 import { extrairPagamentoTexto } from './_doc-extracao.js';
 
 export const VERSAO_CONDICOES = 1;
 export const CAMPOS_PAGAMENTO = ['aVista', 'parcelamentoPermitido', 'parcelas', 'sinalPct', 'financiavel', 'fgts', 'prazoDias', 'comissaoPct'];
-const PROVA_FORTE = new Set(['edital_texto', 'ficha_cef']);
+const PROVA_FORTE = new Set(['edital_texto', 'ficha_cef', 'plataforma_leiloeiro']);
 
 const temValor = (v) => v !== null && v !== undefined && v !== '' && !(typeof v === 'number' && !Number.isFinite(v));
 const mesmo = (a, b) => (typeof a === 'number' || typeof b === 'number') ? Number(a) === Number(b) : a === b;
@@ -28,9 +38,11 @@ const mesmo = (a, b) => (typeof a === 'number' || typeof b === 'number') ? Numbe
  * @param {{regras?:object, texto?:string}} [p.anuncio]     extração do título do anúncio
  * @param {{regras?:object, amostras?:number}} [p.prior]    consenso do leiloeiro × modalidade
  * @param {object} [p.fichaCef]                             ficha estruturada da Caixa (financiamento/fgts)
+ * @param {{parcelamentoPermitido?:boolean, selo?:string}} [p.plataforma] selo do sistema de lances (imoveis_leilao.condicoes_plataforma)
  * @param {string} [p.modalidade]
  */
-export function montarCondicoesPagamento({ edital, documental, anuncio, prior, fichaCef, modalidade } = {}) {
+export function montarCondicoesPagamento({ edital, documental, anuncio, prior, fichaCef, plataforma, modalidade } = {}) {
+  const judicial = String(modalidade || '').toLowerCase() === 'judicial';
   // Releitura do trecho citado: o que o PRÓPRIO trecho diz é a prova. Paráfrase, título ou consenso não passam.
   const doTrecho = edital?.texto ? extrairPagamentoTexto(String(edital.texto)) : null;
   const camadas = [];
@@ -41,6 +53,11 @@ export function montarCondicoesPagamento({ edital, documental, anuncio, prior, f
     if (fin === true || fin === false) r.financiavel = fin;
     if (fg === true || fg === false) r.fgts = fg;
     if (Object.keys(r).length) camadas.push({ regras: r, origemDe: () => 'ficha_cef', trecho: 'ficha do imóvel publicada pela Caixa' });
+  }
+  if (plataforma && typeof plataforma === 'object' && plataforma.parcelamentoPermitido === true) {
+    const origem = judicial ? 'plataforma_leiloeiro' : 'plataforma_proposta';
+    camadas.push({ regras: { parcelamentoPermitido: true }, origemDe: () => origem,
+      trecho: `selo "${String(plataforma.selo || 'aceita parcelado').slice(0, 60)}" na página do lote, no sistema de lances do leiloeiro` });
   }
   if (documental?.regras) camadas.push({ regras: documental.regras, origemDe: () => 'documental_ia', trecho: documental.texto || null });
   if (anuncio?.regras) camadas.push({ regras: anuncio.regras, origemDe: () => 'anuncio', trecho: anuncio.texto || null });
@@ -63,7 +80,6 @@ export function montarCondicoesPagamento({ edital, documental, anuncio, prior, f
     || (forte('financiavel') && campos.financiavel.valor === true);
   // FGTS NÃO entra: aceitar FGTS não é parcelamento (o Brooklin começou aí).
   const cenarioInicial = !vedaProvado && parcelaProvada ? 'financiado' : 'aVista';
-  const judicial = String(modalidade || '').toLowerCase() === 'judicial';
   return {
     versao: VERSAO_CONDICOES,
     campos,
@@ -72,7 +88,9 @@ export function montarCondicoesPagamento({ edital, documental, anuncio, prior, f
     tipoParcelamento: cenarioInicial === 'financiado' ? (judicial && !(forte('financiavel') && campos.financiavel.valor === true) ? 'parcelado_judicial' : 'financiamento') : null,
     provado: cenarioInicial === 'financiado' || vedaProvado || (forte('aVista') && campos.aVista.valor === true),
     motivo: vedaProvado ? 'edital veda parcelamento'
-      : parcelaProvada ? 'parcelamento comprovado (edital citado ou ficha da Caixa)'
+      : parcelaProvada ? (campos.parcelamentoPermitido?.origem === 'plataforma_leiloeiro' && !forte('parcelas') && !forte('financiavel')
+        ? 'leilão judicial com lance parcelado aceito no sistema do leiloeiro (art. 895 do CPC: 25% de entrada + até 30 meses); confirme no edital'
+        : 'parcelamento comprovado (edital citado, ficha da Caixa ou sistema de lances do leiloeiro)')
       : Object.keys(campos).length ? 'sem prova de parcelamento no edital — abre à vista; simulação parcelada é premissa'
       : 'condições não lidas — abre à vista; confirme no edital',
   };
@@ -80,6 +98,7 @@ export function montarCondicoesPagamento({ edital, documental, anuncio, prior, f
 
 /** Rótulo curto da origem, para a tela/PDF. */
 export function rotuloOrigem(origem) {
-  return ({ edital_texto: 'edital', edital_sem_trecho: 'edital (sem trecho citado)', ficha_cef: 'ficha da Caixa', documental_ia: 'documental (IA)',
+  return ({ edital_texto: 'edital', edital_sem_trecho: 'edital (sem trecho citado)', ficha_cef: 'ficha da Caixa', plataforma_leiloeiro: 'sistema de lances do leiloeiro',
+    plataforma_proposta: 'selo do leiloeiro (sem condições)', documental_ia: 'documental (IA)',
     anuncio: 'anúncio do leiloeiro', padrao_leiloeiro: 'padrão do leiloeiro' })[origem] || 'não verificado';
 }

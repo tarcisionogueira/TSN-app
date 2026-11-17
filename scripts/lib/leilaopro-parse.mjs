@@ -499,8 +499,19 @@ export function parseDetalhe(html, url) {
     if (tipo === 'matricula' && !link_matricula) link_matricula = abs;
   }
 
+  // SELO DE PARCELAMENTO (17/11, REGIONALLEIL 902, Porto Alegre). O card do lote traz
+  // <span class="badge badge-parcelado">ACEITA LANCE PARCELADO</span> (judicial, art. 895) ou "ACEITA PROPOSTA
+  // PARCELADA"; lote sem parcelamento tem o contêiner de selos VAZIO (medido em GOLDENBRAZIL 338 e DELZEIRLEIL 515).
+  // Lido do HTML cru: o `txt` acima tira <script>, e é lá que mora o `entradaParcelasPadraoAntecipado = {25, 30}` —
+  // padrão do template, presente em toda página, com ou sem selo. Esse NÃO é prova e não é lido.
+  const selo = (html.match(/<span[^>]*class=["'][^"']*\bbadge-parcelado\b[^"']*["'][^>]*>\s*([^<]{3,80}?)\s*<\/span>/i) || [])[1] || null;
+  const condicoes_plataforma = selo && /parcel/i.test(selo)
+    ? { parcelamentoPermitido: true, selo: decodificarEntidades(selo).trim(), tipo: /lance/i.test(selo) ? 'lance' : 'proposta', fonte: 'leilaopro' }
+    : null;
+
   return {
     titulo: tituloOut.slice(0, 180) || null,
+    condicoes_plataforma,
     cidade, estado, link_foto: base.link_foto || null,
     valor_avaliacao: avaliacao, valor_minimo: minimo,
     modalidade, area_m2: area,
@@ -533,6 +544,9 @@ export function montarRow(url, det, tenant) {
     link_edital: det.link_edital || url, url_lote: url, link_foto: det.link_foto || null,
     numero_matricula: det.numero_matricula, link_matricula: det.link_matricula, anexos: det.anexos,
     leiloeiro: tenant.leiloeiro, data_leilao: det.data_leilao || null, forma_pagamento: 'a_vista',
+    // Selo de parcelamento do sistema de lances (null = página lida sem selo). Quem decide o que ele prova é
+    // api/_condicoes-origem.js; `forma_pagamento` fica como está (o gatilho já marca judicial como `hipotecado`).
+    condicoes_plataforma: det.condicoes_plataforma || null,
     ativo: true,
     viavel: va > 0 ? (1 - vm / va) >= 0.3 : null,
     score_viabilidade: va > 0 ? Math.min(100, Math.round((1 - vm / va) * 150)) : 30,
