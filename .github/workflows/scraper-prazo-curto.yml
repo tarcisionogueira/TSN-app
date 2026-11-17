@@ -9,7 +9,10 @@ name: Scraper — fontes de prazo curto (2ª coleta do dia)
 #   select fonte, antec_p10, coleta_sugerida_h from fonte_perfil_publicacao(30) where classe_antecedencia = 'curta';
 on:
   schedule:
-    - cron: '23 7 * * *'   # 07:23 UTC — ~12 h depois de quando o diário costuma gravar estas fontes
+    # 02:23 UTC (madrugada, fila do GitHub mais vazia). O agendamento do GitHub ATRASA muito: o diário marcado para
+    # 10:00 UTC começou entre 16:27 e 20:08 em 13–16/11 (6 a 10 h depois). Marcado às 07:23, este cairia em cima dele;
+    # às 02:23, mesmo com atraso parecido, roda de madrugada/manhã — longe da coleta principal.
+    - cron: '23 2 * * *'
   workflow_dispatch:
     inputs:
       fontes:
