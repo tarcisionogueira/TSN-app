@@ -183,12 +183,12 @@ Managed). As duas pontas foram configuradas pelo dono no mesmo dia:
 "Criar conta grátis". Se não aparecer, o deploy que segue este commit ainda não terminou —
 env var nova só entra a partir do PRÓXIMO deploy, não retroage no que já estava no ar.
 
-## ⏳ Homio (lançamento de 26/11) — código pronto em 11/11, envs AINDA NÃO criadas
+## Homio (lançamento de 26/11) — `HOMIO_WEBHOOK_SECRET` no ar desde 11/11 (26 leads com e-mail de ativação); `HOMIO_WEBHOOK_URL` cadastrada em 17/11
 
 | Nome | Para quê |
 |---|---|
 | `HOMIO_WEBHOOK_SECRET` | **obrigatória**: a Homio manda no cabeçalho `x-homio-secret` ao chamar `/api/homio-lead`; também deriva o token do link de ativação. Sem ela a rota responde 503 |
-| `HOMIO_WEBHOOK_URL` | opcional: URL do webhook de entrada de uma automação da Homio, que recebe `conta_criada` / `ja_tinha_conta` / `conta_ativada` |
+| `HOMIO_WEBHOOK_URL` | URL do endpoint do desenvolvedor da Homio (`homio-vercel-backend-v2`, rota `/api/bidpro-ativacao`), que recebe `conta_criada` / `ja_tinha_conta` / `conta_ativada` com `x-webhook-secret` |
 
 Passo a passo em `docs/INTEGRACAO_HOMIO.md` (pendência #471).
 
