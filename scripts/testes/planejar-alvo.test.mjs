@@ -140,5 +140,27 @@ const eq = (nome, a, b) => {
   eq('sumiu_da_fonte que voltou entra com os novos; gêmeo não', [r.novos, r.voltaram, r.alvo], [['novo','sumiu'], ['sumiu'], ['novo','sumiu','vivo']]);
 }
 
-console.log(falhas ? `\n${falhas} FALHA(S)` : '\n13/13 cenários passam');
+// 14) #505 (17/11): lote cuja 1ª praça venceu há pouco e que NÃO foi relido desde então fura a fila (até metade do teto),
+// antes do sem-foto e do mais velho. Relido depois da praça, praça antiga (> 3 dias) ou futura: ordem de sempre.
+{
+  // AGORA = 29/08 22:00 UTC (19:00 em Brasília). Praça de 28/08 venceu às 23:59 de 28/08 (BRT).
+  const meta = metaDe([
+    {u:'velho', tocado:'2026-08-01T00:00:00Z', foto:true},
+    {u:'transicao', tocado:'2026-08-27T00:00:00Z', foto:true},          // praça 28/08, último toque antes dela
+    {u:'jaRelido', tocado:'2026-08-29T12:00:00Z', foto:true},           // praça 28/08, relido depois
+    {u:'antiga', tocado:'2026-08-02T00:00:00Z', foto:true},             // praça 20/08: fora da janela de 3 dias
+    {u:'futura', tocado:'2026-08-03T00:00:00Z', foto:true},             // praça 05/09
+  ]);
+  meta.get('f_transicao').data_leilao = '2026-08-28';
+  meta.get('f_jaRelido').data_leilao = '2026-08-28';
+  meta.get('f_antiga').data_leilao = '2026-08-20';
+  meta.get('f_futura').data_leilao = '2026-09-05';
+  const r = planejarAlvo({ urls: ['velho','transicao','jaRelido','antiga','futura'], meta, chaveDe, maxLotes: 2, maxRefresh: 2, agora: AGORA });
+  eq('transição de praça vai para a frente da releitura', r.releitura[0], 'transicao');
+  eq('com teto 2, só 1 vaga de transição; a outra segue a ordem de sempre (mais velho)', r.releitura, ['transicao','velho']);
+  const sem = planejarAlvo({ urls: ['velho','jaRelido','antiga','futura'], meta, chaveDe, maxLotes: 2, maxRefresh: 2, agora: AGORA });
+  eq('sem lote em transição: ordem idêntica à de antes', sem.releitura, ['velho','antiga']);
+}
+
+console.log(falhas ? `\n${falhas} FALHA(S)` : '\n14/14 cenários passam');
 process.exit(falhas ? 1 : 0);

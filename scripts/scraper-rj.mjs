@@ -414,7 +414,7 @@ async function main() {
   const meta = new Map();
   for (let i = 0; i < ids.length; i += 200) {
     const { data, error } = await supabase.from('imoveis_leilao')
-      .select('fonte_id,atualizado_em,data_fim,ativo,link_foto').in('fonte_id', ids.slice(i, i + 200));
+      .select('fonte_id,atualizado_em,data_fim,data_leilao,ativo,link_foto').in('fonte_id', ids.slice(i, i + 200));
     if (error) throw new FalhaDeAcesso('supabase', `leitura de fonte_id: ${error.message}`);
     for (const r of data || []) meta.set(r.fonte_id, r);
   }

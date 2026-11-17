@@ -766,7 +766,7 @@ async function coletarTenant(tenant) {
   const meta = new Map();
   for (let i = 0; i < ids.length; i += 200) {
     const { data } = await supabase.from('imoveis_leilao')
-      .select('fonte_id,atualizado_em,data_fim,ativo').in('fonte_id', ids.slice(i, i + 200));
+      .select('fonte_id,atualizado_em,data_fim,data_leilao,ativo').in('fonte_id', ids.slice(i, i + 200));
     for (const r of data || []) meta.set(r.fonte_id, r);
   }
   const { novos, releitura, alvo, iReleitura } = planejarAlvo({ urls, meta, chaveDe, maxLotes: MAX_LOTES });

@@ -261,6 +261,15 @@ const SEM_FOTO_TETO = 15;
 // teto — a outra metade continua com a ordem de sempre (iminente primeiro). Abaixo do limiar de 4 dias
 // do `acervo_lotes_fantasma()` de propósito: o lote é relido antes de virar suspeito.
 const DIAS_FOME = 3;
+// TRANSIÇÃO DE PRAÇA FURA A FILA, ATÉ METADE DA RELEITURA (17/11, pendência 505). `fonte_perfil_publicacao()` mostrou
+// que a 2ª praça é previsível (CEF 6 dias em 100% dos lotes; judiciais ~20 dias) e é logo DEPOIS da 1ª praça que o dado
+// muda: o lote é vendido (sai) ou passa a valer o lance da 2ª praça (preço cai). A ordem "praça próxima primeiro" usa a
+// data FINAL e, dentro dela, o mais velho — o lote que acabou de passar pela 1ª praça esperava na fila com o resto.
+// Lote cuja 1ª praça venceu há até `DIAS_TRANSICAO` e que não foi relido desde então vai para a frente, da praça mais
+// antiga para a mais nova, até METADE do teto (mín. 1). Sem `data_leilao` no meta, nada muda.
+const DIAS_TRANSICAO = 3;
+// Fim do dia da praça em Brasília: "2026-11-18" → 2026-11-18T23:59:59-03:00 (a praça pode ser à noite).
+const fimDaPraca = (d) => (/^\d{4}-\d{2}-\d{2}/.test(String(d || '')) ? Date.parse(`${String(d).slice(0, 10)}T23:59:59-03:00`) : null);
 // Linhas por upsert: 100 × ~28 ms ≈ 3 s, longe do statement timeout mesmo com a base sob carga.
 const UPSERT_FATIA = 100;
 
@@ -286,7 +295,7 @@ export function planejarAlvo({ urls, meta, chaveDe, maxLotes, maxRefresh, recusa
       const m = meta.get(chaveDe(u));
       return { url: u, id: m.fonte_id, tocado: Date.parse(m.atualizado_em) || 0,
                fim: m.data_fim ? Date.parse(m.data_fim) : null, ativo: m.ativo !== false,
-               temFoto: !!m.link_foto };
+               temFoto: !!m.link_foto, praca1: fimDaPraca(m.data_leilao) };
     })
     .filter(c => c.ativo)              // lote já desativado não volta pela releitura
     .sort((a, b) => {
@@ -297,20 +306,27 @@ export function planejarAlvo({ urls, meta, chaveDe, maxLotes, maxRefresh, recusa
       if (ia !== ib) return ia - ib;
       return (a.tocado || 0) - (b.tocado || 0) || (a.id < b.id ? -1 : 1);
     });
-  // Extrai, respeitando a ordem acima, até SEM_FOTO_TETO lotes sem foto e recoloca na frente —
-  // o resto da fila segue exatamente como já era (ver garantia de compatibilidade no teste).
-  const semFotoBoost = porOrdemBase.filter(c => !c.temFoto).slice(0, SEM_FOTO_TETO);
-  const boostIds = new Set(semFotoBoost.map(c => c.id));
   const usadosPorNovos = Math.min(novos.length, maxLotes);
   const folga = maxLotes - usadosPorNovos;
   const teto = maxRefresh === undefined ? folga : Math.max(0, Math.min(folga, maxRefresh));
+  // Transição de praça (ver DIAS_TRANSICAO): 1ª praça vencida há pouco e lote não relido desde então.
+  const desdeTransicao = agora - DIAS_TRANSICAO * 864e5;
+  const transicao = porOrdemBase
+    .filter(c => c.praca1 && c.praca1 <= agora && c.praca1 >= desdeTransicao && (c.tocado || 0) < c.praca1)
+    .sort((a, b) => a.praca1 - b.praca1 || (a.id < b.id ? -1 : 1))
+    .slice(0, teto > 0 ? Math.max(1, Math.floor(teto / 2)) : 0);
+  const transicaoIds = new Set(transicao.map(c => c.id));
+  // Extrai, respeitando a ordem acima, até SEM_FOTO_TETO lotes sem foto e recoloca na frente —
+  // o resto da fila segue exatamente como já era (ver garantia de compatibilidade no teste).
+  const semFotoBoost = porOrdemBase.filter(c => !c.temFoto && !transicaoIds.has(c.id)).slice(0, SEM_FOTO_TETO);
+  const boostIds = new Set([...transicaoIds, ...semFotoBoost.map(c => c.id)]);
   // Famintos (ver DIAS_FOME): `floor(teto/2)` — com teto 1 a vaga única continua da praça iminente.
   const limiteFome = agora - DIAS_FOME * 864e5;
   const famintos = porOrdemBase.filter(c => !boostIds.has(c.id) && (c.tocado || 0) < limiteFome)
     .sort((a, b) => (a.tocado || 0) - (b.tocado || 0) || (a.id < b.id ? -1 : 1))
     .slice(0, Math.floor(teto / 2));
   for (const c of famintos) boostIds.add(c.id);
-  const conhecidas = [...semFotoBoost, ...famintos, ...porOrdemBase.filter(c => !boostIds.has(c.id))];
+  const conhecidas = [...transicao, ...semFotoBoost, ...famintos, ...porOrdemBase.filter(c => !boostIds.has(c.id))];
   const releitura = conhecidas.slice(0, teto).map(c => c.url);
   return {
     novos, releitura, voltaram,
@@ -351,7 +367,7 @@ export async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLote
     for (let i = 0; i < ids.length; i += 200) {
       // padrao-ok: leitura best-effort de dedup; erro → reprocessa lote conhecido (upsert idempotente), nunca corrompe. Mesmo padrão dos scrapers de origem.
       const { data } = await supabase.from('imoveis_leilao')
-        .select('fonte_id,atualizado_em,data_fim,ativo,link_foto,suprimido_motivo').in('fonte_id', ids.slice(i, i + 200));
+        .select('fonte_id,atualizado_em,data_fim,data_leilao,ativo,link_foto,suprimido_motivo').in('fonte_id', ids.slice(i, i + 200));
       for (const r of data || []) meta.set(r.fonte_id, r);
     }
     // Memória de recusa (#238). Falhar aqui só custa leitura repetida (o comportamento antigo), nunca dado
