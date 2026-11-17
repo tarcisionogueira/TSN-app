@@ -6,6 +6,20 @@
 
 
 
+## 16/11 (noite, 4) — FECHAMENTO DO DIA: onde parou
+
+- **Feito hoje (noite):** Milan veículos e imóveis de vários lotes pela siteback grátis (47e610ab, 8d8604b4); fechamento
+  passado encerra lote Milan (5f0d197f); SUPORTE 2ª praça e ZUK "sem lance" não são mais desligados pela coleta
+  (c0da420c, 2bf0a6f8 — ver seção abaixo).
+- **Homio (lançamento 26/11):** a integração grava `contact_id` em `homio_leads` e já devolve no aviso (`api/_homio.js`,
+  `docs/INTEGRACAO_HOMIO.md`), mas **nenhum aviso saiu**: falta `HOMIO_WEBHOOK_URL` na Vercel. O dono vai mandar a URL
+  de entrada da Homio → criar a env, redeploy, o `homio-reenvio-cron` reenvia sozinho; conferir `homio_avisado`.
+  Pendência #495 (P0) no banco.
+- **Leiloeiros ("Conexão direta dos lotes"):** respondidos pela caixa do Resend — DH (vai mandar JSON diário; pedimos
+  encerramento de cada praça + situação), Franco (vai mandar API), João Emílio (avaliando), Leilopar (pediu e recebeu
+  apresentação). Montenegro já integrado; citou URL de veículos. Pendência #496 (P2) no banco.
+- **Próxima sessão:** ritual normal; depois `pendencias_abertas()` — Homio primeiro se a URL tiver chegado.
+
 ## 16/11 (noite, 3) — LOTE EM 2ª PRAÇA DESLIGADO A CADA COLETA (SUPORTE; gatilho, não coletor)
 
 Dono: "verifique as outras fontes com o mesmo problema de data". Régua usada (custo zero): lote `praca_vencida` que
