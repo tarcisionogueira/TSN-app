@@ -302,6 +302,8 @@ function localDoTexto(texto = '') {
   return { cidade: caixa(cidade), estado, bairro: bairro && bairro.toLowerCase() !== cidade.toLowerCase() ? caixa(bairro) : null };
 }
 const NAO_IMOVEL = /ve[íi]culo|\bcarro\b|\bmoto|caminh[ãa]o|sucata|\bm[áa]quina|equipamento|eletro|\bm[óo]veis\b|mercadoria/i;
+// Descrição provisória (título do leilão de lote único): o detalhe da página substitui quando é lido.
+const DESC_PROVISORIA = new WeakSet();
 function parseCardGrade(card, ctx) {
   // O `alt` da miniatura tem a grafia do leiloeiro; o span de `lote-nome` vem em caixa alta
   // feita byte a byte no servidor ("PARAISóPOLIS") e às vezes cortado ("BOM JESUS/P").
@@ -328,7 +330,7 @@ function parseCardGrade(card, ctx) {
   const foto = (String(ctx.htmlEvento || card.html).match(reFotoLote) || [])[1] || null;
   const temDesconto = valorAval > 0 && valorMinimo > 0 && valorMinimo <= valorAval;
   const base = ctx.prefixoId || ctx.dominio.replace(/^www\./, '').split('.')[0];
-  return {
+  const row = {
     fonte: 'GESTAOLEILOES',
     fonte_id: `gestao_${base}_${card.idLote}`,
     titulo: titulo.slice(0, 180),
@@ -339,7 +341,9 @@ function parseCardGrade(card, ctx) {
     valor_avaliacao: valorAval,
     valor_minimo: valorMinimo || valorAval,
     area_m2: area || 0,
-    descricao: null,
+    // Lote único sem descrição no card: o título do leilão ("Mansão … c/ 365,96m² AT, …/SP") vira a descrição provisória
+    // — é o sinal de imóvel que a checagem central (ehForaDoAcervo) procura. O detalhe da página, quando vem, substitui.
+    descricao: tituloEvento || null,
     numero_matricula: null,
     link_edital: `https://${ctx.dominio}/leilao.php?idLeilao=${ctx.idLeilao}`,
     url_lote: `https://${ctx.dominio}/lote.php?idLote=${card.idLote}`,
@@ -353,6 +357,8 @@ function parseCardGrade(card, ctx) {
     desconto_percentual: temDesconto ? Math.round((1 - valorMinimo / valorAval) * 100) : null,
     atualizado_em: new Date().toISOString(),
   };
+  if (row.descricao) DESC_PROVISORIA.add(row);
+  return row;
 }
 
 // Página do lote (layout em grade): "Descrição do lote" (título em <strong> + texto) e
@@ -366,7 +372,7 @@ function extrairDetalheGrade(html) {
   return { descricao, endereco, matricula };
 }
 async function completarDetalheGrade(rows) {
-  const alvo = rows.filter(r => !r.descricao && /^gestao_[a-z]/.test(r.fonte_id)).slice(0, DETALHE_CAP);
+  const alvo = rows.filter(r => (!r.descricao || DESC_PROVISORIA.has(r)) && /^gestao_[a-z]/.test(r.fonte_id)).slice(0, DETALHE_CAP);
   if (!alvo.length) return;
   let ok = 0;
   for (const r of alvo) {
