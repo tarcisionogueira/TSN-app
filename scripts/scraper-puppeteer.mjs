@@ -418,6 +418,15 @@ async function salvarEFinalizar(imoveis, fonte) {
   if (urlAmostra) await capturarContatoSeAusente(supabase, fonte, urlAmostra);
 
   const runStart = new Date().toISOString();
+  // CARÊNCIA DO SWEEP (17/11, #510). O sweep desligava todo lote que não veio NESTA listagem. Listagem que oscila
+  // entre rodadas (leilão que vem 108 de 129 lotes, 2ª coleta do prazo curto lendo outro recorte que a do diário)
+  // virava lote VIVO fora da vitrine até a rodada seguinte: em 17/11, FRAZAO frazao_44137..44139 (praça 09/12) foram
+  // coletados às 17:27 e desligados às 19:55; havia 441 SUPERBID, 207 ZUK, 183 FRAZAO e 90 LJUD com praça futura
+  // desligados como sumiu_da_fonte. Agora só sai quem também não foi visto nas últimas SWEEP_CARENCIA_H horas — a
+  // mesma ideia do `sumidoDias` do motor (ausente em várias rodadas seguidas). Custo: lote que saiu de verdade fica
+  // até ~36 h a mais; o que tem praça vencida continua saindo pela limpeza por data.
+  const CARENCIA_H = Math.max(0, Number(process.env.SWEEP_CARENCIA_H ?? 36));
+  const corteSweep = new Date(Date.parse(runStart) - CARENCIA_H * 3600e3).toISOString();
   // LEILÃO NEGATIVO FICA 15 DIAS (23/09) — ver o sweep abaixo. Mesmo filtro nos dois lugares.
   const janelaNegativo = new Date(Date.now() - 15 * 864e5).toISOString();
   const ORFILTRO_VARRIVEL = `resultado_leilao.is.null,resultado_leilao.eq.vendido,resultado_apurado_em.is.null,resultado_apurado_em.lt.${janelaNegativo}`;
@@ -517,7 +526,7 @@ async function salvarEFinalizar(imoveis, fonte) {
       for (const im of imoveis) if (ehFracaoIdeal(im)) imoveis.vivosNaFonte.delete(im.fonte_id);
       const { data: cand, error: eCand } = await semProtegidos(supabase
         .from('imoveis_leilao').select('id, fonte_id')
-        .eq('fonte', fonte).eq('ativo', true).lt('atualizado_em', runStart).or(ORFILTRO_VARRIVEL)).limit(5000);
+        .eq('fonte', fonte).eq('ativo', true).lt('atualizado_em', corteSweep).or(ORFILTRO_VARRIVEL)).limit(5000);
       if (eCand) error = eCand;
       else {
         const r = semOsVivos(cand, imoveis.vivosNaFonte);
@@ -535,7 +544,7 @@ async function salvarEFinalizar(imoveis, fonte) {
         .update({ ativo: false, suprimido_motivo: 'sumiu_da_fonte' }, { count: 'exact' })
         .eq('fonte', fonte)
         .eq('ativo', true)
-        .lt('atualizado_em', runStart)
+        .lt('atualizado_em', corteSweep)
         .or(ORFILTRO_VARRIVEL)));
     }
     if (error) console.error(`  Erro ao desativar ${fonte} obsoletos:`, error.message);
