@@ -17,6 +17,10 @@ assert.ok(det.fotos.length >= 1 && det.fotos.every((f) => f.includes('/bens/8714
 assert.equal(det.encerrado, true, 'praça de 2022 tem que sair como encerrada');
 assert.equal(cfg.parse.montarRow(`${base}/lote/frigorifico-em-itajuba-mg`, det, TENANTS.saraiva).leiloeiro, 'Angela Saraiva Portes Souza');
 
+// Categoria "—" (em branco) e "Lote" (terreno) não podem descartar imóvel (dry-run ao vivo de 17/11: 5 perdidos).
+const comCat = (c) => fx('saraiva-lote-frigorifico.html').replace(/(<div class="lei-lote-spec__k">Tipo<\/div>\s*<div class="lei-lote-spec__v">)[\s\S]*?(<\/div>)/, `$1${c}$2`);
+for (const c of ['—', 'Lote']) assert.notEqual(PORTAL.parseDetalhe(comCat(c), `${base}/lote/x`).eh_imovel, false, `categoria "${c}" descartou imóvel`);
+
 // Enumeração REAL do motor: agenda de leilões abertos → leilão 586 → só card ABERTO e de IMÓVEL.
 const mapa = new Map([
   [`${base}/leiloes?situacao=andamento`, fx('saraiva-leiloes-andamento.html')],

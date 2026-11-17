@@ -125,7 +125,14 @@ export function checarQualidade(row, opts) {
   if (row?._tipoBem) return { ok: false, descartar: true, faltando: ['fora_do_acervo'], motivo: `a fonte classifica o bem como "${row._tipoBem}" (não imóvel)` };
   return checarQualidadeBase(row, opts);
 }
-const ehImovelPelaCategoria = (cat) => (cat ? RE_CAT_IMOVEL.test(cat) && !RE_CAT_VEICULO.test(cat) : null);
+// Categoria em branco do site ("—", "-") é AUSÊNCIA de categoria, não "não imóvel": o detalhe decide pelo título.
+// "Lote"/"Lotes" é terreno (Saraiva, 17/11 — 5 imóveis descartados no dry-run por essas duas leituras).
+const ehImovelPelaCategoria = (cat) => {
+  const c = String(cat || '').trim();
+  if (!c || /^[-—–\s.]+$/.test(c)) return null;
+  if (/^lotes?$/i.test(c)) return true;
+  return RE_CAT_IMOVEL.test(c) && !RE_CAT_VEICULO.test(c);
+};
 
 // ══ LANCEVIP ═════════════════════════════════════════════════════════════════════════════════════
 export const LANCEVIP = (() => {
