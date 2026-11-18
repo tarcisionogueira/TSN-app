@@ -1263,6 +1263,7 @@ export default async function handler(req, res) {
         // no relatório JURÍDICO (onde a evidência importa), é preciso saber QUANTO do acervo
         // é convertível — este número responde isso em poucos dias, sem mudar nada agora.
         let charsTexto = null;
+        let textoParaChecar = doc.kind === 'text' ? String(doc.text || '') : '';
         if (doc.kind === 'pdf' && doc.base64 && Date.now() < deadline - 20000) {
           try {
             const PDFParse = await carregarPDFParse();
@@ -1270,11 +1271,21 @@ export default async function handler(req, res) {
             try {
               const txtPdf = String((await parser.getText())?.text || '');
               charsTexto = txtPdf.length;
+              textoParaChecar = txtPdf;
               // Guarda o texto do EDITAL para ler a data de ENCERRAMENTO sem depender da IA (14/10).
               if ((u.tipo || tipoDoc) === 'edital' && txtPdf.length > textoEditalLido.length) textoEditalLido = txtPdf.slice(0, 200000);
             }
             finally { await parser.destroy().catch(() => {}); }
           } catch { charsTexto = null; } // escaneado/quebrado → null, e a visão segue sendo a única via
+        }
+        // TELA DE "INDISPONÍVEL" DA CAIXA NÃO É DOCUMENTO (18/11). Acesso sem sessão/bloqueado recebe "O imóvel que você
+        // procura não está mais disponível para venda" com o imóvel À VENDA; capturada como "Condições de venda", a IA a
+        // leu como fato e deu RISCO BLOQUEANTE (Carpina/PE, 08/11). Descartada aqui, com rastro em naoLidos.
+        if (/n[ãa]o est[áa] mais dispon[íi]vel para venda/i.test(textoParaChecar) && textoParaChecar.length < 6000) {
+          console.log('[documental] tela de indisponível da Caixa descartada', JSON.stringify({ rotulo: u2.rotulo, tipo: tipoDoc || u.tipo || null }));
+          naoLidos.push({ rotulo: u2.rotulo, url: u.url, tipo: tipoDoc || u.tipo || 'anexo',
+            motivo: 'arquivo era a tela "imóvel não disponível" do portal da Caixa (acesso sem sessão), não o documento', inexistente: false });
+          continue;
         }
         // PÁGINA DO LOTE NÃO É DOCUMENTO (05/11, dono: "não deve ser gerado sem o edital e a matrícula").
         // Muitas fontes gravam a página do lote em link_edital; lida, ela vira TEXTO sem conversão e

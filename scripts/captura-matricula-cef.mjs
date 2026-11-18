@@ -238,7 +238,16 @@ async function processar(page, item) {
           }
         }
         // 3b) Condições de venda: imprime a própria página de detalhe como PDF.
-        if (!capturados.includes('regras_venda')) {
+        // SÓ SE A PÁGINA FOR O ANÚNCIO (18/11). A Caixa responde "O imóvel que você procura não está mais disponível
+        // para venda" a acesso sem sessão/bloqueado — com o imóvel À VENDA. Impressa como "Condições de venda", essa tela
+        // virou documento e o documental de Carpina/PE (cef_8555535718805, 08/11) saiu com RISCO BLOQUEANTE "o portal
+        // retornou que não está disponível" para um imóvel disponível. Prova de anúncio: o valor de avaliação na página.
+        const paginaOk = await page.evaluate(() => {
+          const t = document.body?.innerText || '';
+          return !/n[ãa]o est[áa] mais dispon[íi]vel/i.test(t) && /valor de avalia[çc][ãa]o/i.test(t);
+        }).catch(() => false);
+        if (!paginaOk) console.log(`  [${item.imovel_id}] página de detalhe sem o anúncio (indisponível/sem sessão) — Condições de venda NÃO capturadas`);
+        if (!capturados.includes('regras_venda') && paginaOk) {
           const cond = Buffer.from(await page.pdf({ format: 'A4', printBackground: true, margin: { top: '10mm', bottom: '10mm', left: '8mm', right: '8mm' } }));
           if (cond.length > 2000) { await salvarAnexo(item.imovel_id, cond, 'regras_venda', 'Condições de venda (CEF, automático).pdf'); capturados.push('regras_venda'); }
         }
