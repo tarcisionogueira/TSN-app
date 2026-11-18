@@ -16,7 +16,7 @@ import { groundingGemini } from './_grounding.js';
 import { resumoAprendizadoTexto, recalcularArremate } from './_arremate-aprendizado.js';
 import { ehCidadeTemporada, motivoTemporada } from './_temporada.js';
 import { avaliarMercado, explicarCalculo, ehAmostraDeLeilao, limparComentarioDeLeilao } from './_valor-mercado.js';
-import { resolverRedirecionadores } from './_link-anuncio.js';
+import { resolverRedirecionadores, semLinksMortos } from './_link-anuncio.js';
 import { composicaoTemporal, avisoFrescor } from './_indice-composicao.js';
 import { referenciaPonderada } from './_indice-ponderacao.js';
 import { aplicarPesos } from './_indice-peso.js';
@@ -3598,6 +3598,31 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
         if (mercado) mercado.amostrasDaBase = base[1].length + base[2].length + base[3].length;
         // Duplicata entre níveis sai ANTES da conta (03/11, Pirituba: média com 42, tela com 40).
         if (mercado) dedupVendasEntreNiveis(mercado);
+        // LINK MORTO SAI ANTES DA CONTA (18/11, #482). Medido em 41 relatórios de 30 dias: 99 de 390 comparáveis
+        // (25%) tinham o anúncio fora do ar; tirá-los muda a mediana do m² em mais de 10% em 9 relatórios, e 1 estava
+        // apoiado só em links mortos. O Índice já os ignorava (view indice_amostra_valida); o relatório não. Só sai o
+        // PROVADO morto (404/410 etc.; incerto fica). Trava: se sobrarem menos de 3 vendas, NÃO tira — relatório sem
+        // base é pior — e marca `linksMortosMantidos` para a tela avisar.
+        // 75 s = a reserva do parecer (55 s, RESERVA_PARECER da busca) + 20 s; literal para não depender do escopo dela.
+        if (mercado && restante() > 75000) {
+          try {
+            const comUrl = NIVEIS.flatMap((k) => mercado[k]?.vendas || []).filter((v) => v?.url);
+            if (comUrl.length) {
+              const { vivas, mortas } = await semLinksMortos(comUrl, { tetoTotalMs: Math.min(12000, restante() - 70000) });
+              if (mortas) {
+                const vivasSet = new Set(vivas);
+                const totalVendas = NIVEIS.reduce((s, k) => s + (mercado[k]?.vendas?.length || 0), 0);
+                if (totalVendas - mortas >= 3) {
+                  for (const k of NIVEIS) if (mercado[k]?.vendas) mercado[k].vendas = mercado[k].vendas.filter((v) => !v?.url || vivasSet.has(v));
+                  mercado.linksMortosRemovidos = mortas;
+                } else {
+                  mercado.linksMortosMantidos = mortas;
+                }
+                console.log('[gerar-analise] links mortos nos comparáveis', JSON.stringify({ imovel: String(imovelId), mortas, totalVendas, removidos: totalVendas - mortas >= 3 }));
+              }
+            }
+          } catch (e) { console.error('[gerar-analise] checagem de links fora da conta:', e?.message || e); }
+        }
         avalPond = avaliarMercado({
           nivel1: [...(mercado?.nivel1?.vendas || []), ...base[1]],
           nivel2: [...(mercado?.nivel2?.vendas || []), ...base[2]],
