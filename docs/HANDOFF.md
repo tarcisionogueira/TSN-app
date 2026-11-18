@@ -40509,3 +40509,31 @@ assunto) — o e-mail do Jorge Brasil (Don Alonso) foi reprocessado: matrícula 
   GFLEILOES, GOLD, NOGARI, FERREIRALEIL, HASTAPUBLICA, vlleiloes), 465 (aprovação Merchant Center), 467 (convites);
   do dono: 464 (Search Console), 451 (NF manual William), 66 (chip WhatsApp Business). Montenegro: aguardando Paulo
   (frequência e endpoint de veículos). Bunny e texto da política de reembolso ainda a revisar.
+
+## 17–18/11 — Captura: 2ª coleta, agenda pela Vercel, sweep com carência; documental de Carpina; comparáveis mortos
+
+- **Homio (#498):** retorno de ativação pronto (`x-webhook-secret` = `HOMIO_WEBHOOK_SECRET`, `event`, `inscrito_em`);
+  endpoint deles ainda dá 404. Quando publicarem: `select public.homio_leads_reabrir_avisos();`.
+- **Auditoria de leiloeiros (17/11):** e-mail diário em 3 baldes (`api/_baldes-fontes.js`), explicação automática
+  (`fonte_explicar_automatico`), trava `scripts/verificar-gravou.mjs` (modo `*` para jobs sem lista; ligada no
+  leiloeiros-puppeteer e no scraper-dom — #502). Suporte NEXT: Saraiva/Ananda/Sued Peter no motor; Vinco/Gestão com
+  data de encerramento certa; Gabriel removido.
+- **Padrão de publicação:** `fonte_perfil_publicacao()` (antecedência, ritmo, coleta sugerida).
+  **#504:** `scraper-prazo-curto.yml` (VIP, ZUK, FRAZAO, LEILOTECH; matriz, 1 job por fonte) — rodou ok.
+  **#505:** releitura prioriza lote com 1ª praça vencida há ≤ 3 dias (runner/RJ/SOLEON). Medir em 24/11 e 01/12.
+- **#507 — o agendamento do GitHub atrasa 9–10 h** (medido em todos os diários). `api/disparar-coletas-cron.js`
+  (Vercel `3 9,10,22 * * *`) dispara CEF, diário de leiloeiros e prazo curto com `origem=agenda` (título
+  "[agenda]"); o `schedule` do GitHub virou reserva com job `gate` (pula se houve [agenda] em 20 h).
+- **#510 — sweep do scraper-puppeteer com carência de 36 h** (`SWEEP_CARENCIA_H`): listagem que oscila desligava
+  lote vivo (SUPERBID 441, ZUK 207, FRAZAO 183, LJUD 90 com praça futura). #428 (motor) fechada: 36/25/21/20 → 0/0/6/1.
+- **#371:** `local_do_evento()` lê UF/cidade do slug do EVENTO (Suporte) no gatilho; evento de foro dá só a UF.
+  Em seco: UF 192/192, cidade 145/145. Fechadas: #373 (CEF datas, 0), #508 (João Emílio: vazio é verdadeiro).
+- **Carpina/PE — risco bloqueante falso (#511, dono regera):** `captura-matricula-cef.mjs` imprimia a tela
+  "imóvel não está mais disponível" (acesso sem sessão) como "Condições de venda"; a IA leu como fato. Corrigido
+  nas duas pontas (5ebb80f). Único relatório afetado.
+- **#482:** comparável de venda com link PROVADO morto sai antes de `avaliarMercado` (trava: < 3 restantes →
+  mantém e marca `linksMortosMantidos`). Medição prévia: 25% mortos; muda > 10% o m² em 9 de 41 relatórios.
+- **Ferramenta:** o plugin de privacidade recusa comando de shell que leia `api/gerar-analise.js` ou este HANDOFF;
+  use Edit/Read/Grep neles.
+- **Retomar:** conferências agendadas — 507 (18/11 20:30 UTC, tarefa já marcada), 502 e 510 (20/11), 371 (21/11),
+  504 (24/11), 482 (25/11), 505 (01/12). Do dono: 511 (regerar Carpina), 498/495 (Homio), 506 (alerta de 2ª praça).
