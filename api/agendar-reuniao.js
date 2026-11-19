@@ -80,14 +80,22 @@ export default async function handler(req) {
   // mandasse reuniao_numero=2 agendava: criava sala Daily (custo) e e-mail ao analista, sem plano
   // e sem relatório. Whitelist (não blacklist): papel novo de conta grátis não passa por engano.
   const PODE_AGENDAR = new Set(['top2', 'assessorado', 'clube', 'admin', 'analista', 'advogado', 'consultor']);
-  const [perfilUser] = await (await sb(`perfis?id=eq.${user.id}&select=role,ativo`)).json();
+  const perfilRes = await sb(`perfis?id=eq.${user.id}&select=role,ativo`);
+  if (!perfilRes.ok) {
+    return new Response(JSON.stringify({ error: 'Não foi possível validar seu plano agora. Tente novamente em instantes.' }), { status: 503 });
+  }
+  const [perfilUser] = await perfilRes.json();
   if (!perfilUser || perfilUser.ativo === false || !PODE_AGENDAR.has(perfilUser.role)) {
     return new Response(JSON.stringify({ error: 'O agendamento de reuniões é exclusivo de assinantes do Investidor Pro / Assessoria.' }), { status: 403 });
   }
 
   // 1.3. Reuniões já existentes do caso: não reagendar o mesmo número já agendado (dedup contra
-  // reserva repetida de slots) e exigir a 1ª antes da 2ª.
-  const reuExist = await (await sb(`reunioes?caso_id=eq.${caso_id}&select=numero,status`)).json();
+  // reserva repetida de slots) e exigir a 1ª antes da 2ª. Falha de leitura → 503 (fail-closed).
+  const reuExistRes = await sb(`reunioes?caso_id=eq.${caso_id}&select=numero,status`);
+  if (!reuExistRes.ok) {
+    return new Response(JSON.stringify({ error: 'Não foi possível validar o caso agora. Tente novamente em instantes.' }), { status: 503 });
+  }
+  const reuExist = await reuExistRes.json();
   const listaReu = Array.isArray(reuExist) ? reuExist : [];
   if (listaReu.some((r) => Number(r.numero) === numero && r.status === 'agendada')) {
     return new Response(JSON.stringify({ error: 'Já existe uma reunião desse tipo agendada para este caso.' }), { status: 409 });
