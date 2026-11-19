@@ -9,6 +9,7 @@ export const config = { runtime: 'edge' };
 import { getAuthUser } from './_auth.js';
 import { criarEventoAgenda } from './_gcal.js';
 import { registrarUso } from './_uso.js';
+import { pedidoRepetido, respostaRepetido } from './_pedido-unico.js';
 
 const SUPABASE_URL  = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY   = process.env.SUPABASE_SERVICE_KEY;
@@ -35,9 +36,14 @@ function fmtDataHora(iso) {
   return d.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
+// Escapa dado controlado pelo usuário (nome do perfil, endereço do imóvel) antes de ir pro HTML
+// do e-mail — o nome é definido no cadastro e caía cru no e-mail ao analista (pentest 19/11).
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
 export default async function handler(req) {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204 });
   if (req.method !== 'POST') return new Response('Method Not Allowed', { status: 405 });
+  if (await pedidoRepetido(req, 'agendar-reuniao')) return respostaRepetido();
 
   const user = await getAuthUser(req);
   if (!user) return new Response(JSON.stringify({ error: 'Não autenticado' }), { status: 401 });
@@ -48,6 +54,12 @@ export default async function handler(req) {
   const { slot_id, caso_id, reuniao_numero } = body;
   if (!slot_id || !caso_id || !reuniao_numero) {
     return new Response(JSON.stringify({ error: 'slot_id, caso_id e reuniao_numero são obrigatórios' }), { status: 400 });
+  }
+  // reuniao_numero controla o gate abaixo e vai pra tabela — só 1 ou 2 (pentest 19/11: valor
+  // arbitrário era aceito, e numero=2 pulava o gate dos relatórios).
+  const numero = Number(reuniao_numero);
+  if (numero !== 1 && numero !== 2) {
+    return new Response(JSON.stringify({ error: 'reuniao_numero deve ser 1 ou 2' }), { status: 400 });
   }
   // slot_id/caso_id vão crus em filtros PostgREST → exige UUID (defesa contra injeção de parâmetros).
   const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -62,12 +74,35 @@ export default async function handler(req) {
     return new Response(JSON.stringify({ error: 'Caso não encontrado ou sem permissão' }), { status: 403 });
   }
 
+  // 1.2. GATE DE PLANO (pentest 19/11): agendar reunião com o analista é recurso de assessoria —
+  // só cliente pagante (Investidor Pro / Assessorado / Clube) ou equipe. Antes, qualquer logado
+  // (inclusive explorador grátis) que criasse um caso para si — a RLS de `casos` permite — e
+  // mandasse reuniao_numero=2 agendava: criava sala Daily (custo) e e-mail ao analista, sem plano
+  // e sem relatório. Whitelist (não blacklist): papel novo de conta grátis não passa por engano.
+  const PODE_AGENDAR = new Set(['top2', 'assessorado', 'clube', 'admin', 'analista', 'advogado', 'consultor']);
+  const [perfilUser] = await (await sb(`perfis?id=eq.${user.id}&select=role,ativo`)).json();
+  if (!perfilUser || perfilUser.ativo === false || !PODE_AGENDAR.has(perfilUser.role)) {
+    return new Response(JSON.stringify({ error: 'O agendamento de reuniões é exclusivo de assinantes do Investidor Pro / Assessoria.' }), { status: 403 });
+  }
+
+  // 1.3. Reuniões já existentes do caso: não reagendar o mesmo número já agendado (dedup contra
+  // reserva repetida de slots) e exigir a 1ª antes da 2ª.
+  const reuExist = await (await sb(`reunioes?caso_id=eq.${caso_id}&select=numero,status`)).json();
+  const listaReu = Array.isArray(reuExist) ? reuExist : [];
+  if (listaReu.some((r) => Number(r.numero) === numero && r.status === 'agendada')) {
+    return new Response(JSON.stringify({ error: 'Já existe uma reunião desse tipo agendada para este caso.' }), { status: 409 });
+  }
+  if (numero === 2 && !listaReu.some((r) => Number(r.numero) === 1 && r.status !== 'cancelada')) {
+    return new Response(JSON.stringify({ error: 'A 2ª reunião só pode ser agendada após a 1ª.' }), { status: 403 });
+  }
+
   // 1.5. GATE: a reunião com o analista só é liberada com os TRÊS relatórios concluídos
   // (Mercadológico + Documental + Laudo de Viabilidade). O gate do front (Analise.jsx) é
-  // burlável por POST direto, então revalidamos no servidor. Aplica só à 1ª reunião — a 2ª é a
-  // aprovação pós-análise, já dentro do fluxo assistido. Paridade com o front: o documental
-  // só conta quando NÃO está pendente (precisaDocumentos != true).
-  if (Number(reuniao_numero) === 1 && caso.imovel_id) {
+  // burlável por POST direto, então revalidamos no servidor. Aplica às DUAS reuniões (pentest
+  // 19/11: numero=2 pulava este gate inteiro); a 2ª ainda exige a 1ª já existente, conferido
+  // acima. Paridade com o front: o documental só conta quando NÃO está pendente
+  // (precisaDocumentos != true).
+  if (caso.imovel_id) {
     const enc = encodeURIComponent(caso.imovel_id);
     const uid = encodeURIComponent(user.id);
     try {
@@ -254,13 +289,13 @@ export default async function handler(req) {
         html: `
           <div style="font-family:sans-serif;max-width:520px;margin:0 auto">
             <h2 style="color:#0D63DB">Reunião confirmada!</h2>
-            <p>Olá, <strong>${cliente.nome || 'cliente'}</strong>.</p>
+            <p>Olá, <strong>${esc(cliente.nome) || 'cliente'}</strong>.</p>
             <p>Sua <strong>${tituloReu}</strong> foi agendada com sucesso:</p>
             <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px;margin:16px 0">
               <div><b>Data e hora:</b> ${dataFormatada}</div>
               <div><b>Duração:</b> 30 minutos</div>
-              ${analista ? `<div><b>Analista:</b> ${analista.nome}</div>` : ''}
-              <div><b>Imóvel:</b> ${caso.imovel_endereco || '-'}</div>
+              ${analista ? `<div><b>Analista:</b> ${esc(analista.nome)}</div>` : ''}
+              <div><b>Imóvel:</b> ${esc(caso.imovel_endereco) || '-'}</div>
             </div>
             ${meetLink ? `<a href="${meetLink}" style="display:inline-block;padding:12px 24px;background:#0D63DB;color:white;border-radius:8px;text-decoration:none;font-weight:700">Acessar videochamada</a>` : ''}
             <p style="margin-top:20px"><a href="${gcalLink || calLink}" style="color:#0D63DB">📅 ${gcalLink ? 'Ver na sua Google Agenda' : 'Adicionar ao Google Agenda'}</a></p>
@@ -285,9 +320,9 @@ export default async function handler(req) {
             <h2 style="color:#0D63DB">Nova reunião agendada</h2>
             <p><strong>${tituloReu}</strong> marcada pelo cliente:</p>
             <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px;margin:16px 0">
-              <div><b>Cliente:</b> ${cliente?.nome || user.id}</div>
+              <div><b>Cliente:</b> ${esc(cliente?.nome) || esc(user.id)}</div>
               <div><b>Data e hora:</b> ${dataFormatada}</div>
-              <div><b>Imóvel:</b> ${caso.imovel_endereco || '-'}</div>
+              <div><b>Imóvel:</b> ${esc(caso.imovel_endereco) || '-'}</div>
             </div>
             ${meetLink ? `<a href="${meetLink}" style="display:inline-block;padding:12px 24px;background:#0D63DB;color:white;border-radius:8px;text-decoration:none;font-weight:700">Acessar videochamada</a>` : ''}
           </div>
