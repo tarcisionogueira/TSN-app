@@ -31,6 +31,18 @@ const json = (status, refuseReason) => new Response(
   { status: 200, headers: { 'Content-Type': 'application/json' } }
 );
 
+// Comparação em tempo constante do token (runtime Edge não tem crypto.timingSafeEqual do
+// Node). Mesmo princípio dos outros webhooks (mp-webhook/asaas-webhook): acumula XOR sobre
+// todos os bytes em vez de parar no primeiro que difere, pra não vazar o token por timing.
+function tokenIgual(recebido, esperado) {
+  const a = new TextEncoder().encode(String(recebido || ''));
+  const b = new TextEncoder().encode(String(esperado || ''));
+  if (a.length === 0 || a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
+  return diff === 0;
+}
+
 function sb(path, opts = {}) {
   return fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
     ...opts,
@@ -44,7 +56,7 @@ export default async function handler(req) {
   // Token opcional na doc do Asaas, mas obrigatório aqui: sem ele, qualquer chamada não
   // autenticada poderia tentar aprovar transferências (fail-closed).
   const token = req.headers.get('asaas-access-token');
-  if (!WEBHOOK_TOKEN || !token || token !== WEBHOOK_TOKEN) {
+  if (!WEBHOOK_TOKEN || !tokenIgual(token, WEBHOOK_TOKEN)) {
     return json('REFUSED', 'Token de autenticação ausente ou inválido.');
   }
 
