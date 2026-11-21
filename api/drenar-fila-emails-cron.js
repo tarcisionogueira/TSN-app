@@ -12,7 +12,7 @@
 export const config = { runtime: 'nodejs', maxDuration: 60 };
 
 import { isCronAuthorized } from './_auth.js';
-import { enviarEmailAgora, orcamentoRestanteHoje, reservarOrcamentoEmail } from './_email.js';
+import { enviarEmailAgora, orcamentoRestanteHoje, reservarOrcamentoEmail, ehEnvioEmMassa } from './_email.js';
 import { drenarPedidosAguardando } from './_pedido-leiloeiro-auto.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -36,19 +36,29 @@ async function handler(req) {
     return new Response(JSON.stringify({ ok: true, processados: 0, motivo: 'sem orcamento sobrando hoje' }), { headers: { 'Content-Type': 'application/json' } });
   }
 
-  const r = await sb(`emails_fila?status=eq.pendente&order=criado_em.asc&limit=${Math.min(restante, 50)}&select=*`);
+  // Lê mais do que cabe e ordena: transacional (ativação da Homio, boas-vindas, contrato…)
+  // antes do envio em massa, mais antigo primeiro dentro de cada grupo (21/11).
+  const r = await sb(`emails_fila?status=eq.pendente&order=criado_em.asc&limit=200&select=*`);
   if (!r.ok) return new Response(JSON.stringify({ error: 'query falhou' }), { status: 500 });
-  const fila = await r.json();
+  const fila = (await r.json())
+    .sort((a, b) => Number(ehEnvioEmMassa(a.tipo)) - Number(ehEnvioEmMassa(b.tipo)))
+    .slice(0, Math.min(restante, 50));
 
-  let enviados = 0, falhas = 0;
+  let enviados = 0, falhas = 0, emMassaSemVaga = false;
   for (const item of fila) {
+    const emMassa = ehEnvioEmMassa(item.tipo);
+    if (emMassa && emMassaSemVaga) continue;
     // RESERVA ATÔMICA por item (14/09): a foto de `restante` lida antes do loop pode já estar
     // velha — `enviarEmail` (requests comuns) e `enviar-alertas-cron.js` reservam no MESMO
     // contador enquanto esta drenagem roda. Sem reservar aqui item a item, os três chamadores
     // concorrentes liam contagens desatualizadas e, juntos, estouravam o teto real do Resend
     // (foi o que causou as falhas reais de "daily email sending quota" de 13/09).
-    const reserva = await reservarOrcamentoEmail();
-    if (!reserva.permitido) break; // sem margem agora — os que sobrarem seguem 'pendente'
+    const reserva = await reservarOrcamentoEmail(item.tipo);
+    if (!reserva.permitido) {
+      // Em massa bateu no seu teto: o transacional ainda pode ter vaga. Transacional sem vaga = acabou o dia.
+      if (emMassa) { emMassaSemVaga = true; continue; }
+      break; // sem margem agora — os que sobrarem seguem 'pendente'
+    }
     let res;
     try {
       res = await enviarEmailAgora({
@@ -71,6 +81,17 @@ async function handler(req) {
         method: 'PATCH', headers: { Prefer: 'return=minimal' },
         body: JSON.stringify({ status: 'enviado', processado_em: new Date().toISOString(), tentativas: item.tentativas + 1 }),
       });
+      // Ativação da Homio que saiu pela fila: o lead ficava para sempre com "enfileirado" e sem
+      // `email_ativacao_em` — o painel dizia "nunca enviado" e o lembrete nunca disparava (21/11).
+      if (item.tipo === 'homio_ativacao') {
+        for (const dest of item.destinatario.split(',').filter(Boolean)) {
+          // `eq` com minúsculas (homio_leads.email já é gravado assim): `ilike` trataria o `_` do endereço como curinga.
+          await sb(`homio_leads?email=eq.${encodeURIComponent(dest.trim().toLowerCase())}&email_ativacao_em=is.null`, {
+            method: 'PATCH', headers: { Prefer: 'return=minimal' },
+            body: JSON.stringify({ email_ativacao_em: new Date().toISOString(), email_ativacao_erro: null }),
+          }).catch((e) => console.error('[drenar-fila-emails] homio_leads:', e?.message));
+        }
+      }
     } else {
       falhas++;
       // Suprimido/sem chave: não adianta tentar de novo amanhã com o mesmo destino/config.

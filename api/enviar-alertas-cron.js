@@ -1095,7 +1095,8 @@ async function handler(req) {
       // ativo). Corta o loop aqui — sem chamar o Resend, sem chained `continuar()` (ver
       // abaixo) — quem ficou de fora entra de novo no próximo dia útil.
       if (!testeEmail) {
-        const reserva = reservarOrcamentoEmail ? await reservarOrcamentoEmail() : { permitido: true };
+        // Em massa: para no TETO_EM_MASSA e deixa a vaga do transacional (ver _email.js).
+        const reserva = reservarOrcamentoEmail ? await reservarOrcamentoEmail(modo === 'imediato' ? 'oportunidade_imediata' : 'oportunidades') : { permitido: true };
         if (!reserva.permitido) { cortadoPorOrcamentoEmail = true; break; }
         restanteHoje--;
       }

@@ -22,6 +22,21 @@ const TETO_DIARIO_RESEND = 100;
 const RESERVA_AUTH = 20;
 const ORCAMENTO_ENVIAREMAIL = TETO_DIARIO_RESEND - RESERVA_AUTH;
 
+// ─── VAGA GARANTIDA PARA O TRANSACIONAL (21/11) ──────────────────────────────────────────
+// De 16 a 21/11 o teto de 80 estourou todo dia: oportunidades e divulgação saem em lote às
+// 11h/13h UTC e comiam a cota inteira; a ativação da Homio (lead que acabou de se inscrever e
+// espera o link AGORA) chegava depois e ia para a fila do dia seguinte — 18 represadas.
+// Correção sem mudar o contador: o MESMO `emails_uso_dia` com dois tetos. Envio em massa
+// (campanha + oportunidades + alerta público) só reserva enquanto o contador está abaixo de
+// TETO_EM_MASSA; o transacional reserva até ORCAMENTO_ENVIAREMAIL. Ou seja, as últimas
+// RESERVA_TRANSACIONAL vagas do dia são só de quem pediu (ativação, boas-vindas, contrato…).
+const RESERVA_TRANSACIONAL = 30;
+const TETO_EM_MASSA = ORCAMENTO_ENVIAREMAIL - RESERVA_TRANSACIONAL;
+const TIPOS_EM_MASSA = new Set(['oportunidades', 'oportunidade_imediata', 'alerta_publico']);
+export function ehEnvioEmMassa(tipo) {
+  return ehCampanha(tipo) || TIPOS_EM_MASSA.has(String(tipo || ''));
+}
+
 // Quantos e-mails (por este helper OU por qualquer outro caminho que grave em `emails_log`,
 // como `enviar-alertas-cron.js`) já saíram desde a meia-noite UTC — que é a janela que o
 // Resend usa pro teto diário. `null` = não consegui checar; tratado como "sem margem" pelo
@@ -69,13 +84,15 @@ export async function orcamentoRestanteHoje() {
 // no banco, que soma e checa o teto na MESMA operação — dois chamadores concorrentes não
 // conseguem os dois passar pelo mesmo slot. Todo envio de verdade (`enviarEmail`, o loop de
 // `enviar-alertas-cron.js`, a drenagem da fila) precisa reservar AQUI antes de mandar.
-export async function reservarOrcamentoEmail() {
+// `tipo` decide o teto (ver TETO_EM_MASSA). Sem tipo = transacional, de propósito: um envio
+// novo sem categoria não pode ficar sem vaga por ter esquecido de dizer o que é.
+export async function reservarOrcamentoEmail(tipo) {
   if (!SB_URL || !SB_KEY) return { permitido: false, motivo: 'sem_credencial' };
   try {
     const r = await fetch(`${SB_URL}/rest/v1/rpc/reservar_orcamento_email`, {
       method: 'POST',
       headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ p_teto: ORCAMENTO_ENVIAREMAIL }),
+      body: JSON.stringify({ p_teto: ehEnvioEmMassa(tipo) ? TETO_EM_MASSA : ORCAMENTO_ENVIAREMAIL }),
       signal: AbortSignal.timeout(5000),
     });
     if (!r.ok) return { permitido: false, motivo: 'rpc_indisponivel', detalhe: `HTTP ${r.status}` };
@@ -241,7 +258,7 @@ export async function enviarEmail({ from, to, cc, subject, html, text, attachmen
     // que um e-mail a mais), mas deixa rastro no log do servidor.
     if (permitida === null) console.error('[email] limite semanal de campanha NÃO verificado — enviado assim mesmo', meta.userId, meta.tipo);
   }
-  const reserva = await reservarOrcamentoEmail();
+  const reserva = await reservarOrcamentoEmail(meta?.tipo);
   if (!reserva.permitido) {
     // `semFila` (09/10): a fila não guarda anexo nem remetente — e-mail COM anexo represado sairia
     // amanhã sem o arquivo e por outro endereço. Quem pede isto prefere a recusa agora.
