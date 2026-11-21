@@ -111,10 +111,13 @@ async function main() {
 // ── FASE 2: TODOS os documentos da página logada (25/09) ─────────────────────────────────
 // Dono: "há mais anexos no leiloeiro que não estão aparecendo no sistema" (Z37342). A fase 1
 // só guarda a matrícula; laudo, certidões e cópias do processo dos cards ficavam no site. Guardar
-// tudo de todos os ~660 lotes custaria storage à toa, então só entra lote que alguém está
-// trabalhando (caso aberto ou análise gerada) + os pedidos à mão em ZUK_IDS. Um lote é visitado
-// UMA vez (`zuk_docs_em`); para refazer, passe o id em ZUK_IDS.
-const DOCS_LOTE = Number(process.env.ZUK_DOCS_LOTE || 15);
+// tudo de todos os ~660 lotes custaria storage à toa, então só entrava lote que alguém está
+// trabalhando (caso aberto ou análise gerada) + os pedidos à mão em ZUK_IDS.
+// 21/11 (dono, "guardar todos"): a fila agora cobre TODO lote ZUK ativo. Ordem: pedidos à mão,
+// depois lotes em uso, depois o resto pela praça mais próxima. Medido: ~530 kb por documento,
+// ~3 por lote → ~1,6 GB para os ~990 ativos, dentro da franquia do Supabase (30,6 GB em uso).
+// Um lote é visitado UMA vez (`zuk_docs_em`); para refazer, passe o id em ZUK_IDS.
+const DOCS_LOTE = Number(process.env.ZUK_DOCS_LOTE || 50);
 const slug = (t) => String(t || 'documento').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 60) || 'documento';
 
 async function idsDeInteresse() {
@@ -140,7 +143,17 @@ async function documentosCompletos(jar) {
     if (error) { console.log(`  (fase 2) leitura de lotes falhou: ${error.message}`); return; }
     for (const l of data || []) if (!l.zuk_docs_em || pedidos.includes(l.id)) lotes.push(l);
   }
-  console.log(`\nFase 2 (documentos completos): ${lotes.length} lote(s) ZUK de interesse (cap ${DOCS_LOTE}).`);
+  const deInteresse = lotes.length;
+  // O resto do acervo ativo ainda não visitado, praça mais próxima primeiro (sem data por último).
+  if (lotes.length < DOCS_LOTE) {
+    const ja = new Set(lotes.map(l => l.id));
+    const { data, error } = await supabase.from('imoveis_leilao').select('id, link_edital, anexos, zuk_docs_em')
+      .eq('fonte', 'ZUK').eq('ativo', true).not('link_edital', 'is', null).is('zuk_docs_em', null)
+      .order('data_leilao', { ascending: true, nullsFirst: false }).limit(DOCS_LOTE * 2);
+    if (error) console.log(`  (fase 2) leitura do acervo falhou: ${error.message} — sigo só com os de interesse`);
+    for (const l of data || []) if (lotes.length < DOCS_LOTE && !ja.has(l.id)) lotes.push(l);
+  }
+  console.log(`\nFase 2 (documentos completos): ${lotes.length} lote(s) ZUK nesta rodada — ${deInteresse} de interesse, ${lotes.length - deInteresse} do acervo (cap ${DOCS_LOTE}).`);
   let salvos = 0, erros = 0;
   for (const lote of lotes.slice(0, DOCS_LOTE)) {
     try {

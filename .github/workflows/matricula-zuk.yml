@@ -16,6 +16,10 @@ on:
         description: 'Fase 2: ids de imóveis ZUK para guardar TODOS os documentos (vírgula)'
         required: false
         default: ''
+      docs:
+        description: 'Fase 2: quantos lotes visitar para guardar todos os documentos'
+        required: false
+        default: '50'
 
 concurrency:
   group: matricula-zuk
@@ -24,7 +28,7 @@ concurrency:
 jobs:
   matricula:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35   # 21/11: fase 2 cobre todo o acervo (50 lotes/rodada)
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -44,5 +48,6 @@ jobs:
           ZUK_EMAIL: ${{ secrets.ZUK_EMAIL }}
           ZUK_SENHA: ${{ secrets.ZUK_SENHA }}
           ZUK_IDS: ${{ github.event.inputs.ids || '' }}
+          ZUK_DOCS_LOTE: ${{ github.event.inputs.docs || '50' }}   # fase 2: lotes por rodada (todos os documentos)
           ZUK_MATRICULA_LOTE: ${{ github.event.inputs.lote || '60' }}   # 02/09: era 20 (80/dia, 100% de acerto) e a fila dos nunca-checados não zerava
         run: node scripts/captura-matricula-zuk.mjs
