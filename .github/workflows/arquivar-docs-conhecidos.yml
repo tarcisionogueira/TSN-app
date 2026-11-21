@@ -1,0 +1,53 @@
+name: Documentos — arquivar todos os links conhecidos (todos os leiloeiros)
+
+# 21/11: guarda no Storage TODOS os documentos cujo link o coletor já conhece (anexos,
+# matrícula, edital/regras em PDF), não só o primeiro. Fetch direto: sem navegador, sem
+# Bright Data — custo zero. Cada lote visitado é carimbado (docs_arquivados_em) e só volta
+# em 30 dias. Ver scripts/arquivar-docs-conhecidos.mjs.
+on:
+  schedule:
+    - cron: '40 */3 * * *'   # 8x/dia no papel; o GitHub costuma rodar menos
+  workflow_dispatch:
+    inputs:
+      lotes:
+        description: 'Lotes por rodada'
+        required: false
+        default: '300'
+      fonte:
+        description: 'Só esta fonte (opcional, ex.: MORAESLEIL)'
+        required: false
+        default: ''
+      seco:
+        description: '1 = só contar, não gravar'
+        required: false
+        default: ''
+
+concurrency:
+  group: arquivar-docs-conhecidos
+  cancel-in-progress: false
+
+jobs:
+  arquivar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Arquivar documentos conhecidos → Storage + imovel_anexos
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          ARQ_LOTES: ${{ github.event.inputs.lotes || '300' }}
+          ARQ_FONTE: ${{ github.event.inputs.fonte || '' }}
+          ARQ_SECO: ${{ github.event.inputs.seco || '' }}
+          ARQ_MAX_MIN: '40'
+        run: node scripts/arquivar-docs-conhecidos.mjs
