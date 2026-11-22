@@ -47,6 +47,9 @@ const REVISITAR_H = Number(process.env.ARQ_REVISITAR_HORAS || 0);
 const REVISITA_DIAS = 30;
 const TIPO_UNICO = new Set(['edital', 'matricula', 'carta_arrematacao', 'matricula_registrada']);
 const MAX_BYTES = 25 * 1024 * 1024;
+// Teto por leiloeiro (22/11, dono): a LJUD publica processo digitalizado inteiro — 21 de 108 anexos
+// pendentes passavam de 25 MB, o maior com 48,7 MB. 50 MB é o teto de upload do Supabase.
+const MAX_BYTES_FONTE = { LJUD: 50 * 1024 * 1024 };
 const MAX_LINKS_LOTE = 12;
 // Pipelines próprios (login ou fila dedicada) — não passam por aqui.
 const FORA = ['CEF', 'caixa', 'ZUK'];
@@ -75,17 +78,18 @@ function linksConhecidos(im) {
 
 // Download direto. Devolve { buf } ou { motivo } — o motivo vai para o log e para a contagem por
 // host (anti-bot que responde 403 a tudo não merece 12 tentativas por lote).
-async function baixar(url, referer) {
+async function baixar(url, referer, maxBytes = MAX_BYTES) {
+  const teto = `> ${Math.round(maxBytes / 1048576)} MB`;
   try {
     const r = await fetch(url, {
       headers: { 'User-Agent': UA, Accept: 'application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,*/*', ...(ehUrl(referer) ? { Referer: referer } : {}) },
-      redirect: 'follow', signal: AbortSignal.timeout(30000),
+      redirect: 'follow', signal: AbortSignal.timeout(maxBytes > MAX_BYTES ? 120000 : 30000),
     });
     if (!r.ok) return { motivo: `HTTP ${r.status}`, bloqueio: r.status === 403 || r.status === 429 };
     const len = Number(r.headers.get('content-length') || 0);
-    if (len > MAX_BYTES) return { motivo: `> 25 MB (${Math.round(len / 1048576)} MB)` };
+    if (len > maxBytes) return { motivo: `${teto} (${Math.round(len / 1048576)} MB)` };
     const buf = Buffer.from(await r.arrayBuffer());
-    if (buf.length > MAX_BYTES) return { motivo: '> 25 MB' };
+    if (buf.length > maxBytes) return { motivo: teto };
     const doc = tipoDocumento(buf);
     if (!doc) return { motivo: `não é PDF (${r.headers.get('content-type') || '?'}, ${buf.length}b)` };
     return { buf, doc };
@@ -171,7 +175,7 @@ async function arquivarLote(im, est, hostsBloqueados) {
     const h = host(l.url);
     if ((hostsBloqueados.get(h) || 0) >= 3) { est.puladosHost++; paraFila ||= `host ${h} barrou`; continue; }
     if (SECO) { est.novos++; continue; }
-    const r = await baixar(l.url, pagina);
+    const r = await baixar(l.url, pagina, MAX_BYTES_FONTE[im.fonte] || MAX_BYTES);
     if (!r.buf) {
       est.falhas++;
       if (r.bloqueio) hostsBloqueados.set(h, (hostsBloqueados.get(h) || 0) + 1);
