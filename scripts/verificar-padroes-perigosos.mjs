@@ -669,6 +669,9 @@ const ENV_PARES_LEGITIMOS = new Set([
   'IG_APP_SECRET_INSTAGRAM~IG_APP_SECRET',
   // WhatsApp oficial: o token de VERIFICAÇÃO do webhook (hub.challenge) não é o token de ENVIO.
   'WA_VERIFY_TOKEN~WA_TOKEN',
+  // WhatsApp via Evolution (22/11): o token que AUTENTICA o webhook da Evolution (header
+  // x-webhook-token) não é o token de ENVIO da Cloud API.
+  'WA_EVOLUTION_WEBHOOK_TOKEN~WA_TOKEN',
 ]);
 function envsSuspeitas() {
   // COMENTÁRIO É IGNORADO POR LINHA, não por parser de estado. A primeira tentativa usou o
