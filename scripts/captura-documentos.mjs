@@ -24,6 +24,13 @@ import { ehDocInstitucional } from '../api/_doc-scan.js';
 const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 const BUCKET = 'documentos';
 const LOTE = Number(process.env.DOCS_LOTE || 40);
+// ORÇAMENTO DE TEMPO (22/11). O job tem 55 min no GitHub; em 22/11 duas rodadas seguidas foram
+// CANCELADAS no teto antigo de 45 min. Cancelado, o processo morre sem fechar nada: o lote da vez
+// ficava em 'processando' para sempre (8 presos, o mais velho desde 26/10) e o resumo nunca saía.
+// Agora a rodada para de PEGAR lote novo depois de DOCS_MAX_MIN e cada lote tem teto próprio.
+const MAX_MS = Number(process.env.DOCS_MAX_MIN || 38) * 60_000;
+const TETO_LOTE_MS = 5 * 60_000;
+const INICIO = Date.now();
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 const publicarFatosDoPdf = (imovelId, buffer, tipo, valores) => publicarFatos(supabase, imovelId, buffer, tipo, valores);
@@ -495,11 +502,20 @@ async function main() {
         .eq('id', imovelId).is('link_matricula', null);
     } catch { /* best-effort */ }
   };
+  let parouPorTempo = 0;
   for (const item of fila) {
+    if (Date.now() - INICIO > MAX_MS) { parouPorTempo = fila.length - (ok + semDoc + bloq + erros); break; }
     const tentativaAtual = (item.tentativas || 0) + 1;
-    await supabase.from('documentos_fila').update({ status: 'processando', tentativas: tentativaAtual }).eq('imovel_id', item.imovel_id);
+    // processado_em marca a HORA em que o lote foi pego: é por ela que documentos_fila_proxima
+    // devolve à fila o lote largado em 'processando' (rodada morta no meio).
+    const { error: ePeg } = await supabase.from('documentos_fila').update({ status: 'processando', tentativas: tentativaAtual, processado_em: new Date().toISOString() }).eq('imovel_id', item.imovel_id).select('imovel_id');
+    if (ePeg) console.log(`  ${item.imovel_id}: não marquei 'processando' (${ePeg.message})`);
     try {
-      const docs = await processar(browser, item);
+      let relogio;
+      const docs = await Promise.race([
+        processar(browser, item),
+        new Promise((_, rej) => { relogio = setTimeout(() => rej(new Error(`teto_por_lote: passou de ${TETO_LOTE_MS / 60000} min`)), TETO_LOTE_MS); }),
+      ]).finally(() => clearTimeout(relogio));
       await supabase.from('documentos_fila').update({ status: 'ok', erro: null, processado_em: new Date().toISOString() }).eq('imovel_id', item.imovel_id);
       ok++; console.log(`✓ ${item.imovel_id}: ${docs.join(', ')}`);
       // Checado com sucesso, mas sem matrícula (pegou só edital/anexo) → negative-cache.
@@ -540,8 +556,8 @@ async function main() {
     }
     await new Promise(r => setTimeout(r, 800));
   }
-  await browser.close();
-  console.log(`Concluído: ${ok} ok, ${semDoc} sem documento (medido), ${bloq} bloqueado(s) pela fonte (voltam à fila), ${erros} erro(s) de verdade.`);
+  await browser.close().catch((e) => console.log(`browser.close: ${e.message}`));
+  console.log(`Concluído: ${ok} ok, ${semDoc} sem documento (medido), ${bloq} bloqueado(s) pela fonte (voltam à fila), ${erros} erro(s) de verdade.${parouPorTempo ? ` Parou por tempo (${MAX_MS / 60000} min): ${parouPorTempo} lote(s) ficam para a próxima rodada.` : ''}`);
 }
 
 main().catch(e => { console.error(e); process.exit(1); });
