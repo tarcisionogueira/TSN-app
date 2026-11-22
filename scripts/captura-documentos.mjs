@@ -28,12 +28,37 @@ const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 
 const publicarFatosDoPdf = (imovelId, buffer, tipo, valores) => publicarFatos(supabase, imovelId, buffer, tipo, valores);
 const ehUrl = v => typeof v === 'string' && /^https?:\/\//i.test(v);
-async function salvarAnexo(imovelId, buffer, tipo, nome, idx = 0, valores = {}) {
+async function salvarAnexo(imovelId, buffer, tipo, nome, idx = 0, valores = {}, origemUrl = null) {
   // Caminho ENDEREÇADO POR CONTEÚDO (hash do PDF), NÃO por Date.now(). Assim uma
   // recaptura do MESMO documento reaproveita o mesmo objeto (upsert sobrescreve) em vez
   // de criar uma cópia nova a cada run — era a causa do inchaço do bucket (lotes de
   // "outro_auto" idênticos) e de objetos órfãos. Conteúdo diferente → hash diferente.
   const hash = createHash('md5').update(buffer).digest('hex').slice(0, 16);
+  // NÃO SOBRESCREVER DOCUMENTO DE OUTRA ORIGEM (22/11). Desde 21/11 o `arquivar-docs-conhecidos`
+  // guarda TODOS os documentos do lote, cada um com a `origem_url`. A regra "1 por tipo → atualiza
+  // o existente" abaixo trocaria, por exemplo, o edital do leilão (já guardado) pelo edital do lote
+  // que esta fila acabou de achar — e o primeiro sumia da tela. Mesmo tipo com origem conhecida e
+  // DIFERENTE da deste arquivo é outro documento: entra como 'outro', em linha própria.
+  if (tipo !== 'outro' && origemUrl) {
+    const { data: doTipo } = await supabase.from('imovel_anexos').select('origem_url, storage_path').eq('imovel_id', imovelId).eq('tipo', tipo).limit(1);
+    const ex = doTipo?.[0];
+    if (ex?.origem_url && ex.origem_url !== origemUrl && !String(ex.storage_path || '').endsWith(`_${hash}.pdf`)) tipo = 'outro';
+  }
+  // MESMO CONTEÚDO GUARDADO COM OUTRO TIPO (22/11): o arquivamento pode ter guardado este PDF como
+  // 'outro' (2º edital do lote) e esta fila o classificaria 'edital' — o path muda pelo tipo e o
+  // mesmo arquivo entraria de novo, em duplicata. O hash do nome do arquivo é o que identifica.
+  const { data: porConteudo, error: eConteudo } = await supabase.from('imovel_anexos').select('id, tipo, origem_url')
+    .eq('imovel_id', imovelId).like('storage_path', `casos/${imovelId}/%\\_${hash}.pdf`).limit(1);
+  if (eConteudo) console.log(`  dedup por conteúdo ${imovelId}: ${eConteudo.message}`);
+  const outroTipo = porConteudo?.[0] && porConteudo[0].tipo !== tipo ? porConteudo[0] : null;
+  if (outroTipo) {
+    if (origemUrl && !outroTipo.origem_url) {
+      const { error: eO } = await supabase.from('imovel_anexos').update({ origem_url: origemUrl }).eq('id', outroTipo.id).select('id');
+      if (eO) console.log(`  origem_url ${imovelId}: ${eO.message}`);
+    }
+    await publicarFatosDoPdf(imovelId, buffer, outroTipo.tipo, valores);
+    return;
+  }
   const path = `casos/${imovelId}/${tipo}_${hash}.pdf`;
   // Já existe um anexo apontando p/ esse conteúdo neste imóvel? (dedup determinístico)
   const { data: jaTem } = await supabase.from('imovel_anexos').select('id').eq('imovel_id', imovelId).eq('storage_path', path).limit(1);
@@ -41,7 +66,7 @@ async function salvarAnexo(imovelId, buffer, tipo, nome, idx = 0, valores = {}) 
   if (up.error) throw new Error('upload: ' + up.error.message);
   const signed = await supabase.storage.from(BUCKET).createSignedUrl(path, 60 * 60 * 24 * 365);
   const url = signed.data?.signedUrl || null;
-  const row = { imovel_id: imovelId, tipo, nome, url, storage_path: path, tamanho_kb: Math.round(buffer.length / 1024), role_criador: 'sistema' };
+  const row = { imovel_id: imovelId, tipo, nome, url, storage_path: path, tamanho_kb: Math.round(buffer.length / 1024), role_criador: 'sistema', ...(origemUrl ? { origem_url: origemUrl } : {}) };
   // Lê o PDF que acabou de chegar e publica os fatos na ficha (nome do condomínio,
   // despesas mensais, custos do edital, área da matrícula). Antes do return de dedup:
   // documento já cadastrado continua valendo, e o merge da RPC é idempotente.
@@ -206,7 +231,7 @@ async function processar(browser, item) {
     // matrícula que não classificaram); cada um vira uma linha própria.
     if (tipo !== 'outro' && salvos.has(tipo)) return;
     await salvarAnexo(item.imovel_id, buf, tipo, nome || `${tipo}.pdf`, tipo === 'outro' ? ++nOutro : 0,
-      { valorMinimo: im.valor_minimo, valorAvaliacao: im.valor_avaliacao });
+      { valorMinimo: im.valor_minimo, valorAvaliacao: im.valor_avaliacao }, url || null);
     urlsSalvas.add(url);
     if (tipo !== 'outro') salvos.add(tipo);
     capturados.push(tipo);
@@ -392,7 +417,11 @@ async function processar(browser, item) {
   // barrar, via Bright Data). Respeita o teto semanal de custo (proposito 'docs').
   // Com o PDF já CONHECIDO (anexos lidos pelo coletor), vai direto nele: 1 request por documento em vez de
   // gastar um com a página bloqueada para redescobrir o mesmo link (05/11: GF/Destak/Silva — Cloudflare no runner).
-  if (!capturados.length && bloqueado && brightDataDisponivel()) {
+  // Sem exigir `!capturados.length` (22/11): o lote que chega aqui pelo `arquivar-docs-conhecidos`
+  // costuma ter parte dos documentos num CDN aberto (já guardados, recapturados de graça no caminho 1)
+  // e o resto no host barrado — com a exigência antiga, o recapturado bastava para o Bright Data nunca
+  // ser tentado e o documento bloqueado nunca chegava. Continua limitado a 3 por lote e ao teto.
+  if (bloqueado && brightDataDisponivel()) {
     for (const c of conhecidos.filter((k) => /\.(pdf|docx?)(\?|#|$)/i.test(k.url) && !urlsSalvas.has(k.url)).slice(0, 3)) {
       if (capturados.length >= 8 || recusasOrcamentoBD.has(propositoBD)) break;
       const buf = await baixarPdfBD(c.url, paginaLote, propositoBD);

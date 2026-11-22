@@ -20,8 +20,17 @@
  *  - tipo classificado já presente, tamanho diferente → é OUTRO documento (edital do leilão +
  *    edital do lote, 2 matrículas) e entra como linha própria.
  *
+ * O QUE FALHA AQUI VAI PARA A FILA ANTIGA (22/11, dono: "resolva os bloqueados pela fila antiga"):
+ * link barrado (403/429/5xx, host pulado por anti-bot), link que é página e não PDF, ou erro de rede
+ * põe o lote em `documentos_fila` como `pendente`. Lá o `captura-documentos` abre a página com
+ * navegador e, se ela estiver barrada, usa o Bright Data dentro do teto. Sem isso o lote ficava
+ * carimbado aqui por 30 dias e, para a fila antiga, já resolvido (status `ok`): o documento
+ * bloqueado nunca seria buscado. `> 25 MB` não entra: é decisão de tamanho, não bloqueio.
+ *
  * Config: ARQ_LOTES (lotes por rodada, default 300), ARQ_MAX_MIN (orçamento de tempo, default 40),
- * ARQ_FONTE (opcional: só uma fonte), ARQ_SECO=1 (só conta, não grava).
+ * ARQ_FONTE (opcional: só uma fonte), ARQ_SECO=1 (só conta, não grava), ARQ_REVISITAR_HORAS=N
+ * (refaz os lotes carimbados nas últimas N horas — para mandar à fila antiga as falhas de rodadas
+ * anteriores a esta regra; os links já guardados são pulados pela `origem_url`).
  */
 import { createClient } from '@supabase/supabase-js';
 import { Buffer } from 'buffer';
@@ -34,6 +43,7 @@ const LOTES = Number(process.env.ARQ_LOTES || 300);
 const MAX_MS = Number(process.env.ARQ_MAX_MIN || 40) * 60_000;
 const FONTE = (process.env.ARQ_FONTE || '').trim().toUpperCase();
 const SECO = process.env.ARQ_SECO === '1';
+const REVISITAR_H = Number(process.env.ARQ_REVISITAR_HORAS || 0);
 const REVISITA_DIAS = 30;
 const TIPO_UNICO = new Set(['edital', 'matricula', 'carta_arrematacao', 'matricula_registrada']);
 const MAX_BYTES = 25 * 1024 * 1024;
@@ -95,6 +105,12 @@ async function proximaFatia(jaVistos) {
     if (FONTE) q = q.eq('fonte', FONTE);
     return q;
   };
+  if (REVISITAR_H > 0) {
+    const desde = new Date(Date.now() - REVISITAR_H * 3600_000).toISOString();
+    const rev = await base().gte('docs_arquivados_em', desde).order('docs_arquivados_em', { ascending: true }).limit(100);
+    if (rev.error) throw new Error(`leitura de revisitas recentes falhou: ${rev.error.message}`);
+    return (rev.data || []).filter((l) => !jaVistos.has(l.id));
+  }
   // 1º os nunca visitados (praça mais próxima primeiro), depois as revisitas vencidas.
   const nunca = await base().is('docs_arquivados_em', null).order('data_leilao', { ascending: true, nullsFirst: false }).limit(100);
   if (nunca.error) throw new Error(`leitura de lotes falhou: ${nunca.error.message}`);
@@ -113,6 +129,27 @@ async function carimbar(id) {
   if (error) console.log(`  - ${id}: não carimbei docs_arquivados_em (${error.message})`);
 }
 
+// Falha que a fila antiga resolve (navegador + Bright Data) × falha que ela repetiria igual.
+const resolvivelNaFilaAntiga = (r) => r.bloqueio || /^HTTP 5\d\d|^não é PDF|^rede:/.test(r.motivo || '');
+
+// Põe o lote na fila antiga como `pendente`, sem atropelar quem já está lá esperando ou rodando
+// (`pendente`/`processando`) nem o `bloqueado`, que a própria fila retenta por conta. `ok` e
+// `sem_documento` voltam a `pendente` com tentativas zeradas: a fila os deu por resolvidos
+// olhando UM documento, e este lote tem outro que ela ainda não buscou.
+async function mandarParaFilaAntiga(imovelId, motivo, est) {
+  if (SECO) { est.paraFila++; return; }
+  const { data: atual, error: eSel } = await supabase.from('documentos_fila').select('status').eq('imovel_id', imovelId).maybeSingle();
+  if (eSel) { console.log(`  - ${imovelId}: fila antiga ilegível (${eSel.message}) — não enfileirado`); return; }
+  if (atual && ['pendente', 'processando', 'bloqueado'].includes(atual.status)) { est.jaNaFila++; return; }
+  const erro = `arquivar-docs: ${motivo}`.slice(0, 300);
+  const op = atual
+    ? supabase.from('documentos_fila').update({ status: 'pendente', tentativas: 0, erro }).eq('imovel_id', imovelId).select('imovel_id')
+    : supabase.from('documentos_fila').insert({ imovel_id: imovelId, status: 'pendente', tentativas: 0, erro }).select('imovel_id');
+  const { data, error } = await op;
+  if (error || !data?.length) { console.log(`  - ${imovelId}: não enfileirado (${error?.message || 'nenhuma linha'})`); return; }
+  est.paraFila++;
+}
+
 async function arquivarLote(im, est, hostsBloqueados) {
   const links = linksConhecidos(im);
   if (!links.length) { est.semLink++; return; }
@@ -125,15 +162,18 @@ async function arquivarLote(im, est, hostsBloqueados) {
   if (!pendentes.length) { est.jaCompletos++; return; }
   const pagina = ehUrl(im.link_edital) && !ehPdfUrl(im.link_edital) ? im.link_edital : im.url_lote;
 
+  let paraFila = null; // 1º motivo resolvível pela fila antiga neste lote
+  const fim = async (r) => { if (paraFila) await mandarParaFilaAntiga(im.id, paraFila, est); return r; };
   for (const l of pendentes) {
-    if (Date.now() - inicio > MAX_MS) return 'tempo';
+    if (Date.now() - inicio > MAX_MS) return fim('tempo');
     const h = host(l.url);
-    if ((hostsBloqueados.get(h) || 0) >= 3) { est.puladosHost++; continue; }
+    if ((hostsBloqueados.get(h) || 0) >= 3) { est.puladosHost++; paraFila ||= `host ${h} barrou`; continue; }
     if (SECO) { est.novos++; continue; }
     const r = await baixar(l.url, pagina);
     if (!r.buf) {
       est.falhas++;
       if (r.bloqueio) hostsBloqueados.set(h, (hostsBloqueados.get(h) || 0) + 1);
+      if (resolvivelNaFilaAntiga(r)) paraFila ||= `${r.motivo} em ${l.url}`;
       est.motivos[r.motivo.split(' (')[0]] = (est.motivos[r.motivo.split(' (')[0]] || 0) + 1;
       continue;
     }
@@ -186,16 +226,17 @@ async function arquivarLote(im, est, hostsBloqueados) {
     est.porFonte[im.fonte] = (est.porFonte[im.fonte] || 0) + 1;
     await new Promise((s) => setTimeout(s, 300)); // gentil com o leiloeiro
   }
+  return fim();
 }
 
 async function main() {
   if (!process.env.VITE_SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) { console.error('Supabase ausente'); process.exit(2); }
   const permitidas = await fontesPermitidas();
-  const est = { lotes: 0, semLink: 0, jaCompletos: 0, novos: 0, jaTinha: 0, falhas: 0, puladosHost: 0, foraDaLista: 0, kb: 0, motivos: {}, porFonte: {} };
+  const est = { lotes: 0, semLink: 0, jaCompletos: 0, novos: 0, jaTinha: 0, falhas: 0, paraFila: 0, jaNaFila: 0, puladosHost: 0, foraDaLista: 0, kb: 0, motivos: {}, porFonte: {} };
   const hostsBloqueados = new Map();
   const jaVistos = new Set();
   let parouPorTempo = false;
-  console.log(`Arquivar documentos conhecidos — até ${LOTES} lote(s), ${MAX_MS / 60000} min${FONTE ? `, fonte ${FONTE}` : ''}${SECO ? ' [SECO]' : ''}.`);
+  console.log(`Arquivar documentos conhecidos — até ${LOTES} lote(s), ${MAX_MS / 60000} min${FONTE ? `, fonte ${FONTE}` : ''}${REVISITAR_H ? `, REVISITANDO os carimbados nas últimas ${REVISITAR_H} h` : ''}${SECO ? ' [SECO]' : ''}.`);
 
   laco: while (est.lotes < LOTES) {
     const fatia = await proximaFatia(jaVistos);
@@ -223,6 +264,7 @@ async function main() {
   console.log(`\nResultado: ${est.lotes} lote(s) · ${est.novos} documento(s) novo(s) (${Math.round(est.kb / 1024)} MB) · ${est.jaTinha} já estavam guardados · ${est.falhas} falha(s) · ${est.jaCompletos} lote(s) já completos · ${est.semLink} sem link · ${est.foraDaLista} fora da lista de arquivamento${parouPorTempo ? ' · PAROU POR TEMPO' : ''}.`);
   if (fontes) console.log(`Por fonte: ${fontes}`);
   if (motivos) console.log(`Falhas por motivo: ${motivos}`);
+  console.log(`Fila antiga (navegador + Bright Data): ${est.paraFila} lote(s) enviados · ${est.jaNaFila} já estavam lá.`);
   if (bloqueados) console.log(`Hosts que bloquearam (pulados no resto da rodada): ${bloqueados}`);
 }
 

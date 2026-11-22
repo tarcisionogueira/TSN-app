@@ -21,6 +21,10 @@ on:
         description: '1 = só contar, não gravar'
         required: false
         default: ''
+      revisitar_horas:
+        description: 'Refazer os lotes carimbados nas últimas N horas (manda as falhas à fila antiga)'
+        required: false
+        default: ''
 
 concurrency:
   group: arquivar-docs-conhecidos
@@ -49,5 +53,6 @@ jobs:
           ARQ_LOTES: ${{ github.event.inputs.lotes || '300' }}
           ARQ_FONTE: ${{ github.event.inputs.fonte || '' }}
           ARQ_SECO: ${{ github.event.inputs.seco || '' }}
+          ARQ_REVISITAR_HORAS: ${{ github.event.inputs.revisitar_horas || '' }}
           ARQ_MAX_MIN: '40'
         run: node scripts/arquivar-docs-conhecidos.mjs
