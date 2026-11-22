@@ -2,6 +2,7 @@
 import { normalizar, casarGatilho, montarMensagem, sortearPublica } from '../../api/instagram-gatilhos.js';
 import { validarGatilho } from '../../api/admin-ig-gatilhos.js';
 import { lerComentario, lerMensagem } from '../../api/instagram-webhook.js';
+import { precisaRenovar } from '../../api/ig-token-cron.js';
 
 let ok = 0, falhou = 0;
 const t = (nome, cond) => { if (cond) { ok++; console.log('  ✓', nome); } else { falhou++; console.log('  ✗', nome); } };
@@ -38,6 +39,12 @@ t('webhook guarda o post do comentário', c?.media_id === 'P9');
 const d = lerMensagem({ sender: { id: '5' }, recipient: { id: '1' }, timestamp: 1700000000000, message: { mid: 'm1', text: 'oi' } });
 t('DM tem as MESMAS chaves do comentário (insert em lote do PostgREST)', d && 'media_id' in d
   && Object.keys(d).sort().join() === Object.keys((({ username, ...r }) => r)(c)).sort().join());
+
+const hoje = new Date('2026-11-22T12:00:00Z');
+t('token novo (2 dias, vale 57) não renova', precisaRenovar({ token: 'x', renovado_em: '2026-11-20', expira_em: '2027-01-18' }, hoje) === false);
+t('token de 8 dias renova', precisaRenovar({ token: 'x', renovado_em: '2026-11-14', expira_em: '2027-01-12' }, hoje) === true);
+t('token perto de vencer renova mesmo novo', precisaRenovar({ token: 'x', renovado_em: '2026-11-21', expira_em: '2026-12-05' }, hoje) === true);
+t('sem token não tenta', precisaRenovar(null, hoje) === false);
 
 console.log(`\n${falhou ? '✗' : '✓'} ${ok}/${ok + falhou} asserções`);
 if (falhou) process.exit(1);

@@ -506,6 +506,10 @@
       "schedule": "*/30 * * * *"
     },
     {
+      "path": "/api/ig-token-cron",
+      "schedule": "17 9 * * *"
+    },
+    {
       "path": "/api/instagram-gatilhos",
       "schedule": "*/5 * * * *"
     },

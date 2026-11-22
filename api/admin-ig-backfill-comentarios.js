@@ -34,7 +34,7 @@
 export const config = { runtime: 'nodejs', maxDuration: 60 };
 
 import { getUser } from './_auth.js';
-import { envioConfigurado, GRAPH_VERSION } from './_instagram-envio.js';
+import { envioConfigurado, GRAPH_VERSION, credencialAtual } from './_instagram-envio.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -85,7 +85,7 @@ const sb = (path, init = {}) => fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
 async function chamarGraph(caminho, params) {
   const url = new URL(`https://graph.instagram.com/${GRAPH_VERSION}/${caminho}`);
   for (const [k, v] of Object.entries(params || {})) url.searchParams.set(k, v);
-  url.searchParams.set('access_token', IG_PAGE_TOKEN);
+  url.searchParams.set('access_token', (await credencialAtual()).pageToken || IG_PAGE_TOKEN || ''); // token do banco (22/11)
   const r = await fetch(url, { signal: AbortSignal.timeout(15000) });
   const j = await r.json().catch(() => null);
   // `.ok` antes do corpo — mesma régua de _instagram-envio.js: a Graph API devolve JSON de

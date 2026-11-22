@@ -149,7 +149,14 @@ export default function CaixaInstagram() {
     } finally { setOcupado(null); }
   }
 
-  if (carregando) return <div style={{ padding: 28, fontFamily: 'system-ui' }}>Carregando a caixa…</div>;
+  // Os gatilhos não esperam a caixa (que leva ~20 s com 200+ rascunhos): são o que se cadastra aqui.
+  if (carregando) return (
+    <div style={{ maxWidth: 760, margin: '0 auto', padding: '24px 18px 60px', fontFamily: 'system-ui, sans-serif', color: '#0f172a' }}>
+      <h1 style={{ fontSize: 22, fontWeight: 800, margin: '0 0 4px' }}>Caixa do Instagram</h1>
+      <GatilhosInstagram />
+      <div style={{ fontSize: 13, color: '#64748b' }}>Carregando a caixa de rascunhos…</div>
+    </div>
+  );
   if (erro && !dados) return <div style={{ padding: 28, color: '#991b1b', fontFamily: 'system-ui' }}>{erro}</div>;
 
   const pendentes = (dados?.itens || []).filter((i) => !resolvidos.has(i.id));

@@ -17,6 +17,9 @@ export default function GatilhosInstagram() {
   const [erro, setErro] = useState('');
   const [form, setForm] = useState(null);       // null = fechado; objeto = criando/editando
   const [salvando, setSalvando] = useState(false);
+  const [token, setToken] = useState('');
+  const [trocarToken, setTrocarToken] = useState(false);
+  const [msgToken, setMsgToken] = useState('');
 
   const carregar = useCallback(async () => {
     try {
@@ -50,6 +53,17 @@ export default function GatilhosInstagram() {
     catch (e) { setErro(String(e.message || e)); }
   }
 
+  async function salvarToken() {
+    setSalvando(true); setMsgToken('');
+    try {
+      const j = await enviar({ acao: 'token', token });
+      setToken(''); setTrocarToken(false);
+      setMsgToken(`✅ Token aceito pela Meta${j.username ? ` (@${j.username})` : ''}. Ele passa a ser renovado sozinho.`);
+      await carregar();
+    } catch (e) { setMsgToken(`❌ ${e.message || e}`); }
+    finally { setSalvando(false); }
+  }
+
   const palavraDe = (id) => dados?.gatilhos?.find((g) => g.id === id)?.palavra || `#${id}`;
 
   return (
@@ -62,9 +76,33 @@ export default function GatilhosInstagram() {
 
       {dados?.conta && !dados.conta.ok && (
         <div style={{ marginTop: 10, padding: '8px 12px', borderRadius: 8, background: '#fef2f2', color: '#991b1b', fontSize: 12.5 }}>
-          ⚠️ <strong>O envio pelo Instagram não está funcionando:</strong> {dados.conta.motivo}. Os gatilhos ficam salvos, mas nenhum direct sai até o token ser renovado.
+          ⚠️ <strong>O envio pelo Instagram não está funcionando:</strong> {dados.conta.motivo}. Os gatilhos ficam salvos, mas nenhum direct sai até você colar um token novo abaixo.
         </div>
       )}
+      {dados?.conta?.ok && !trocarToken && (
+        <div style={{ marginTop: 8, fontSize: 12, color: '#166534' }}>
+          ✅ Envio ativo{dados.conta.username ? ` como @${dados.conta.username}` : ''}
+          {dados.conta.expira_em && <> · token renova sozinho (vale até {new Date(dados.conta.expira_em).toLocaleDateString('pt-BR')})</>}
+          {dados.conta.ultimo_erro && <span style={{ color: '#b45309' }}> · última renovação falhou: {dados.conta.ultimo_erro}</span>}
+          {' · '}<button onClick={() => setTrocarToken(true)} style={{ background: 'none', border: 'none', color: '#475569', textDecoration: 'underline', cursor: 'pointer', fontSize: 12, padding: 0 }}>trocar token</button>
+        </div>
+      )}
+      {dados?.conta && (!dados.conta.ok || trocarToken) && (
+        <div style={{ marginTop: 10, padding: 12, border: '1px solid #e2e8f0', borderRadius: 10, background: '#fff', fontSize: 12.5, lineHeight: 1.6 }}>
+          <strong>Colar token novo do Instagram</strong>
+          <ol style={{ margin: '6px 0 8px', paddingLeft: 18, color: '#475569' }}>
+            <li>Abra <a href="https://developers.facebook.com/apps/" target="_blank" rel="noopener noreferrer">developers.facebook.com/apps</a> → app <strong>BidPro - Atendimento</strong>.</li>
+            <li>Menu <strong>Instagram</strong> → <strong>Configuração da API com login do Instagram</strong> → <strong>Gerar tokens de acesso</strong>.</li>
+            <li>Na conta <strong>@tarcisionogueiraleiloes</strong>, clique em <strong>Gerar token</strong>, entre no Instagram se pedir e copie o token.</li>
+          </ol>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input type="password" autoComplete="off" value={token} onChange={(e) => setToken(e.target.value.trim())} placeholder="Cole aqui o token (começa com IG…)" style={{ ...IN, flex: 1 }} />
+            <button style={{ ...B, background: '#111', color: '#fff', border: 'none' }} disabled={salvando || token.length < 40} onClick={salvarToken}>{salvando ? 'Validando…' : 'Validar e salvar'}</button>
+            {trocarToken && <button style={B} onClick={() => setTrocarToken(false)}>Cancelar</button>}
+          </div>
+        </div>
+      )}
+      {msgToken && <div style={{ marginTop: 8, fontSize: 12.5 }}>{msgToken}</div>}
       {erro && <div style={{ marginTop: 10, color: '#b91c1c', fontSize: 12.5 }}>{erro}</div>}
 
       {form && (

@@ -27,13 +27,38 @@
  */
 export const GRAPH_VERSION = 'v21.0';
 
-function envCfg() {
-  return { igUserId: process.env.IG_USER_ID, pageToken: process.env.IG_PAGE_TOKEN };
+// ─── O TOKEN MORA NO BANCO (22/11) ───────────────────────────────────────────────────
+// O IG_PAGE_TOKEN da Vercel venceu em 07/11 sem ninguém ver. Agora o token vem de
+// `ig_credencial` (colado na tela /admin/instagram e renovado pelo api/ig-token-cron.js); a env
+// só vale enquanto o banco estiver vazio. Cache curto: um lote de disparos não relê a cada envio.
+const SB_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
+let cache = { em: 0, valor: null };
+
+export async function credencialAtual({ fresco = false } = {}) {
+  if (!fresco && cache.valor && Date.now() - cache.em < 60000) return cache.valor;
+  let doBanco = null;
+  if (SB_URL && SB_KEY) {
+    try {
+      const r = await fetch(`${SB_URL}/rest/v1/ig_credencial?id=eq.1&select=token,ig_user_id`, {
+        headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` }, signal: AbortSignal.timeout(5000),
+      });
+      if (r.ok) doBanco = (await r.json().catch(() => []))[0] || null;
+      else console.warn('[ig-envio] não li ig_credencial:', r.status);
+    } catch (e) { console.warn('[ig-envio] não li ig_credencial:', e?.message || e); }
+  }
+  const valor = {
+    igUserId: doBanco?.ig_user_id || process.env.IG_USER_ID || null,
+    pageToken: doBanco?.token || process.env.IG_PAGE_TOKEN || null,
+    fonte: doBanco?.token ? 'banco' : process.env.IG_PAGE_TOKEN ? 'env' : null,
+  };
+  cache = { em: Date.now(), valor };
+  return valor;
 }
 
+/** Síncrono e otimista: há de onde tirar um token? Quem prova se ele VALE é a chamada à Meta. */
 export function envioConfigurado() {
-  const { igUserId, pageToken } = envCfg();
-  return !!(igUserId && pageToken);
+  return !!(process.env.IG_USER_ID && (process.env.IG_PAGE_TOKEN || (SB_URL && SB_KEY)));
 }
 
 /**
@@ -58,8 +83,8 @@ export function montarCorpoEnvio(destino, texto) {
 }
 
 async function chamarSendAPI(corpo) {
-  if (!envioConfigurado()) return { ok: false, erro: 'nao_configurado', detalhe: 'IG_USER_ID/IG_PAGE_TOKEN ausentes' };
-  const { igUserId, pageToken } = envCfg();
+  const { igUserId, pageToken } = await credencialAtual();
+  if (!igUserId || !pageToken) return { ok: false, erro: 'nao_configurado', detalhe: 'sem token do Instagram (cole em /admin/instagram)' };
   let r;
   try {
     r = await fetch(`https://graph.instagram.com/${GRAPH_VERSION}/${igUserId}/messages`, {
@@ -105,8 +130,8 @@ export function montarCorpoRespostaPublica(commentId, texto) {
 }
 
 async function chamarRespostaPublica({ id, message }) {
-  if (!envioConfigurado()) return { ok: false, erro: 'nao_configurado', detalhe: 'IG_USER_ID/IG_PAGE_TOKEN ausentes' };
-  const { pageToken } = envCfg();
+  const { pageToken } = await credencialAtual();
+  if (!pageToken) return { ok: false, erro: 'nao_configurado', detalhe: 'sem token do Instagram (cole em /admin/instagram)' };
   // `message` e `access_token` como PARÂMETRO (não corpo JSON) — é o formato documentado pra
   // este endpoint específico, diferente do `/messages` acima. Mesma ressalva do cabeçalho:
   // conferir contra tráfego real antes de confiar cegamente.

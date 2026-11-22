@@ -5,12 +5,14 @@
  *        o gatilho casa e o direct é recusado — melhor a tela avisar antes do primeiro comentário.
  * POST { acao: 'salvar', gatilho: {...} }  → cria (sem id) ou atualiza (com id)
  * POST { acao: 'ativar', id, ativo }       → liga/desliga (não apagamos: o log de disparos fica)
+ * POST { acao: 'token', token }            → valida o token NA META e grava em `ig_credencial`
+ *        (22/11: o da Vercel venceu em 07/11). O token nunca volta para a tela — só @ e validade.
  * Só admin.
  */
 export const config = { runtime: 'nodejs', maxDuration: 20 };
 
 import { getUser } from './_auth.js';
-import { GRAPH_VERSION } from './_instagram-envio.js';
+import { GRAPH_VERSION, credencialAtual } from './_instagram-envio.js';
 
 const SB = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SVC = process.env.SUPABASE_SERVICE_KEY;
@@ -27,9 +29,8 @@ async function sb(method, path, body, prefer) {
 }
 
 async function postsRecentes() {
-  const id = process.env.IG_USER_ID;
-  const token = process.env.IG_PAGE_TOKEN;
-  if (!id || !token) return { ok: false, motivo: 'IG_USER_ID/IG_PAGE_TOKEN ausentes na Vercel', posts: [] };
+  const { igUserId: id, pageToken: token } = await credencialAtual({ fresco: true });
+  if (!id || !token) return { ok: false, motivo: 'nenhum token do Instagram cadastrado', posts: [] };
   try {
     const url = `https://graph.instagram.com/${GRAPH_VERSION}/${id}/media?fields=id,caption,permalink,timestamp,media_type,thumbnail_url,media_url&limit=24`;
     const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(8000) });
@@ -68,12 +69,16 @@ export default async function handler(req, res) {
     if (perfil?.role !== 'admin') return res.status(403).json({ error: 'Apenas admin' });
 
     if (req.method === 'GET') {
-      const [gatilhos, disparos, conta] = await Promise.all([
+      const [gatilhos, disparos, conta, cred] = await Promise.all([
         sb('GET', 'ig_gatilhos?select=*&order=ativo.desc,criado_em.desc'),
         sb('GET', 'ig_gatilho_disparos?select=id,gatilho_id,status,erro,criado_em,ig_user_id&order=criado_em.desc&limit=30'),
         postsRecentes(),
+        sb('GET', 'ig_credencial?id=eq.1&select=username,expira_em,renovado_em,origem,ultimo_erro'),
       ]);
-      return res.status(200).json({ gatilhos: gatilhos || [], disparos: disparos || [], posts: conta.posts, conta: { ok: conta.ok, motivo: conta.motivo } });
+      return res.status(200).json({
+        gatilhos: gatilhos || [], disparos: disparos || [], posts: conta.posts,
+        conta: { ok: conta.ok, motivo: conta.motivo, ...(cred?.[0] || {}) },
+      });
     }
 
     if (req.method !== 'POST') return res.status(405).json({ error: 'Método não permitido' });
@@ -85,6 +90,27 @@ export default async function handler(req, res) {
       const r = await sb('PATCH', `ig_gatilhos?id=eq.${id}`, { ativo: !!req.body.ativo, atualizado_em: new Date().toISOString() }, 'return=representation');
       if (!r?.length) return res.status(404).json({ error: 'Gatilho não encontrado' });
       return res.status(200).json({ ok: true, gatilho: r[0] });
+    }
+
+    if (acao === 'token') {
+      const token = String(req.body.token || '').trim();
+      if (token.length < 40 || /\s/.test(token)) return res.status(400).json({ error: 'Isso não parece um token do Instagram (é um texto longo, sem espaços, começando com IG…).' });
+      let me;
+      try {
+        const r = await fetch(`https://graph.instagram.com/${GRAPH_VERSION}/me?fields=user_id,username`, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(8000) });
+        me = await r.json().catch(() => null);
+        if (!r.ok) return res.status(400).json({ error: `A Meta recusou este token: ${me?.error?.message || r.status}` });
+      } catch (e) {
+        return res.status(502).json({ error: `Não consegui falar com a Meta para validar: ${e?.message || e}` });
+      }
+      const agora = new Date();
+      await sb('POST', 'ig_credencial?on_conflict=id', {
+        id: 1, token, username: me?.username || null,
+        expira_em: new Date(agora.getTime() + 59 * 86400000).toISOString(),   // longa duração: ~60 dias
+        renovado_em: agora.toISOString(), origem: 'tela', ultimo_erro: null,
+      }, 'resolution=merge-duplicates,return=minimal');
+      await credencialAtual({ fresco: true });
+      return res.status(200).json({ ok: true, username: me?.username || null });
     }
 
     if (acao === 'salvar') {
