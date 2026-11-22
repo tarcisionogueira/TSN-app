@@ -31,6 +31,23 @@ export default function GatilhosInstagram() {
   }, []);
   useEffect(() => { carregar(); }, [carregar]);
 
+  // Volta do "Conectar Instagram" (api/ig-oauth): ?ig=ok ou ?ig=erro&motivo=… no hash da rota.
+  useEffect(() => {
+    const q = new URLSearchParams((window.location.hash.split('?')[1]) || '');
+    if (q.get('ig') === 'ok') setMsgToken('✅ Instagram conectado. O token foi salvo e passa a ser renovado sozinho.');
+    else if (q.get('ig') === 'erro') setMsgToken(`❌ Não conectou: ${q.get('motivo') || 'motivo desconhecido'}`);
+  }, []);
+
+  async function conectar() {
+    setSalvando(true); setMsgToken('');
+    try {
+      const r = await apiCall('/api/ig-oauth', { method: 'POST' });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.url) throw new Error(j?.error || `HTTP ${r.status}`);
+      window.location.href = j.url;
+    } catch (e) { setMsgToken(`❌ ${e.message || e}`); setSalvando(false); }
+  }
+
   async function enviar(corpo) {
     const r = await apiCall('/api/admin-ig-gatilhos', { method: 'POST', body: JSON.stringify(corpo) });
     const j = await r.json().catch(() => ({}));
@@ -89,7 +106,12 @@ export default function GatilhosInstagram() {
       )}
       {dados?.conta && (!dados.conta.ok || trocarToken) && (
         <div style={{ marginTop: 10, padding: 12, border: '1px solid #e2e8f0', borderRadius: 10, background: '#fff', fontSize: 12.5, lineHeight: 1.6 }}>
-          <strong>Colar token novo do Instagram</strong>
+          <button style={{ ...B, background: '#9d174d', color: '#fff', border: 'none', fontSize: 13.5, padding: '9px 16px' }} disabled={salvando} onClick={conectar}>
+            {salvando ? 'Abrindo o Instagram…' : '📸 Conectar Instagram'}
+          </button>
+          <span style={{ marginLeft: 8, color: '#64748b' }}>abre o login oficial do Instagram e salva o token sozinho (recomendado)</span>
+          <details style={{ marginTop: 10 }}>
+          <summary style={{ cursor: 'pointer', fontWeight: 700 }}>ou colar um token gerado no painel da Meta</summary>
           <ol style={{ margin: '6px 0 8px', paddingLeft: 18, color: '#475569' }}>
             <li>Abra <a href="https://developers.facebook.com/apps/" target="_blank" rel="noopener noreferrer">developers.facebook.com/apps</a> → app <strong>BidPro - Atendimento</strong>.</li>
             <li>Menu <strong>Instagram</strong> → <strong>Configuração da API com login do Instagram</strong> → <strong>Gerar tokens de acesso</strong>.</li>
@@ -98,8 +120,9 @@ export default function GatilhosInstagram() {
           <div style={{ display: 'flex', gap: 8 }}>
             <input type="password" autoComplete="off" value={token} onChange={(e) => setToken(e.target.value.trim())} placeholder="Cole aqui o token (começa com IG…)" style={{ ...IN, flex: 1 }} />
             <button style={{ ...B, background: '#111', color: '#fff', border: 'none' }} disabled={salvando || token.length < 40} onClick={salvarToken}>{salvando ? 'Validando…' : 'Validar e salvar'}</button>
-            {trocarToken && <button style={B} onClick={() => setTrocarToken(false)}>Cancelar</button>}
           </div>
+          </details>
+          {trocarToken && <button style={{ ...B, marginTop: 8 }} onClick={() => setTrocarToken(false)}>Cancelar</button>}
         </div>
       )}
       {msgToken && <div style={{ marginTop: 8, fontSize: 12.5 }}>{msgToken}</div>}

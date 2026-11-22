@@ -3,6 +3,7 @@ import { normalizar, casarGatilho, montarMensagem, sortearPublica } from '../../
 import { validarGatilho } from '../../api/admin-ig-gatilhos.js';
 import { lerComentario, lerMensagem } from '../../api/instagram-webhook.js';
 import { precisaRenovar } from '../../api/ig-token-cron.js';
+import { assinarState, lerState, urlAutorizacao, REDIRECT_URI } from '../../api/ig-oauth.js';
 
 let ok = 0, falhou = 0;
 const t = (nome, cond) => { if (cond) { ok++; console.log('  ✓', nome); } else { falhou++; console.log('  ✗', nome); } };
@@ -45,6 +46,15 @@ t('token novo (2 dias, vale 57) não renova', precisaRenovar({ token: 'x', renov
 t('token de 8 dias renova', precisaRenovar({ token: 'x', renovado_em: '2026-11-14', expira_em: '2027-01-12' }, hoje) === true);
 t('token perto de vencer renova mesmo novo', precisaRenovar({ token: 'x', renovado_em: '2026-11-21', expira_em: '2026-12-05' }, hoje) === true);
 t('sem token não tenta', precisaRenovar(null, hoje) === false);
+
+const st = assinarState({ u: 'adm', exp: Date.now() + 60000 }, 'k1');
+t('state assinado volta válido', lerState(st, 'k1')?.u === 'adm');
+t('state com outra chave é recusado', lerState(st, 'k2') === null);
+t('state adulterado é recusado', lerState(st.replace(/^./, (c) => (c === 'e' ? 'f' : 'e')), 'k1') === null);
+t('state vencido é recusado', lerState(assinarState({ u: 'a', exp: Date.now() - 1 }, 'k1'), 'k1') === null);
+const au = new URL(urlAutorizacao('S'));
+t('link de autorização vai ao Instagram com retorno e escopos certos', au.hostname === 'www.instagram.com'
+  && au.searchParams.get('redirect_uri') === REDIRECT_URI && au.searchParams.get('scope').includes('instagram_business_manage_comments'));
 
 console.log(`\n${falhou ? '✗' : '✓'} ${ok}/${ok + falhou} asserções`);
 if (falhou) process.exit(1);
