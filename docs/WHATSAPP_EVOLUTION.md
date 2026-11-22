@@ -19,31 +19,33 @@ oficial por QR code). Depois da portabilidade e da Verificação da Meta, o mesm
 
 ## Passo a passo
 
-### 1. Servidor da Evolution (fica ligado 24 h)
-A Evolution não roda na Vercel (precisa de processo contínuo). Opções: VPS simples (Hostinger,
-Contabo, DigitalOcean) com Docker, ou Railway/Render com o template oficial
-(`github.com/evolution-foundation/evolution-api`). Ela precisa de Postgres e Redis — os templates já trazem.
-Defina no `.env` da Evolution uma `AUTHENTICATION_API_KEY` forte (essa é a chave global).
+### 1–3. Servidor, QR e webhook — instalador automático (`infra/evolution/`)
+O instalador sobe Evolution + Postgres + Redis + Caddy (HTTPS) numa VPS Ubuntu, gera as chaves,
+cria a instância `bidpro` (recusa ligação, ignora grupo), configura o webhook com o header
+`x-webhook-token` e mostra o QR **no próprio terminal**. Os segredos ficam só em `/opt/evolution/.env`.
 
-### 2. Criar a instância e ler o QR code
-No painel da Evolution (`https://SEU-SERVIDOR/manager`): **Create instance** → nome `bidpro` →
-**Connect** → aparece o QR. No celular do número: WhatsApp Business → Aparelhos conectados →
-Conectar aparelho → ler o QR.
+1. **VPS**: Ubuntu 22.04/24.04, 2 GB de RAM basta (Hostinger KVM 1, Contabo, DigitalOcean). Anote o IP.
+2. **DNS (Registro.br)**: bidprobrasil.com.br → DNS → nova entrada **A**, nome `wa`, valor = IP da VPS.
+3. **No terminal da VPS** (`ssh root@IP`):
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/tarcisionogueira/TSN-app/main/infra/evolution/instalar.sh | sudo bash
+   ```
+   Se o DNS ainda não propagou, ele para e avisa; rode de novo depois.
+4. **Celular do número**: WhatsApp Business → Aparelhos conectados → Conectar aparelho → ler o QR
+   do terminal. Sem câmera à mão: `sudo bash /opt/evolution/instalar.sh codigo` (código de 8 letras).
+5. No fim ele imprime as envs da Vercel prontas (passo 4). Reimprimir: `sudo bash /opt/evolution/instalar.sh envs`.
 
-### 3. Webhook da instância
-Em **Webhook** da instância:
-- URL: `https://www.bidprobrasil.com.br/api/whatsapp-evolution-webhook` (**com www**)
-- Eventos: `MESSAGES_UPSERT`, `MESSAGES_UPDATE`, `CONNECTION_UPDATE`
-- Headers: `x-webhook-token: <o mesmo valor de WA_EVOLUTION_WEBHOOK_TOKEN>`
-- "Webhook by events" desligado, "Base64" desligado.
+Manutenção: `instalar.sh status` (estado) · `instalar.sh qr` (sessão caiu) · rodar sem argumento de
+novo é seguro (não apaga nada). Atualizar a Evolution: trocar `EVOLUTION_TAG` no `.env` e
+`cd /opt/evolution && docker compose pull && docker compose up -d`.
 
 ### 4. Envs na Vercel (Production + Preview)
 | Env | Valor |
 |---|---|
-| `EVOLUTION_URL` | `https://SEU-SERVIDOR` (sem barra no fim) |
-| `EVOLUTION_APIKEY` | a chave global (ou o token da instância) |
+| `EVOLUTION_URL` | `https://wa.bidprobrasil.com.br` |
+| `EVOLUTION_APIKEY` | a `AUTHENTICATION_API_KEY` que o instalador gerou |
 | `EVOLUTION_INSTANCIA` | `bidpro` |
-| `WA_EVOLUTION_WEBHOOK_TOKEN` | um texto aleatório longo (o mesmo do header do passo 3) |
+| `WA_EVOLUTION_WEBHOOK_TOKEN` | o `BIDPRO_WEBHOOK_TOKEN` que o instalador gerou |
 | `WA_CANAL` | `evolution` |
 | `WA_BOT_ATIVO` | `1` → a IA começa a responder |
 | `VITE_WHATSAPP_NUMERO` | `5511964079726` → o widget do site passa a mandar o cliente para o WhatsApp |

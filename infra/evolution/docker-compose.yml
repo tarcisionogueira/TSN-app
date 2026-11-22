@@ -1,0 +1,63 @@
+# Evolution API (WhatsApp por QR code) — servidor próprio da BidPro.
+# Sobe 4 serviços numa VPS: a API, Postgres, Redis e o Caddy (HTTPS automático).
+# Quem instala: infra/evolution/instalar.sh (gera o .env com chaves aleatórias).
+# Os segredos ficam SÓ no .env da VPS — este repositório é público.
+
+services:
+  api:
+    image: evoapicloud/evolution-api:${EVOLUTION_TAG:-v2.3.7}
+    container_name: evolution_api
+    restart: always
+    depends_on: [postgres, redis]
+    env_file: .env
+    volumes:
+      - evolution_instances:/evolution/instances
+    # Só no localhost da VPS (o instalar.sh usa); de fora, só pelo Caddy em HTTPS.
+    ports: ["127.0.0.1:8080:8080"]
+    networks: [evo]
+
+  postgres:
+    image: postgres:15
+    container_name: evolution_postgres
+    restart: always
+    environment:
+      POSTGRES_DB: evolution
+      POSTGRES_USER: evolution
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    command: ["postgres", "-c", "max_connections=200"]
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks: [evo]
+
+  redis:
+    image: redis:7
+    container_name: evolution_redis
+    restart: always
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - evolution_redis:/data
+    networks: [evo]
+
+  caddy:
+    image: caddy:2
+    container_name: evolution_caddy
+    restart: always
+    depends_on: [api]
+    ports: ["80:80", "443:443"]
+    environment:
+      EVOLUTION_DOMINIO: ${EVOLUTION_DOMINIO}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [evo]
+
+volumes:
+  evolution_instances:
+  evolution_redis:
+  postgres_data:
+  caddy_data:
+  caddy_config:
+
+networks:
+  evo:
