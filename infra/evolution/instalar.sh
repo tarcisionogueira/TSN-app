@@ -84,9 +84,19 @@ command -v docker >/dev/null || curl -fsSL https://get.docker.com | sh >/dev/nul
 docker compose version >/dev/null 2>&1 || erro "docker compose não ficou disponível."
 ok "Docker $(docker --version | cut -d' ' -f3 | tr -d ,)"
 
-ufw allow 22/tcp >/dev/null; ufw allow 80/tcp >/dev/null; ufw allow 443/tcp >/dev/null
-ufw --force enable >/dev/null
-ok "Firewall: só 22, 80 e 443 abertas."
+if iptables -S INPUT 2>/dev/null | grep -q -- '-j REJECT'; then
+  # Imagem Ubuntu da Oracle Cloud: já vem com iptables fechado (só 22). Abrir 80/443 nele;
+  # ligar o ufw por cima brigaria com o netfilter-persistent da imagem.
+  for p in 80 443; do
+    iptables -C INPUT -p tcp --dport $p -j ACCEPT 2>/dev/null || iptables -I INPUT 1 -p tcp --dport $p -j ACCEPT
+  done
+  command -v netfilter-persistent >/dev/null && netfilter-persistent save >/dev/null 2>&1 || true
+  ok "Firewall (Oracle): 80 e 443 liberadas no iptables. Libere também na Security List da VCN."
+else
+  ufw allow 22/tcp >/dev/null; ufw allow 80/tcp >/dev/null; ufw allow 443/tcp >/dev/null
+  ufw --force enable >/dev/null
+  ok "Firewall: só 22, 80 e 443 abertas."
+fi
 
 # 2. Arquivos
 mkdir -p "$DIR"; cd "$DIR"
