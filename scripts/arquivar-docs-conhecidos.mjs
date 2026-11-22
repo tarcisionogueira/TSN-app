@@ -35,7 +35,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { Buffer } from 'buffer';
 import { createHash } from 'node:crypto';
-import { limparNome, classificar, publicarFatosDoPdf } from './lib/doc-fatos.mjs';
+import { limparNome, classificar, publicarFatosDoPdf, tipoDocumento, ehNaoDoc } from './lib/doc-fatos.mjs';
 
 const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 const BUCKET = 'documentos';
@@ -54,15 +54,16 @@ const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 
 const inicio = Date.now();
 const ehUrl = (v) => typeof v === 'string' && /^https?:\/\//i.test(v);
-const ehPdfUrl = (v) => /\.pdf(\?|#|$)/i.test(v || '');
+const ehPdfUrl = (v) => /\.(pdf|docx?)(\?|#|$)/i.test(v || ''); // arquivo de documento (PDF ou Word)
 const ehNossoStorage = (v) => /\/storage\/v1\/object\//.test(v || '');
 const host = (u) => { try { return new URL(u).host; } catch { return ''; } };
+
 
 function linksConhecidos(im) {
   const out = [];
   const vistos = new Set();
   const add = (url, nome) => {
-    if (!ehUrl(url) || ehNossoStorage(url) || vistos.has(url)) return;
+    if (!ehUrl(url) || ehNossoStorage(url) || ehNaoDoc(url) || vistos.has(url)) return;
     vistos.add(url); out.push({ url, nome: nome || '' });
   };
   add(im.link_matricula, 'matricula');
@@ -77,7 +78,7 @@ function linksConhecidos(im) {
 async function baixar(url, referer) {
   try {
     const r = await fetch(url, {
-      headers: { 'User-Agent': UA, Accept: 'application/pdf,*/*', ...(ehUrl(referer) ? { Referer: referer } : {}) },
+      headers: { 'User-Agent': UA, Accept: 'application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,*/*', ...(ehUrl(referer) ? { Referer: referer } : {}) },
       redirect: 'follow', signal: AbortSignal.timeout(30000),
     });
     if (!r.ok) return { motivo: `HTTP ${r.status}`, bloqueio: r.status === 403 || r.status === 429 };
@@ -85,8 +86,9 @@ async function baixar(url, referer) {
     if (len > MAX_BYTES) return { motivo: `> 25 MB (${Math.round(len / 1048576)} MB)` };
     const buf = Buffer.from(await r.arrayBuffer());
     if (buf.length > MAX_BYTES) return { motivo: '> 25 MB' };
-    if (buf.length < 1000 || buf.slice(0, 5).toString('latin1') !== '%PDF-') return { motivo: `não é PDF (${r.headers.get('content-type') || '?'}, ${buf.length}b)` };
-    return { buf };
+    const doc = tipoDocumento(buf);
+    if (!doc) return { motivo: `não é PDF (${r.headers.get('content-type') || '?'}, ${buf.length}b)` };
+    return { buf, doc };
   } catch (e) {
     return { motivo: `rede: ${e?.name === 'TimeoutError' ? 'timeout' : (e?.message || e)}`.slice(0, 120) };
   }
@@ -181,7 +183,7 @@ async function arquivarLote(im, est, hostsBloqueados) {
     const hash = createHash('md5').update(buf).digest('hex').slice(0, 16);
     const kb = Math.round(buf.length / 1024);
     let tipo = classificar(l.url, l.nome, im.fonte);
-    const mesmoConteudo = lista.find((a) => a.storage_path && a.storage_path.endsWith(`_${hash}.pdf`));
+    const mesmoConteudo = lista.find((a) => a.storage_path && new RegExp(`_${hash}\.(pdf|docx?)$`).test(a.storage_path));
     if (mesmoConteudo) {
       if (!mesmoConteudo.origem_url) {
         const { error: eU } = await supabase.from('imovel_anexos').update({ origem_url: l.url }).eq('id', mesmoConteudo.id).select('id');
@@ -207,12 +209,12 @@ async function arquivarLote(im, est, hostsBloqueados) {
       // vieram delas): o índice único não olha o path, só (imovel_id, tipo).
       if (TIPO_UNICO.has(tipo) && lista.some((a) => a.tipo === tipo)) tipo = 'outro';
     }
-    const path = `casos/${im.id}/${tipo}_${hash}.pdf`;
-    const up = await supabase.storage.from(BUCKET).upload(path, buf, { contentType: 'application/pdf', upsert: true });
+    const path = `casos/${im.id}/${tipo}_${hash}.${r.doc.ext}`;
+    const up = await supabase.storage.from(BUCKET).upload(path, buf, { contentType: r.doc.mime, upsert: true });
     if (up.error) { est.falhas++; est.motivos['upload'] = (est.motivos['upload'] || 0) + 1; console.log(`  - ${im.id}: upload: ${up.error.message}`); continue; }
     const signed = await supabase.storage.from(BUCKET).createSignedUrl(path, 60 * 60 * 24 * 365);
     if (signed.error) console.log(`  - ${im.id}: URL assinada falhou (${signed.error.message}) — linha fica só com storage_path`);
-    const row = { imovel_id: im.id, tipo, nome: limparNome(l.nome) || `${tipo}.pdf`, url: signed.data?.signedUrl || null, storage_path: path, tamanho_kb: kb, role_criador: 'sistema', origem_url: l.url };
+    const row = { imovel_id: im.id, tipo, nome: limparNome(l.nome) || `${tipo}.${r.doc.ext}`, url: signed.data?.signedUrl || null, storage_path: path, tamanho_kb: kb, role_criador: 'sistema', origem_url: l.url };
     const { data: ins, error: eIns } = await supabase.from('imovel_anexos').insert(row).select('id').single();
     if (eIns) {
       est.falhas++; est.motivos['registro'] = (est.motivos['registro'] || 0) + 1;
@@ -223,7 +225,7 @@ async function arquivarLote(im, est, hostsBloqueados) {
       continue;
     }
     lista.push({ ...row, id: ins.id });
-    await publicarFatosDoPdf(supabase, im.id, buf, tipo, { valorMinimo: im.valor_minimo, valorAvaliacao: im.valor_avaliacao });
+    if (r.doc.ext === 'pdf') await publicarFatosDoPdf(supabase, im.id, buf, tipo, { valorMinimo: im.valor_minimo, valorAvaliacao: im.valor_avaliacao });
     est.novos++; est.kb += kb;
     est.porFonte[im.fonte] = (est.porFonte[im.fonte] || 0) + 1;
     await new Promise((s) => setTimeout(s, 300)); // gentil com o leiloeiro

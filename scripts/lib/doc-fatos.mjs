@@ -8,6 +8,23 @@ import { carregarPDFParse } from '../../api/_pdf-safe.js';
 import { extrairMatriculaTexto, extrairPagamentoTexto, extrairCustosTexto, extrairIdentidadeTexto } from '../../api/_doc-extracao.js';
 import { isolarBlocoDoLote, ehDocMultiLote } from '../../api/_edital-extrato.js';
 
+// Link que NUNCA é documento (22/11): consulta de processo (e-SAJ, eproc, PJe), anúncio da PGFN e
+// da Caixa, pasta do Drive, mapa, WhatsApp, vídeo. Baixar dava "não é PDF" e o lote ia para a fila
+// antiga, que repetia a mesma página — 47 links da LEILOESRN só de PGFN. Fica fora antes de tentar.
+export const NAO_DOC = /(esaj\.tj|eproc|pje\b|consultapublicapje|comprei\.pgfn|compreicaixa|drive\.google\.com\/drive\/folders|google\.[a-z.]+\/maps|earth\.google|maps\.app\.goo|goo\.gl\/maps|api\.whatsapp|wa\.me\/|\.(mp4|mov|avi|webm|mp3)(\?|#|$))/i;
+export const ehNaoDoc = (u) => NAO_DOC.test(u || '');
+
+// Documento aceito, pelos BYTES (22/11: Word entra — edital/proposta em .docx da GOLD, LJUD,
+// ARENA, HASTAPUBLICA). Quem lê depois (api/_doc-normalizar.js) já abre .doc e .docx.
+export function tipoDocumento(buf) {
+  if (!buf || buf.length < 1000) return null;
+  const ini = buf.slice(0, 5).toString('latin1');
+  if (ini === '%PDF-') return { ext: 'pdf', mime: 'application/pdf' };
+  if (buf.readUInt32BE(0) === 0x504B0304 && buf.includes('word/document.xml')) return { ext: 'docx', mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };
+  if (buf.readUInt32BE(0) === 0xD0CF11E0 && buf.readUInt32BE(4) === 0xA1B11AE1) return { ext: 'doc', mime: 'application/msword' };
+  return null;
+}
+
 // Limpa o "nome" do doc: tira URLs/paths e ruído, deixa só texto humano curto
 // (senão o nome no banco virava a URL crua repetida — feio na tela).
 export function limparNome(n) {

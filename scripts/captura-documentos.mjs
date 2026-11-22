@@ -18,7 +18,7 @@ import puppeteer from 'puppeteer';
 import { Buffer } from 'buffer';
 import { createHash } from 'node:crypto';
 import { fetchViaBrightData, buscarViaBrightData, ErroBrightData, brightDataDisponivel, propositoDaFonte } from '../api/_brightdata.js';
-import { limparNome, classificar, publicarFatosDoPdf as publicarFatos } from './lib/doc-fatos.mjs';
+import { limparNome, classificar, publicarFatosDoPdf as publicarFatos, tipoDocumento, ehNaoDoc } from './lib/doc-fatos.mjs';
 import { ehDocInstitucional } from '../api/_doc-scan.js';
 
 const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
@@ -41,6 +41,9 @@ async function salvarAnexo(imovelId, buffer, tipo, nome, idx = 0, valores = {}, 
   // de criar uma cópia nova a cada run — era a causa do inchaço do bucket (lotes de
   // "outro_auto" idênticos) e de objetos órfãos. Conteúdo diferente → hash diferente.
   const hash = createHash('md5').update(buffer).digest('hex').slice(0, 16);
+  // PDF ou Word (22/11) — a extensão e o content-type do objeto seguem os BYTES.
+  const doc = tipoDocumento(buffer) || { ext: 'pdf', mime: 'application/pdf' };
+  const ehPdfDoc = doc.ext === 'pdf';
   // NÃO SOBRESCREVER DOCUMENTO DE OUTRA ORIGEM (22/11). Desde 21/11 o `arquivar-docs-conhecidos`
   // guarda TODOS os documentos do lote, cada um com a `origem_url`. A regra "1 por tipo → atualiza
   // o existente" abaixo trocaria, por exemplo, o edital do leilão (já guardado) pelo edital do lote
@@ -49,13 +52,13 @@ async function salvarAnexo(imovelId, buffer, tipo, nome, idx = 0, valores = {}, 
   if (tipo !== 'outro' && origemUrl) {
     const { data: doTipo } = await supabase.from('imovel_anexos').select('origem_url, storage_path').eq('imovel_id', imovelId).eq('tipo', tipo).limit(1);
     const ex = doTipo?.[0];
-    if (ex?.origem_url && ex.origem_url !== origemUrl && !String(ex.storage_path || '').endsWith(`_${hash}.pdf`)) tipo = 'outro';
+    if (ex?.origem_url && ex.origem_url !== origemUrl && !String(ex.storage_path || '').includes(`_${hash}.`)) tipo = 'outro';
   }
   // MESMO CONTEÚDO GUARDADO COM OUTRO TIPO (22/11): o arquivamento pode ter guardado este PDF como
   // 'outro' (2º edital do lote) e esta fila o classificaria 'edital' — o path muda pelo tipo e o
   // mesmo arquivo entraria de novo, em duplicata. O hash do nome do arquivo é o que identifica.
   const { data: porConteudo, error: eConteudo } = await supabase.from('imovel_anexos').select('id, tipo, origem_url')
-    .eq('imovel_id', imovelId).like('storage_path', `casos/${imovelId}/%\\_${hash}.pdf`).limit(1);
+    .eq('imovel_id', imovelId).like('storage_path', `casos/${imovelId}/%\\_${hash}.%`).limit(1);
   if (eConteudo) console.log(`  dedup por conteúdo ${imovelId}: ${eConteudo.message}`);
   const outroTipo = porConteudo?.[0] && porConteudo[0].tipo !== tipo ? porConteudo[0] : null;
   if (outroTipo) {
@@ -63,13 +66,13 @@ async function salvarAnexo(imovelId, buffer, tipo, nome, idx = 0, valores = {}, 
       const { error: eO } = await supabase.from('imovel_anexos').update({ origem_url: origemUrl }).eq('id', outroTipo.id).select('id');
       if (eO) console.log(`  origem_url ${imovelId}: ${eO.message}`);
     }
-    await publicarFatosDoPdf(imovelId, buffer, outroTipo.tipo, valores);
+    if (ehPdfDoc) await publicarFatosDoPdf(imovelId, buffer, outroTipo.tipo, valores);
     return;
   }
-  const path = `casos/${imovelId}/${tipo}_${hash}.pdf`;
+  const path = `casos/${imovelId}/${tipo}_${hash}.${doc.ext}`;
   // Já existe um anexo apontando p/ esse conteúdo neste imóvel? (dedup determinístico)
   const { data: jaTem } = await supabase.from('imovel_anexos').select('id').eq('imovel_id', imovelId).eq('storage_path', path).limit(1);
-  const up = await supabase.storage.from(BUCKET).upload(path, buffer, { contentType: 'application/pdf', upsert: true });
+  const up = await supabase.storage.from(BUCKET).upload(path, buffer, { contentType: doc.mime, upsert: true });
   if (up.error) throw new Error('upload: ' + up.error.message);
   const signed = await supabase.storage.from(BUCKET).createSignedUrl(path, 60 * 60 * 24 * 365);
   const url = signed.data?.signedUrl || null;
@@ -77,7 +80,7 @@ async function salvarAnexo(imovelId, buffer, tipo, nome, idx = 0, valores = {}, 
   // Lê o PDF que acabou de chegar e publica os fatos na ficha (nome do condomínio,
   // despesas mensais, custos do edital, área da matrícula). Antes do return de dedup:
   // documento já cadastrado continua valendo, e o merge da RPC é idempotente.
-  await publicarFatosDoPdf(imovelId, buffer, tipo, valores);
+  if (ehPdfDoc) await publicarFatosDoPdf(imovelId, buffer, tipo, valores);
   // Mesmo conteúdo já cadastrado (qualquer tipo) → só atualiza a linha, não duplica.
   if (jaTem?.length) { await supabase.from('imovel_anexos').update(row).eq('id', jaTem[0].id); await sincronizarJsonbAnexos(imovelId, tipo, url); return; }
   // Classificados (edital/matrícula/laudo/regras): 1 por tipo → atualiza o existente.
@@ -113,14 +116,15 @@ async function sincronizarJsonbAnexos(imovelId, tipo, urlNova) {
   } catch (e) { console.log(`  sync jsonb anexos ${imovelId}: ${e.message}`); }
 }
 
-const ehPdfBuf = (buf, ct) => buf && buf.length > 1500 && ((ct || '').includes('pdf') || buf.slice(0, 5).toString('latin1') === '%PDF-');
+// Documento aceito: PDF (pelos bytes ou pelo content-type) ou Word .doc/.docx (pelos bytes, 22/11).
+const ehPdfBuf = (buf, ct) => !!buf && buf.length > 1500 && ((ct || '').includes('pdf') || !!tipoDocumento(buf));
 
 // Download DIRETO (Node fetch, sem navegador). Base do CAMINHO 1 e primeira tentativa
 // do baixarPdf. Funciona cross-origin (essencial p/ PDFs em CDN, ex.: megaleiloes),
 // onde o fetch da página é bloqueado por CORS. Só retorna se for REALMENTE PDF.
 async function baixarPdfDireto(url, referer) {
   try {
-    const r = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/pdf,*/*', ...(referer ? { Referer: referer } : {}) }, redirect: 'follow', signal: AbortSignal.timeout(25000) });
+    const r = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,*/*', ...(referer ? { Referer: referer } : {}) }, redirect: 'follow', signal: AbortSignal.timeout(25000) });
     if (r.ok) {
       const buf = Buffer.from(await r.arrayBuffer());
       if (ehPdfBuf(buf, r.headers.get('content-type'))) return buf;
@@ -165,7 +169,7 @@ function linksDocDeHtml(html, base) {
     if (vistos.has(href)) continue;
     const txt = (m[2] || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
     const alvo = `${txt} ${href}`;
-    const ehPdf = /\.pdf(\?|#|$)/i.test(href);
+    const ehPdf = /\.(pdf|docx?)(\?|#|$)/i.test(href);
     const ehDoc = /edital|matr[ií]cula|laudo|documento|anexo|processo|arquivo|download/i.test(alvo);
     // O ruído CORPORATIVO vem da régua canônica (`api/_doc-scan.js`), não de uma cópia local:
     // esta linha tinha a própria lista e faltava nela a palavra "cookie" — foi assim que o
@@ -237,7 +241,7 @@ async function processar(browser, item) {
     // Classificados: 1 por tipo. 'outro' é genérico → pode haver vários (edital +
     // matrícula que não classificaram); cada um vira uma linha própria.
     if (tipo !== 'outro' && salvos.has(tipo)) return;
-    await salvarAnexo(item.imovel_id, buf, tipo, nome || `${tipo}.pdf`, tipo === 'outro' ? ++nOutro : 0,
+    await salvarAnexo(item.imovel_id, buf, tipo, nome || `${tipo}.${tipoDocumento(buf)?.ext || 'pdf'}`, tipo === 'outro' ? ++nOutro : 0,
       { valorMinimo: im.valor_minimo, valorAvaliacao: im.valor_avaliacao }, url || null);
     urlsSalvas.add(url);
     if (tipo !== 'outro') salvos.add(tipo);
@@ -249,7 +253,7 @@ async function processar(browser, item) {
   // permanentemente — ver trg_preservar_link_edital), navegar para ele mandaria o
   // Puppeteer para um PDF em vez da página do lote: nenhum outro documento seria
   // encontrado e o Referer do caminho 1 ficaria errado. Aí a url_lote é que vale.
-  const ehPdf = (u) => /\.pdf(\?|#|$)/i.test(u || '');
+  const ehPdf = (u) => /\.(pdf|docx?)(\?|#|$)/i.test(u || '');
   const paginaLote = (ehUrl(im.link_edital) && !ehPdf(im.link_edital)) ? im.link_edital
     : (ehUrl(im.url_lote) ? im.url_lote : (ehUrl(im.link_regras_venda) ? im.link_regras_venda : null));
 
@@ -259,9 +263,9 @@ async function processar(browser, item) {
   // é ignorada de graça. Quem já tiver documento aqui nem aciona os caminhos 2/3.
   const conhecidos = [];
   if (ehUrl(im.link_matricula)) conhecidos.push({ url: im.link_matricula, nome: 'matricula' });
-  if (ehUrl(im.link_edital) && /\.pdf(\?|#|$)/i.test(im.link_edital)) conhecidos.push({ url: im.link_edital, nome: 'edital' });
-  if (ehUrl(im.link_regras_venda) && /\.pdf(\?|#|$)/i.test(im.link_regras_venda)) conhecidos.push({ url: im.link_regras_venda, nome: 'regras venda' });
-  for (const a of (Array.isArray(im.anexos) ? im.anexos : [])) if (ehUrl(a?.url)) conhecidos.push({ url: a.url, nome: a?.nome || '' });
+  if (ehUrl(im.link_edital) && /\.(pdf|docx?)(\?|#|$)/i.test(im.link_edital)) conhecidos.push({ url: im.link_edital, nome: 'edital' });
+  if (ehUrl(im.link_regras_venda) && /\.(pdf|docx?)(\?|#|$)/i.test(im.link_regras_venda)) conhecidos.push({ url: im.link_regras_venda, nome: 'regras venda' });
+  for (const a of (Array.isArray(im.anexos) ? im.anexos : [])) if (ehUrl(a?.url) && !ehNaoDoc(a.url)) conhecidos.push({ url: a.url, nome: a?.nome || '' });
   // Cota própria do leiloeiro (14/10): quem tem sub-cota em brightdata_reserva (ex.: BAYIT, cujo
   // Cloudflare devolve 403 a qualquer datacenter) busca o PDF CONHECIDO direto pelo Bright Data —
   // 1 request por documento, em vez de esperar a página ser barrada e gastar a cota `docs` comum.
@@ -370,7 +374,7 @@ async function processar(browser, item) {
           nav: !!a.closest('nav,header,footer,[role="navigation"],[class*="footer"],[class*="menu"]'),
         };
       })
-      .filter(x => !x.nav && (/\.pdf(\?|#|$)/i.test(x.href) || /edital|matr[ií]cula|laudo|documento|anexo|processo|arquivo|download/i.test(x.txt + ' ' + x.ctx + ' ' + x.href))));
+      .filter(x => !x.nav && (/\.(pdf|docx?)(\?|#|$)/i.test(x.href) || /edital|matr[ií]cula|laudo|documento|anexo|processo|arquivo|download/i.test(x.txt + ' ' + x.ctx + ' ' + x.href))));
   } catch { /* sem links */ }
 
   // DIAGNÓSTICO p/ calibrar leiloeiros anti-bot (aparece nos logs do GitHub Actions).
@@ -387,7 +391,7 @@ async function processar(browser, item) {
   for (const l of linksPdf) {
     if (capturados.length >= 8) break; // teto de segurança (não só 4 tipos — vários 'outro')
     const alvo = l.txt + ' ' + (l.ctx || '') + ' ' + l.href;
-    const ehPdfHref = /\.pdf(\?|#|$)/i.test(l.href);
+    const ehPdfHref = /\.(pdf|docx?)(\?|#|$)/i.test(l.href);
     const ehDocTxt = /edital|matr[ií]cula|laudo|documento|anexo|processo|arquivo|download/i.test(alvo);
     // Ignora documentos GENÉRICOS/INSTITUCIONAIS do site (não são do lote): modelo
     // de proposta, "como comprar", termos, cadastro, e material CORPORATIVO do
