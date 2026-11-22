@@ -34,8 +34,12 @@
  */
 import { readFileSync, writeFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const RAIZ = new URL('..', import.meta.url).pathname.replace(/\/$/, '');
+// fileURLToPath, não `.pathname` (22/11): no Windows, com acento no caminho ("Tarcísio"),
+// `.pathname` vinha "/C:/Users/Tarc%C3%ADsio/..." — a pasta "não existia", NENHUM arquivo era
+// lido e a trava aprovava tudo. Passou assim um catch sem motivo que a Vercel (Linux) barrou.
+const RAIZ = fileURLToPath(new URL('..', import.meta.url)).replace(/[\\/]$/, '');
 const BASELINE = join(RAIZ, 'scripts', 'padroes-perigosos.baseline.json');
 const DIRS = ['api', 'src', 'scripts'];
 const EXT = /\.(js|jsx|mjs)$/;
@@ -565,7 +569,8 @@ function arquivos(dir, saida = []) {
   if (!existsSync(abs)) return saida;
   for (const nome of readdirSync(abs)) {
     const p = join(abs, nome);
-    const rel = relative(RAIZ, p);
+    // Barra normal sempre: a linha de base e as regras usam "api/x.js" (no Windows viria "api\x.js").
+    const rel = relative(RAIZ, p).split('\\').join('/');
     if (IGNORAR.test('/' + rel)) continue;
     if (statSync(p).isDirectory()) arquivos(rel, saida);
     else if (EXT.test(nome)) saida.push(rel);

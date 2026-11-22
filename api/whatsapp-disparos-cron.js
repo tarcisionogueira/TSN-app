@@ -140,6 +140,7 @@ export default async function handler(req, res) {
     let wamid;
     try { wamid = await enviarTextoWhatsapp(prox.telefone, texto); }
     catch (e) {
+      console.warn('[wa-disp] envio recusado:', prox.id, e?.message || e);
       await sb('PATCH', `wa_disparos?id=eq.${prox.id}`, { status: 'erro', erro: String(e?.message || e).slice(0, 200), enviado_em: new Date().toISOString() }, 'return=minimal');
       res.status(200).json({ ok: false, erro_envio: String(e?.message || e).slice(0, 200), ...resumo }); return;
     }
