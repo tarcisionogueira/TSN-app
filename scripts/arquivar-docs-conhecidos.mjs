@@ -203,7 +203,9 @@ async function arquivarLote(im, est, hostsBloqueados) {
       // uniq_imovel_anexos_imovel_tipo_doc). Um segundo documento DIFERENTE desses tipos (edital
       // do leilão + edital do lote, 2 matrículas, a /loteanexo/ extra do BIASI) entra como 'outro'
       // — decidido ANTES do upload, senão o insert falha e o arquivo fica órfão (52 em 21/11).
-      if (mesmoTipo.length && TIPO_UNICO.has(tipo)) tipo = 'outro';
+      // Conta também a linha SEM arquivo (storage_path e url nulos — existem: 13 conflitos em 22/11
+      // vieram delas): o índice único não olha o path, só (imovel_id, tipo).
+      if (TIPO_UNICO.has(tipo) && lista.some((a) => a.tipo === tipo)) tipo = 'outro';
     }
     const path = `casos/${im.id}/${tipo}_${hash}.pdf`;
     const up = await supabase.storage.from(BUCKET).upload(path, buf, { contentType: 'application/pdf', upsert: true });
