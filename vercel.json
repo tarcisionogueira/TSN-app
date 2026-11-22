@@ -514,6 +514,14 @@
       "schedule": "*/5 * * * *"
     },
     {
+      "path": "/api/whatsapp-disparos-cron",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/whatsapp-sdr-aprendizado-cron",
+      "schedule": "40 6 * * *"
+    },
+    {
       "path": "/api/drenar-fila-emails-cron",
       "schedule": "15 */3 * * *"
     },

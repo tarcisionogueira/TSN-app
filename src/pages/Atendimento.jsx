@@ -122,6 +122,7 @@ export default function Atendimento() {
   // ficava cortada para fora da tela e o seletor de modo esticava com a altura da grade.
   const estreito = useIsMobile(900);
   const [mensagens, setMensagens] = useState([]);
+  const [perfilWa, setPerfilWa] = useState(null);
   const [texto, setTexto] = useState('');
   const [anexos, setAnexos] = useState([]);
   const [enviando, setEnviando] = useState(false);
@@ -181,9 +182,16 @@ export default function Atendimento() {
 
   async function abrirChamado(c) {
     setChamadoAtivo(c);
+    setPerfilWa(null);
     const { data } = await supabase.from('chamados_mensagens').select('*')
       .eq('chamado_id', c.id).order('criado_em', { ascending: true });
     setMensagens(data || []);
+    // Conversa de WhatsApp: o perfil que a IA levantou (objetivo, região, capital, interesse…).
+    if (c.canal === 'whatsapp') {
+      const { data: p, error } = await supabase.rpc('wa_perfil_do_chamado', { p_chamado: c.id });
+      if (error) console.error('[atendimento] perfil do WhatsApp:', error.message);
+      else setPerfilWa(Array.isArray(p) ? p[0] || null : null);
+    }
   }
 
   async function assumirChamado() {
@@ -211,7 +219,7 @@ export default function Atendimento() {
       autor_tipo: 'atendente', conteudo: texto || '[anexo]', anexos,
       // Marca por onde a resposta saiu — o histórico precisa deixar claro que esta
       // mensagem foi entregue por e-mail, e não só gravada numa tela que o cliente não tem.
-      canal: chamadoAtivo.canal === 'email' ? 'email' : null,
+      canal: chamadoAtivo.canal === 'email' ? 'email' : chamadoAtivo.canal === 'whatsapp' ? 'whatsapp' : null,
     }).select().single();
     if (msgErr) { alert('Erro ao enviar mensagem. Tente novamente.'); setEnviando(false); return; }
     // 19/08: dedup por id — quando o push do realtime chega ANTES da resposta deste
@@ -219,6 +227,24 @@ export default function Atendimento() {
     // era o que fazia a mesma mensagem aparecer DUAS vezes na tela (uma linha no banco).
     if (msg) setMensagens(prev => prev.find(m => m.id === msg.id) ? prev : [...prev, msg]);
     await supabase.from('chamados').update({ atualizado_em: new Date().toISOString() }).eq('id', chamadoAtivo.id);
+    // Chamado de WhatsApp (22/11): a resposta SAI pelo WhatsApp e a IA pausa nessa conversa. Sem
+    // e-mail — a pessoa está no WhatsApp. Falha de envio aparece aqui, nunca some calada.
+    if (chamadoAtivo.canal === 'whatsapp') {
+      if (msg && texto.trim()) {
+        apiCall('/api/atendimento-whatsapp', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chamado_id: chamadoAtivo.id, mensagem_id: msg.id }),
+        }).then(async (res) => {
+          const j = await res.json().catch(() => ({}));
+          if (!res.ok || j.error) alert(`A mensagem ficou no chamado, mas NÃO saiu pelo WhatsApp: ${j.error || `HTTP ${res.status}`}.`);
+        }).catch((e) => alert(`A mensagem ficou no chamado, mas não consegui confirmar o envio pelo WhatsApp: ${e.message}.`));
+      } else if (anexos.length) {
+        alert('Anexo fica registrado no chamado, mas ainda não sai pelo WhatsApp — mande o texto.');
+      }
+      setTexto(''); setAnexos([]);
+      setEnviando(false);
+      return;
+    }
     // Notifica o cliente por e-mail (essencial para leads sem conta)
     // 23/09: a resposta do e-mail é CONFERIDA — antes era disparar e esquecer, e uma recusa do
     // provedor deixava a mensagem no chat com cara de entregue enquanto o cliente (que muitas
@@ -411,6 +437,7 @@ export default function Atendimento() {
                     {(() => { const sg = SEGMENTOS[segOf(c)] || SEGMENTOS.outro; return (
                       <span style={{ fontSize: 9, fontWeight: 800, padding: '1px 6px', borderRadius: 8, background: sg.bg, color: sg.cor }}>{sg.curto}</span>
                     ); })()}
+                    {c.canal === 'whatsapp' && <span title="Conversa do WhatsApp" style={{ fontSize: 9, fontWeight: 800, padding: '1px 6px', borderRadius: 8, background: '#d1fae5', color: '#065f46' }}>WhatsApp</span>}
                     <span><User size={10} style={{ verticalAlign: 'middle', marginRight: 3 }} />{c.user_nome || c.user_email?.split('@')[0]}{' · '}{fmtData(c.aberto_em || c.criado_em)}</span>
                   </div>
                   {c.atendente_nome && (
@@ -451,12 +478,25 @@ export default function Atendimento() {
                 {chamadoAtivo.canal === 'email' && (
                   <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 10, background: '#e0e7ff', color: '#3730a3' }}>✉ por e-mail</span>
                 )}
+                {chamadoAtivo.canal === 'whatsapp' && (
+                  <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 10, background: '#d1fae5', color: '#065f46' }}>🟢 WhatsApp</span>
+                )}
               </div>
               <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
                 <User size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />
                 {chamadoAtivo.user_nome || chamadoAtivo.user_email}
                 {chamadoAtivo.atendente_nome && <> · Atend.: <strong>{chamadoAtivo.atendente_nome}</strong></>}
+                {perfilWa?.telefone && !perfilWa.telefone.includes('@') && <> · +{perfilWa.telefone}</>}
               </div>
+              {chamadoAtivo.canal === 'whatsapp' && perfilWa && (perfilWa.perfil_lead || perfilWa.interesse || perfilWa.anuncio || perfilWa.optout_em) && (
+                <div style={{ marginTop: 6, fontSize: 11.5, color: '#334155', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '6px 10px', lineHeight: 1.5 }}>
+                  <strong>Perfil do investidor (IA):</strong>{' '}
+                  {perfilWa.interesse && <span style={{ fontWeight: 800, color: '#0D63DB' }}>interesse: {perfilWa.interesse.replace('_', ' ')} · </span>}
+                  {perfilWa.perfil_lead ? perfilWa.perfil_lead.replace(/interesse\s*=\s*[a-z_]+;?/i, '').replace(/[a-z_]+=\?;?\s*/gi, '').trim() : 'ainda sem dados'}
+                  {perfilWa.anuncio && <div>Veio do anúncio: “{perfilWa.anuncio}”</div>}
+                  {perfilWa.optout_em && <div style={{ color: '#b91c1c', fontWeight: 700 }}>Pediu para não receber mensagens ativas.</div>}
+                </div>
+              )}
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               {(() => {
@@ -522,7 +562,8 @@ export default function Atendimento() {
                     <>{m.autor_nome || 'Sistema'} · {fmtHora(m.criado_em)}</>
                   ) : (
                     <><User size={11} style={{ verticalAlign: 'middle', marginRight: 3 }} />{m.autor_nome || 'Cliente'} · {fmtHora(m.criado_em)}
-                      {m.canal === 'email' && <span style={{ marginLeft: 5, color: '#4338ca', fontWeight: 700 }}>✉ por e-mail</span>}</>
+                      {m.canal === 'email' && <span style={{ marginLeft: 5, color: '#4338ca', fontWeight: 700 }}>✉ por e-mail</span>}
+                      {m.canal === 'whatsapp' && <span style={{ marginLeft: 5, color: '#047857', fontWeight: 700 }}>🟢 WhatsApp</span>}</>
                   )}
                 </div>
                 <div style={{
@@ -572,6 +613,11 @@ export default function Atendimento() {
                   ✉ <strong>Este atendimento chegou por e-mail.</strong> Sua resposta vai por e-mail para <strong>{chamadoAtivo.user_email}</strong> — ele não enxerga esta tela. Anexos daqui <strong>não</strong> seguem no e-mail.
                 </div>
               )}
+              {chamadoAtivo.canal === 'whatsapp' && (
+                <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 10, padding: '8px 12px', marginBottom: 8, fontSize: 12, color: '#065f46', lineHeight: 1.5 }}>
+                  🟢 <strong>Conversa do WhatsApp.</strong> Sua resposta sai pelo WhatsApp e a IA para de responder nesta conversa por 12 h. Para a IA não falar por cima, clique em <strong>Assumir</strong>; ao <strong>Finalizar</strong>, ela volta a atender. Por enquanto só texto sai pelo WhatsApp.
+                </div>
+              )}
               <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
                 <button onClick={() => fileRef.current?.click()} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: 8, borderRadius: 8 }}>
                   <Paperclip size={16} />
@@ -579,7 +625,7 @@ export default function Atendimento() {
                 <textarea
                   value={texto} onChange={e => setTexto(e.target.value)} onPaste={handlePaste}
                   onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviarMensagem(); } }}
-                  placeholder={chamadoAtivo.canal === 'email' ? 'Responder por e-mail… (Enter para enviar)' : 'Responder ao cliente… (Ctrl+V para colar print · Enter para enviar)'}
+                  placeholder={chamadoAtivo.canal === 'email' ? 'Responder por e-mail… (Enter para enviar)' : chamadoAtivo.canal === 'whatsapp' ? 'Responder pelo WhatsApp… (Enter para enviar)' : 'Responder ao cliente… (Ctrl+V para colar print · Enter para enviar)'}
                   rows={2}
                   style={{ flex: 1, padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 13, resize: 'none', outline: 'none', fontFamily: 'inherit', lineHeight: 1.4 }}
                 />

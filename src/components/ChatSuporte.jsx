@@ -243,6 +243,8 @@ export default function ChatSuporte() {
     setCarregando(true);
     const { data } = await supabase.from('chamados').select('*')
       .eq('user_id', user.id) // padrao-ok: o chat flutuante é do LOGADO (mensagem assinada por quem escreve); a visão do cliente sob suporte é MeusChamados/Atendimento
+      // Conversa de WhatsApp continua NO WhatsApp: listada aqui, uma resposta pelo site não chegaria lá.
+      .neq('canal', 'whatsapp')
       .order('atualizado_em', { ascending: false, nullsFirst: false })
       .order('criado_em', { ascending: false });
     const lista = data || [];
@@ -621,6 +623,24 @@ export default function ChatSuporte() {
               <p style={{ fontSize: 13, color: '#475569', margin: '0 0 14px', lineHeight: 1.6 }}>
                 Olá, <strong style={{ color: '#111111' }}>{nomeUsuario}</strong>! Como posso ajudar?
               </p>
+              {/* 22/11 (dono): o atendimento é PELO WHATSAPP — a conversa chega à equipe na tela de
+                  Atendimento. O código BP-xxxxxxxx (8 primeiros hex do id) vai na 1ª mensagem para a
+                  conversa cair já ligada ao cadastro, mesmo que o WhatsApp seja outro número. */}
+              {WHATSAPP_NUMERO && (
+                <>
+                  <a href={`https://wa.me/${WHATSAPP_NUMERO}?text=${encodeURIComponent(`Olá! Sou ${nomeUsuario || 'cliente'} (código BP-${String(user?.id || '').replace(/-/g, '').slice(0, 8)}). ${descricao.trim() ? descricao.trim().slice(0, 500) : 'Preciso de ajuda.'}`)}`}
+                    target="_blank" rel="noreferrer"
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '12px', background: '#25D366', color: 'white', borderRadius: 10, fontWeight: 800, fontSize: 14, textDecoration: 'none', boxSizing: 'border-box' }}>
+                    🟢 Abrir atendimento no WhatsApp
+                  </a>
+                  <p style={{ fontSize: 11, color: '#64748b', margin: '6px 0 0', textAlign: 'center' }}>Resposta rápida pela nossa assistente e, quando precisar, pela equipe — no seu WhatsApp.</p>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '14px 0 10px' }}>
+                    <div style={{ flex: 1, height: 1, background: '#e2e8f0' }} />
+                    <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>ou escreva por aqui</span>
+                    <div style={{ flex: 1, height: 1, background: '#e2e8f0' }} />
+                  </div>
+                </>
+              )}
               <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 6 }}>Falar com</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
                 {[{ k: 'ia', rotulo: 'Assistente (resposta imediata)' }, ...advogados.map(a => ({ k: a.caso_id, rotulo: `${a.nome} · ${a.imovel}`.slice(0, 60), adv: true })), { k: 'equipe', rotulo: 'Equipe de atendimento' }].map(o => (
@@ -664,22 +684,6 @@ export default function ChatSuporte() {
               </div>
               <input ref={fileRef} type="file" accept={ACEITA_DOCUMENTO} style={{ display: 'none' }} onChange={handleFile} />
               <p style={{ fontSize: 10, color: '#94a3b8', marginTop: 8, textAlign: 'center', marginBottom: 0 }}>Ctrl+V para colar prints de tela</p>
-              {/* Alternativa: falar no WhatsApp (aparece só quando o número existir) */}
-              {WHATSAPP_NUMERO && (
-                <>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '14px 0 10px' }}>
-                    <div style={{ flex: 1, height: 1, background: '#e2e8f0' }} />
-                    <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>ou</span>
-                    <div style={{ flex: 1, height: 1, background: '#e2e8f0' }} />
-                  </div>
-                  <a href={`https://wa.me/${WHATSAPP_NUMERO}?text=${encodeURIComponent('Olá! Vim pelo site da BidPro Brasil e gostaria de falar por aqui.')}`}
-                    target="_blank" rel="noreferrer"
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '10px', background: '#25D366', color: 'white', borderRadius: 10, fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
-                    🟢 Falar no WhatsApp
-                  </a>
-                  <p style={{ fontSize: 10, color: '#94a3b8', marginTop: 6, textAlign: 'center', marginBottom: 0 }}>Continue no seu WhatsApp, sem precisar manter o site aberto.</p>
-                </>
-              )}
             </div>
           ) : (
             /* Conversa ativa */

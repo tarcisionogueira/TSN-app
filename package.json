@@ -71,6 +71,7 @@
     "testar:fracao": "node scripts/testes/fracao-ideal.mjs",
     "testar:redator": "node scripts/testes/redator-proposta-nao-inventa-valor.mjs",
     "testar:whatsapp-oficial": "node scripts/testes/whatsapp-escuta-e-envio.mjs",
+    "testar:whatsapp-evolution": "node scripts/testes/whatsapp-evolution.mjs",
     "testar:praca-fim": "node scripts/testes/praca-fim-nunca-antes-da-abertura.mjs",
     "testar:suporte": "node scripts/testes/modo-suporte-nao-mostra-o-admin.mjs",
     "testar:certidoes": "node scripts/testes/certidao-indisponivel-nao-e-certidao-limpa.mjs",

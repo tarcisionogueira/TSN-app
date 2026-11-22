@@ -28,10 +28,10 @@ import { isCronAuthorized } from './_auth.js';
 import { responderSuporte } from './chat-suporte.js';
 import { enviarEmail } from './_email.js';
 import { pedidoRepetido, CORPO_REPETIDO } from './_pedido-unico.js';
+import { enviarTextoWhatsapp, enviarTextoOficial, regrasDoCanal, faltaParaEnviar } from './_whatsapp-envio.js';
 
 const SB = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SVC = process.env.SUPABASE_SERVICE_KEY;
-const GRAPH = 'https://graph.facebook.com/v21.0';
 const JANELA_MS = 24 * 3600 * 1000;
 const PAUSA_ESCALADA_MS = 12 * 3600 * 1000;
 const ORCAMENTO_MS = 45000;
@@ -60,6 +60,10 @@ export function montarCatalogoWa({ planos = [], ebooks = [], cursos = [] } = {})
   const linhas = [];
   const pro = planos.find((p) => p.plano_key === 'top2' && p.ativo);
   if (pro) linhas.push(`- PLANO ${pro.nome} (prioridade): ${brl(pro.preco)}/mês${pro.preco_anual ? ` ou ${brl(pro.preco_anual)}/ano` : ''} — relatórios de mercado e jurídico ilimitados por imóvel, filtros e calculadora. Link: ${SITE}/?${UTM}&utm_content=plano_pro#/planos`);
+  const vei = planos.find((p) => p.plano_key === 'veiculos' && p.ativo);
+  if (vei) linhas.push(`- PLANO ${vei.nome} (quem quer carro/moto/caminhão de leilão): ${brl(vei.preco)}/mês${vei.preco_anual ? ` ou ${brl(vei.preco_anual)}/ano` : ''} — leilões de veículos com leiloeiro, link do lote e relatório por IA. Link: ${SITE}/?${UTM}&utm_content=plano_veiculos#/planos`);
+  const combo = planos.find((p) => p.plano_key === 'combo' && p.ativo);
+  if (combo) linhas.push(`- ${combo.nome} (quem quer imóveis E veículos): ${brl(combo.preco)}/mês${combo.preco_anual ? ` ou ${brl(combo.preco_anual)}/ano` : ''}. Link: ${SITE}/?${UTM}&utm_content=plano_combo#/planos`);
   const ass = planos.find((p) => p.plano_key === 'assessorado' && p.ativo);
   if (ass) linhas.push(`- ${ass.nome} (equipe faz a arrematação com o cliente, do edital à posse): ${brl(ass.preco)} parcelado${ass.preco_vista ? ` ou ${brl(ass.preco_vista)} à vista` : ''}${Number(ass.honorarios_exito_pct) > 0 ? ` + ${Number(ass.honorarios_exito_pct)}% de êxito sobre a arrematação` : ''}. Fechamento é com consultor: encerre com [[ESCALAR]] quando ela quiser.`);
   for (const e of ebooks.filter((x) => x.ativo && Number(x.preco) > 0).slice(0, 6)) {
@@ -77,7 +81,7 @@ async function catalogoWa() {
   if (_catalogo.texto && Date.now() - _catalogo.em < 10 * 60_000) return _catalogo.texto;
   try {
     const [planos, ebooks, cursos] = await Promise.all([
-      sb('GET', 'planos_config?select=plano_key,nome,preco,preco_vista,preco_anual,honorarios_exito_pct,ativo&plano_key=in.(top2,assessorado)'),
+      sb('GET', 'planos_config?select=plano_key,nome,preco,preco_vista,preco_anual,honorarios_exito_pct,ativo&plano_key=in.(top2,assessorado,veiculos,combo)'),
       sb('GET', 'ebooks_admin?select=id,titulo,preco,ativo,concede_plano,concede_meses&ativo=eq.true&order=criado_em.asc'),
       sb('GET', 'cursos_admin?select=id,titulo,preco,ativo&ativo=eq.true'),
     ]);
@@ -109,19 +113,50 @@ export function variantesTelefone(tel) {
   return [...vs].filter((v) => v.replace(/\D/g, '').length >= 10);
 }
 
-/** Envia texto pela Cloud API. Devolve o wamid, ou lança com o motivo da Meta (erro vem no corpo). */
-export async function enviarTextoWa(para, texto, { token = process.env.WA_TOKEN, phoneId = process.env.WA_PHONE_NUMBER_ID, fetchImpl = fetch } = {}) {
-  const r = await fetchImpl(`${GRAPH}/${phoneId}/messages`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messaging_product: 'whatsapp', to: para, type: 'text', text: { body: String(texto).slice(0, 4000), preview_url: true } }),
-    signal: AbortSignal.timeout(15000),
-  });
-  const j = await r.json().catch(() => null);
-  // `.ok` não basta sozinho: sem `messages[0].id` não há prova de que a Meta aceitou (forma nº 1).
-  const wamid = j?.messages?.[0]?.id;
-  if (!r.ok || !wamid) throw new Error(`Meta ${r.status}: ${j?.error?.message || 'sem id da mensagem'}`.slice(0, 200));
-  return wamid;
+/** Cloud API direta — mantida com este nome para os testes antigos; o envio real usa o canal ativo. */
+export const enviarTextoWa = enviarTextoOficial;
+
+// SAIR / PARAR: a pessoa pediu para não receber mais. Responde UMA confirmação curta (sem IA),
+// marca optout e cancela o que estiver na fila ativa para ela. Só mensagem curta e direta —
+// "não quero sair do grupo" numa frase longa não é pedido de descadastro.
+export function pedidoDeSaida(texto) {
+  const t = String(texto || '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[!.?\s]+$/g, '');
+  return t.length <= 40 && /^(sair|parar|pare|stop|cancelar|descadastrar|nao quero (mais )?(receber|mensagens?)|remover|me remova|me tire da lista)$/.test(t);
+}
+
+// Interesse estruturado a partir da linha [[PERFIL: ...; interesse=X]] — vira coluna para segmentar.
+const INTERESSES = new Set(['investidor_pro', 'veiculos', 'combo', 'assessoria', 'ebook', 'indefinido']);
+export function interesseDoPerfil(perfil) {
+  const m = /interesse\s*=\s*([a-z_]+)/i.exec(String(perfil || ''));
+  if (!m) return null;
+  const v = m[1].toLowerCase() === 'plano' ? 'investidor_pro' : m[1].toLowerCase();
+  return INTERESSES.has(v) ? v : null;
+}
+
+// Código que o widget do site manda ("código BP-1a2b3c4d") — casa a conversa com o cadastro
+// mesmo quando o telefone do WhatsApp não é o do perfil.
+export function codigoClienteDoTexto(texto) {
+  const m = /\bBP-([0-9a-f]{8})\b/i.exec(String(texto || ''));
+  return m ? m[1].toLowerCase() : null;
+}
+
+// LIÇÕES DO SDR: sugestões que o agente de aprendizado (whatsapp-sdr-aprendizado-cron) extraiu das
+// conversas e que o DONO marcou como aplicadas no Admin → Qualidade. Só as aprovadas entram no
+// prompt: as conversas vêm de terceiros, e texto delas nunca vira instrução sem revisão humana.
+let _licoes = { em: 0, texto: '' };
+async function licoesSdr() {
+  if (Date.now() - _licoes.em < 10 * 60_000) return _licoes.texto;
+  try {
+    const rows = await sb('GET', 'aprendizado_sugestoes?escopo=eq.whatsapp_sdr&aplicado=eq.true&select=detalhe&order=criado_em.desc&limit=3') || [];
+    const itens = rows.flatMap((r) => (Array.isArray(r?.detalhe?.sugestoes) ? r.detalhe.sugestoes : []))
+      .map((it) => [it.titulo, it.acao].filter(Boolean).join(': ').replace(/[\r\n]+/g, ' ').slice(0, 240))
+      .filter(Boolean).slice(0, 12);
+    _licoes = { em: Date.now(), texto: itens.length ? ` Lições aprovadas pela equipe a partir de conversas anteriores (siga-as): ${itens.map((t) => `• ${t}`).join(' ')}` : '' };
+  } catch (e) {
+    console.warn('[wa-resp] lições do SDR ilegíveis (segue sem):', e?.message || e);
+    _licoes = { em: Date.now(), texto: '' };
+  }
+  return _licoes.texto;
 }
 
 async function marcar(ids, patch) {
@@ -144,10 +179,32 @@ async function atender(tel, pendentes) {
     await marcar(meus, { resposta_status: 'ignorada', resposta_erro: 'humano assumiu a conversa' });
     return 'pausada';
   }
-  if (!conv?.ultima_msg_deles_em || agora - Date.parse(conv.ultima_msg_deles_em) > JANELA_MS) {
+  // Janela de 24 h só existe na Cloud API oficial; pela Evolution não há essa regra.
+  if (regrasDoCanal().janela24h && (!conv?.ultima_msg_deles_em || agora - Date.parse(conv.ultima_msg_deles_em) > JANELA_MS)) {
     await marcar(meus, { resposta_status: 'ignorada', resposta_erro: 'fora da janela de 24h' });
     return 'fora_janela';
   }
+  // Atendente ASSUMIU o chamado na tela de Atendimento (ou ele está esperando um): a IA não fala
+  // por cima. Finalizar o chamado devolve a conversa à IA (a próxima mensagem abre outro).
+  if (conv?.chamado_id) {
+    const [ch] = (await sb('GET', `chamados?id=eq.${conv.chamado_id}&select=status`).catch(() => [])) || [];
+    if (ch && ['em_atendimento', 'aguardando_atendente'].includes(ch.status)) {
+      await marcar(meus, { resposta_status: 'ignorada', resposta_erro: `chamado ${ch.status} — humano conduz` });
+      return 'humano_no_chamado';
+    }
+  }
+  if (pendentes.some((m) => pedidoDeSaida(m.texto))) {
+    const ok = 'Tudo certo, não vou mais te enviar mensagens. Se precisar de algo sobre leilões, é só chamar por aqui.';
+    let idOk = null;
+    try { idOk = await enviarTextoWhatsapp(tel, ok); } catch (e) { console.warn('[wa-resp] confirmação de saída não saiu:', e?.message || e); }
+    if (idOk) await sb('POST', 'wa_mensagens?on_conflict=wamid', { wamid: idOk, telefone: tel, direcao: 'enviada', autor: 'ia', texto: ok, ocorrido_em: new Date().toISOString() }, 'resolution=ignore-duplicates,return=minimal');
+    await sb('PATCH', `wa_conversas?telefone=eq.${encodeURIComponent(tel)}`, { optout_em: new Date().toISOString() }, 'return=minimal');
+    await sb('PATCH', `wa_disparos?telefone=eq.${encodeURIComponent(tel)}&status=in.(agendado,enviando)`, { status: 'cancelado', erro: 'pediu SAIR' }, 'return=minimal').catch(() => {});
+    await marcar(meus, { resposta_status: 'respondida', resposta_erro: 'optout' });
+    return 'optout';
+  }
+  // Respondeu a uma mensagem ATIVA: a fila para de insistir (sem lembrete) e o funil conta.
+  await sb('PATCH', `wa_disparos?telefone=eq.${encodeURIComponent(tel)}&status=eq.enviado`, { status: 'respondido' }, 'return=minimal').catch(() => {});
 
   // Quem é: perfil pelo telefone (uma vez; depois fica em wa_conversas.user_id).
   let perfil = null;
@@ -156,10 +213,11 @@ async function atender(tel, pendentes) {
     else {
       const vs = variantesTelefone(tel).map((v) => `"${v}"`).join(',');
       const achados = await sb('GET', `perfis?telefone=in.(${encodeURIComponent(vs)})&select=id,nome,role&limit=2`) || [];
-      if (achados.length === 1) {
-        perfil = achados[0];
-        await sb('PATCH', `wa_conversas?telefone=eq.${encodeURIComponent(tel)}`, { user_id: perfil.id }, 'return=minimal');
-      }
+      if (achados.length === 1) perfil = achados[0];
+      // Veio pelo botão do site: a 1ª mensagem traz "código BP-xxxxxxxx" (8 primeiros hex do id).
+      const cod = !perfil && pendentes.map((m) => codigoClienteDoTexto(m.texto)).find(Boolean);
+      if (cod) [perfil] = (await sb('POST', 'rpc/wa_perfil_por_codigo', { p_codigo: cod })) || [];
+      if (perfil) await sb('PATCH', `wa_conversas?telefone=eq.${encodeURIComponent(tel)}`, { user_id: perfil.id }, 'return=minimal');
     }
   } catch (e) { console.warn('[wa-resp] perfil não resolvido (segue como contato novo):', e?.message || e); }
   const memoria = (perfil
@@ -168,7 +226,8 @@ async function atender(tel, pendentes) {
   // Anúncio de origem (Clique-para-WhatsApp): diz à IA o que a pessoa clicou, para continuar
   // daquele assunto em vez de recomeçar do zero. Só o título do anúncio — nunca dado de terceiro.
   ) + (conv.perfil_lead ? ` Perfil já levantado (não pergunte de novo): ${conv.perfil_lead}.` : '')
-    + (conv.origem?.headline ? ` Chegou pelo anúncio: "${String(conv.origem.headline).slice(0, 160)}".` : (conv.origem ? ' Chegou por um anúncio de Clique-para-WhatsApp.' : ''));
+    + (conv.origem?.headline ? ` Chegou pelo anúncio: "${String(conv.origem.headline).slice(0, 160)}".` : (conv.origem ? ' Chegou por um anúncio de Clique-para-WhatsApp.' : ''))
+    + (await licoesSdr());
 
   const hist = await sb('GET', `wa_mensagens?telefone=eq.${encodeURIComponent(tel)}&select=autor,texto&order=criado_em.desc&limit=20`) || [];
   const mensagens = hist.reverse().filter((m) => m.texto)
@@ -187,15 +246,17 @@ async function atender(tel, pendentes) {
   // marcador interno ([[PERFIL… cortado) nunca chega à pessoa.
   out.resposta = limparSaidaWa(out.resposta);
   let wamid;
-  try { wamid = await enviarTextoWa(tel, out.resposta); }
+  try { wamid = await enviarTextoWhatsapp(tel, out.resposta); }
   catch (e) {
     await marcar(meus, { resposta_status: 'erro', resposta_erro: String(e?.message || e).slice(0, 200) });
     return 'erro_envio';
   }
   await sb('POST', 'wa_mensagens?on_conflict=wamid', { wamid, telefone: tel, direcao: 'enviada', autor: 'ia', texto: out.resposta, ocorrido_em: new Date().toISOString() }, 'resolution=ignore-duplicates,return=minimal');
   await marcar(meus, { resposta_status: 'respondida', resposta_erro: null });
-  if (out.perfilLead && !perfil) {
-    await sb('PATCH', `wa_conversas?telefone=eq.${encodeURIComponent(tel)}`, { perfil_lead: out.perfilLead, perfil_em: new Date().toISOString() }, 'return=minimal')
+  // Perfil de TODOS (22/11, dono: "complementar as informações que temos dele") — cliente também.
+  if (out.perfilLead) {
+    const interesse = interesseDoPerfil(out.perfilLead);
+    await sb('PATCH', `wa_conversas?telefone=eq.${encodeURIComponent(tel)}`, { perfil_lead: out.perfilLead, perfil_em: new Date().toISOString(), ...(interesse ? { interesse } : {}) }, 'return=minimal')
       .catch((e) => console.warn('[wa-resp] perfil do lead não gravado:', e?.message || e));
   }
 
@@ -218,7 +279,7 @@ async function atender(tel, pendentes) {
       subject: `WhatsApp: ${nomeContato || tel} precisa de você (${motivo})`,
       html: `<p><b>${escH(nomeContato || 'Contato')}</b> — +${telDig}${perfil ? ` · cliente (${escH(perfil.role)})` : ' · ainda não cadastrado'}</p>
              <p><b>Última mensagem:</b><br>${escH(ultima)}</p>
-             <p>A IA avisou que um especialista vai responder e ficou PAUSADA por 12 h nesta conversa. Responda pelo app WhatsApp Business: <a href="https://wa.me/${telDig}">abrir conversa</a>.</p>`,
+             <p>A IA avisou que um especialista vai responder e ficou PAUSADA por 12 h nesta conversa. Responda pela tela de <a href="${SITE}/#/atendimento">Atendimento</a> (sai pelo WhatsApp) ou pelo celular: <a href="https://wa.me/${telDig}">abrir conversa</a>.</p>`,
       meta: { tipo: 'whatsapp_escalada', userId: perfil?.id || null },
     }).catch((e) => ({ ok: false, error: e?.message }));
     if (!env?.ok) console.error('[wa-resp] aviso de escalada NÃO saiu:', env?.error || 'motivo desconhecido');
@@ -243,7 +304,7 @@ export default async function handler(req, res) {
   if (fila?.erro) { res.status(502).json({ ok: false, erro: fila.erro }); return; }
 
   if (process.env.WA_BOT_ATIVO !== '1') { res.status(200).json({ ok: true, dormente: true, pendentes: fila.length }); return; }
-  const faltam = ['WA_TOKEN', 'WA_PHONE_NUMBER_ID', 'CLAUDE_KEY'].filter((n) => !process.env[n]);
+  const faltam = [...faltaParaEnviar(), ...(process.env.CLAUDE_KEY ? [] : ['CLAUDE_KEY'])];
   // Ligado sem credencial NÃO é "nada a fazer": é falha de configuração, e tem de aparecer.
   if (faltam.length) { res.status(500).json({ ok: false, erro: 'configuração incompleta', faltam, pendentes: fila.length }); return; }
 

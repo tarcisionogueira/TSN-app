@@ -49,7 +49,7 @@ export default function MeusChamados() {
     // justamente quando o cliente vinha acompanhar a resposta da equipe.
     const statusFiltro = aba === 'abertos' ? ['saudacao', 'aberto', 'em_atendimento', 'aguardando_atendente'] : ['finalizado'];
     // Sob suporte a lista é a do CLIENTE visto — user.id cru mostrava os chamados do admin.
-    const { data } = await supabase.from('chamados').select('*').eq('user_id', effectiveUserId || user.id)
+    const { data } = await supabase.from('chamados').select('*').eq('user_id', effectiveUserId || user.id).neq('canal', 'whatsapp') // WhatsApp continua no WhatsApp
       .in('status', statusFiltro).order('atualizado_em', { ascending: false });
     setChamados(data || []);
     setLoading(false);

@@ -34,7 +34,8 @@ async function get(path) { const r = await sb(path); return r.ok ? r.json().catc
 async function supervisor() {
   if (!process.env.GEMINI_API_KEY) return { rodou: false, motivo: 'sem GEMINI_API_KEY' };
   try {
-    const ultimas = await get('aprendizado_sugestoes?select=criado_em&order=criado_em.desc&limit=1');
+    // Só as DESTE supervisor: o de WhatsApp (whatsapp-sdr-aprendizado-cron) grava na mesma tabela.
+    const ultimas = await get('aprendizado_sugestoes?select=criado_em&escopo=eq.mercadologico&order=criado_em.desc&limit=1');
     if (ultimas?.[0]?.criado_em && (Date.now() - Date.parse(ultimas[0].criado_em)) < 6 * 86400000) {
       return { rodou: false, motivo: 'sugestão recente (<6d)' };
     }

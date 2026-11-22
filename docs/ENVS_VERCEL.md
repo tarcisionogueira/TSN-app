@@ -192,6 +192,14 @@ env var nova só entra a partir do PRÓXIMO deploy, não retroage no que já est
 
 Passo a passo em `docs/INTEGRACAO_HOMIO.md` (pendência #471).
 
+## ⏳ WhatsApp pela Evolution (QR code) — código pronto em 22/11, envs AINDA NÃO criadas
+
+Canal provisório até a portabilidade/Verificação da Meta. Passo a passo e riscos em `docs/WHATSAPP_EVOLUTION.md`.
+Nomes: `EVOLUTION_URL`, `EVOLUTION_APIKEY`, `EVOLUTION_INSTANCIA`, `WA_EVOLUTION_WEBHOOK_TOKEN`, `WA_CANAL=evolution`,
+`WA_BOT_ATIVO=1`, `VITE_WHATSAPP_NUMERO` (widget do site), `WA_DISPAROS_ATIVO=1` (fila ativa; padrão desligada),
+opcionais `WA_DISPARO_INTERVALO_S` (120) e `WA_DISPARO_TETO_DIA` (150).
+Conferir: `GET /api/whatsapp-evolution-webhook` devolve `{ escuta, responde, falta: [...] }`.
+
 ## ⏳ WhatsApp oficial (Cloud API) — código pronto em 24/09, envs AINDA NÃO criadas
 
 Todas marcadas em Production + Preview + Development. Nomes (valores só no painel):
