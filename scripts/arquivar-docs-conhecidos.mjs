@@ -35,6 +35,7 @@ const MAX_MS = Number(process.env.ARQ_MAX_MIN || 40) * 60_000;
 const FONTE = (process.env.ARQ_FONTE || '').trim().toUpperCase();
 const SECO = process.env.ARQ_SECO === '1';
 const REVISITA_DIAS = 30;
+const TIPO_UNICO = new Set(['edital', 'matricula', 'carta_arrematacao', 'matricula_registrada']);
 const MAX_BYTES = 25 * 1024 * 1024;
 const MAX_LINKS_LOTE = 12;
 // Pipelines próprios (login ou fila dedicada) — não passam por aqui.
@@ -158,8 +159,11 @@ async function arquivarLote(im, est, hostsBloqueados) {
         parecido.origem_url = l.url;
         est.jaTinha++; continue;
       }
-      // BIASI: a 1ª /loteanexo/ é a matrícula; as demais do mesmo lote são outros documentos.
-      if (mesmoTipo.length && tipo === 'matricula' && im.fonte === 'BIASI') tipo = 'outro';
+      // O banco aceita UM edital e UMA matrícula por lote (índice único
+      // uniq_imovel_anexos_imovel_tipo_doc). Um segundo documento DIFERENTE desses tipos (edital
+      // do leilão + edital do lote, 2 matrículas, a /loteanexo/ extra do BIASI) entra como 'outro'
+      // — decidido ANTES do upload, senão o insert falha e o arquivo fica órfão (52 em 21/11).
+      if (mesmoTipo.length && TIPO_UNICO.has(tipo)) tipo = 'outro';
     }
     const path = `casos/${im.id}/${tipo}_${hash}.pdf`;
     const up = await supabase.storage.from(BUCKET).upload(path, buf, { contentType: 'application/pdf', upsert: true });
@@ -168,7 +172,14 @@ async function arquivarLote(im, est, hostsBloqueados) {
     if (signed.error) console.log(`  - ${im.id}: URL assinada falhou (${signed.error.message}) — linha fica só com storage_path`);
     const row = { imovel_id: im.id, tipo, nome: limparNome(l.nome) || `${tipo}.pdf`, url: signed.data?.signedUrl || null, storage_path: path, tamanho_kb: kb, role_criador: 'sistema', origem_url: l.url };
     const { data: ins, error: eIns } = await supabase.from('imovel_anexos').insert(row).select('id').single();
-    if (eIns) { est.falhas++; est.motivos['registro'] = (est.motivos['registro'] || 0) + 1; console.log(`  - ${im.id}: registro: ${eIns.message}`); continue; }
+    if (eIns) {
+      est.falhas++; est.motivos['registro'] = (est.motivos['registro'] || 0) + 1;
+      console.log(`  - ${im.id}: registro: ${eIns.message}`);
+      // O arquivo acabou de subir e ficaria sem linha que aponte para ele: tira o que este job criou.
+      const rm = await supabase.storage.from(BUCKET).remove([path]);
+      if (rm.error) console.log(`  - ${im.id}: órfão ${path} não removido (${rm.error.message})`);
+      continue;
+    }
     lista.push({ ...row, id: ins.id });
     await publicarFatosDoPdf(supabase, im.id, buf, tipo, { valorMinimo: im.valor_minimo, valorAvaliacao: im.valor_avaliacao });
     est.novos++; est.kb += kb;
