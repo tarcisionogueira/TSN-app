@@ -219,7 +219,7 @@ export default function Atendimento() {
       autor_tipo: 'atendente', conteudo: texto || '[anexo]', anexos,
       // Marca por onde a resposta saiu — o histórico precisa deixar claro que esta
       // mensagem foi entregue por e-mail, e não só gravada numa tela que o cliente não tem.
-      canal: chamadoAtivo.canal === 'email' ? 'email' : chamadoAtivo.canal === 'whatsapp' ? 'whatsapp' : null,
+      canal: ['email', 'whatsapp', 'instagram'].includes(chamadoAtivo.canal) ? chamadoAtivo.canal : null,
     }).select().single();
     if (msgErr) { alert('Erro ao enviar mensagem. Tente novamente.'); setEnviando(false); return; }
     // 19/08: dedup por id — quando o push do realtime chega ANTES da resposta deste
@@ -229,17 +229,20 @@ export default function Atendimento() {
     await supabase.from('chamados').update({ atualizado_em: new Date().toISOString() }).eq('id', chamadoAtivo.id);
     // Chamado de WhatsApp (22/11): a resposta SAI pelo WhatsApp e a IA pausa nessa conversa. Sem
     // e-mail — a pessoa está no WhatsApp. Falha de envio aparece aqui, nunca some calada.
-    if (chamadoAtivo.canal === 'whatsapp') {
+    if (chamadoAtivo.canal === 'whatsapp' || chamadoAtivo.canal === 'instagram') {
+      // Instagram (22/11): mesmo caminho — a resposta sai pelo direct (só até 24 h depois da
+      // última mensagem da pessoa; fora disso a Meta recusa e o alerta abaixo diz por quê).
+      const rede = chamadoAtivo.canal === 'instagram' ? 'Instagram' : 'WhatsApp';
       if (msg && texto.trim()) {
-        apiCall('/api/atendimento-whatsapp', {
+        apiCall(chamadoAtivo.canal === 'instagram' ? '/api/atendimento-instagram' : '/api/atendimento-whatsapp', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ chamado_id: chamadoAtivo.id, mensagem_id: msg.id }),
         }).then(async (res) => {
           const j = await res.json().catch(() => ({}));
-          if (!res.ok || j.error) alert(`A mensagem ficou no chamado, mas NÃO saiu pelo WhatsApp: ${j.error || `HTTP ${res.status}`}.`);
-        }).catch((e) => alert(`A mensagem ficou no chamado, mas não consegui confirmar o envio pelo WhatsApp: ${e.message}.`));
+          if (!res.ok || j.error) alert(`A mensagem ficou no chamado, mas NÃO saiu pelo ${rede}: ${j.error || `HTTP ${res.status}`}.`);
+        }).catch((e) => alert(`A mensagem ficou no chamado, mas não consegui confirmar o envio pelo ${rede}: ${e.message}.`));
       } else if (anexos.length) {
-        alert('Anexo fica registrado no chamado, mas ainda não sai pelo WhatsApp — mande o texto.');
+        alert(`Anexo fica registrado no chamado, mas ainda não sai pelo ${rede} — mande o texto.`);
       }
       setTexto(''); setAnexos([]);
       setEnviando(false);
@@ -438,6 +441,7 @@ export default function Atendimento() {
                       <span style={{ fontSize: 9, fontWeight: 800, padding: '1px 6px', borderRadius: 8, background: sg.bg, color: sg.cor }}>{sg.curto}</span>
                     ); })()}
                     {c.canal === 'whatsapp' && <span title="Conversa do WhatsApp" style={{ fontSize: 9, fontWeight: 800, padding: '1px 6px', borderRadius: 8, background: '#d1fae5', color: '#065f46' }}>WhatsApp</span>}
+                    {c.canal === 'instagram' && <span title="Direct do Instagram" style={{ fontSize: 9, fontWeight: 800, padding: '1px 6px', borderRadius: 8, background: '#fce7f3', color: '#9d174d' }}>Instagram</span>}
                     <span><User size={10} style={{ verticalAlign: 'middle', marginRight: 3 }} />{c.user_nome || c.user_email?.split('@')[0]}{' · '}{fmtData(c.aberto_em || c.criado_em)}</span>
                   </div>
                   {c.atendente_nome && (
@@ -480,6 +484,9 @@ export default function Atendimento() {
                 )}
                 {chamadoAtivo.canal === 'whatsapp' && (
                   <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 10, background: '#d1fae5', color: '#065f46' }}>🟢 WhatsApp</span>
+                )}
+                {chamadoAtivo.canal === 'instagram' && (
+                  <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 10, background: '#fce7f3', color: '#9d174d' }}>📸 Instagram</span>
                 )}
               </div>
               <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
@@ -563,7 +570,8 @@ export default function Atendimento() {
                   ) : (
                     <><User size={11} style={{ verticalAlign: 'middle', marginRight: 3 }} />{m.autor_nome || 'Cliente'} · {fmtHora(m.criado_em)}
                       {m.canal === 'email' && <span style={{ marginLeft: 5, color: '#4338ca', fontWeight: 700 }}>✉ por e-mail</span>}
-                      {m.canal === 'whatsapp' && <span style={{ marginLeft: 5, color: '#047857', fontWeight: 700 }}>🟢 WhatsApp</span>}</>
+                      {m.canal === 'whatsapp' && <span style={{ marginLeft: 5, color: '#047857', fontWeight: 700 }}>🟢 WhatsApp</span>}
+                      {m.canal === 'instagram' && <span style={{ marginLeft: 5, color: '#9d174d', fontWeight: 700 }}>📸 Instagram</span>}</>
                   )}
                 </div>
                 <div style={{
@@ -618,6 +626,11 @@ export default function Atendimento() {
                   🟢 <strong>Conversa do WhatsApp.</strong> Sua resposta sai pelo WhatsApp e a IA para de responder nesta conversa por 12 h. Para a IA não falar por cima, clique em <strong>Assumir</strong>; ao <strong>Finalizar</strong>, ela volta a atender. Por enquanto só texto sai pelo WhatsApp.
                 </div>
               )}
+              {chamadoAtivo.canal === 'instagram' && (
+                <div style={{ background: '#fdf2f8', border: '1px solid #fbcfe8', borderRadius: 10, padding: '8px 12px', marginBottom: 8, fontSize: 12, color: '#9d174d', lineHeight: 1.5 }}>
+                  📸 <strong>Direct do Instagram.</strong> Sua resposta sai pelo direct. A Meta só deixa responder até <strong>24 h</strong> depois da última mensagem da pessoa — passou disso, responda pelo app do Instagram. Por enquanto só texto.
+                </div>
+              )}
               <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
                 <button onClick={() => fileRef.current?.click()} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: 8, borderRadius: 8 }}>
                   <Paperclip size={16} />
@@ -625,7 +638,7 @@ export default function Atendimento() {
                 <textarea
                   value={texto} onChange={e => setTexto(e.target.value)} onPaste={handlePaste}
                   onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviarMensagem(); } }}
-                  placeholder={chamadoAtivo.canal === 'email' ? 'Responder por e-mail… (Enter para enviar)' : chamadoAtivo.canal === 'whatsapp' ? 'Responder pelo WhatsApp… (Enter para enviar)' : 'Responder ao cliente… (Ctrl+V para colar print · Enter para enviar)'}
+                  placeholder={chamadoAtivo.canal === 'email' ? 'Responder por e-mail… (Enter para enviar)' : chamadoAtivo.canal === 'whatsapp' ? 'Responder pelo WhatsApp… (Enter para enviar)' : chamadoAtivo.canal === 'instagram' ? 'Responder pelo direct… (Enter para enviar)' : 'Responder ao cliente… (Ctrl+V para colar print · Enter para enviar)'}
                   rows={2}
                   style={{ flex: 1, padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 13, resize: 'none', outline: 'none', fontFamily: 'inherit', lineHeight: 1.4 }}
                 />

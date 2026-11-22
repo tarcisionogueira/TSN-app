@@ -342,3 +342,19 @@ funcionamento normal, e alarme que sempre toca é alarme desligado.
 
 **Mensagem só com anexo (foto, áudio) É gravada**, com `texto` nulo: ela não serve de corpus,
 mas é contato — move a janela de 24 h. Descartá-la faria o bot concluir que a pessoa nunca falou.
+
+## 11. GATILHOS DE PALAVRA-CHAVE + ATENDIMENTO (22/11) — o "ManyChat" ligado de verdade
+
+- **Cadastro:** `/admin/instagram` → bloco *Gatilhos de palavra-chave*: palavra (sem acento/caixa
+  importa: "PATRIMÔNIO" = "patrimonio"), post (ou qualquer post), mensagem do direct (`{nome}` = @),
+  link do material, respostas públicas (uma por linha, sorteadas). Tabela `ig_gatilhos`.
+- **Disparo:** `api/instagram-gatilhos.js`, acordado pelo webhook a cada comentário + cron de reserva
+  a cada 5 min. Claim em `ig_gatilho_disparos.comment_mid` (UNIQUE). Private reply + resposta pública.
+  Mesma pessoa no mesmo gatilho em 7 dias = `repetido` (só a pública).
+- **Atendimento:** DM e resposta de story viram chamado `canal='instagram'` (gatilho
+  `ig_espelhar_no_chamado`); a equipe responde na tela e sai pelo direct (`api/atendimento-instagram.js`,
+  janela de 24 h da Meta). Comentário público NÃO vira chamado.
+- **O que ainda limita:** (a) o token `IG_PAGE_TOKEN` vence em ~60 dias — a tela de gatilhos avisa
+  quando a Meta recusa; (b) DM/story de qualquer pessoa só chegam com o Acesso Avançado da Revisão do
+  App. A private reply do gatilho sai pela permissão de comentários/mensagens — conferir no 1º disparo
+  real (`ig_gatilho_disparos.erro` mostra o que a Meta respondeu).

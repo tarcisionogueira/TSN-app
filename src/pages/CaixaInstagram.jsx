@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { apiCall } from '../utils/apiCall';
+import GatilhosInstagram from '../components/GatilhosInstagram';
 
 /**
  * CAIXA DE RASCUNHOS DO INSTAGRAM — o dono lê, edita e responde.
@@ -159,6 +160,7 @@ export default function CaixaInstagram() {
   return (
     <div style={{ maxWidth: 760, margin: '0 auto', padding: '24px 18px 60px', fontFamily: 'system-ui, sans-serif', color: '#0f172a' }}>
       <h1 style={{ fontSize: 22, fontWeight: 800, margin: '0 0 4px' }}>Caixa do Instagram</h1>
+      <GatilhosInstagram />
       <p style={{ fontSize: 13, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 9, padding: '10px 12px', lineHeight: 1.6, margin: '10px 0 0' }}>
         {dados?.envio_disponivel
           ? <>Ela sugere, você <strong>edita aqui</strong> até ficar como vai mandar, e <strong>"Enviar agora" manda de verdade</strong> pela API. Edite <em>antes</em> de enviar: é o texto desta caixa que vira a medição de quando uma classe pode passar a responder sozinha.</>

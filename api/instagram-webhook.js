@@ -165,6 +165,7 @@ export function lerMensagem(ev) {
     // quem enviar pelo bot grava a linha ANTES, e o echo dela bate no UNIQUE e é ignorado.
     autor: echo ? 'dono' : 'pessoa',
     texto: typeof msg.text === 'string' ? msg.text : null,
+    media_id: null,                        // mesmas chaves do comentário: o insert em lote do PostgREST exige
     ocorrido_em: carimbo(ev?.timestamp),   // messaging[]: MILISSEGUNDOS
   };
 }
@@ -226,6 +227,7 @@ export function lerComentario(ch, entryTime, nossaConta = NOSSA_CONTA) {
     origem: 'comentario',
     autor: 'pessoa',
     texto: typeof v.text === 'string' ? v.text : null,
+    media_id: v.media?.id ? String(v.media.id) : null,   // post do comentário: escopo do gatilho (22/11)
     username: typeof v.from.username === 'string' ? v.from.username : null,
     // `created_time` do comentário quando vem; senão o `entry.time` da entrega. Os dois em
     // SEGUNDOS. O prazo de 7 dias conta do comentário, e uma reentrega da Meta dias depois
@@ -234,7 +236,7 @@ export function lerComentario(ch, entryTime, nossaConta = NOSSA_CONTA) {
   };
 }
 
-export default async function handler(req) {
+export default async function handler(req, ctx) {
   // ─── GET: verificação do webhook no painel da Meta ─────────────────────────────────
   if (req.method === 'GET') {
     const q = new URL(req.url).searchParams;
@@ -379,6 +381,16 @@ export default async function handler(req) {
   // ser inofensiva. Devolver 200 sobre uma gravação que falhou seria carimbar sucesso sem
   // ter gravado — exatamente o que `coleta_cliente_concluir` existe para impedir do outro lado.
   if (erro) return json({ ok: false, erro }, 500);
+
+  // Gatilho de palavra-chave (22/11): comentário novo acorda o disparador JÁ, sem esperar o cron
+  // de reserva. Depois do 200, por waitUntil — a Meta não espera IA nem Send API.
+  const temComentario = linhas.some((l) => l.origem === 'comentario' && l.texto);
+  if (temComentario && gravadas > 0 && process.env.CRON_SECRET && typeof ctx?.waitUntil === 'function') {
+    const base = new URL(req.url).origin;
+    ctx.waitUntil(fetch(`${base}/api/instagram-gatilhos`, { method: 'POST', headers: { 'x-cron-secret': process.env.CRON_SECRET } })
+      .then((r) => { if (!r.ok) console.warn('[ig] disparador de gatilhos respondeu', r.status); })
+      .catch((e) => console.warn('[ig] não acordou o disparador de gatilhos:', e?.message || e)));
+  }
 
   return json({ ok: true, gravadas, nao_reconhecidos: naoReconhecidos });
 }
