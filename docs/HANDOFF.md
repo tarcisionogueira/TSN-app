@@ -6,6 +6,28 @@
 
 
 
+## 22/11 — DOCUMENTOS: Word entra, link que não é documento sai, LJUD até 50 MB · FECHAMENTO
+
+- **Por que:** os 81 lotes priorizados trouxeram 0 documento novo. Três causas: (1) link que nunca é documento
+  (e-SAJ, eproc, PJe, PGFN, Caixa, Drive, mapa, WhatsApp, vídeo) dava "não é PDF" e o lote ia para a fila antiga, que
+  repetia a mesma página (47 links só de PGFN na LEILOESRN); (2) edital/proposta em **Word** era recusado; (3) cota do
+  Bright Data na fila antiga.
+- **Conserto (3b38713d):** `scripts/lib/doc-fatos.mjs` ganhou `NAO_DOC`/`ehNaoDoc` (filtra antes de baixar) e
+  `tipoDocumento(buf)` (aceita PDF, .docx e .doc **pelos bytes**). `arquivar-docs-conhecidos.mjs` e
+  `captura-documentos.mjs` gravam com a extensão/mime certos; `publicarFatosDoPdf` só roda em PDF. Quem lê depois
+  (`api/_doc-normalizar.js`) já abria Word. ⚠️ Leitura de um Word arquivado pelo relatório **não foi conferida ponta a
+  ponta** (sem credencial local) — conferir no primeiro documental de lote LEILAOBRASIL/GOLD.
+- **Rodadas:** 248 lotes com link Word re-enfileirados. Geral 73 novos · LEILAOBRASIL 147 · GOLD 95 · LJUD 16. Word
+  guardado em 3 h: LEILAOBRASIL 146, GOLD 46, LJUD 12.
+- **LJUD 50 MB (cf581bae):** HEAD nos pendentes achou 21 anexos > 25 MB (maior 48,7 MB). `MAX_BYTES_FONTE = { LJUD: 50 MB }`,
+  timeout 120 s para teto maior. Revisita + 5 rodadas só da LJUD: **0 lote nunca visitado** (de 1.255), 1.487 de 1.578
+  ativos (94%) com edital ou matrícula, 17 arquivos > 25 MB em 24 h (maior 47,8 MB), 3 falhas (403/não-documento) → fila
+  antiga. 76 lotes sem link na página.
+- **Aberto:** pendência **#518** (P2) — fila antiga com hosts bloqueados pela cota (RZ, Raupp, Pietoso, GT, Renovar,
+  Leilão Eletrônico), renova seg 23/11 0h UTC; conferir em 24/11. Rascunho do Asaas segue **sem destinatário** (não enviar
+  sem o dono). `verificar:csp` falha só local (CRLF no `index.html` do Windows); deploy da Vercel READY.
+- **Próxima sessão:** ritual normal; `pendencias_abertas()`; Homio (#495) primeiro se a URL tiver chegado.
+
 ## 16/11 (noite, 4) — FECHAMENTO DO DIA: onde parou
 
 - **Feito hoje (noite):** Milan veículos e imóveis de vários lotes pela siteback grátis (47e610ab, 8d8604b4); fechamento
