@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Inbox, ShieldAlert, Send, Trash2, RefreshCw, PenSquare, Reply, Forward, Ban, Paperclip, X, Loader2, Undo2, MessageCircle, AlertCircle, ArrowLeft, FileText } from 'lucide-react';
+import { Inbox, ShieldAlert, Send, Trash2, RefreshCw, PenSquare, Reply, Forward, Ban, Paperclip, X, Loader2, Undo2, MessageCircle, AlertCircle, ArrowLeft, FileText, Mail, MailOpen, Minus, Maximize2, Minimize2, EllipsisVertical } from 'lucide-react';
 import { useIsMobile } from '../utils/useIsMobile';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -106,6 +106,18 @@ const fmtData = (iso) => {
     : d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 };
 const btn = (ativo) => ({ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, border: '1px solid #e2e8f0', background: ativo ? '#111111' : 'white', color: ativo ? 'white' : '#334155', fontSize: 12, fontWeight: 700, cursor: 'pointer' });
+// Botão só de ícone (23/11, inspirado no Gmail): a barra de leitura tinha até 8 botões com texto
+// quebrando em duas linhas. O nome vai no `title` (dica ao passar o mouse) e no `aria-label`.
+const iconeBtn = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: 8, border: '1px solid transparent', background: 'none', color: '#475569', cursor: 'pointer', padding: 0, flexShrink: 0 };
+function BotaoIcone({ titulo, onClick, Icon, cor, tamanho = 16 }) {
+  return (
+    <button type="button" title={titulo} aria-label={titulo} onClick={onClick}
+      onMouseEnter={(e) => { e.currentTarget.style.background = '#f1f5f9'; }} onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; }}
+      style={{ ...iconeBtn, ...(cor ? { color: cor } : {}) }}>
+      <Icon size={tamanho} />
+    </button>
+  );
+}
 
 // Corpo não-JSON (502 da plataforma, HTML de erro) não pode estourar a tela: vira um `error`
 // que diz o status — quem chama mostra essa frase em vez de "falhou" sem motivo.
@@ -213,6 +225,13 @@ export default function CaixaEmail({ soPessoal = false }) {
   const estreito = useIsMobile(900);
   const [busca, setBusca] = useState('');
   const [compor, setCompor] = useState(null);    // { de, para, cc, assunto, texto, responder_a, rascunho_id? }
+  // Escrever em JANELA NO CANTO (23/11, inspirado no Gmail): era um modal que tapava a caixa inteira,
+  // e não dava para consultar outro e-mail enquanto escrevia. 'normal' | 'min' (só a barra) | 'max'.
+  const [tamCompor, setTamCompor] = useState('normal');
+  // Seleção em LOTE por conversa (chave da conversa) e ações ao passar o mouse na linha (23/11).
+  const [selecionadas, setSelecionadas] = useState(() => new Set());
+  const [linhaHover, setLinhaHover] = useState(null);
+  const [menuMais, setMenuMais] = useState(false);
   const [rascunhos, setRascunhos] = useState([]);
   const [salvoEm, setSalvoEm] = useState(null);  // hora do último salvamento automático
   const rascunhoId = useRef(null);               // ref (não estado): gravar o id não pode redisparar o salvamento
@@ -290,7 +309,8 @@ export default function CaixaEmail({ soPessoal = false }) {
     setCarregando(false);
   }, [pasta]);
 
-  useEffect(() => { setAtiva(null); setConversa([]); carregar(); }, [carregar]);
+  useEffect(() => { setAtiva(null); setConversa([]); setSelecionadas(new Set()); setMenuMais(false); carregar(); }, [carregar]);
+  useEffect(() => { setMenuMais(false); }, [ativa]);
   // Atualiza sozinha a cada minuto com a aba visível — sem depender de alguém lembrar do botão.
   useEffect(() => {
     const t = setInterval(() => { if (document.visibilityState === 'visible') carregar(); }, 60_000);
@@ -339,8 +359,8 @@ export default function CaixaEmail({ soPessoal = false }) {
 
   // Move a conversa INTEIRA desta pasta (não só a última mensagem — senão ela continuaria na lista).
   // `destinoDe` recebe a mensagem porque Restaurar devolve saída → Enviados e entrada → Entrada.
-  async function mover(destinoDe, msgOk) {
-    const alvo = conversa.filter(x => x.pasta === pasta);
+  // `moverMsgs` (23/11) é o mesmo caminho para a conversa aberta, a ação da linha e o lote selecionado.
+  async function moverMsgs(alvo, destinoDe, msgOk) {
     const porDestino = {};
     alvo.forEach(x => { const d = destinoDe(x); (porDestino[d] = porDestino[d] || []).push(x.id); });
     const movidas = new Set();
@@ -351,9 +371,43 @@ export default function CaixaEmail({ soPessoal = false }) {
     }
     if (!movidas.size) { setErro(prev => prev || 'Sem permissão para mover esta conversa.'); return false; }
     setLista(prev => prev.filter(x => !movidas.has(x.id)));
-    setAtiva(null); setConversa([]);
-    setAviso(movidas.size > 1 ? `${msgOk} (${movidas.size} mensagens da conversa)` : msgOk);
+    if (conversa.some(x => movidas.has(x.id))) { setAtiva(null); setConversa([]); }
+    setSelecionadas(new Set());
+    setAviso(movidas.size > 1 ? `${msgOk} (${movidas.size} mensagens)` : msgOk);
+    // Contador de não lidas das pastas: a mensagem movida pode ter levado um "não lido" junto.
+    const { data: nl, error: eNl } = await supabase.from('email_caixa').select('pasta').eq('lido', false).in('pasta', ['entrada', 'spam']);
+    if (!eNl) setNaoLidos((nl || []).reduce((a, r) => ({ ...a, [r.pasta]: (a[r.pasta] || 0) + 1 }), {}));
     return true;
+  }
+  const mover = (destinoDe, msgOk) => moverMsgs(conversa.filter(x => x.pasta === pasta), destinoDe, msgOk);
+  const paraLixeira = (msgs) => moverMsgs(msgs, () => 'lixeira', 'Movido para a Lixeira.');
+  const paraSpam = (msgs) => moverMsgs(msgs, () => 'spam', 'Movido para Spam.');
+  const restaurar = (msgs) => moverMsgs(msgs, (x) => (x.direcao === 'saida' ? 'enviados' : 'entrada'), 'Restaurado.');
+  const naoESpam = (msgs) => moverMsgs(msgs, () => 'entrada', 'Devolvido à Entrada. (Não abre chamado automaticamente — responda daqui se precisar.)');
+
+  // MARCAR COMO LIDA / NÃO LIDA (23/11, pedido do dono a partir do Gmail). Abrir a conversa marca
+  // tudo como lido e não havia volta. Só mensagem RECEBIDA tem "lido" com sentido; ao desmarcar,
+  // basta a mais recente recebida voltar a "não lida" para a conversa reaparecer em negrito.
+  // `grupos` = uma lista de conversas, cada uma em ordem CRONOLÓGICA (a última é a mais nova).
+  async function marcarLido(grupos, lido) {
+    const porConversa = grupos.map(g => g.filter(x => x.direcao === 'entrada')).filter(r => r.length);
+    const ids = porConversa.flatMap(r => (lido ? r.filter(x => !x.lido) : r.slice(-1).filter(x => x.lido))).map(x => x.id);
+    if (!porConversa.length) { setAviso('Só há mensagens enviadas por nós aqui — não há o que marcar.'); return false; }
+    if (!ids.length) { setAviso(lido ? 'Já estava lida.' : 'Já estava não lida.'); return false; }
+    const { data, error } = await supabase.from('email_caixa').update({ lido }).in('id', ids).select('id,pasta');
+    if (error) { setErro(`Não consegui marcar como ${lido ? 'lida' : 'não lida'}: ${error.message}`); return false; }
+    if (!data?.length) { setErro('Nada foi alterado — sem acesso a estas mensagens?'); return false; }
+    const feitas = new Set(data.map(r => r.id));
+    setLista(prev => prev.map(x => (feitas.has(x.id) ? { ...x, lido } : x)));
+    setConversa(prev => prev.map(x => (feitas.has(x.id) ? { ...x, lido } : x)));
+    setNaoLidos(prev => data.reduce((a, r) => ({ ...a, [r.pasta]: Math.max(0, (a[r.pasta] || 0) + (lido ? -1 : 1)) }), prev));
+    setSelecionadas(new Set());
+    return true;
+  }
+  // Ordem da conversa aberta é da mais antiga para a mais nova; a da LISTA é da mais nova para a mais antiga.
+  const cronologica = (msgs) => [...msgs].sort((a, b2) => new Date(a.criado_em) - new Date(b2.criado_em));
+  async function naoLidaDaLeitura() {
+    if (await marcarLido([conversa.filter(x => x.pasta === pasta)], false)) { setAtiva(null); setConversa([]); setAviso('Marcada como não lida.'); }
   }
 
   async function bloquear(m, porDominio) {
@@ -404,7 +458,16 @@ export default function CaixaEmail({ soPessoal = false }) {
 
   // ── RASCUNHO (24/09) ────────────────────────────────────────────────────────────────
   // Abrir o Escrever sempre passa por aqui: zera (ou retoma) o id do rascunho.
-  function abrirCompor(c) {
+  // Com a janela no canto (23/11), dá para clicar Responder/Escrever com outra mensagem ainda aberta.
+  // Antes de trocar, a anterior é GRAVADA — e só depois o id do rascunho muda; trocar o id com um
+  // salvamento ainda na fila faria o novo e-mail sobrescrever o rascunho antigo.
+  async function abrirCompor(c) {
+    if (compor && temConteudo(compor)) {
+      await salvarRascunho(compor);
+      setAviso('O e-mail que estava sendo escrito ficou salvo em Rascunhos.');
+      if (pasta === 'rascunhos') carregar();
+    } else await salvando.current;
+    setTamCompor('normal');
     rascunhoId.current = c?.rascunho_id || null;
     if (c) c = { ...c, anexos: Array.isArray(c.anexos) ? c.anexos : [], encaminhar_anexos: Array.isArray(c.encaminhar_anexos) ? c.encaminhar_anexos : [] };
     chaveEnvio.current = crypto.randomUUID?.() || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
@@ -466,9 +529,10 @@ export default function CaixaEmail({ soPessoal = false }) {
     navigate({ pathname: loc.pathname, search: q.toString() ? `?${q}` : '' }, { replace: true });
   }, [loc.search]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function responder(m) {
+  async function responder(m) {
     const caixaNossa = String(m.caixa || '').split('@')[0];
-    abrirCompor({
+    // `await`: a leitura do cliente do caso (abaixo) só pode completar a janela DESTA resposta.
+    await abrirCompor({
       // Veio pra minha caixa pessoal → respondo como eu; veio pra comunicação → pelo mesmo endereço.
       de: (m.dono && meuEndereco) ? 'pessoal' : (CAIXAS.includes(caixaNossa) ? caixaNossa : dePadrao),
       para: m.de_email || '', cc: '',
@@ -658,6 +722,35 @@ export default function CaixaEmail({ soPessoal = false }) {
             Aqui cai o que veio de remetente <b>bloqueado</b> ou que <b>falhou na autenticação</b> (SPF/DKIM/DMARC — remetente possivelmente forjado). Nada daqui abre chamado. Não clique em links de mensagens suspeitas.
           </div>
         )}
+        {/* SELEÇÃO EM LOTE (23/11): marcar várias conversas e agir de uma vez, como no Gmail. */}
+        {pasta !== 'rascunhos' && !carregando && conversas.length > 0 && (() => {
+          const marcadas = conversas.filter(c => selecionadas.has(c.chave));
+          const msgsMarcadas = marcadas.flatMap(c => c.msgs);
+          const todas = marcadas.length === conversas.length;
+          return (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '4px 8px 4px 14px', borderBottom: '1px solid #e2e8f0', background: marcadas.length ? '#eff6ff' : '#f8fafc', minHeight: 40 }}>
+              <input type="checkbox" aria-label="Selecionar todas" title={todas ? 'Desmarcar todas' : 'Selecionar todas desta página'}
+                checked={todas} ref={(el) => { if (el) el.indeterminate = marcadas.length > 0 && !todas; }}
+                onChange={() => setSelecionadas(todas ? new Set() : new Set(conversas.map(c => c.chave)))}
+                style={{ width: 15, height: 15, cursor: 'pointer', margin: '0 8px 0 0' }} />
+              {marcadas.length === 0 ? (
+                <span style={{ fontSize: 11.5, color: '#94a3b8' }}>{conversas.length} conversa(s)</span>
+              ) : (
+                <>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#0D63DB', marginRight: 'auto' }}>{marcadas.length} selecionada(s)</span>
+                  {pasta === 'lixeira'
+                    ? <BotaoIcone titulo="Restaurar" Icon={Undo2} onClick={() => restaurar(msgsMarcadas)} />
+                    : <BotaoIcone titulo="Mover para a Lixeira" Icon={Trash2} onClick={() => paraLixeira(msgsMarcadas)} />}
+                  {pasta === 'entrada' && <BotaoIcone titulo="Mover para Spam" Icon={ShieldAlert} onClick={() => paraSpam(msgsMarcadas)} />}
+                  {pasta === 'spam' && <BotaoIcone titulo="Não é spam" Icon={Undo2} onClick={() => naoESpam(msgsMarcadas)} />}
+                  {pasta !== 'enviados' && <BotaoIcone titulo="Marcar como lida" Icon={MailOpen} onClick={() => marcarLido(marcadas.map(c => cronologica(c.msgs)), true)} />}
+                  {pasta !== 'enviados' && <BotaoIcone titulo="Marcar como não lida" Icon={Mail} onClick={() => marcarLido(marcadas.map(c => cronologica(c.msgs)), false)} />}
+                  <BotaoIcone titulo="Limpar seleção" Icon={X} onClick={() => setSelecionadas(new Set())} />
+                </>
+              )}
+            </div>
+          );
+        })()}
         {carregando ? (
           <div style={{ padding: 30, textAlign: 'center', color: '#94a3b8' }}><Loader2 size={18} className="spin" /> Carregando…</div>
         ) : pasta === 'rascunhos' ? (
@@ -682,20 +775,43 @@ export default function CaixaEmail({ soPessoal = false }) {
           const naoLida = msgs.some(x => !x.lido);
           const entrada = msgs.find(x => x.direcao === 'entrada');
           const quem = entrada ? (entrada.de_nome || entrada.de_email || '(sem remetente)') : `Para: ${listaSemToken(m.para)}`;
+          const marcada = selecionadas.has(chave);
+          // Ações da linha aparecem ao passar o mouse (no lugar da data), só no computador — no
+          // celular não há "passar o mouse"; lá vale a caixinha + a barra de lote.
+          const acoesLinha = !estreito && linhaHover === chave;
+          const parar = (fn) => (e) => { e.stopPropagation(); fn(); };
           return (
             <div key={chave} onClick={() => abrir({ chave, msgs })}
-              style={{ padding: '10px 14px', borderBottom: '1px solid #f1f5f9', cursor: 'pointer', background: sel ? '#eff6ff' : 'white', borderLeft: `3px solid ${naoLida ? '#0D63DB' : 'transparent'}` }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+              onMouseEnter={() => setLinhaHover(chave)} onMouseLeave={() => setLinhaHover(h => (h === chave ? null : h))}
+              style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '10px 14px', borderBottom: '1px solid #f1f5f9', cursor: 'pointer', background: marcada ? '#dbeafe' : sel ? '#eff6ff' : acoesLinha ? '#f8fafc' : 'white', borderLeft: `3px solid ${naoLida ? '#0D63DB' : 'transparent'}`, boxShadow: acoesLinha ? 'inset 0 -1px 0 #e2e8f0, 0 1px 3px rgba(15,23,42,.08)' : 'none' }}>
+              <input type="checkbox" checked={marcada} aria-label="Selecionar conversa" onClick={(e) => e.stopPropagation()}
+                onChange={() => setSelecionadas(prev => { const n = new Set(prev); if (n.has(chave)) n.delete(chave); else n.add(chave); return n; })}
+                style={{ width: 15, height: 15, marginTop: 2, cursor: 'pointer', flexShrink: 0 }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', minHeight: 20 }}>
                 <span style={{ fontSize: 13, fontWeight: naoLida ? 800 : 600, color: '#111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {quem}{msgs.length > 1 && <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 700, color: '#64748b' }}>({msgs.length})</span>}
                 </span>
-                <span style={{ fontSize: 11, color: '#94a3b8', flexShrink: 0 }}>{fmtData(m.criado_em)}</span>
+                {acoesLinha ? (
+                  <span style={{ display: 'inline-flex', flexShrink: 0, margin: '-6px -6px -6px 0' }}>
+                    {pasta === 'lixeira'
+                      ? <BotaoIcone titulo="Restaurar" Icon={Undo2} tamanho={15} onClick={parar(() => restaurar(msgs))} />
+                      : <BotaoIcone titulo="Mover para a Lixeira" Icon={Trash2} tamanho={15} onClick={parar(() => paraLixeira(msgs))} />}
+                    {pasta === 'entrada' && <BotaoIcone titulo="Mover para Spam" Icon={ShieldAlert} tamanho={15} onClick={parar(() => paraSpam(msgs))} />}
+                    {entrada && pasta !== 'enviados' && (naoLida
+                      ? <BotaoIcone titulo="Marcar como lida" Icon={MailOpen} tamanho={15} onClick={parar(() => marcarLido([cronologica(msgs)], true))} />
+                      : <BotaoIcone titulo="Marcar como não lida" Icon={Mail} tamanho={15} onClick={parar(() => marcarLido([cronologica(msgs)], false))} />)}
+                  </span>
+                ) : (
+                  <span style={{ fontSize: 11, color: '#94a3b8', flexShrink: 0 }}>{fmtData(m.criado_em)}</span>
+                )}
               </div>
               <div style={{ fontSize: 12.5, color: '#334155', fontWeight: naoLida ? 700 : 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.assunto || '(sem assunto)'}</div>
               <div style={{ fontSize: 11.5, color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', gap: 6, alignItems: 'center' }}>
                 {msgs.some(x => x.chamado_id) && <MessageCircle size={11} title="Virou chamado" />}
                 {msgs.some(x => (x.anexos || []).length > 0) && <Paperclip size={11} />}
                 {m.spam_motivo ? <span style={{ color: '#dc2626' }}>{m.spam_motivo}</span> : m.direcao === 'saida' ? <StatusEnvio m={m} /> : separarCitacao(m.texto).principal.slice(0, 90)}
+              </div>
               </div>
             </div>
           );
@@ -730,19 +846,48 @@ export default function CaixaEmail({ soPessoal = false }) {
               {conversa.some(x => x.chamado_id) && <div style={{ color: '#0D63DB' }}><MessageCircle size={12} /> Esta conversa está num chamado da fila — responder daqui também registra no chamado.</div>}
             </div>
 
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '12px 0' }}>
-              {ultimaEntrada && pasta !== 'spam' && <button onClick={() => responder(ultimaEntrada)} style={btn(false)}><Reply size={13} /> Responder</button>}
-              <button onClick={() => encaminhar([conversa[conversa.length - 1] || ativa])} style={btn(false)}><Forward size={13} /> {conversa.length > 1 ? 'Encaminhar a última' : 'Encaminhar'}</button>
-              {conversa.length > 1 && <button onClick={() => encaminhar(conversa)} style={btn(false)}><Forward size={13} /> Encaminhar a conversa ({conversa.length})</button>}
-              {!soPessoal && ultimaEntrada?.caso_id && ultimaEntrada.anexos?.length > 0 && <button onClick={() => anexoAoCliente(ultimaEntrada)} style={{ ...btn(false), color: '#047857' }}><Forward size={13} /> Enviar só o anexo ao cliente</button>}
-              {pasta === 'entrada' && <button onClick={() => mover(() => 'spam', 'Movido para Spam.')} style={btn(false)}><ShieldAlert size={13} /> Spam</button>}
-              {pasta === 'spam' && <button onClick={() => mover(() => 'entrada', 'Devolvido à Entrada. (Não abre chamado automaticamente — responda daqui se precisar.)')} style={btn(false)}><Undo2 size={13} /> Não é spam</button>}
-              {ultimaEntrada?.de_email && <button onClick={() => bloquear(ultimaEntrada, false)} style={{ ...btn(false), color: '#b91c1c' }}><Ban size={13} /> Bloquear remetente</button>}
-              {ultimaEntrada?.de_email && <button onClick={() => bloquear(ultimaEntrada, true)} style={{ ...btn(false), color: '#b91c1c' }}><Ban size={13} /> Bloquear domínio</button>}
-              {pasta !== 'lixeira'
-                ? <button onClick={() => mover(() => 'lixeira', 'Movido para a Lixeira.')} style={btn(false)}><Trash2 size={13} /> Lixeira</button>
-                : <button onClick={() => mover((x) => (x.direcao === 'saida' ? 'enviados' : 'entrada'), 'Restaurado.')} style={btn(false)}><Undo2 size={13} /> Restaurar</button>}
-            </div>
+            {/* BARRA DE AÇÕES (23/11, inspirada no Gmail): eram até 8 botões com texto quebrando em duas
+                linhas. Ficam à vista Responder + ícones do dia a dia; o que é raro ou perigoso (bloquear)
+                vai para o "⋮ Mais". O que cada ícone faz aparece ao passar o mouse. */}
+            {(() => {
+              const itensMais = [
+                conversa.length > 1 && { k: 'fwd-todas', label: `Encaminhar a conversa inteira (${conversa.length})`, Icon: Forward, fn: () => encaminhar(conversa) },
+                !soPessoal && ultimaEntrada?.caso_id && ultimaEntrada.anexos?.length > 0 && { k: 'anexo', label: 'Enviar só o anexo ao cliente', Icon: Forward, cor: '#047857', fn: () => anexoAoCliente(ultimaEntrada) },
+                ultimaEntrada?.de_email && { k: 'bl-rem', label: 'Bloquear remetente', Icon: Ban, cor: '#b91c1c', fn: () => bloquear(ultimaEntrada, false) },
+                ultimaEntrada?.de_email && { k: 'bl-dom', label: 'Bloquear domínio inteiro', Icon: Ban, cor: '#b91c1c', fn: () => bloquear(ultimaEntrada, true) },
+              ].filter(Boolean);
+              return (
+                <div style={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center', margin: '12px 0', paddingBottom: 10, borderBottom: '1px solid #f1f5f9' }}>
+                  {ultimaEntrada && pasta !== 'spam' && <button onClick={() => responder(ultimaEntrada)} style={{ ...btn(false), marginRight: 6 }}><Reply size={13} /> Responder</button>}
+                  <BotaoIcone titulo={conversa.length > 1 ? 'Encaminhar a última mensagem' : 'Encaminhar'} Icon={Forward} onClick={() => encaminhar([conversa[conversa.length - 1] || ativa])} />
+                  <span style={{ width: 1, height: 20, background: '#e2e8f0', margin: '0 4px' }} />
+                  {pasta === 'entrada' && <BotaoIcone titulo="Mover para Spam" Icon={ShieldAlert} onClick={() => mover(() => 'spam', 'Movido para Spam.')} />}
+                  {pasta === 'spam' && <BotaoIcone titulo="Não é spam (devolver à Entrada)" Icon={Undo2} onClick={() => mover(() => 'entrada', 'Devolvido à Entrada. (Não abre chamado automaticamente — responda daqui se precisar.)')} />}
+                  {pasta !== 'lixeira'
+                    ? <BotaoIcone titulo="Mover para a Lixeira" Icon={Trash2} onClick={() => mover(() => 'lixeira', 'Movido para a Lixeira.')} />
+                    : <BotaoIcone titulo="Restaurar" Icon={Undo2} onClick={() => mover((x) => (x.direcao === 'saida' ? 'enviados' : 'entrada'), 'Restaurado.')} />}
+                  {ultimaEntrada && pasta !== 'enviados' && <BotaoIcone titulo="Marcar como não lida" Icon={Mail} onClick={naoLidaDaLeitura} />}
+                  {itensMais.length > 0 && (
+                    <span style={{ position: 'relative' }}>
+                      <BotaoIcone titulo="Mais ações" Icon={EllipsisVertical} onClick={() => setMenuMais(v => !v)} />
+                      {menuMais && <>
+                        {/* Clique fora fecha o menu. */}
+                        <div onClick={() => setMenuMais(false)} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
+                        <div role="menu" style={{ position: 'absolute', top: 36, right: 0, zIndex: 41, background: 'white', border: '1px solid #e2e8f0', borderRadius: 10, boxShadow: '0 8px 24px rgba(15,23,42,.14)', padding: 4, minWidth: 240 }}>
+                          {itensMais.map(({ k, label, Icon, cor, fn }) => (
+                            <button key={k} role="menuitem" onClick={() => { setMenuMais(false); fn(); }}
+                              onMouseEnter={(e) => { e.currentTarget.style.background = '#f1f5f9'; }} onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; }}
+                              style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 10px', border: 'none', background: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12.5, fontWeight: 600, color: cor || '#334155', textAlign: 'left' }}>
+                              <Icon size={14} /> {label}
+                            </button>
+                          ))}
+                        </div>
+                      </>}
+                    </span>
+                  )}
+                </div>
+              );
+            })()}
 
             {pasta !== 'spam' && pasta !== 'lixeira' && user?.id && <CobrarPosicao conversa={conversa} userId={user.id} onErro={setErro} onAviso={setAviso} />}
 
@@ -817,15 +962,33 @@ export default function CaixaEmail({ soPessoal = false }) {
       </div>
 
       {/* COMPOR */}
-      {compor && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
-          <div style={{ background: 'white', borderRadius: 14, width: 'min(680px, 100%)', maxHeight: '92vh', overflow: 'auto', padding: 20 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <span style={{ fontWeight: 800, fontSize: 16 }}>{compor.responder_a ? 'Responder' : 'Nova mensagem'}
-                {salvoEm && <span style={{ marginLeft: 10, fontSize: 11.5, fontWeight: 600, color: '#94a3b8' }}>rascunho salvo {salvoEm.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>}
+      {/* JANELA NO CANTO (23/11, inspirada no Gmail): não tapa a caixa — dá para abrir outra conversa
+          e consultar enquanto escreve. Minimizar deixa só a barra; tela cheia escurece o fundo. No
+          celular continua ocupando a tela (não cabe janela flutuante). */}
+      {compor && (() => {
+        const minimizada = tamCompor === 'min' && !estreito;
+        const cheia = tamCompor === 'max' && !estreito;
+        const posicao = estreito ? { inset: 0, borderRadius: 0 }
+          : minimizada ? { right: 24, bottom: 0, width: 320, borderRadius: '12px 12px 0 0' }
+          : cheia ? { top: '4vh', left: '50%', transform: 'translateX(-50%)', width: 'min(1000px, 94vw)', height: '92vh', borderRadius: 12 }
+          : { right: 24, bottom: 0, width: 'min(580px, calc(100vw - 48px))', height: 'min(660px, 88vh)', borderRadius: '12px 12px 0 0' };
+        const titulo = compor.responder_a ? 'Responder' : 'Nova mensagem';
+        const parar = (fn) => (e) => { e.stopPropagation(); fn(); };
+        return (<>
+        {cheia && <div onClick={() => setTamCompor('normal')} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.35)', zIndex: 999 }} />}
+        <div role="dialog" aria-label={titulo} style={{ position: 'fixed', ...posicao, zIndex: 1000, background: 'white', border: '1px solid #e2e8f0', boxShadow: '0 8px 32px rgba(15,23,42,.25)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <div onClick={minimizada ? () => setTamCompor('normal') : undefined} title={minimizada ? 'Abrir' : undefined}
+              style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '6px 6px 6px 14px', background: '#f1f5f9', cursor: minimizada ? 'pointer' : 'default', flexShrink: 0 }}>
+              <span style={{ flex: 1, minWidth: 0, fontWeight: 700, fontSize: 13.5, color: '#111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {minimizada && compor.assunto ? compor.assunto : titulo}
+                {salvoEm && !minimizada && <span style={{ marginLeft: 10, fontSize: 11.5, fontWeight: 600, color: '#94a3b8' }}>rascunho salvo {salvoEm.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>}
               </span>
-              <button onClick={fecharCompor} title="Fechar (o rascunho fica salvo)" style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={18} /></button>
+              {!estreito && <BotaoIcone titulo={minimizada ? 'Abrir' : 'Minimizar'} Icon={Minus} tamanho={15} onClick={parar(() => setTamCompor(minimizada ? 'normal' : 'min'))} />}
+              {!estreito && <BotaoIcone titulo={cheia ? 'Sair da tela cheia' : 'Tela cheia'} Icon={cheia ? Minimize2 : Maximize2} tamanho={14} onClick={parar(() => setTamCompor(cheia ? 'normal' : 'max'))} />}
+              <BotaoIcone titulo="Fechar (o rascunho fica salvo)" Icon={X} tamanho={16} onClick={parar(fecharCompor)} />
             </div>
+            {!minimizada && <>
+            <div style={{ flex: 1, overflow: 'auto', padding: '12px 16px' }}>
             {compor.chamado_id && <div style={{ fontSize: 12, color: '#0D63DB', marginBottom: 8 }}>Esta resposta também entra no histórico do chamado.</div>}
             {[
               ['De', <select key="de" value={compor.de} onChange={e => setCompor({ ...compor, de: e.target.value })} style={campo}>
@@ -840,7 +1003,7 @@ export default function CaixaEmail({ soPessoal = false }) {
             ].map(([rot, el]) => (
               <label key={rot} style={{ display: 'grid', gridTemplateColumns: '70px minmax(0, 1fr)', alignItems: 'center', gap: 8, marginBottom: 8, fontSize: 12, fontWeight: 700, color: '#475569' }}>{rot}{el}</label>
             ))}
-            <textarea value={compor.texto} onChange={e => setCompor({ ...compor, texto: e.target.value })} rows={12}
+            <textarea value={compor.texto} onChange={e => setCompor({ ...compor, texto: e.target.value })} rows={cheia ? 18 : 10}
               onPaste={aoColar}
               onDragOver={e => { if (e.dataTransfer?.types?.includes('Files')) e.preventDefault(); }}
               onDrop={e => { if (e.dataTransfer?.files?.length) { e.preventDefault(); anexarArquivos(e.dataTransfer.files); } }}
@@ -895,16 +1058,19 @@ export default function CaixaEmail({ soPessoal = false }) {
                 Incluir no final o e-mail que estou respondendo (citado). Desmarcado: vai só o que você escreveu.
               </label>
             )}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
-              {temConteudo(compor) && <button onClick={descartarRascunho} style={{ ...btn(false), color: '#b91c1c', marginRight: 'auto' }}><Trash2 size={13} /> Descartar</button>}
-              <button onClick={fecharCompor} style={btn(false)}>{temConteudo(compor) ? 'Salvar e fechar' : 'Cancelar'}</button>
-              <button onClick={enviar} disabled={enviando} style={{ ...btn(true), background: '#0D63DB', opacity: enviando ? 0.6 : 1 }}>
+            </div>
+            {/* Rodapé fixo: Enviar sempre à vista, mesmo com texto longo rolando acima. */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderTop: '1px solid #f1f5f9', flexShrink: 0 }}>
+              <button onClick={enviar} disabled={enviando} style={{ ...btn(true), background: '#0D63DB', opacity: enviando ? 0.6 : 1, padding: '8px 18px', borderRadius: 999 }}>
                 {enviando ? <Loader2 size={14} /> : <Send size={14} />} Enviar
               </button>
+              <button onClick={fecharCompor} style={btn(false)}>{temConteudo(compor) ? 'Salvar e fechar' : 'Cancelar'}</button>
+              {temConteudo(compor) && <span style={{ marginLeft: 'auto' }}><BotaoIcone titulo="Descartar rascunho" Icon={Trash2} cor="#b91c1c" onClick={descartarRascunho} /></span>}
             </div>
-          </div>
+            </>}
         </div>
-      )}
+        </>);
+      })()}
     </div>
   );
 }
