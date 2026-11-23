@@ -38,6 +38,7 @@ const BuscaVeiculos = lazy(() => import('./pages/BuscaVeiculos'));
 const AnaliseVeiculo = lazy(() => import('./pages/AnaliseVeiculo'));
 const VeiculoDetalhe = lazy(() => import('./pages/VeiculoDetalhe'));
 const RetomadaVeiculos = lazy(() => import('./pages/RetomadaVeiculos'));
+const VeiculosArrematados = lazy(() => import('./pages/VeiculosArrematados'));
 const CarteiraPropostas = lazy(() => import('./components/CarteiraPropostas'));
 const ImovelDetalhe = lazy(() => import('./pages/ImovelDetalhe'));
 const ImovelGate = lazy(() => import('./pages/ImovelGate'));
@@ -401,6 +402,8 @@ function MainLayout() {
           <Route path="/analise-veiculo" element={<PrivateRoute><AnaliseVeiculo /></PrivateRoute>} />
           <Route path="/carteira-propostas" element={<PrivateRoute roles={['admin','analista','consultor']}><div style={{ padding: 20, display: 'flex', justifyContent: 'center' }}><CarteiraPropostas /></div></PrivateRoute>} />
           <Route path="/admin/retomada-veiculos" element={<PrivateRoute roles={['admin','analista']}><RetomadaVeiculos /></PrivateRoute>} />
+          {/* Rastreio de veículo arrematado + assessoria de veículo (23/11): só lançamento manual da equipe. */}
+          <Route path="/admin/veiculos-arrematados" element={<PrivateRoute roles={['admin','analista']}><VeiculosArrematados /></PrivateRoute>} />
           <Route path="/completar-cadastro" element={<PrivateRoute><CompletarCadastro /></PrivateRoute>} />
           <Route path="/imovel/:id" element={<ImovelRota />} />
           <Route path="/mapa" element={<PrivateRoute><MapaImoveis /></PrivateRoute>} />

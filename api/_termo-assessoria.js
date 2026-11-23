@@ -215,7 +215,7 @@ async function nomeDo(sb, userId) {
 
 // Cria o link de assinatura + o contrato pendente (bloqueio até assinar). Idempotente por
 // (produto_tipo, produto_id) entre os que estão aguardando ou assinados.
-async function criarDocumento(sb, { userId, titulo, conteudo, produtoTipo, produtoId, planoKey, imovelId, criadoPor }) {
+export async function criarDocumento(sb, { userId, titulo, conteudo, produtoTipo, produtoId, planoKey, imovelId, criadoPor }) {
   const rJa = await sb(`contratos_link?produto_tipo=eq.${produtoTipo}&produto_id=eq.${encodeURIComponent(produtoId)}&arremate_user_id=eq.${userId}&status=in.(aguardando_assinatura,assinado)&select=token,status&limit=1`);
   if (!rJa.ok) return { ok: false, motivo: `conferência de documento existente HTTP ${rJa.status}` };
   const [ja] = await rJa.json();

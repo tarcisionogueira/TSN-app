@@ -11459,7 +11459,10 @@ function CnjTab() {
   return (
     <div style={{ padding: '24px 0', height: 'calc(100vh - 200px)', minHeight: 500, display: 'flex', flexDirection: 'column' }}>
       {/* Atalho que morava na aba Veículos (removida em 21/10, dono: a lista de veículos já é a busca /veiculos). */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+        <a href="#/admin/veiculos-arrematados" style={{ padding: '6px 14px', borderRadius: 8, background: 'white', color: '#0D63DB', border: '1px solid #bfdbfe', fontSize: 12, fontWeight: 700, textDecoration: 'none' }}>
+          🚗 Veículos arrematados (rastreio e assessoria)
+        </a>
         <a href="#/admin/retomada-veiculos" style={{ padding: '6px 14px', borderRadius: 8, background: 'white', color: '#0D63DB', border: '1px solid #bfdbfe', fontSize: 12, fontWeight: 700, textDecoration: 'none' }}>
           ⚖️ Retomada de veículos (busca e apreensão por banco)
         </a>
