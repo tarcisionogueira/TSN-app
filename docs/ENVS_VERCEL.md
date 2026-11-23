@@ -238,3 +238,21 @@ Os dois também como **secret do GitHub** (o `enriquecer-fipe.yml` lê de lá).
   dia 3): ausente = o pacote vai só ao dono, com alerta dizendo que o contador não recebeu.
 - `AUDITORIA_EMAIL_DESTINO` — **não é da Vercel**, é **secret do GitHub** (`auditoria-claude.yml`). Conferir em
   GitHub › Settings › Secrets and variables › Actions.
+
+
+## ⏳ A CRIAR — ONR Web Service oficial (convênio, 22/11)
+
+Convênio da NOGUEIRA EMPREENDIMENTOS ativado no chamado CS0819152 (21/10). O ID e a chave chegaram
+por e-mail da ONR — **o valor da chave nunca entra no repositório** (repo público). Cliente:
+`api/_onr-ws.js`; teste no painel de `/registro-imovel` ("Testar conexão").
+
+| Env | Valor |
+|---|---|
+| `ONR_WS_ID` | o "ID" do e-mail da ONR (IDParceiro) |
+| `ONR_WS_CHAVE` | a "Chave" do e-mail da ONR (64 caracteres) |
+| `ONR_WS_EMAIL` | e-mail do usuário administrador do convênio no RI Digital |
+| `ONR_WS_CPF` | CPF do mesmo usuário (só números) |
+| `ONR_WS_URL` | opcional — padrão homologação `https://hml3-ws.onr.org.br`; a URL de produção a ONR ainda não informou |
+| `ONR_WS_HASH_CASE` | opcional — `upper` (padrão) ou `lower`; o "Testar conexão" diz qual a ONR aceita |
+
+⚠️ O acesso à Homologação3 foi liberado por 30 dias, até 21/11/2026 — pedir prorrogação no mesmo chamado.

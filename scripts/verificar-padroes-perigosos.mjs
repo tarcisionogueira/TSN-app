@@ -677,6 +677,9 @@ const ENV_PARES_LEGITIMOS = new Set([
   // WhatsApp via Evolution (22/11): o token que AUTENTICA o webhook da Evolution (header
   // x-webhook-token) não é o token de ENVIO da Cloud API.
   'WA_EVOLUTION_WEBHOOK_TOKEN~WA_TOKEN',
+  // ONR (22/11): o e-mail do usuário do convênio no Web Service OFICIAL (_onr-ws.js) não é o login
+  // da raspagem do portal (_onr.js). Convivem enquanto a raspagem não for aposentada.
+  'ONR_WS_EMAIL~ONR_EMAIL',
 ]);
 function envsSuspeitas() {
   // COMENTÁRIO É IGNORADO POR LINHA, não por parser de estado. A primeira tentativa usou o

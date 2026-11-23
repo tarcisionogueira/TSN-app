@@ -66,6 +66,7 @@ export default async function handler(req) {
     video:    { ok: !!process.env.DAILY_API_KEY,           label: 'Vídeo (Daily.co)',          grupo: 'operacao', impacto: 'operacional' },
     coleta:   { ok: !!process.env.BRIGHTDATA_API_TOKEN,    label: 'Coleta de lotes (Bright Data)', grupo: 'operacao', impacto: 'operacional' },
     onr:      { ok: !!(process.env.ONR_EMAIL && process.env.ONR_SENHA), label: 'Cartório (ONR / RI Digital)', grupo: 'operacao', impacto: 'operacional', opcional: true },
+    onr_ws:   { ok: !!(process.env.ONR_WS_ID && process.env.ONR_WS_CHAVE && process.env.ONR_WS_EMAIL && process.env.ONR_WS_CPF), label: 'ONR — Web Service oficial (convênio)', grupo: 'operacao', impacto: 'operacional', opcional: true },
     // ── Agenda ───────────────────────────────────────────────────────────────
     gcalClient:  { ok: !!(process.env.GOOGLE_OAUTH_CLIENT_ID && process.env.GOOGLE_OAUTH_CLIENT_SECRET), label: 'Google OAuth (client)', grupo: 'agenda', impacto: 'operacional' },
     gcalConectada:{ ok: !!process.env.GOOGLE_OAUTH_REFRESH_TOKEN, label: 'Agenda Google conectada', grupo: 'agenda', impacto: 'operacional' },

@@ -4,6 +4,7 @@ import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
 import { nomeArquivoSeguro, ACEITA_DOCUMENTO } from '../utils/arquivo';
 import { useAuth } from '../contexts/AuthContext';
+import OnrWsPainel from '../components/OnrWsPainel';
 import { ChevronLeft, FileText, CheckCircle2, Clock, AlertCircle, ExternalLink, Upload, Loader2, Info } from 'lucide-react';
 
 // Documentos necessários para registro pós-arrematação
@@ -224,6 +225,8 @@ export default function OnrRegistro() {
       <button onClick={() => nav(-1)} style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', color: '#475569', fontWeight: 600, fontSize: 13, cursor: 'pointer', marginBottom: 20 }}>
         <ChevronLeft size={15} /> Voltar
       </button>
+
+      <OnrWsPainel />
 
       {/* Header */}
       <div style={{ marginBottom: 24 }}>
