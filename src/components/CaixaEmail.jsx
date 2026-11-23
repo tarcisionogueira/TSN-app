@@ -28,7 +28,7 @@ const PASTAS = [
   { k: 'lixeira', label: 'Lixeira', Icon: Trash2 },
 ];
 const CAIXAS = ['suporte', 'contato', 'privacidade'];
-const COLS_LISTA = 'id,direcao,pasta,caixa,dono,de_email,de_nome,para,assunto,texto,lido,criado_em,chamado_id,spam_motivo,anexos,resposta_de,entregue_em,aberto_em,clicado_em,entrega_status';
+const COLS_LISTA = 'id,direcao,pasta,caixa,dono,de_email,de_nome,para,assunto,texto,lido,criado_em,chamado_id,caso_id,spam_motivo,anexos,resposta_de,entregue_em,aberto_em,clicado_em,entrega_status';
 // Filtro de origem (23/09): caixa PESSOAL (endereço da própria pessoa, privada) × COMUNICAÇÃO
 // (contato@/suporte@/privacidade@ — da equipe toda).
 // Sinal de ENTREGA/ABERTURA de e-mail enviado (webhook do Resend → email_caixa). "Aberto"
@@ -70,6 +70,61 @@ const semToken = (e) => String(e || '').replace(/\+[a-z0-9]+@(bidprobrasil\.com\
 const listaSemToken = (l) => [...new Set((l || []).map(semToken))].join(', ');
 const contraparte = (m) => String(m.direcao === 'saida' ? ((m.para || [])[0] || '') : (m.de_email || '')).trim().toLowerCase();
 const chaveConversa = (m) => `${contraparte(m)}|${normAssunto(m.assunto)}`;
+// AVATAR (23/11, inspirado no Gmail): bolinha com a inicial, cor fixa por endereço — a mesma pessoa
+// tem sempre a mesma cor, o que ajuda a separar quem é quem numa conversa longa.
+const CORES_AVATAR = ['#0D63DB', '#16a34a', '#9333ea', '#ea580c', '#0891b2', '#db2777', '#4f46e5', '#65a30d', '#b45309', '#0f766e'];
+function Avatar({ nome, email, nossa, tamanho = 32 }) {
+  const base = String(email || nome || '?').toLowerCase();
+  let h = 0;
+  for (let i = 0; i < base.length; i++) h = (h * 31 + base.charCodeAt(i)) >>> 0;
+  const letra = (String(nome || '').replace(/["'<>]/g, '').trim()[0] || String(email || '?')[0] || '?').toUpperCase();
+  return (
+    <span aria-hidden="true" style={{ width: tamanho, height: tamanho, borderRadius: 999, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+      background: nossa ? '#111111' : CORES_AVATAR[h % CORES_AVATAR.length], color: 'white', fontSize: tamanho * 0.44, fontWeight: 700 }}>
+      {nossa ? 'B' : letra}
+    </span>
+  );
+}
+// ANEXOS E ETIQUETAS NA LINHA DA LISTA (23/11, inspirado no Gmail): antes era só um clipe e um balão.
+// Agora o nome dos anexos (até 2, clicáveis) com o tipo em cor, e etiquetas de Chamado, Caso e de
+// qual caixa a conversa veio (quando a lista mistura "Minha caixa" e "Comunicação").
+const COR_EXT = { pdf: '#dc2626', doc: '#2563eb', docx: '#2563eb', xls: '#16a34a', xlsx: '#16a34a', csv: '#16a34a', jpg: '#9333ea', jpeg: '#9333ea', png: '#9333ea', gif: '#9333ea', webp: '#9333ea', zip: '#b45309', rar: '#b45309' };
+const etiqueta = (cor, fundo) => ({ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '1px 8px', borderRadius: 999, fontSize: 10.5, fontWeight: 700, color: cor, background: fundo, whiteSpace: 'nowrap' });
+function EtiquetasLinha({ msgs, m, mostrarCaixa, onAnexo }) {
+  const anexos = msgs.flatMap(x => (x.anexos || []).map((a, i) => ({ x, a, i }))).filter(({ a }) => a && !a.inline && a.enviado !== false);
+  const chamado = msgs.some(x => x.chamado_id);
+  const caso = msgs.some(x => x.caso_id);
+  const caixa = mostrarCaixa ? (m.dono ? { t: 'Minha caixa', cor: '#0D63DB', fundo: '#eff6ff' } : m.caixa ? { t: `${String(m.caixa).split('@')[0]}@`, cor: '#15803d', fundo: '#f0fdf4' } : null) : null;
+  if (!anexos.length && !chamado && !caso && !caixa) return null;
+  return (
+    <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center', marginTop: 6 }}>
+      {anexos.slice(0, 2).map(({ x, a, i }) => {
+        const ext = String(a.nome || '').split('.').pop().toLowerCase();
+        const abre = !!a.id; // só o que tem cópia baixável abre direto da lista
+        const conteudo = <>
+          <span style={{ fontSize: 9, fontWeight: 800, color: 'white', background: COR_EXT[ext] || '#64748b', borderRadius: 3, padding: '0 3px', textTransform: 'uppercase' }}>{(ext || 'arq').slice(0, 4)}</span>
+          <span style={{ maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.nome || 'anexo'}</span>
+        </>;
+        const estilo = { display: 'inline-flex', alignItems: 'center', gap: 5, padding: '2px 8px', borderRadius: 999, border: '1px solid #e2e8f0', background: 'white', fontSize: 11, color: '#334155', maxWidth: 160 };
+        return abre
+          ? <button key={`${x.id}-${i}`} type="button" title={`Abrir ${a.nome || 'anexo'}`} onClick={(e) => { e.stopPropagation(); onAnexo(x, a, i); }} style={{ ...estilo, cursor: 'pointer' }}>{conteudo}</button>
+          : <span key={`${x.id}-${i}`} title={a.nome || ''} style={estilo}>{conteudo}</span>;
+      })}
+      {anexos.length > 2 && <span style={{ fontSize: 11, color: '#64748b', fontWeight: 700 }}>+{anexos.length - 2}</span>}
+      {chamado && <span style={etiqueta('#0D63DB', '#eff6ff')}><MessageCircle size={10} /> Chamado</span>}
+      {caso && <span style={etiqueta('#7c3aed', '#f5f3ff')}>Caso</span>}
+      {caixa && <span style={etiqueta(caixa.cor, caixa.fundo)}>{caixa.t}</span>}
+    </div>
+  );
+}
+// "para mim", "para suporte@" ou "para fulano, +2" — o endereço completo fica nos detalhes.
+function resumoPara(m) {
+  const lista = (m.para || []).map(semToken);
+  if (!lista.length) return semToken(m.caixa) || '';
+  const primeiro = lista[0].split('@')[0];
+  const extras = lista.length - 1 + (m.cc || []).length;
+  return extras > 0 ? `${primeiro}, +${extras}` : primeiro;
+}
 // Endereço que pode ir cru num filtro `.or()` do PostgREST (vírgula/parêntese/aspas quebrariam a sintaxe).
 const RE_FILTRO_SEGURO = /^[^\s,()"{}]+@[^\s,()"{}]+$/;
 // Corta o texto na 1ª linha de histórico citado ("Em … escreveu:", "De: … Enviada em:", ">").
@@ -223,11 +278,20 @@ export default function CaixaEmail({ soPessoal = false }) {
   // Celular (23/09): lista e leitor lado a lado (340px + 1fr) empurravam a mensagem para fora da
   // tela. Abaixo de 900px vira app de e-mail: OU a lista, OU a mensagem aberta com "Voltar".
   const estreito = useIsMobile(900);
+  // Pastas numa COLUNA LATERAL (23/11, inspirado no Gmail) só quando cabe: com a tela de Atendimento
+  // limitada a 1200px, abaixo disso a terceira coluna espremeria a leitura — volta a barra de botões.
+  const lateral = !useIsMobile(1180);
   const [busca, setBusca] = useState('');
   const [compor, setCompor] = useState(null);    // { de, para, cc, assunto, texto, responder_a, rascunho_id? }
   // Escrever em JANELA NO CANTO (23/11, inspirado no Gmail): era um modal que tapava a caixa inteira,
   // e não dava para consultar outro e-mail enquanto escrevia. 'normal' | 'min' (só a barra) | 'max'.
   const [tamCompor, setTamCompor] = useState('normal');
+  // Cc SÓ QUANDO PRECISAR (23/11): o campo fica escondido atrás de um link "Cc" ao lado do Para; abre
+  // sozinho se já houver cópia (rascunho retomado, cliente do caso marcado).
+  const [abrirCc, setAbrirCc] = useState(false);
+  // Uma vez à vista, o Cc não some se a pessoa apagar o último endereço enquanto edita.
+  const temCc = !!String(compor?.cc || '').trim();
+  useEffect(() => { if (temCc) setAbrirCc(true); }, [temCc]);
   // Seleção em LOTE por conversa (chave da conversa) e ações ao passar o mouse na linha (23/11).
   const [selecionadas, setSelecionadas] = useState(() => new Set());
   const [linhaHover, setLinhaHover] = useState(null);
@@ -468,6 +532,7 @@ export default function CaixaEmail({ soPessoal = false }) {
       if (pasta === 'rascunhos') carregar();
     } else await salvando.current;
     setTamCompor('normal');
+    setAbrirCc(false);
     rascunhoId.current = c?.rascunho_id || null;
     if (c) c = { ...c, anexos: Array.isArray(c.anexos) ? c.anexos : [], encaminhar_anexos: Array.isArray(c.encaminhar_anexos) ? c.encaminhar_anexos : [] };
     chaveEnvio.current = crypto.randomUUID?.() || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
@@ -685,8 +750,16 @@ export default function CaixaEmail({ soPessoal = false }) {
   const ultimaEntrada = [...conversa].reverse().find(x => x.direcao === 'entrada');
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: estreito ? 'minmax(0, 1fr)' : '340px minmax(0, 1fr)', gap: 16, alignItems: 'start' }}>
-      {/* Barra de pastas + ações */}
+    <div style={{ display: 'grid', gridTemplateColumns: estreito ? 'minmax(0, 1fr)' : lateral ? '176px 330px minmax(0, 1fr)' : '340px minmax(0, 1fr)', gap: 16, alignItems: 'start' }}>
+      {lateral ? (
+        // Tela larga: no topo só a busca e o atualizar; pastas, origem e Escrever vão para a coluna lateral.
+        <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar remetente ou assunto…"
+            style={{ flex: 1, maxWidth: 560, marginLeft: 192, padding: '9px 16px', borderRadius: 999, border: '1px solid #e2e8f0', background: '#f1f5f9', fontSize: 13 }} />
+          <BotaoIcone titulo="Atualizar" Icon={RefreshCw} onClick={carregar} />
+        </div>
+      ) : (
+      /* Barra de pastas + ações (tela média e celular) */
       <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         {PASTAS.map(({ k, label, Icon }) => (
           <button key={k} onClick={() => setPasta(k)} style={btn(pasta === k)}>
@@ -706,6 +779,7 @@ export default function CaixaEmail({ soPessoal = false }) {
           <PenSquare size={14} /> Escrever
         </button>
       </div>
+      )}
 
       {(erro || aviso) && (
         <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 8, alignItems: 'center', padding: '8px 12px', borderRadius: 8, fontSize: 12.5, fontWeight: 600,
@@ -713,6 +787,35 @@ export default function CaixaEmail({ soPessoal = false }) {
           <AlertCircle size={14} /> <span style={{ flex: 1 }}>{erro || aviso}</span>
           <button onClick={() => { setErro(''); setAviso(''); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit' }}><X size={14} /></button>
         </div>
+      )}
+
+      {/* COLUNA LATERAL (tela larga): Escrever em destaque, pastas com contagem e o filtro de origem. */}
+      {lateral && (
+        <nav aria-label="Pastas" style={{ display: 'grid', gap: 2, position: 'sticky', top: 12 }}>
+          <button onClick={() => abrirCompor({ de: dePadrao, para: '', cc: '', assunto: '', texto: '', responder_a: null })}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 10, justifySelf: 'start', padding: '14px 22px', marginBottom: 12, borderRadius: 16, border: 'none', background: '#dbeafe', color: '#0f2f66', fontSize: 14, fontWeight: 700, cursor: 'pointer', boxShadow: '0 1px 3px rgba(15,23,42,.12)' }}>
+            <PenSquare size={18} /> Escrever
+          </button>
+          {PASTAS.map(({ k, label, Icon }) => {
+            const ativo = pasta === k;
+            return (
+              <button key={k} onClick={() => setPasta(k)} aria-current={ativo ? 'page' : undefined}
+                style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '7px 12px 7px 16px', border: 'none', borderRadius: 999, cursor: 'pointer', textAlign: 'left',
+                  background: ativo ? '#dbeafe' : 'none', color: ativo ? '#0f2f66' : '#334155', fontSize: 13, fontWeight: ativo || naoLidos[k] > 0 ? 800 : 500 }}>
+                <Icon size={16} /> <span style={{ flex: 1 }}>{label}</span>
+                {naoLidos[k] > 0 && <span style={{ fontSize: 11.5, fontWeight: 700, color: k === 'spam' ? '#dc2626' : 'inherit' }}>{naoLidos[k]}</span>}
+              </button>
+            );
+          })}
+          <div style={{ fontSize: 11, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.04em', margin: '16px 0 4px 16px' }}>Origem</div>
+          {ORIGENS.map(([k, l]) => (
+            <button key={k} onClick={() => setOrigem(k)} aria-pressed={origem === k}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '6px 12px 6px 16px', border: 'none', borderRadius: 999, cursor: 'pointer', textAlign: 'left',
+                background: origem === k ? '#f1f5f9' : 'none', color: '#334155', fontSize: 12.5, fontWeight: origem === k ? 700 : 500 }}>
+              <span style={{ width: 8, height: 8, borderRadius: 999, background: k === 'minha' ? '#0D63DB' : k === 'comunicacao' ? '#16a34a' : '#94a3b8' }} /> {l}
+            </button>
+          ))}
+        </nav>
       )}
 
       {/* LISTA */}
@@ -807,11 +910,10 @@ export default function CaixaEmail({ soPessoal = false }) {
                 )}
               </div>
               <div style={{ fontSize: 12.5, color: '#334155', fontWeight: naoLida ? 700 : 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.assunto || '(sem assunto)'}</div>
-              <div style={{ fontSize: 11.5, color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', gap: 6, alignItems: 'center' }}>
-                {msgs.some(x => x.chamado_id) && <MessageCircle size={11} title="Virou chamado" />}
-                {msgs.some(x => (x.anexos || []).length > 0) && <Paperclip size={11} />}
+              <div style={{ fontSize: 11.5, color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {m.spam_motivo ? <span style={{ color: '#dc2626' }}>{m.spam_motivo}</span> : m.direcao === 'saida' ? <StatusEnvio m={m} /> : separarCitacao(m.texto).principal.slice(0, 90)}
               </div>
+              <EtiquetasLinha msgs={msgs} m={m} mostrarCaixa={origem === 'todas' && !soPessoal} onAnexo={(x, a, i) => baixarAnexo(x, a, i)} />
               </div>
             </div>
           );
@@ -914,10 +1016,32 @@ export default function CaixaEmail({ soPessoal = false }) {
               return (
                 <div key={m.id} ref={ultima ? ultimaRef : undefined}
                   style={{ borderTop: idx ? '1px solid #e2e8f0' : 'none', padding: '14px 0 14px 12px', borderLeft: `3px solid ${nossa ? '#0D63DB' : '#cbd5e1'}`, marginBottom: 2, scrollMarginTop: 12 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', fontSize: 12.5, color: '#475569', overflowWrap: 'anywhere' }}>
-                    <span><b style={{ color: '#111' }}>{nossa ? `Nós (${m.de_email})` : (m.de_nome ? `${m.de_nome} <${m.de_email}>` : m.de_email)}</b>
-                      {' → '}{listaSemToken(m.para) || semToken(m.caixa)}{(m.cc || []).length > 0 && ` · Cc: ${listaSemToken(m.cc)}`}</span>
-                    <span style={{ color: '#94a3b8', flexShrink: 0 }}>{new Date(m.criado_em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+                  {/* CABEÇALHO (23/11, inspirado no Gmail): avatar + nome em destaque, endereço miúdo e
+                      "para …" resumido; o endereçamento completo abre no ▾ (antes ia tudo por extenso). */}
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                    <Avatar nome={nossa ? 'BidPro' : m.de_nome} email={m.de_email} nossa={nossa} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'baseline' }}>
+                        <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 13 }}>
+                          <b style={{ color: '#111' }}>{nossa ? 'Nós' : (m.de_nome || m.de_email)}</b>
+                          <span style={{ marginLeft: 6, fontSize: 11.5, color: '#64748b' }}>{nossa ? semToken(m.de_email) : (m.de_nome ? `<${m.de_email}>` : '')}</span>
+                        </span>
+                        <span style={{ color: '#94a3b8', fontSize: 11.5, flexShrink: 0 }}>{new Date(m.criado_em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+                      </div>
+                      <button type="button" onClick={() => alternar('detalhes')} aria-expanded={!!v.detalhes}
+                        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 11.5, color: '#64748b' }}>
+                        para {resumoPara(m)} {v.detalhes ? '▴' : '▾'}
+                      </button>
+                      {v.detalhes && (
+                        <div style={{ marginTop: 6, padding: '8px 10px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 12, color: '#475569', display: 'grid', gridTemplateColumns: '52px minmax(0, 1fr)', gap: '3px 8px', overflowWrap: 'anywhere' }}>
+                          <span style={{ color: '#94a3b8' }}>de:</span><span>{m.de_nome ? `${m.de_nome} <${semToken(m.de_email)}>` : semToken(m.de_email)}</span>
+                          <span style={{ color: '#94a3b8' }}>para:</span><span>{listaSemToken(m.para) || semToken(m.caixa)}</span>
+                          {(m.cc || []).length > 0 && <><span style={{ color: '#94a3b8' }}>cc:</span><span>{listaSemToken(m.cc)}</span></>}
+                          <span style={{ color: '#94a3b8' }}>data:</span><span>{new Date(m.criado_em).toLocaleString('pt-BR', { dateStyle: 'full', timeStyle: 'short' })}</span>
+                          <span style={{ color: '#94a3b8' }}>assunto:</span><span>{m.assunto || '(sem assunto)'}</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                   {nossa && <div style={{ marginTop: 2 }}><StatusEnvio m={m} completo /></div>}
                   {m.spam_motivo && <div style={{ color: '#dc2626', fontWeight: 700, fontSize: 12 }}><ShieldAlert size={12} /> Spam: {m.spam_motivo}</div>}
@@ -997,10 +1121,18 @@ export default function CaixaEmail({ soPessoal = false }) {
               </select>],
               // Etiquetas por endereço (25/09): Tab/Enter/vírgula ou terminar em .com.br confirma cada um.
               // `key` = a chave deste envio: remonta só ao abrir outro rascunho, não a cada tecla.
-              ['Para', <CampoEmails key={`para-${chaveEnvio.current}`} valorInicial={separarEmails(compor.para)} onChange={l => setCompor(c => (c && c.para !== l.join(', ') ? { ...c, para: l.join(', ') } : c))} placeholder="email@exemplo.com.br" sugestoes={contatos} />],
-              ['Cc', <CampoEmails key={`cc-${chaveEnvio.current}`} valorInicial={separarEmails(compor.cc)} onChange={l => setCompor(c => (c && c.cc !== l.join(', ') ? { ...c, cc: l.join(', ') } : c))} placeholder="opcional" sugestoes={contatos} />],
+              ['Para', <div key="para" style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <CampoEmails key={`para-${chaveEnvio.current}`} valorInicial={separarEmails(compor.para)} onChange={l => setCompor(c => (c && c.para !== l.join(', ') ? { ...c, para: l.join(', ') } : c))} placeholder="email@exemplo.com.br" sugestoes={contatos} />
+                </div>
+                {!(abrirCc || String(compor.cc || '').trim()) && (
+                  <button type="button" onClick={(e) => { e.preventDefault(); setAbrirCc(true); }} title="Adicionar cópia (Cc)"
+                    style={{ background: 'none', border: 'none', padding: '4px 6px', cursor: 'pointer', fontSize: 12.5, fontWeight: 600, color: '#475569' }}>Cc</button>
+                )}
+              </div>],
+              (abrirCc || String(compor.cc || '').trim()) && ['Cc', <CampoEmails key={`cc-${chaveEnvio.current}`} valorInicial={separarEmails(compor.cc)} onChange={l => setCompor(c => (c && c.cc !== l.join(', ') ? { ...c, cc: l.join(', ') } : c))} placeholder="opcional" sugestoes={contatos} />],
               ['Assunto', <input key="as" value={compor.assunto} onChange={e => setCompor({ ...compor, assunto: e.target.value })} style={campo} />],
-            ].map(([rot, el]) => (
+            ].filter(Boolean).map(([rot, el]) => (
               <label key={rot} style={{ display: 'grid', gridTemplateColumns: '70px minmax(0, 1fr)', alignItems: 'center', gap: 8, marginBottom: 8, fontSize: 12, fontWeight: 700, color: '#475569' }}>{rot}{el}</label>
             ))}
             <textarea value={compor.texto} onChange={e => setCompor({ ...compor, texto: e.target.value })} rows={cheia ? 18 : 10}
