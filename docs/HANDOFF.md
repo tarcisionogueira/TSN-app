@@ -6,6 +6,46 @@
 
 
 
+## 23/11 (tarde) — CAIXA DE E-MAIL: Cco E AGENDAR ENVIO (2f84dba2, #520)
+
+- **Por que:** as duas ideias do Gmail que tinham ficado de fora da leva de layout (entrada abaixo); o dono pediu.
+- **Cco:** links "Cc" e "Cco" ao lado do Para (cada campo abre sob demanda). `api/_email.js` passou a aceitar
+  `bcc` (Resend `bcc`; conta no uso faturado). Limite de 10 destinatários agora soma Para+Cc+Cco; endereço
+  repetido em Para/Cc sai do Cco. Enviados registra em **`email_caixa.cco`** (detalhe "cco: … (oculto)", só a
+  equipe vê). ⚠️ **E-mail com Cco não entra na fila do orçamento diário** (`emails_fila` não guarda `bcc` —
+  represado, sairia SEM as cópias ocultas): recusa na hora com o rascunho salvo, mesma regra do anexo. De quebra, a
+  mensagem de orçamento estourado deixou de dizer "colocada na fila" quando a fila FALHOU (`r.enfileirado`).
+- **Agendar envio — fila NOSSA, não o `scheduled_at` do Resend:** o agendado é um **rascunho com
+  `agendado_para`** (`email_rascunhos`). `api/email-agendados-cron.js` (`*/5`) pega os vencidos e envia pela
+  **mesma função do botão Enviar**. Por isso orçamento, supressão, fio do chamado e Enviados valem na hora do ENVIO, e
+  cancelar/editar é só mexer no rascunho. Estados: `agendado` → `enviando` (reivindicado por **PATCH condicional**
+  `agendamento_status=eq.agendado`, com `return=representation` — duas execuções sobrepostas não mandam o mesmo
+  e-mail) → apagado (saiu) ou `falhou` (motivo em `agendamento_erro`, vermelho na pasta Agendados).
+  `enviando` parado > 15 min → `falhou` com "confira Enviados antes de reenviar" (não dá para saber se saiu). O
+  acesso de quem agendou é conferido de novo na hora (`acessoCaixa`). A `chave_envio` gravada ao agendar vai como
+  Idempotency-Key do Resend. Enviou mas não conseguiu apagar o rascunho → ele vira rascunho comum com o aviso
+  "JÁ FOI ENVIADO", que aparece no topo do Escrever (`compor.alerta`) — nunca volta a `agendado`. Batimento:
+  `sistema_heartbeat` chave **`email_agendados`**.
+- **Tela:** seta ▾ ao lado do Enviar (amanhã 8h, amanhã 13h, próxima segunda 8h, data e hora livres; mínimo 1 min
+  à frente, máximo 1 ano); pasta **Agendados** (contagem; vermelha se algo falhou). Abrir um agendado **cancela o
+  agendamento** antes de editar (como no Gmail) — editar com o cron podendo mandar a qualquer momento mandaria uma
+  versão pela metade. O rascunho passou a guardar `cco`, `citar` e `caso_id` (o cron manda o que o botão mandaria).
+- **Refatoração:** a lógica de envio saiu de `api/email-caixa.js` para **`api/_caixa-envio.js`**
+  (`enviarDaCaixa`, `acessoCaixa`, `resolverAnexo`, `sb`/`ler1`) — botão e cron usam a mesma função; duas cópias da
+  regra divergiriam na primeira mudança. `email-caixa.js` ficou só com auth, rate limit, anexo e cliente do caso.
+- **Banco:** migração `email_cco_e_agendamento.sql` (só acrescenta; aplicada): `email_caixa.cco text[]`; em
+  `email_rascunhos`, `cco`, `citar`, `caso_id`, `chave_envio`, `agendado_para`, `agendamento_status` (check),
+  `agendamento_erro`, `agendamento_tentativas` + índice parcial dos agendados.
+- **Verificado:** lint, `verificar:padroes`, `vite build`; os módulos da API carregam no Node; `acessoCaixa` (advogado,
+  analista, cliente) e a recusa de Cco inválido testados em seco; deploy READY. **Não verificado: um envio agendado de
+  verdade, ponta a ponta** — pendência **#520** (P2, dono), com o roteiro de teste. **Nem a 1ª execução do
+  cron foi vista:** a sessão encerrou às 17:38 UTC, com o deploy pronto ~17:35 e o 1º horário `*/5` às 17:40 — sem
+  batimento nem log ainda, o que era esperado. **Próxima sessão, primeiro:**
+  `select ultimo_em, detalhe from sistema_heartbeat where chave = 'email_agendados';` — vazio = o cron NÃO está
+  rodando (conferir `vercel.json` e os logs de `/api/email-agendados-cron`); com linha recente e `"vencidos":0`, está são.
+- **⚠️ CRLF:** `api/_email.js` é guardado **em CRLF** no repositório (`i/crlf`), ao contrário do resto. Editei
+  preservando CRLF; não converta esse arquivo para LF (o diff trocaria tudo).
+
 ## 23/11 — CAIXA DE E-MAIL COM A CARA DO GMAIL: 10 melhorias de layout em 3 levas (#519 ✅ fechada)
 
 - **Por que:** o dono pediu para usar a interface do Gmail como referência na Caixa de e-mail do Atendimento
