@@ -6,7 +6,7 @@
 
 
 
-## 23/11 — CAIXA DE E-MAIL COM A CARA DO GMAIL: 10 melhorias de layout em 3 levas (#519)
+## 23/11 — CAIXA DE E-MAIL COM A CARA DO GMAIL: 10 melhorias de layout em 3 levas (#519 ✅ fechada)
 
 - **Por que:** o dono pediu para usar a interface do Gmail como referência na Caixa de e-mail do Atendimento
   (`src/components/CaixaEmail.jsx`). A funcionalidade já era boa (conversa agrupada, rascunho automático, status de
@@ -35,9 +35,9 @@
   trecho dentro de `text[]`. Conferido: 379/380 preenchidas, `auditoria_seguranca()` 0/0. (10) Atalhos do Gmail (j/k, u,
   r, f, #, !, Shift+U, c, /, Esc, ?) com painel de ajuda; ignorados em campo de texto e com o Escrever aberto. Um ouvinte
   só, montado uma vez; a ref recebe a versão atual num `useEffect` (atribuir ref no render a lint pega).
-- **⚠️ Não verificado na tela:** lint, `verificar:padroes` e `vite build` passaram e os 3 deploys ficaram READY, mas
-  **ninguém viu a Caixa funcionando** — sem `.env` local (o app quebra com "supabaseKey is required") e a Caixa exige
-  login da equipe. Roteiro de conferência na pendência **#519** (P2, dono).
+- **✅ Conferido na tela pelo dono em 23/11** — pendência **#519** fechada (17:14 UTC). A sessão não conseguia ver
+  sozinha: sem `.env` local (o app quebra com "supabaseKey is required") e a Caixa exige login da equipe. Lint,
+  `verificar:padroes`, `vite build` e os 3 deploys (READY) já tinham passado.
 - **Armadilhas desta máquina (Windows):** a cópia de trabalho está em **CRLF** com `core.autocrlf=false`, e o repo
   guarda LF. Editar e commitar sem converter troca o arquivo inteiro no diff (`sed -i 's/\r$//' <arquivo>` antes do
   `git add`; conferir com `git ls-files --eol`). Pelo mesmo motivo `npm run build` reprova local no `verificar:csp`
