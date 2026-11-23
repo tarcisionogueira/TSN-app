@@ -6,6 +6,45 @@
 
 
 
+## 23/11 — CAIXA DE E-MAIL COM A CARA DO GMAIL: 10 melhorias de layout em 3 levas (#519)
+
+- **Por que:** o dono pediu para usar a interface do Gmail como referência na Caixa de e-mail do Atendimento
+  (`src/components/CaixaEmail.jsx`). A funcionalidade já era boa (conversa agrupada, rascunho automático, status de
+  entrega, vínculo com chamado/caso); o que faltava era organização da tela. Levantamento feito no Gmail do dono
+  (lista, leitura, Escrever) e comparado com o componente; 10 itens, aplicados na ordem de impacto.
+- **Leva 1 (cfb3c0a2):** (1) **Escrever deixa de ser modal** — janela no canto inferior direito, minimizar (só a
+  barra), tela cheia; no celular segue tela inteira. Como agora dá para clicar Responder com um e-mail em andamento,
+  `abrirCompor` virou `async` e **grava o rascunho anterior ANTES de trocar `rascunhoId`** (trocar o id com salvamento na
+  fila faria o novo e-mail sobrescrever o antigo); `responder` espera o `abrirCompor` antes de completar o Cc do cliente
+  do caso. (2) Barra de leitura: Responder + ícones (`BotaoIcone`); encaminhar a conversa, só o anexo e os bloqueios no
+  menu "⋮". (3) Caixinha por conversa, barra de lote e ações ao passar o mouse — tudo por `moverMsgs` (um caminho só para
+  conversa aberta, linha e lote). (4) **Marcar como não lida** (`marcarLido(grupos, lido)`): só mensagem RECEBIDA; ao
+  desmarcar, basta a mais recente recebida voltar a não lida. Toda mudança confirma com `.select()`.
+- **Leva 2 (665d8068):** (5) Em tela ≥ 1180 px, coluna lateral (Escrever em destaque, pastas com não lidas, filtro de
+  origem); abaixo disso volta a barra de botões — a página de Atendimento tem 1200 px e três colunas espremeriam a
+  leitura. (6) Cabeçalho da mensagem com `Avatar` (cor fixa por endereço) e "para fulano, +2 ▾" que abre os detalhes.
+  (7) `EtiquetasLinha`: até 2 anexos pelo nome (tipo em cor, clicáveis) e etiquetas Chamado/Caso/caixa de origem; a
+  lista passou a ler `caso_id`. (8) Cc atrás de um link; abre sozinho se já houver cópia e não some ao esvaziar.
+- **Leva 3 (f14f79ae):** (9) **Busca e origem foram para o banco, em páginas de 50 com `count: 'exact'`.** Achado
+  medido: a lista lia as 200 mais recentes e a busca filtrava só essas — **Enviados tinha 218, as 18 mais antigas nunca
+  apareciam nem buscando** (forma nº 9: janela de cache tratada como janela de dados). A busca cobre de, nome, assunto,
+  texto e destinatários; `termoBusca()` tira `, ( ) " ' \ : * %` antes do `.or()` (vírgula/parêntese quebrariam o filtro
+  ou injetariam outro); `seqLista` descarta resposta atrasada; 350 ms de pausa na digitação. Migração
+  `email_caixa_busca_destinatarios.sql` (aplicada): coluna gerada `destinatarios_texto` = para + cc, via
+  `_email_lista_texto()` IMMUTABLE (o `array_to_string` é STABLE e coluna gerada exige IMMUTABLE) — o PostgREST não acha
+  trecho dentro de `text[]`. Conferido: 379/380 preenchidas, `auditoria_seguranca()` 0/0. (10) Atalhos do Gmail (j/k, u,
+  r, f, #, !, Shift+U, c, /, Esc, ?) com painel de ajuda; ignorados em campo de texto e com o Escrever aberto. Um ouvinte
+  só, montado uma vez; a ref recebe a versão atual num `useEffect` (atribuir ref no render a lint pega).
+- **⚠️ Não verificado na tela:** lint, `verificar:padroes` e `vite build` passaram e os 3 deploys ficaram READY, mas
+  **ninguém viu a Caixa funcionando** — sem `.env` local (o app quebra com "supabaseKey is required") e a Caixa exige
+  login da equipe. Roteiro de conferência na pendência **#519** (P2, dono).
+- **Armadilhas desta máquina (Windows):** a cópia de trabalho está em **CRLF** com `core.autocrlf=false`, e o repo
+  guarda LF. Editar e commitar sem converter troca o arquivo inteiro no diff (`sed -i 's/\r$//' <arquivo>` antes do
+  `git add`; conferir com `git ls-files --eol`). Pelo mesmo motivo `npm run build` reprova local no `verificar:csp`
+  (hash do `index.html` em CRLF) — não é defeito; na Vercel passa. Para validar o front aqui: `npx vite build`.
+- **Ideias que ficaram de fora (não pedidas):** "Cco"; agendar envio (seta do Enviar no Gmail); adiar ("snooze");
+  arrastar conversa para pasta; busca com operadores (`de:`, `tem:anexo`).
+
 ## 22/11 — DOCUMENTOS: Word entra, link que não é documento sai, LJUD até 50 MB · FECHAMENTO
 
 - **Por que:** os 81 lotes priorizados trouxeram 0 documento novo. Três causas: (1) link que nunca é documento
