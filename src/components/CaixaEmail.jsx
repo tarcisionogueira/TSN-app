@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Inbox, ShieldAlert, Send, Trash2, RefreshCw, PenSquare, Reply, Forward, Ban, Paperclip, X, Loader2, Undo2, MessageCircle, AlertCircle, ArrowLeft, FileText, Mail, MailOpen, Minus, Maximize2, Minimize2, EllipsisVertical } from 'lucide-react';
+import { Inbox, ShieldAlert, Send, Trash2, RefreshCw, PenSquare, Reply, Forward, Ban, Paperclip, X, Loader2, Undo2, MessageCircle, AlertCircle, ArrowLeft, FileText, Mail, MailOpen, Minus, Maximize2, Minimize2, EllipsisVertical, ChevronLeft, ChevronRight, Keyboard } from 'lucide-react';
 import { useIsMobile } from '../utils/useIsMobile';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -153,6 +153,10 @@ const MAX_ARQ = 25 * 1024 * 1024, MAX_TOTAL = 30 * 1024 * 1024;
 const nomeSeguro = (n) => String(n || 'arquivo').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^_+|_+$/g, '').slice(-80) || 'arquivo';
 const fmtTam = (b) => (b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
 
+// Termo de busca que pode ir dentro do `.or()` do PostgREST: vírgula, parênteses, aspas, dois-pontos e
+// curinga quebrariam a sintaxe do filtro (ou injetariam outro filtro). Some com eles; o resto vira texto.
+const POR_PAGINA = 50;
+const termoBusca = (s) => String(s || '').replace(/[,()"'\\:*%]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80);
 const fmtData = (iso) => {
   const d = new Date(iso);
   const hoje = new Date();
@@ -282,6 +286,11 @@ export default function CaixaEmail({ soPessoal = false }) {
   // limitada a 1200px, abaixo disso a terceira coluna espremeria a leitura — volta a barra de botões.
   const lateral = !useIsMobile(1180);
   const [busca, setBusca] = useState('');
+  const [buscaAplicada, setBuscaAplicada] = useState(''); // o que de fato foi ao banco (após a pausa na digitação)
+  const [pagina, setPagina] = useState(0);
+  const [total, setTotal] = useState(null);       // contagem exata da pasta com os filtros; null = não consegui ler
+  const seqLista = useRef(0);                      // só a resposta da leitura MAIS NOVA entra na tela
+  const buscaRef = useRef(null);                   // atalho "/" põe o cursor na busca
   const [compor, setCompor] = useState(null);    // { de, para, cc, assunto, texto, responder_a, rascunho_id? }
   // Escrever em JANELA NO CANTO (23/11, inspirado no Gmail): era um modal que tapava a caixa inteira,
   // e não dava para consultar outro e-mail enquanto escrevia. 'normal' | 'min' (só a barra) | 'max'.
@@ -296,6 +305,7 @@ export default function CaixaEmail({ soPessoal = false }) {
   const [selecionadas, setSelecionadas] = useState(() => new Set());
   const [linhaHover, setLinhaHover] = useState(null);
   const [menuMais, setMenuMais] = useState(false);
+  const [ajudaAtalhos, setAjudaAtalhos] = useState(false);
   const [rascunhos, setRascunhos] = useState([]);
   const [salvoEm, setSalvoEm] = useState(null);  // hora do último salvamento automático
   const rascunhoId = useRef(null);               // ref (não estado): gravar o id não pode redisparar o salvamento
@@ -360,10 +370,23 @@ export default function CaixaEmail({ soPessoal = false }) {
       setRascunhos(eR ? [] : (rs || [])); setLista([]); setCarregando(false);
       return;
     }
-    const { data, error } = await supabase.from('email_caixa').select(COLS_LISTA)
-      .eq('pasta', pasta).order('criado_em', { ascending: false }).limit(200);
-    if (error) { setErro(`Não consegui ler a caixa: ${error.message}`); setLista([]); }
-    else setLista(data || []);
+    // BUSCA E PÁGINAS NO BANCO (23/11, inspirado no Gmail). Antes vinham as 200 mais recentes e a busca
+    // filtrava só essas: medido nesse dia, Enviados tinha 218 — as 18 mais antigas nunca apareciam, nem
+    // buscando. Agora o filtro (busca, origem) vai ao banco, a lista vem em páginas de POR_PAGINA e a
+    // contagem é a exata. A busca olha também o CORPO (texto), como o Gmail.
+    const meu = ++seqLista.current;
+    let q = supabase.from('email_caixa').select(COLS_LISTA, { count: 'exact' }).eq('pasta', pasta);
+    if (origem === 'minha') q = q.not('dono', 'is', null);
+    else if (origem === 'comunicacao') q = q.is('dono', null);
+    const termo = termoBusca(buscaAplicada);
+    // `destinatarios_texto` = para + cc em texto (coluna gerada, migração email_caixa_busca_destinatarios.sql):
+    // `para` é array e o PostgREST não acha trecho dentro de array.
+    if (termo) q = q.or(['de_email', 'de_nome', 'assunto', 'texto', 'destinatarios_texto'].map(c => `${c}.ilike.*${termo}*`).join(','));
+    const ini = pagina * POR_PAGINA;
+    const { data, error, count } = await q.order('criado_em', { ascending: false }).range(ini, ini + POR_PAGINA - 1);
+    if (meu !== seqLista.current) return; // chegou depois de outra busca mais nova: descarta
+    if (error) { setErro(`Não consegui ler a caixa: ${error.message}`); setLista([]); setTotal(null); }
+    else { setLista(data || []); setTotal(count ?? null); }
     const { data: nl, error: eNl } = await supabase.from('email_caixa').select('pasta').eq('lido', false).in('pasta', ['entrada', 'spam']);
     if (!eNl) setNaoLidos((nl || []).reduce((a, r) => ({ ...a, [r.pasta]: (a[r.pasta] || 0) + 1 }), {}));
     if (pasta === 'spam') {
@@ -371,7 +394,14 @@ export default function CaixaEmail({ soPessoal = false }) {
       if (eBl) setErro(`Não consegui ler a lista de bloqueados: ${eBl.message}`); else setBloqueados(bl || []);
     }
     setCarregando(false);
-  }, [pasta]);
+  }, [pasta, origem, buscaAplicada, pagina]);
+  // Trocar pasta, origem ou busca volta para a 1ª página.
+  useEffect(() => { setPagina(0); }, [pasta, origem, buscaAplicada]);
+  // A busca vai ao banco 350 ms depois da última tecla, não a cada letra.
+  useEffect(() => {
+    const t = setTimeout(() => setBuscaAplicada(busca.trim()), 350);
+    return () => clearTimeout(t);
+  }, [busca]);
 
   useEffect(() => { setAtiva(null); setConversa([]); setSelecionadas(new Set()); setMenuMais(false); carregar(); }, [carregar]);
   useEffect(() => { setMenuMais(false); }, [ativa]);
@@ -435,6 +465,7 @@ export default function CaixaEmail({ soPessoal = false }) {
     }
     if (!movidas.size) { setErro(prev => prev || 'Sem permissão para mover esta conversa.'); return false; }
     setLista(prev => prev.filter(x => !movidas.has(x.id)));
+    setTotal(t => (t == null ? t : Math.max(0, t - movidas.size)));
     if (conversa.some(x => movidas.has(x.id))) { setAtiva(null); setConversa([]); }
     setSelecionadas(new Set());
     setAviso(movidas.size > 1 ? `${msgOk} (${movidas.size} mensagens)` : msgOk);
@@ -738,9 +769,8 @@ export default function CaixaEmail({ soPessoal = false }) {
     } finally { enviandoRef.current = false; setEnviando(false); }
   }
 
-  const b = busca.trim().toLowerCase();
-  const porOrigem = origem === 'todas' ? lista : lista.filter(m => (origem === 'minha' ? !!m.dono : !m.dono));
-  const visiveis = b ? porOrigem.filter(m => [m.de_email, m.de_nome, m.assunto, (m.para || []).join(' ')].some(v => String(v || '').toLowerCase().includes(b))) : porOrigem;
+  // Busca e origem já vêm filtradas do banco (`carregar`) — a lista é a página como veio.
+  const visiveis = lista;
   // Lista vem da mais nova para a mais antiga: o 1º de cada grupo é a mensagem mais recente.
   const conversas = useMemo(() => {
     const mapa = new Map();
@@ -749,14 +779,66 @@ export default function CaixaEmail({ soPessoal = false }) {
   }, [visiveis]);
   const ultimaEntrada = [...conversa].reverse().find(x => x.direcao === 'entrada');
 
+  // ATALHOS DE TECLADO (23/11, os do Gmail). Ignorados enquanto se digita (campo, texto, seleção) e
+  // com a janela de Escrever aberta — senão "r" ou "c" no meio de uma frase disparariam ações.
+  // O ouvinte é um só (montado uma vez); a ref recebe a versão atual a cada render.
+  const atalhoRef = useRef(null);
+  useEffect(() => {
+    atalhoRef.current = (e) => {
+      if (e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return;
+      const alvo = e.target;
+      const tag = String(alvo?.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select' || alvo?.isContentEditable) {
+        if (e.key === 'Escape' && alvo === buscaRef.current) alvo.blur();
+        return;
+      }
+      const k = e.key;
+      if (k === '?') { e.preventDefault(); setAjudaAtalhos(v => !v); return; }
+      if (k === 'Escape') {
+        if (ajudaAtalhos) setAjudaAtalhos(false);
+        else if (menuMais) setMenuMais(false);
+        else if (ativa && !compor) { setAtiva(null); setConversa([]); }
+        return;
+      }
+      if (compor && tamCompor !== 'min') return;
+      if (k === '/') { e.preventDefault(); buscaRef.current?.focus(); return; }
+      if (k === 'c') { e.preventDefault(); abrirCompor({ de: dePadrao, para: '', cc: '', assunto: '', texto: '', responder_a: null }); return; }
+      if (pasta === 'rascunhos') return;
+      if (k === 'j' || k === 'k') {
+        if (!conversas.length) return;
+        e.preventDefault();
+        const idx = ativa ? conversas.findIndex(c => conversa.some(x => x.id === c.msgs[0].id)) : -1;
+        const novo = idx < 0 ? 0 : Math.min(conversas.length - 1, Math.max(0, idx + (k === 'j' ? 1 : -1)));
+        if (novo !== idx) abrir(conversas[novo]);
+        return;
+      }
+      if (!ativa) return;
+      if (k === 'u') { setAtiva(null); setConversa([]); }
+      else if (k === 'r' && ultimaEntrada && pasta !== 'spam') { e.preventDefault(); responder(ultimaEntrada); }
+      else if (k === 'f') { e.preventDefault(); encaminhar([conversa[conversa.length - 1] || ativa]); }
+      else if (k === '#' || k === 'Delete') {
+        if (pasta === 'lixeira') mover((x) => (x.direcao === 'saida' ? 'enviados' : 'entrada'), 'Restaurado.');
+        else mover(() => 'lixeira', 'Movido para a Lixeira.');
+      }
+      else if (k === '!' && pasta === 'entrada') mover(() => 'spam', 'Movido para Spam.');
+      else if (k === 'U' && ultimaEntrada && pasta !== 'enviados') naoLidaDaLeitura();
+    };
+  });
+  useEffect(() => {
+    const ouvir = (e) => atalhoRef.current?.(e);
+    window.addEventListener('keydown', ouvir);
+    return () => window.removeEventListener('keydown', ouvir);
+  }, []);
+
   return (
     <div style={{ display: 'grid', gridTemplateColumns: estreito ? 'minmax(0, 1fr)' : lateral ? '176px 330px minmax(0, 1fr)' : '340px minmax(0, 1fr)', gap: 16, alignItems: 'start' }}>
       {lateral ? (
         // Tela larga: no topo só a busca e o atualizar; pastas, origem e Escrever vão para a coluna lateral.
         <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 8, alignItems: 'center' }}>
-          <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar remetente ou assunto…"
+          <input ref={buscaRef} type="search" value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar na caixa inteira (remetente, destinatário, assunto, texto)…  /"
             style={{ flex: 1, maxWidth: 560, marginLeft: 192, padding: '9px 16px', borderRadius: 999, border: '1px solid #e2e8f0', background: '#f1f5f9', fontSize: 13 }} />
           <BotaoIcone titulo="Atualizar" Icon={RefreshCw} onClick={carregar} />
+          <BotaoIcone titulo="Atalhos de teclado (?)" Icon={Keyboard} onClick={() => setAjudaAtalhos(true)} />
         </div>
       ) : (
       /* Barra de pastas + ações (tela média e celular) */
@@ -772,9 +854,10 @@ export default function CaixaEmail({ soPessoal = false }) {
           <button key={k} onClick={() => setOrigem(k)} style={{ ...btn(origem === k), background: origem === k ? '#334155' : 'white' }}>{l}</button>
         ))}
         <div style={{ flex: 1 }} />
-        <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar remetente ou assunto…"
+        <input ref={buscaRef} type="search" value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar na caixa inteira (remetente, destinatário, assunto, texto)…  /"
           style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12, minWidth: estreito ? 0 : 220, flex: estreito ? '1 1 100%' : undefined }} />
         <button onClick={carregar} style={btn(false)} title="Atualizar"><RefreshCw size={14} /></button>
+        {!estreito && <button onClick={() => setAjudaAtalhos(true)} style={btn(false)} title="Atalhos de teclado (?)"><Keyboard size={14} /></button>}
         <button onClick={() => abrirCompor({ de: dePadrao, para: '', cc: '', assunto: '', texto: '', responder_a: null })} style={{ ...btn(true), background: '#0D63DB' }}>
           <PenSquare size={14} /> Escrever
         </button>
@@ -826,7 +909,7 @@ export default function CaixaEmail({ soPessoal = false }) {
           </div>
         )}
         {/* SELEÇÃO EM LOTE (23/11): marcar várias conversas e agir de uma vez, como no Gmail. */}
-        {pasta !== 'rascunhos' && !carregando && conversas.length > 0 && (() => {
+        {pasta !== 'rascunhos' && !carregando && (conversas.length > 0 || pagina > 0) && (() => {
           const marcadas = conversas.filter(c => selecionadas.has(c.chave));
           const msgsMarcadas = marcadas.flatMap(c => c.msgs);
           const todas = marcadas.length === conversas.length;
@@ -836,9 +919,29 @@ export default function CaixaEmail({ soPessoal = false }) {
                 checked={todas} ref={(el) => { if (el) el.indeterminate = marcadas.length > 0 && !todas; }}
                 onChange={() => setSelecionadas(todas ? new Set() : new Set(conversas.map(c => c.chave)))}
                 style={{ width: 15, height: 15, cursor: 'pointer', margin: '0 8px 0 0' }} />
-              {marcadas.length === 0 ? (
-                <span style={{ fontSize: 11.5, color: '#94a3b8' }}>{conversas.length} conversa(s)</span>
-              ) : (
+              {marcadas.length === 0 ? (() => {
+                // PÁGINAS (23/11, como o "1–50 de 18.819" do Gmail). Conta MENSAGENS (o que o banco
+                // pagina); a lista agrupa em conversas dentro da página.
+                const ini = pagina * POR_PAGINA;
+                const fim = ini + lista.length;
+                const temMais = total != null ? fim < total : lista.length === POR_PAGINA;
+                return (
+                  <>
+                    {buscaAplicada && <span style={{ fontSize: 11.5, color: '#0D63DB', fontWeight: 700, marginRight: 8 }}>Busca: “{buscaAplicada}”</span>}
+                    <span style={{ fontSize: 11.5, color: '#64748b', marginLeft: 'auto', marginRight: 4 }}
+                      title={total == null ? 'Não consegui contar o total' : `${total} mensagem(ns) nesta pasta${buscaAplicada ? ' com esta busca' : ''}`}>
+                      {lista.length ? `${(ini + 1).toLocaleString('pt-BR')}–${fim.toLocaleString('pt-BR')}` : '0'}
+                      {total != null && ` de ${total.toLocaleString('pt-BR')}`}
+                    </span>
+                    <span style={{ opacity: pagina > 0 ? 1 : 0.35, pointerEvents: pagina > 0 ? 'auto' : 'none' }}>
+                      <BotaoIcone titulo="Mais recentes" Icon={ChevronLeft} onClick={() => setPagina(p => Math.max(0, p - 1))} />
+                    </span>
+                    <span style={{ opacity: temMais ? 1 : 0.35, pointerEvents: temMais ? 'auto' : 'none' }}>
+                      <BotaoIcone titulo="Mais antigas" Icon={ChevronRight} onClick={() => setPagina(p => p + 1)} />
+                    </span>
+                  </>
+                );
+              })() : (
                 <>
                   <span style={{ fontSize: 12, fontWeight: 700, color: '#0D63DB', marginRight: 'auto' }}>{marcadas.length} selecionada(s)</span>
                   {pasta === 'lixeira'
@@ -871,7 +974,7 @@ export default function CaixaEmail({ soPessoal = false }) {
               </div>
             ))
         ) : visiveis.length === 0 ? (
-          <div style={{ padding: 30, textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>{erro ? 'Não foi possível carregar.' : 'Nenhuma mensagem aqui.'}</div>
+          <div style={{ padding: 30, textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>{erro ? 'Não foi possível carregar.' : buscaAplicada ? `Nada encontrado para “${buscaAplicada}” nesta pasta.` : 'Nenhuma mensagem aqui.'}</div>
         ) : conversas.map(({ chave, msgs }) => {
           const m = msgs[0];
           const sel = !!ativa && conversa.some(x => x.id === m.id);
@@ -1086,6 +1189,39 @@ export default function CaixaEmail({ soPessoal = false }) {
       </div>
 
       {/* COMPOR */}
+      {ajudaAtalhos && (
+        <div onClick={() => setAjudaAtalhos(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.35)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div role="dialog" aria-label="Atalhos de teclado" onClick={(e) => e.stopPropagation()}
+            style={{ background: 'white', borderRadius: 14, padding: 20, width: 'min(460px, 100%)', boxShadow: '0 12px 40px rgba(15,23,42,.25)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <span style={{ fontWeight: 800, fontSize: 15, display: 'inline-flex', alignItems: 'center', gap: 8 }}><Keyboard size={16} /> Atalhos de teclado</span>
+              <BotaoIcone titulo="Fechar" Icon={X} onClick={() => setAjudaAtalhos(false)} />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '70px minmax(0, 1fr)', gap: '7px 12px', fontSize: 13, color: '#334155', alignItems: 'center' }}>
+              {[
+                ['j / k', 'Próxima / anterior conversa'],
+                ['u', 'Voltar à lista'],
+                ['r', 'Responder'],
+                ['f', 'Encaminhar a última mensagem'],
+                ['#', 'Mover para a Lixeira (na Lixeira: restaurar)'],
+                ['!', 'Mover para Spam'],
+                ['Shift+U', 'Marcar como não lida'],
+                ['c', 'Escrever'],
+                ['/', 'Buscar'],
+                ['Esc', 'Fechar menu / conversa'],
+                ['?', 'Mostrar esta ajuda'],
+              ].map(([t, d]) => (
+                <React.Fragment key={t}>
+                  <kbd style={{ justifySelf: 'start', fontFamily: 'ui-monospace, monospace', fontSize: 12, fontWeight: 700, padding: '2px 7px', borderRadius: 6, border: '1px solid #cbd5e1', borderBottomWidth: 2, background: '#f8fafc', color: '#111' }}>{t}</kbd>
+                  <span>{d}</span>
+                </React.Fragment>
+              ))}
+            </div>
+            <div style={{ marginTop: 14, fontSize: 11.5, color: '#94a3b8' }}>Os atalhos não funcionam enquanto você digita num campo ou com a janela de Escrever aberta.</div>
+          </div>
+        </div>
+      )}
+
       {/* JANELA NO CANTO (23/11, inspirada no Gmail): não tapa a caixa — dá para abrir outra conversa
           e consultar enquanto escreve. Minimizar deixa só a barra; tela cheia escurece o fundo. No
           celular continua ocupando a tela (não cabe janela flutuante). */}
