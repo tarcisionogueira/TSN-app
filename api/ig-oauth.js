@@ -69,7 +69,7 @@ export function urlAutorizacao(state) {
   u.searchParams.set('redirect_uri', REDIRECT_URI);
   u.searchParams.set('response_type', 'code');
   u.searchParams.set('scope', ESCOPOS.join(','));
-  u.searchParams.set('enable_fb_login', '0');
+  u.searchParams.set('enable_fb_login', '1');   // oferece "Continuar com o Facebook": entra sem a senha do Instagram (captcha em loop, 22/11)
   u.searchParams.set('state', state);
   return u.toString();
 }
