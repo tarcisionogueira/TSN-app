@@ -6,6 +6,34 @@
 
 
 
+## 23/11 (noite) — VEÍCULO ARREMATADO: RASTREIO + ASSESSORIA DE VEÍCULO, SÓ LANÇAMENTO MANUAL (472cbf0b, #522 aberta)
+
+- **Por que:** o dono arrematou uma Chevrolet Tracker T A LTZ 2024/2025 (placa TKV2F62, lote 140757, evento 798628 - GM,
+  SOLD/Superbid; lance de R$ 77.000 aceito em 13/11, R$ 83.210 pagos em 17/11) e pediu o rastreio "como temos para o
+  imóvel", mais a **assessoria de veículo: 5% do arremate, mínimo R$ 2.000**, com termo — **sem abrir ao público**.
+- **Trilha própria, não o `casos` do imóvel:** `arrematacoes.imovel_id` tem FK para `imoveis_leilao`, e as etapas/termo do
+  imóvel falam em jurídico, carta, posse e taxa inicial de R$ 6.000. Tabelas `veiculo_casos` + `veiculo_caso_eventos`
+  (migração `veiculo_assessoria.sql`, aplicada). Etapas: arrematado → pagamento → docs de retirada → retirada liberada →
+  agendada → retirado → vistoria → transferência DETRAN → documento em nome → concluído (ou cancelado; não há DELETE de caso).
+  Trigger põe toda mudança de etapa na linha do tempo (`origem='etapa'`, não apagável).
+- **Regras em `regra_negocio`:** `assessoria_veiculo.honorario` ({pct 5, minimo 2000}, aplicada por `veiculo_honorario()`,
+  falha fechada sem a regra) e `assessoria_veiculo.lancamento_manual` (aplicada por `veiculo_assessoria_pode_lancar()` =
+  admin/analista, usada no RLS). O cliente só LÊ o próprio caso. Abrir ao público = mudar a função, não só o jsonb.
+  `auditoria_regras_negocio()` e `auditoria_seguranca()`: 0 crítico depois da migração.
+- **Termo:** `api/_termo-assessoria-veiculo.js` (só êxito, sem taxa inicial; exclusões de guincho, estadia, DETRAN, IPVA;
+  lance condicional não aprovado não gera honorário). Assinatura pelo mesmo `contratos_link`/`contratos_pendentes` do imóvel
+  (`produto_tipo='assessoria'`, `produto_id='veiculo:<id>'`) com **`plano_key` nulo** — assinar NÃO promove a assessorado de
+  imóvel. Rota `/api/veiculo-assessoria-termo` (admin/analista; `cobrar:true` cria a cobrança avulsa do honorário pelo valor
+  do banco, sem duplicar). `criarDocumento` de `_termo-assessoria.js` passou a ser exportado.
+- **Tela:** `#/admin/veiculos-arrematados` (atalho no Admin, aba Inteligência, ao lado de Retomada de veículos). Alertas de
+  estadia (≤7 dias / correndo), prazos de eventos e honorário sem cobrança.
+- **A Tracker já está lançada** (`veiculo_casos` `bfc8a51d…`, cliente = o dono, sem assessoria): etapa "Retirada liberada",
+  8 registros tirados dos e-mails da Superbid, prazo para agendar a retirada até **08/12** (depois, estadia de R$ 30/dia).
+- **Testado no banco** (transação desfeita): 77.000 → R$ 3.850, 5%, mínimo 2.000, status `pendente`; 25.000 → R$ 2.000;
+  etapa nova gera evento. **NÃO verificado:** a tela e a geração do termo pela rota (a sessão não tem login de equipe) → #522.
+- **Fora do escopo, de propósito:** visão do cliente (o RLS já deixa ele ler; não há tela), checkout/plano público, leitura
+  automática dos e-mails do leiloeiro para a linha do tempo (hoje é registro manual).
+
 ## 23/11 (tarde) — CAIXA DE E-MAIL: Cco E AGENDAR ENVIO (2f84dba2, #520 ✅ fechada)
 
 - **Por que:** as duas ideias do Gmail que tinham ficado de fora da leva de layout (entrada abaixo); o dono pediu.
