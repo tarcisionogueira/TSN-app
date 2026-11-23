@@ -6,7 +6,7 @@
 
 
 
-## 23/11 (noite) — VEÍCULO ARREMATADO: RASTREIO + ASSESSORIA DE VEÍCULO, SÓ LANÇAMENTO MANUAL (472cbf0b, #522 aberta)
+## 23/11 (noite) — VEÍCULO ARREMATADO: RASTREIO + ASSESSORIA DE VEÍCULO, SÓ LANÇAMENTO MANUAL (472cbf0b, #522 ✅ fechada)
 
 - **Por que:** o dono arrematou uma Chevrolet Tracker T A LTZ 2024/2025 (placa TKV2F62, lote 140757, evento 798628 - GM,
   SOLD/Superbid; lance de R$ 77.000 aceito em 13/11, R$ 83.210 pagos em 17/11) e pediu o rastreio "como temos para o
@@ -30,7 +30,7 @@
 - **A Tracker já está lançada** (`veiculo_casos` `bfc8a51d…`, cliente = o dono, sem assessoria): etapa "Retirada liberada",
   8 registros tirados dos e-mails da Superbid, prazo para agendar a retirada até **08/12** (depois, estadia de R$ 30/dia).
 - **Testado no banco** (transação desfeita): 77.000 → R$ 3.850, 5%, mínimo 2.000, status `pendente`; 25.000 → R$ 2.000;
-  etapa nova gera evento. **NÃO verificado:** a tela e a geração do termo pela rota (a sessão não tem login de equipe) → #522.
+  etapa nova gera evento. Tela e geração do termo conferidas pelo dono na tela em 23/11 (#522 fechada).
 - **Fora do escopo, de propósito:** visão do cliente (o RLS já deixa ele ler; não há tela), checkout/plano público, leitura
   automática dos e-mails do leiloeiro para a linha do tempo (hoje é registro manual).
 
