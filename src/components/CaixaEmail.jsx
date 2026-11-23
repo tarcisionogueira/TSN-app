@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Inbox, ShieldAlert, Send, Trash2, RefreshCw, PenSquare, Reply, Forward, Ban, Paperclip, X, Loader2, Undo2, MessageCircle, AlertCircle, ArrowLeft, FileText, Mail, MailOpen, Minus, Maximize2, Minimize2, EllipsisVertical, ChevronLeft, ChevronRight, Keyboard } from 'lucide-react';
+import { Inbox, ShieldAlert, Send, Trash2, RefreshCw, PenSquare, Reply, Forward, Ban, Paperclip, X, Loader2, Undo2, MessageCircle, AlertCircle, ArrowLeft, FileText, Mail, MailOpen, Minus, Maximize2, Minimize2, EllipsisVertical, ChevronLeft, ChevronRight, ChevronDown, Keyboard, Clock } from 'lucide-react';
 import { useIsMobile } from '../utils/useIsMobile';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -25,6 +25,7 @@ const PASTAS = [
   { k: 'spam', label: 'Spam', Icon: ShieldAlert },
   { k: 'enviados', label: 'Enviados', Icon: Send },
   { k: 'rascunhos', label: 'Rascunhos', Icon: FileText },
+  { k: 'agendados', label: 'Agendados', Icon: Clock },
   { k: 'lixeira', label: 'Lixeira', Icon: Trash2 },
 ];
 const CAIXAS = ['suporte', 'contato', 'privacidade'];
@@ -143,8 +144,20 @@ function separarCitacao(texto) {
 
 // encaminhar_anexos (28/10): o rascunho guarda também as REFERÊNCIAS a anexos de mensagens da caixa (o mesmo
 // formato do Encaminhar). Antes sumiam ao fechar a janela, e um rascunho montado com anexos já recebidos voltava sem eles.
-const CAMPOS_RASCUNHO = ['de', 'para', 'cc', 'assunto', 'texto', 'responder_a', 'chamado_id', 'anexos', 'encaminhar_anexos'];
-const temConteudo = (c) => !!(c && (String(c.para || '').trim() || String(c.assunto || '').trim() || String(c.texto || '').trim() || c.anexos?.length || c.encaminhar_anexos?.length));
+// 23/11: + cco, citar e caso_id — o envio AGENDADO sai do rascunho pelo cron, então o rascunho tem de
+// guardar tudo o que o botão Enviar mandaria (senão a resposta agendada perderia a citação ou o caso).
+const CAMPOS_RASCUNHO = ['de', 'para', 'cc', 'cco', 'assunto', 'texto', 'responder_a', 'chamado_id', 'anexos', 'encaminhar_anexos', 'citar', 'caso_id'];
+// Rascunho e Agendado moram na mesma tabela (email_rascunhos); Agendado = rascunho com hora marcada.
+const ehPastaRascunho = (p) => p === 'rascunhos' || p === 'agendados';
+// Linha do banco → janela de Escrever (uuid vazio não pode virar '' e citar é booleano).
+const rascunhoParaCompor = (r, dePadrao) => ({
+  ...Object.fromEntries(CAMPOS_RASCUNHO.map((k) => [k, r[k] ?? ''])),
+  responder_a: r.responder_a || null, chamado_id: r.chamado_id || null, caso_id: r.caso_id || null, citar: !!r.citar,
+  de: r.de || dePadrao, rascunho_id: r.id,
+  alerta: r.agendamento_erro || null, // ex.: "JÁ FOI ENVIADO" ou envio interrompido — aparece no topo do Escrever
+});
+const fmtAgendado = (iso) => new Date(iso).toLocaleString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+const temConteudo = (c) => !!(c && (String(c.para || '').trim() || String(c.cco || '').trim() || String(c.assunto || '').trim() || String(c.texto || '').trim() || c.anexos?.length || c.encaminhar_anexos?.length));
 
 // ANEXAR E COLAR IMAGEM (09/10, dono). O arquivo sobe DIRETO para o bucket, no prefixo do próprio
 // usuário (o servidor só aceita esse prefixo), e o e-mail leva o caminho. Teto do Resend: 40 MB por
@@ -298,14 +311,20 @@ export default function CaixaEmail({ soPessoal = false }) {
   // Cc SÓ QUANDO PRECISAR (23/11): o campo fica escondido atrás de um link "Cc" ao lado do Para; abre
   // sozinho se já houver cópia (rascunho retomado, cliente do caso marcado).
   const [abrirCc, setAbrirCc] = useState(false);
+  const [abrirCco, setAbrirCco] = useState(false); // Cco (23/11): mesma regra do Cc
   // Uma vez à vista, o Cc não some se a pessoa apagar o último endereço enquanto edita.
   const temCc = !!String(compor?.cc || '').trim();
   useEffect(() => { if (temCc) setAbrirCc(true); }, [temCc]);
+  const temCco = !!String(compor?.cco || '').trim();
+  useEffect(() => { if (temCco) setAbrirCco(true); }, [temCco]);
   // Seleção em LOTE por conversa (chave da conversa) e ações ao passar o mouse na linha (23/11).
   const [selecionadas, setSelecionadas] = useState(() => new Set());
   const [linhaHover, setLinhaHover] = useState(null);
   const [menuMais, setMenuMais] = useState(false);
   const [ajudaAtalhos, setAjudaAtalhos] = useState(false);
+  const [agend, setAgend] = useState({ n: 0, falhou: 0 }); // pasta Agendados: total e quantos falharam
+  const [menuAgendar, setMenuAgendar] = useState(false);   // seta do Enviar → "Agendar envio"
+  const [quandoPersonalizado, setQuandoPersonalizado] = useState('');
   const [rascunhos, setRascunhos] = useState([]);
   const [salvoEm, setSalvoEm] = useState(null);  // hora do último salvamento automático
   const rascunhoId = useRef(null);               // ref (não estado): gravar o id não pode redisparar o salvamento
@@ -361,13 +380,25 @@ export default function CaixaEmail({ soPessoal = false }) {
   }, [user?.id]);
   const dePadrao = meuEndereco ? 'pessoal' : 'suporte';
 
+  // Contagem da pasta Agendados (os meus): quantos esperam e quantos FALHARAM — falha aparece em
+  // vermelho na pasta, senão um e-mail que não saiu ficaria esquecido lá dentro.
+  const contarAgendados = useCallback(async () => {
+    const { data, error } = await supabase.from('email_rascunhos').select('agendamento_status').not('agendado_para', 'is', null); // padrao-ok: RLS — só os do usuário logado
+    if (error) { console.warn('[caixa] contagem de agendados:', error.message); return; }
+    setAgend({ n: (data || []).length, falhou: (data || []).filter(x => x.agendamento_status === 'falhou').length });
+  }, []);
+
   const carregar = useCallback(async () => {
     setCarregando(true); setErro('');
-    if (pasta === 'rascunhos') {
-      const { data: rs, error: eR } = await supabase.from('email_rascunhos') // padrao-ok: RLS devolve só os rascunhos do próprio usuário logado
-        .select('*').order('atualizado_em', { ascending: false }).limit(200);
-      if (eR) setErro(`Não consegui ler os rascunhos: ${eR.message}`);
-      setRascunhos(eR ? [] : (rs || [])); setLista([]); setCarregando(false);
+    if (ehPastaRascunho(pasta)) {
+      let q = supabase.from('email_rascunhos').select('*'); // padrao-ok: RLS devolve só os rascunhos do próprio usuário logado
+      q = pasta === 'agendados'
+        ? q.not('agendado_para', 'is', null).order('agendado_para', { ascending: true })
+        : q.is('agendado_para', null).order('atualizado_em', { ascending: false });
+      const { data: rs, error: eR } = await q.limit(200);
+      if (eR) setErro(`Não consegui ler os ${pasta}: ${eR.message}`);
+      setRascunhos(eR ? [] : (rs || [])); setLista([]); setTotal(null); setCarregando(false);
+      contarAgendados();
       return;
     }
     // BUSCA E PÁGINAS NO BANCO (23/11, inspirado no Gmail). Antes vinham as 200 mais recentes e a busca
@@ -394,7 +425,8 @@ export default function CaixaEmail({ soPessoal = false }) {
       if (eBl) setErro(`Não consegui ler a lista de bloqueados: ${eBl.message}`); else setBloqueados(bl || []);
     }
     setCarregando(false);
-  }, [pasta, origem, buscaAplicada, pagina]);
+    contarAgendados();
+  }, [pasta, origem, buscaAplicada, pagina, contarAgendados]);
   // Trocar pasta, origem ou busca volta para a 1ª página.
   useEffect(() => { setPagina(0); }, [pasta, origem, buscaAplicada]);
   // A busca vai ao banco 350 ms depois da última tecla, não a cada letra.
@@ -560,10 +592,12 @@ export default function CaixaEmail({ soPessoal = false }) {
     if (compor && temConteudo(compor)) {
       await salvarRascunho(compor);
       setAviso('O e-mail que estava sendo escrito ficou salvo em Rascunhos.');
-      if (pasta === 'rascunhos') carregar();
+      if (ehPastaRascunho(pasta)) carregar();
     } else await salvando.current;
     setTamCompor('normal');
     setAbrirCc(false);
+    setAbrirCco(false);
+    setMenuAgendar(false);
     rascunhoId.current = c?.rascunho_id || null;
     if (c) c = { ...c, anexos: Array.isArray(c.anexos) ? c.anexos : [], encaminhar_anexos: Array.isArray(c.encaminhar_anexos) ? c.encaminhar_anexos : [] };
     chaveEnvio.current = crypto.randomUUID?.() || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
@@ -573,16 +607,21 @@ export default function CaixaEmail({ soPessoal = false }) {
   function salvarRascunho(c) {
     if (!temConteudo(c)) return salvando.current;
     const linha = Object.fromEntries(CAMPOS_RASCUNHO.map((k) => [k, c[k] ?? null]));
+    // uuid vazio ('') e booleano em texto quebram a gravação: normaliza antes (23/11, campos novos).
+    for (const k of ['responder_a', 'chamado_id', 'caso_id']) linha[k] = linha[k] || null;
+    linha.citar = !!linha.citar;
     linha.atualizado_em = new Date().toISOString();
+    // Resolve `true` só quando gravou — o Agendar precisa saber, os demais só esperam.
     salvando.current = salvando.current.then(async () => {
       const q = rascunhoId.current
         ? supabase.from('email_rascunhos').update(linha).eq('id', rascunhoId.current).select('id')
         : supabase.from('email_rascunhos').insert(linha).select('id');
       const { data, error } = await q;
       // `.select()` prova a gravação: update barrado pela RLS devolve error null e 0 linhas.
-      if (error || !data?.length) { setErro(`Rascunho NÃO foi salvo: ${error?.message || 'sem permissão'}`); return; }
+      if (error || !data?.length) { setErro(`Rascunho NÃO foi salvo: ${error?.message || 'sem permissão'}`); return false; }
       rascunhoId.current = data[0].id;
       setSalvoEm(new Date());
+      return true;
     });
     return salvando.current;
   }
@@ -598,7 +637,7 @@ export default function CaixaEmail({ soPessoal = false }) {
     if (temConteudo(c)) {
       await salvarRascunho(c);
       setAviso('Rascunho salvo — continue depois em Rascunhos.');
-      if (pasta === 'rascunhos') carregar();
+      if (ehPastaRascunho(pasta)) carregar();
     }
   }
   async function descartarRascunho() {
@@ -612,6 +651,59 @@ export default function CaixaEmail({ soPessoal = false }) {
     setRascunhos((prev) => prev.filter((r) => r.id !== data[0].id));
     setAviso('Rascunho descartado.');
   }
+  // ── AGENDAR ENVIO (23/11, a seta do Enviar no Gmail) ──────────────────────────────────────────
+  // Agendado = rascunho com hora marcada; quem envia é api/email-agendados-cron.js (a cada 5 min), pela
+  // MESMA função do botão Enviar. Aqui só se grava o rascunho e se marca a hora — e só depois de o
+  // rascunho estar gravado (senão o cron mandaria uma versão velha do texto).
+  async function agendar(quando) {
+    setMenuAgendar(false);
+    if (!compor) return;
+    const d = new Date(quando);
+    if (Number.isNaN(d.getTime())) { setErro('Data e hora inválidas.'); return; }
+    if (d.getTime() < Date.now() + 60_000) { setErro('Escolha uma hora pelo menos 1 minuto à frente (para agora, use Enviar).'); return; }
+    if (d.getTime() > Date.now() + 365 * 86_400_000) { setErro('O agendamento pode ser de no máximo 1 ano.'); return; }
+    if (subindo > 0) { setErro('Aguarde os anexos terminarem de subir.'); return; }
+    if (!String(compor.para || '').trim() || !String(compor.assunto || '').trim() || !String(compor.texto || '').trim()) {
+      setErro('Para agendar, preencha o destinatário, o assunto e a mensagem.'); return;
+    }
+    const gravou = await salvarRascunho({ ...compor });
+    if (!gravou || !rascunhoId.current) return; // salvarRascunho já disse o motivo
+    const { data, error } = await supabase.from('email_rascunhos')
+      .update({ agendado_para: d.toISOString(), agendamento_status: 'agendado', agendamento_erro: null, chave_envio: chaveEnvio.current, atualizado_em: new Date().toISOString() })
+      .eq('id', rascunhoId.current).select('id');
+    if (error || !data?.length) { setErro(`Não consegui agendar: ${error?.message || 'sem permissão'}. O e-mail ficou em Rascunhos.`); return; }
+    rascunhoId.current = null;
+    setCompor(null);
+    setAviso(`Agendado para ${fmtAgendado(d)}. Até lá ele fica em Agendados — dá para cancelar ou editar.`);
+    contarAgendados();
+    if (ehPastaRascunho(pasta)) carregar();
+  }
+  // Só cancela o que ainda NÃO começou a sair: o filtro de status é a trava contra o cron no meio do envio.
+  async function cancelarAgendamento(r, calado = false) {
+    const { data, error } = await supabase.from('email_rascunhos')
+      .update({ agendado_para: null, agendamento_status: null, agendamento_erro: r.agendamento_status === 'falhou' ? r.agendamento_erro : null })
+      .eq('id', r.id).in('agendamento_status', ['agendado', 'falhou']).select('id');
+    if (error) { setErro(`Não consegui cancelar o agendamento: ${error.message}`); return false; }
+    if (!data?.length) { setErro('Não deu para cancelar: o envio já começou (ou já saiu). Confira em Enviados.'); carregar(); return false; }
+    setRascunhos((prev) => prev.filter((x) => x.id !== r.id));
+    contarAgendados();
+    if (!calado) setAviso('Agendamento cancelado — o e-mail voltou para Rascunhos.');
+    return true;
+  }
+  // Abrir um agendado para editar cancela o agendamento (como no Gmail): editar com o cron podendo
+  // mandar a qualquer momento seria mandar uma versão pela metade.
+  async function abrirAgendado(r) {
+    if (r.agendamento_status === 'enviando') { setAviso('Este e-mail está sendo enviado agora.'); return; }
+    if (!(await cancelarAgendamento(r, true))) return;
+    await abrirCompor(rascunhoParaCompor(r, dePadrao));
+    setAviso('Para editar, o agendamento foi cancelado. Envie agora ou agende de novo pela seta ao lado de Enviar.');
+  }
+  // Atalhos de hora como os do Gmail: amanhã de manhã/à tarde e a próxima segunda de manhã.
+  const opcoesAgendar = () => {
+    const em = (dias, h) => { const d = new Date(); d.setDate(d.getDate() + dias); d.setHours(h, 0, 0, 0); return d; };
+    const seg = new Date(); seg.setDate(seg.getDate() + (((8 - seg.getDay()) % 7) || 7)); seg.setHours(8, 0, 0, 0);
+    return [['Amanhã de manhã', em(1, 8)], ['Amanhã à tarde', em(1, 13)], ['Segunda-feira de manhã', seg]];
+  };
   function escreverPara(para, assunto = '') {
     abrirCompor({ de: dePadrao, para, cc: '', assunto, texto: '', responder_a: null });
   }
@@ -749,7 +841,7 @@ export default function CaixaEmail({ soPessoal = false }) {
     try {
       const res = await apiCall('/api/email-caixa', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ acao: 'enviar', de: compor.de, para: compor.para, cc: compor.cc, assunto: compor.assunto, texto: compor.texto, responder_a: compor.responder_a || undefined, citar: !!(compor.responder_a && compor.citar), encaminhar_anexos: compor.encaminhar_anexos?.length ? compor.encaminhar_anexos : undefined, anexos: compor.anexos?.length ? compor.anexos.map(({ arquivo, nome, inline }) => ({ arquivo, nome, inline })) : undefined, caso_id: compor.caso_id || undefined, chave_envio: chaveEnvio.current || undefined }),
+        body: JSON.stringify({ acao: 'enviar', de: compor.de, para: compor.para, cc: compor.cc, cco: compor.cco, assunto: compor.assunto, texto: compor.texto, responder_a: compor.responder_a || undefined, citar: !!(compor.responder_a && compor.citar), encaminhar_anexos: compor.encaminhar_anexos?.length ? compor.encaminhar_anexos : undefined, anexos: compor.anexos?.length ? compor.anexos.map(({ arquivo, nome, inline }) => ({ arquivo, nome, inline })) : undefined, caso_id: compor.caso_id || undefined, chave_envio: chaveEnvio.current || undefined }),
       });
       const j = await lerJsonSeguro(res);
       if (!res.ok || !j.ok) { setErro(j.error || `Envio falhou (HTTP ${res.status}).`); return; }
@@ -769,6 +861,10 @@ export default function CaixaEmail({ soPessoal = false }) {
     } finally { enviandoRef.current = false; setEnviando(false); }
   }
 
+  // Número ao lado da pasta: não lidas (Entrada/Spam) ou, em Agendados, quantos esperam — em vermelho se
+  // algum FALHOU (aí o número é o de falhas, que é o que pede ação).
+  const contagemPasta = (k) => (k === 'agendados' ? (agend.falhou || agend.n) : naoLidos[k] || 0);
+  const corContagem = (k) => (k === 'spam' || (k === 'agendados' && agend.falhou) ? '#dc2626' : null);
   // Busca e origem já vêm filtradas do banco (`carregar`) — a lista é a página como veio.
   const visiveis = lista;
   // Lista vem da mais nova para a mais antiga: o 1º de cada grupo é a mensagem mais recente.
@@ -803,7 +899,7 @@ export default function CaixaEmail({ soPessoal = false }) {
       if (compor && tamCompor !== 'min') return;
       if (k === '/') { e.preventDefault(); buscaRef.current?.focus(); return; }
       if (k === 'c') { e.preventDefault(); abrirCompor({ de: dePadrao, para: '', cc: '', assunto: '', texto: '', responder_a: null }); return; }
-      if (pasta === 'rascunhos') return;
+      if (ehPastaRascunho(pasta)) return;
       if (k === 'j' || k === 'k') {
         if (!conversas.length) return;
         e.preventDefault();
@@ -846,7 +942,7 @@ export default function CaixaEmail({ soPessoal = false }) {
         {PASTAS.map(({ k, label, Icon }) => (
           <button key={k} onClick={() => setPasta(k)} style={btn(pasta === k)}>
             <Icon size={14} /> {label}
-            {naoLidos[k] > 0 && <span style={{ background: k === 'spam' ? '#dc2626' : '#0D63DB', color: 'white', borderRadius: 10, padding: '0 7px', fontSize: 10 }}>{naoLidos[k]}</span>}
+            {contagemPasta(k) > 0 && <span style={{ background: corContagem(k) || '#0D63DB', color: 'white', borderRadius: 10, padding: '0 7px', fontSize: 10 }}>{contagemPasta(k)}</span>}
           </button>
         ))}
         <span style={{ width: 1, height: 22, background: '#e2e8f0', margin: '0 4px' }} />
@@ -884,9 +980,9 @@ export default function CaixaEmail({ soPessoal = false }) {
             return (
               <button key={k} onClick={() => setPasta(k)} aria-current={ativo ? 'page' : undefined}
                 style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '7px 12px 7px 16px', border: 'none', borderRadius: 999, cursor: 'pointer', textAlign: 'left',
-                  background: ativo ? '#dbeafe' : 'none', color: ativo ? '#0f2f66' : '#334155', fontSize: 13, fontWeight: ativo || naoLidos[k] > 0 ? 800 : 500 }}>
+                  background: ativo ? '#dbeafe' : 'none', color: ativo ? '#0f2f66' : '#334155', fontSize: 13, fontWeight: ativo || (k !== 'agendados' && naoLidos[k] > 0) ? 800 : 500 }}>
                 <Icon size={16} /> <span style={{ flex: 1 }}>{label}</span>
-                {naoLidos[k] > 0 && <span style={{ fontSize: 11.5, fontWeight: 700, color: k === 'spam' ? '#dc2626' : 'inherit' }}>{naoLidos[k]}</span>}
+                {contagemPasta(k) > 0 && <span style={{ fontSize: 11.5, fontWeight: 700, color: corContagem(k) || 'inherit' }}>{contagemPasta(k)}</span>}
               </button>
             );
           })}
@@ -909,7 +1005,7 @@ export default function CaixaEmail({ soPessoal = false }) {
           </div>
         )}
         {/* SELEÇÃO EM LOTE (23/11): marcar várias conversas e agir de uma vez, como no Gmail. */}
-        {pasta !== 'rascunhos' && !carregando && (conversas.length > 0 || pagina > 0) && (() => {
+        {!ehPastaRascunho(pasta) && !carregando && (conversas.length > 0 || pagina > 0) && (() => {
           const marcadas = conversas.filter(c => selecionadas.has(c.chave));
           const msgsMarcadas = marcadas.flatMap(c => c.msgs);
           const todas = marcadas.length === conversas.length;
@@ -959,20 +1055,37 @@ export default function CaixaEmail({ soPessoal = false }) {
         })()}
         {carregando ? (
           <div style={{ padding: 30, textAlign: 'center', color: '#94a3b8' }}><Loader2 size={18} className="spin" /> Carregando…</div>
-        ) : pasta === 'rascunhos' ? (
+        ) : ehPastaRascunho(pasta) ? (
           rascunhos.length === 0
-            ? <div style={{ padding: 30, textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>{erro ? 'Não foi possível carregar.' : 'Nenhum rascunho. Tudo que você começar a escrever fica salvo aqui sozinho.'}</div>
-            : rascunhos.map((r) => (
-              <div key={r.id} onClick={() => abrirCompor({ ...Object.fromEntries(CAMPOS_RASCUNHO.map((k) => [k, r[k] ?? ''])), responder_a: r.responder_a || null, chamado_id: r.chamado_id || null, de: r.de || dePadrao, rascunho_id: r.id })}
-                style={{ padding: '10px 14px', borderBottom: '1px solid #f1f5f9', cursor: 'pointer', borderLeft: '3px solid #f59e0b' }}>
+            ? <div style={{ padding: 30, textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>{erro ? 'Não foi possível carregar.' : pasta === 'agendados' ? 'Nenhum e-mail agendado. No Escrever, use a seta ao lado de Enviar para marcar a hora.' : 'Nenhum rascunho. Tudo que você começar a escrever fica salvo aqui sozinho.'}</div>
+            : rascunhos.map((r) => {
+              const agendado = !!r.agendado_para;
+              const falhou = r.agendamento_status === 'falhou';
+              const enviandoAgora = r.agendamento_status === 'enviando';
+              return (
+              <div key={r.id} onClick={() => (agendado ? abrirAgendado(r) : abrirCompor(rascunhoParaCompor(r, dePadrao)))}
+                style={{ padding: '10px 14px', borderBottom: '1px solid #f1f5f9', cursor: 'pointer', borderLeft: `3px solid ${falhou ? '#dc2626' : agendado ? '#0D63DB' : '#f59e0b'}`, background: falhou ? '#fef2f2' : 'white' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                   <span style={{ fontSize: 13, fontWeight: 700, color: '#111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.para ? `Para: ${r.para}` : '(sem destinatário)'}</span>
-                  <span style={{ fontSize: 11, color: '#94a3b8', flexShrink: 0 }}>{fmtData(r.atualizado_em)}</span>
+                  <span style={{ fontSize: 11, color: agendado ? '#0D63DB' : '#94a3b8', fontWeight: agendado ? 700 : 400, flexShrink: 0 }}>{agendado ? fmtAgendado(r.agendado_para) : fmtData(r.atualizado_em)}</span>
                 </div>
                 <div style={{ fontSize: 12.5, color: '#334155', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.assunto || '(sem assunto)'}</div>
-                <div style={{ fontSize: 11.5, color: '#b45309', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Rascunho · {String(r.texto || '').slice(0, 80) || 'sem texto'}</div>
+                {agendado ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 11.5, color: falhou ? '#b91c1c' : '#0D63DB', fontWeight: 600, overflowWrap: 'anywhere' }}>
+                      {falhou ? `✗ Não saiu: ${r.agendamento_erro || 'falha desconhecida'}` : enviandoAgora ? 'Enviando agora…' : <><Clock size={11} /> Envio agendado para {fmtAgendado(r.agendado_para)}</>}
+                    </span>
+                    {!enviandoAgora && <button type="button" onClick={(e) => { e.stopPropagation(); cancelarAgendamento(r); }}
+                      style={{ ...btn(false), padding: '3px 9px', fontSize: 11 }}>{falhou ? 'Voltar a rascunho' : 'Cancelar agendamento'}</button>}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 11.5, color: r.agendamento_erro ? '#b91c1c' : '#b45309', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {r.agendamento_erro || `Rascunho · ${String(r.texto || '').slice(0, 80) || 'sem texto'}`}
+                  </div>
+                )}
               </div>
-            ))
+              );
+            })
         ) : visiveis.length === 0 ? (
           <div style={{ padding: 30, textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>{erro ? 'Não foi possível carregar.' : buscaAplicada ? `Nada encontrado para “${buscaAplicada}” nesta pasta.` : 'Nenhuma mensagem aqui.'}</div>
         ) : conversas.map(({ chave, msgs }) => {
@@ -1140,6 +1253,7 @@ export default function CaixaEmail({ soPessoal = false }) {
                           <span style={{ color: '#94a3b8' }}>de:</span><span>{m.de_nome ? `${m.de_nome} <${semToken(m.de_email)}>` : semToken(m.de_email)}</span>
                           <span style={{ color: '#94a3b8' }}>para:</span><span>{listaSemToken(m.para) || semToken(m.caixa)}</span>
                           {(m.cc || []).length > 0 && <><span style={{ color: '#94a3b8' }}>cc:</span><span>{listaSemToken(m.cc)}</span></>}
+                          {(m.cco || []).length > 0 && <><span style={{ color: '#94a3b8' }} title="Cópia oculta: o destinatário não vê">cco:</span><span>{listaSemToken(m.cco)} <span style={{ color: '#94a3b8' }}>(oculto)</span></span></>}
                           <span style={{ color: '#94a3b8' }}>data:</span><span>{new Date(m.criado_em).toLocaleString('pt-BR', { dateStyle: 'full', timeStyle: 'short' })}</span>
                           <span style={{ color: '#94a3b8' }}>assunto:</span><span>{m.assunto || '(sem assunto)'}</span>
                         </div>
@@ -1249,6 +1363,7 @@ export default function CaixaEmail({ soPessoal = false }) {
             </div>
             {!minimizada && <>
             <div style={{ flex: 1, overflow: 'auto', padding: '12px 16px' }}>
+            {compor.alerta && <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start', fontSize: 12, fontWeight: 600, color: '#b91c1c', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '6px 10px', marginBottom: 8 }}><AlertCircle size={14} style={{ flexShrink: 0, marginTop: 1 }} /> {compor.alerta}</div>}
             {compor.chamado_id && <div style={{ fontSize: 12, color: '#0D63DB', marginBottom: 8 }}>Esta resposta também entra no histórico do chamado.</div>}
             {[
               ['De', <select key="de" value={compor.de} onChange={e => setCompor({ ...compor, de: e.target.value })} style={campo}>
@@ -1261,12 +1376,17 @@ export default function CaixaEmail({ soPessoal = false }) {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <CampoEmails key={`para-${chaveEnvio.current}`} valorInicial={separarEmails(compor.para)} onChange={l => setCompor(c => (c && c.para !== l.join(', ') ? { ...c, para: l.join(', ') } : c))} placeholder="email@exemplo.com.br" sugestoes={contatos} />
                 </div>
-                {!(abrirCc || String(compor.cc || '').trim()) && (
+                {!(abrirCc || temCc) && (
                   <button type="button" onClick={(e) => { e.preventDefault(); setAbrirCc(true); }} title="Adicionar cópia (Cc)"
                     style={{ background: 'none', border: 'none', padding: '4px 6px', cursor: 'pointer', fontSize: 12.5, fontWeight: 600, color: '#475569' }}>Cc</button>
                 )}
+                {!(abrirCco || temCco) && (
+                  <button type="button" onClick={(e) => { e.preventDefault(); setAbrirCco(true); }} title="Adicionar cópia oculta (Cco) — quem está em Para e Cc não vê"
+                    style={{ background: 'none', border: 'none', padding: '4px 6px', cursor: 'pointer', fontSize: 12.5, fontWeight: 600, color: '#475569' }}>Cco</button>
+                )}
               </div>],
-              (abrirCc || String(compor.cc || '').trim()) && ['Cc', <CampoEmails key={`cc-${chaveEnvio.current}`} valorInicial={separarEmails(compor.cc)} onChange={l => setCompor(c => (c && c.cc !== l.join(', ') ? { ...c, cc: l.join(', ') } : c))} placeholder="opcional" sugestoes={contatos} />],
+              (abrirCc || temCc) && ['Cc', <CampoEmails key={`cc-${chaveEnvio.current}`} valorInicial={separarEmails(compor.cc)} onChange={l => setCompor(c => (c && c.cc !== l.join(', ') ? { ...c, cc: l.join(', ') } : c))} placeholder="opcional" sugestoes={contatos} />],
+              (abrirCco || temCco) && ['Cco', <CampoEmails key={`cco-${chaveEnvio.current}`} valorInicial={separarEmails(compor.cco)} onChange={l => setCompor(c => (c && (c.cco || '') !== l.join(', ') ? { ...c, cco: l.join(', ') } : c))} placeholder="cópia oculta — ninguém vê" sugestoes={contatos} />],
               ['Assunto', <input key="as" value={compor.assunto} onChange={e => setCompor({ ...compor, assunto: e.target.value })} style={campo} />],
             ].filter(Boolean).map(([rot, el]) => (
               <label key={rot} style={{ display: 'grid', gridTemplateColumns: '70px minmax(0, 1fr)', alignItems: 'center', gap: 8, marginBottom: 8, fontSize: 12, fontWeight: 700, color: '#475569' }}>{rot}{el}</label>
@@ -1329,9 +1449,37 @@ export default function CaixaEmail({ soPessoal = false }) {
             </div>
             {/* Rodapé fixo: Enviar sempre à vista, mesmo com texto longo rolando acima. */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderTop: '1px solid #f1f5f9', flexShrink: 0 }}>
-              <button onClick={enviar} disabled={enviando} style={{ ...btn(true), background: '#0D63DB', opacity: enviando ? 0.6 : 1, padding: '8px 18px', borderRadius: 999 }}>
-                {enviando ? <Loader2 size={14} /> : <Send size={14} />} Enviar
-              </button>
+              {/* Enviar + seta (23/11, como no Gmail): a seta abre "Agendar envio". */}
+              <span style={{ position: 'relative', display: 'inline-flex' }}>
+                <button onClick={enviar} disabled={enviando} style={{ ...btn(true), background: '#0D63DB', opacity: enviando ? 0.6 : 1, padding: '8px 16px 8px 18px', borderRadius: '999px 0 0 999px', border: 'none' }}>
+                  {enviando ? <Loader2 size={14} /> : <Send size={14} />} Enviar
+                </button>
+                <button type="button" onClick={() => { setQuandoPersonalizado(''); setMenuAgendar(v => !v); }} disabled={enviando} title="Agendar envio" aria-label="Agendar envio" aria-expanded={menuAgendar}
+                  style={{ ...btn(true), background: '#0D63DB', opacity: enviando ? 0.6 : 1, padding: '8px 10px', borderRadius: '0 999px 999px 0', border: 'none', borderLeft: '1px solid rgba(255,255,255,.35)' }}>
+                  <ChevronDown size={14} />
+                </button>
+                {menuAgendar && <>
+                  <div onClick={() => setMenuAgendar(false)} style={{ position: 'fixed', inset: 0, zIndex: 1 }} />
+                  <div role="menu" style={{ position: 'absolute', bottom: 44, left: 0, zIndex: 2, background: 'white', border: '1px solid #e2e8f0', borderRadius: 10, boxShadow: '0 8px 24px rgba(15,23,42,.18)', padding: 6, width: 270 }}>
+                    <div style={{ fontSize: 11, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.04em', padding: '4px 8px 6px' }}><Clock size={11} /> Agendar envio</div>
+                    {opcoesAgendar().map(([rot, d]) => (
+                      <button key={rot} type="button" role="menuitem" onClick={() => agendar(d)}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = '#f1f5f9'; }} onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; }}
+                        style={{ display: 'flex', justifyContent: 'space-between', gap: 8, width: '100%', padding: '7px 8px', border: 'none', background: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12.5, color: '#334155', textAlign: 'left' }}>
+                        <span style={{ fontWeight: 600 }}>{rot}</span><span style={{ color: '#64748b' }}>{fmtAgendado(d)}</span>
+                      </button>
+                    ))}
+                    <div style={{ borderTop: '1px solid #f1f5f9', margin: '6px 0 0', padding: '8px 8px 4px', display: 'grid', gap: 6 }}>
+                      <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569' }}>Escolher data e hora</label>
+                      <input type="datetime-local" value={quandoPersonalizado} onChange={(e) => setQuandoPersonalizado(e.target.value)} style={{ ...campo, padding: '6px 8px' }} />
+                      <button type="button" disabled={!quandoPersonalizado} onClick={() => agendar(quandoPersonalizado)}
+                        style={{ ...btn(true), background: '#0D63DB', justifyContent: 'center', opacity: quandoPersonalizado ? 1 : 0.5 }}>
+                        <Clock size={13} /> Agendar
+                      </button>
+                    </div>
+                  </div>
+                </>}
+              </span>
               <button onClick={fecharCompor} style={btn(false)}>{temConteudo(compor) ? 'Salvar e fechar' : 'Cancelar'}</button>
               {temConteudo(compor) && <span style={{ marginLeft: 'auto' }}><BotaoIcone titulo="Descartar rascunho" Icon={Trash2} cor="#b91c1c" onClick={descartarRascunho} /></span>}
             </div>

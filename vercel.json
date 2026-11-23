@@ -534,6 +534,10 @@
       "schedule": "15 */3 * * *"
     },
     {
+      "path": "/api/email-agendados-cron",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/avisar-documentos-cron",
       "schedule": "*/20 * * * *"
     },

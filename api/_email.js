@@ -233,7 +233,7 @@ async function campanhaPermitida(userId) {
 // estouro no meio da drenagem re-enfileiraria o MESMO e-mail como uma linha nova.
 // `idempotencyKey` (25/09): o MESMO pedido repetido (toque duplo, retry) sai UMA vez — o Resend
 // devolve o envio original por 24 h em vez de mandar de novo.
-export async function enviarEmail({ from, to, cc, subject, html, text, attachments, replyTo, headers, meta, idempotencyKey, semFila = false }) {
+export async function enviarEmail({ from, to, cc, bcc, subject, html, text, attachments, replyTo, headers, meta, idempotencyKey, semFila = false }) {
   const destinos = (Array.isArray(to) ? to : [to]).filter(Boolean);
   // LIMITE SEMANAL DE CAMPANHA (24/09, pedido do dono — ver api/_cadencia.js e a migração
   // cadencia_por_segmento.sql). Gratuito: 1 campanha/semana e no máximo 2 e-mails/semana
@@ -262,7 +262,8 @@ export async function enviarEmail({ from, to, cc, subject, html, text, attachmen
   if (!reserva.permitido) {
     // `semFila` (09/10): a fila não guarda anexo nem remetente — e-mail COM anexo represado sairia
     // amanhã sem o arquivo e por outro endereço. Quem pede isto prefere a recusa agora.
-    if (semFila) {
+    // Cco (23/11) também não cabe na fila: represado, sairia SEM as cópias ocultas — recusa agora.
+    if (semFila || bcc?.length) {
       await registrarEmailLog(destinos.map((dest) => ({
         user_id: meta?.userId || null, destinatario: String(dest).toLowerCase().slice(0, 200),
         assunto: (subject || '').slice(0, 300), tipo: meta?.tipo || null, status: 'limitado',
@@ -281,7 +282,7 @@ export async function enviarEmail({ from, to, cc, subject, html, text, attachmen
     })));
     return { ok: false, error: 'orcamento_diario_excedido', enfileirado: enfileirou };
   }
-  return enviarEmailAgora({ from, to, cc, subject, html, text, attachments, replyTo, headers, meta, idempotencyKey });
+  return enviarEmailAgora({ from, to, cc, bcc, subject, html, text, attachments, replyTo, headers, meta, idempotencyKey });
 }
 
 // ── ANEXO POR LINK É BAIXADO AQUI (16/10) ───────────────────────────────────────────────────
@@ -342,7 +343,7 @@ async function materializarAnexos(attachments) {
 
 // Envio de verdade, sem checar orçamento (quem chama já garantiu isso). Exportado só para
 // `drenar-fila-emails-cron.js` — todo o resto deve chamar `enviarEmail`.
-export async function enviarEmailAgora({ from, to, cc, subject, html, text, attachments, replyTo, headers, meta, idempotencyKey }) {
+export async function enviarEmailAgora({ from, to, cc, bcc, subject, html, text, attachments, replyTo, headers, meta, idempotencyKey }) {
   const destinos = (Array.isArray(to) ? to : [to]).filter(Boolean);
   if (!RESEND_KEY) {
     // Sem a key não sai e-mail nenhum — e, sem este registro, isso era INVISÍVEL (o return
@@ -388,6 +389,7 @@ export async function enviarEmailAgora({ from, to, cc, subject, html, text, atta
     subject,
   };
   if (cc?.length) payload.cc = Array.isArray(cc) ? cc : [cc];
+  if (bcc?.length) payload.bcc = Array.isArray(bcc) ? bcc : [bcc]; // Cco (23/11): só a caixa da equipe usa
   if (html) payload.html = html;
   if (text) payload.text = text;
   if (replyTo) payload.reply_to = replyTo;
@@ -411,7 +413,7 @@ export async function enviarEmailAgora({ from, to, cc, subject, html, text, atta
     if (!res.ok) {
       out = { ok: false, error: data?.message || `resend_${res.status}` };
     } else {
-      const n = payload.to.length + (payload.cc?.length || 0); // destinatários faturados
+      const n = payload.to.length + (payload.cc?.length || 0) + (payload.bcc?.length || 0); // destinatários faturados
       registrarUso('resend', 'email', { unidades: n });
       out = { ok: true, id: data?.id || null };
     }
