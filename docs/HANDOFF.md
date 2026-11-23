@@ -6,7 +6,7 @@
 
 
 
-## 23/11 (tarde) — CAIXA DE E-MAIL: Cco E AGENDAR ENVIO (2f84dba2, #520)
+## 23/11 (tarde) — CAIXA DE E-MAIL: Cco E AGENDAR ENVIO (2f84dba2, #520 ✅ fechada)
 
 - **Por que:** as duas ideias do Gmail que tinham ficado de fora da leva de layout (entrada abaixo); o dono pediu.
 - **Cco:** links "Cc" e "Cco" ao lado do Para (cada campo abre sob demanda). `api/_email.js` passou a aceitar
@@ -37,12 +37,17 @@
   `email_rascunhos`, `cco`, `citar`, `caso_id`, `chave_envio`, `agendado_para`, `agendamento_status` (check),
   `agendamento_erro`, `agendamento_tentativas` + índice parcial dos agendados.
 - **Verificado:** lint, `verificar:padroes`, `vite build`; os módulos da API carregam no Node; `acessoCaixa` (advogado,
-  analista, cliente) e a recusa de Cco inválido testados em seco; deploy READY. **Não verificado: um envio agendado de
-  verdade, ponta a ponta** — pendência **#520** (P2, dono), com o roteiro de teste. **Nem a 1ª execução do
-  cron foi vista:** a sessão encerrou às 17:38 UTC, com o deploy pronto ~17:35 e o 1º horário `*/5` às 17:40 — sem
-  batimento nem log ainda, o que era esperado. **Próxima sessão, primeiro:**
-  `select ultimo_em, detalhe from sistema_heartbeat where chave = 'email_agendados';` — vazio = o cron NÃO está
-  rodando (conferir `vercel.json` e os logs de `/api/email-agendados-cron`); com linha recente e `"vencidos":0`, está são.
+  analista, cliente) e a recusa de Cco inválido testados em seco; deploy READY.
+- **✅ Ponta a ponta em PRODUÇÃO (17:40 UTC) — #520 fechada:** um rascunho agendado vencido (de/para
+  `tarcisio@bidprobrasil.com.br`, Cco `delivered@resend.dev` — o endereço de teste oficial do Resend, para não escrever
+  a ninguém de fora) foi pego na **1ª execução do cron** (17:40:27, batimento `vencidos 1 · enviados 1 · falharam 0`),
+  o rascunho foi apagado, Enviados registrou `cco = [delivered@resend.dev]` com `entrega_status = entregue`, e a
+  mensagem chegou na Entrada às 17:40:31 **sem o Cco em lugar nenhum** (html, texto, cc) e sem abrir chamado. As duas
+  mensagens de teste (assunto "Teste do envio agendado com Cco") ficaram na caixa pessoal do dono — podem ir para a
+  Lixeira. Não clicado pela sessão: a seta ▾, a pasta Agendados e o "Cancelar agendamento" da tela (sem login da
+  equipe) — usam o mesmo caminho de dados testado; o cancelamento é um UPDATE condicional com `.select()`.
+- **Saúde a vigiar:** `select ultimo_em, detalhe from sistema_heartbeat where chave = 'email_agendados';` — o cron grava
+  a cada 5 min mesmo sem nada vencido; `ultimo_em` velho = cron parado. `falharam > 0` = ver a pasta Agendados.
 - **⚠️ CRLF:** `api/_email.js` é guardado **em CRLF** no repositório (`i/crlf`), ao contrário do resto. Editei
   preservando CRLF; não converta esse arquivo para LF (o diff trocaria tudo).
 
