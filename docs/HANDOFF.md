@@ -15,6 +15,10 @@
   conversa (chave = 1ª mensagem), então reler a mesma conversa não fecha o que foi aberto. Em tela larga o leitor é
   `sticky` com `maxHeight: calc(100vh - 24px)` e rola sozinho; abrir conversa leva o leitor ao topo. Celular sem mudança.
 - Não conferido na tela pela sessão (sem login de equipe); o dono confere junto com a #523.
+- ⚠️ **Quebrou a Caixa em 24/11 (corrigido em f9a58246):** o `const chaveConversa` novo, dentro do componente, sombreou a
+  função de módulo `chaveConversa` que agrupa a lista → "en is not a function" (Sentry TSN-APP-R) e "Algo deu errado" ao
+  abrir o e-mail. Renomeado para `idConversaAberta`. Nem lint nem build pegam sombreamento de nome de módulo: ao criar
+  variável em componente grande, faça `grep` do nome no arquivo antes.
 
 ## 23/11 (noite, 2) — CHAT DE SUPORTE: SEM `**` DO MARKDOWN E BOTÕES SIM/NÃO (3890f81d, #523 aberta)
 
