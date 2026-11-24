@@ -485,13 +485,13 @@ export default function CaixaEmail({ soPessoal = false }) {
   // no topo. Antes era `scrollIntoView` na última mensagem, que rolava a PÁGINA inteira para baixo com
   // todas as antigas abertas por extenso (dono, 23/11: "sair descendo a tela"). A chave é a conversa
   // (1ª mensagem): reler a mesma conversa (ação, marcar lida) não fecha o que a pessoa abriu.
-  const chaveConversa = conversa[0]?.id || null;
+  const idConversaAberta = conversa[0]?.id || null; // NÃO chamar de `chaveConversa`: é a função da linha 73 (24/11: o nome igual escondeu a função e a Caixa inteira quebrou)
   useEffect(() => {
     if (!conversa.length) { setAbertas(new Set()); return; }
     const ult = conversa[conversa.length - 1];
     setAbertas(new Set([ult.id, ...conversa.filter(x => !x.lido && x.direcao === 'entrada').map(x => x.id)]));
     leitorRef.current?.scrollTo?.({ top: 0 });
-  }, [chaveConversa]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [idConversaAberta]); // eslint-disable-line react-hooks/exhaustive-deps
   const alternarAberta = (id) => setAbertas(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
   // Move a conversa INTEIRA desta pasta (não só a última mensagem — senão ela continuaria na lista).
