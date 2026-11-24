@@ -20,7 +20,7 @@
   abrir o e-mail. Renomeado para `idConversaAberta`. Nem lint nem build pegam sombreamento de nome de módulo: ao criar
   variável em componente grande, faça `grep` do nome no arquivo antes.
 
-## 23/11 (noite, 2) — CHAT DE SUPORTE: SEM `**` DO MARKDOWN E BOTÕES SIM/NÃO (3890f81d, #523 aberta)
+## 23/11 (noite, 2) — CHAT DE SUPORTE: SEM `**` DO MARKDOWN E BOTÕES SIM/NÃO (3890f81d, #523 ✅ fechada)
 
 - **Por que:** no chamado da Claudia (explorador, "imóvel no bairro Cidade Baixa, Porto Alegre") a resposta automática
   saiu com "**Busca de Imóveis**" e "**Investidor Pro**": a IA escreve markdown e o chat mostra texto puro. O dono pediu
@@ -32,7 +32,7 @@
   `chamados_mensagens.opcoes` (migração `chamados_mensagens_opcoes.sql`, aplicada). "Isso esclareceu sua dúvida?" conta
   mesmo sem o marcador; resposta que escala não leva botões. `src/components/RespostasRapidas.jsx` mostra os botões sob a
   última mensagem quando ela é da IA; clicar envia a opção como mensagem do cliente (o rascunho digitado fica).
-- **NÃO verificado na tela** (a sessão não tem login de cliente) → #523.
+- Conferido na tela pelo dono em 24/11 (#523 fechada).
 - ⚠️ `api/chat-suporte.js` é CRLF no índice do git: ao editar no Windows, devolva o CRLF antes do commit.
 
 ## 23/11 (noite) — VEÍCULO ARREMATADO: RASTREIO + ASSESSORIA DE VEÍCULO, SÓ LANÇAMENTO MANUAL (472cbf0b, #522 ✅ fechada)
