@@ -291,7 +291,10 @@ export default function CaixaEmail({ soPessoal = false }) {
   const [ativa, setAtiva] = useState(null);      // mensagem mais recente da conversa aberta (linha completa)
   const [conversa, setConversa] = useState([]);  // todas as mensagens da conversa, da mais antiga à mais nova
   const [verMais, setVerMais] = useState({});    // { [id]: { html, citado } } — o que cada cartão mostra aberto
-  const ultimaRef = useRef(null);
+  // Mensagens ABERTAS da conversa (23/11, dono: "os emails antigos deveriam poder minimizar"). Ao abrir,
+  // só a mais nova e as não lidas vêm expandidas; as outras viram uma linha (quem, trecho, data).
+  const [abertas, setAbertas] = useState(() => new Set());
+  const leitorRef = useRef(null);
   // Celular (23/09): lista e leitor lado a lado (340px + 1fr) empurravam a mensagem para fora da
   // tela. Abaixo de 900px vira app de e-mail: OU a lista, OU a mensagem aberta com "Voltar".
   const estreito = useIsMobile(900);
@@ -478,10 +481,18 @@ export default function CaixaEmail({ soPessoal = false }) {
       setNaoLidos(prev => (up || []).reduce((a, r) => ({ ...a, [r.pasta]: Math.max(0, (a[r.pasta] || 1) - 1) }), prev));
     }
   }
-  // Conversa longa: leva direto à mensagem mais nova (a de baixo), que é a que se veio ler.
+  // Ao abrir uma conversa: expande a mais nova e as não lidas, recolhe o resto e põe o PAINEL DE LEITURA
+  // no topo. Antes era `scrollIntoView` na última mensagem, que rolava a PÁGINA inteira para baixo com
+  // todas as antigas abertas por extenso (dono, 23/11: "sair descendo a tela"). A chave é a conversa
+  // (1ª mensagem): reler a mesma conversa (ação, marcar lida) não fecha o que a pessoa abriu.
+  const chaveConversa = conversa[0]?.id || null;
   useEffect(() => {
-    if (conversa.length > 1) ultimaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, [conversa]);
+    if (!conversa.length) { setAbertas(new Set()); return; }
+    const ult = conversa[conversa.length - 1];
+    setAbertas(new Set([ult.id, ...conversa.filter(x => !x.lido && x.direcao === 'entrada').map(x => x.id)]));
+    leitorRef.current?.scrollTo?.({ top: 0 });
+  }, [chaveConversa]); // eslint-disable-line react-hooks/exhaustive-deps
+  const alternarAberta = (id) => setAbertas(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
   // Move a conversa INTEIRA desta pasta (não só a última mensagem — senão ela continuaria na lista).
   // `destinoDe` recebe a mensagem porque Restaurar devolve saída → Enviados e entrada → Entrada.
@@ -1148,7 +1159,10 @@ export default function CaixaEmail({ soPessoal = false }) {
       </div>
 
       {/* LEITOR */}
-      <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', minHeight: estreito ? 0 : 420, minWidth: 0, display: estreito && !ativa ? 'none' : undefined }}>
+      {/* Tela larga (23/11, dono): o leitor fica PRESO na tela, ao lado da lista, e rola sozinho — o corpo do
+          e-mail desce sem levar a lista e as pastas junto. No celular segue a rolagem da página. */}
+      <div ref={leitorRef} style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', minHeight: estreito ? 0 : 420, minWidth: 0, display: estreito && !ativa ? 'none' : undefined,
+        ...(estreito ? {} : { position: 'sticky', top: 12, maxHeight: 'calc(100vh - 24px)', overflowY: 'auto', overscrollBehavior: 'contain' }) }}>
         {estreito && ativa && (
           <button onClick={() => { setAtiva(null); setConversa([]); }} style={{ ...btn(false), margin: '12px 12px 0' }}><ArrowLeft size={14} /> Voltar à lista</button>
         )}
@@ -1161,6 +1175,12 @@ export default function CaixaEmail({ soPessoal = false }) {
             <div style={{ fontSize: 17, fontWeight: 800, color: '#111', marginBottom: 4, overflowWrap: 'anywhere' }}>{ativa.assunto || '(sem assunto)'}</div>
             <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.6 }}>
               {conversa.length > 1 ? `${conversa.length} mensagens nesta conversa — da mais antiga para a mais nova.` : '1 mensagem.'}
+              {conversa.length > 1 && (
+                <button type="button" onClick={() => setAbertas(abertas.size >= conversa.length ? new Set([conversa[conversa.length - 1].id]) : new Set(conversa.map(x => x.id)))}
+                  style={{ marginLeft: 8, background: 'none', border: 'none', padding: 0, color: '#0D63DB', cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>
+                  {abertas.size >= conversa.length ? 'Recolher as antigas' : 'Expandir todas'}
+                </button>
+              )}
               {conversa.some(x => x.chamado_id) && <div style={{ color: '#0D63DB' }}><MessageCircle size={12} /> Esta conversa está num chamado da fila — responder daqui também registra no chamado.</div>}
             </div>
 
@@ -1226,11 +1246,28 @@ export default function CaixaEmail({ soPessoal = false }) {
               // versão formatada abre por padrão; o botão continua alternando. Spam segue só texto.
               // HTML guardado no teto de 300k (29/10) foi CORTADO na entrada — imagem colada em base64
               // estourava o limite e o resto do e-mail sumia. O texto está inteiro: abre nele.
+              // RECOLHIDA: uma linha só — quem, trecho e data. Clicar abre.
+              if (!abertas.has(m.id)) {
+                const trecho = (principal || m.texto || '').replace(/\s+/g, ' ').trim().slice(0, 160) || (m.html ? '(mensagem formatada)' : '(sem texto)');
+                return (
+                  <button key={m.id} type="button" onClick={() => alternarAberta(m.id)} title="Abrir esta mensagem"
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', cursor: 'pointer', background: 'none', border: 'none',
+                      borderTop: idx ? '1px solid #e2e8f0' : 'none', borderLeft: `3px solid ${nossa ? '#0D63DB' : '#cbd5e1'}`, padding: '10px 0 10px 12px', marginBottom: 2 }}>
+                    <Avatar nome={nossa ? 'BidPro' : m.de_nome} email={m.de_email} nossa={nossa} />
+                    <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+                      <span style={{ fontSize: 13, fontWeight: !m.lido && !nossa ? 800 : 700, color: '#111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nossa ? 'Nós' : (m.de_nome || m.de_email)}</span>
+                      <span style={{ fontSize: 12, color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{trecho}</span>
+                    </span>
+                    {(m.anexos || []).length > 0 && <Paperclip size={13} color="#94a3b8" style={{ flexShrink: 0 }} />}
+                    <span style={{ color: '#94a3b8', fontSize: 11.5, flexShrink: 0, paddingRight: 4 }}>{new Date(m.criado_em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+                  </button>
+                );
+              }
               const htmlCortado = !!m.html && m.html.length >= 300000 && !!m.texto;
               const padraoHtml = !!m.html && !htmlCortado && (!m.texto || textoSoDeLinks(m.texto));
               const mostrarHtml = !spam && !!m.html && (v.html !== undefined ? v.html : padraoHtml);
               return (
-                <div key={m.id} ref={ultima ? ultimaRef : undefined}
+                <div key={m.id}
                   style={{ borderTop: idx ? '1px solid #e2e8f0' : 'none', padding: '14px 0 14px 12px', borderLeft: `3px solid ${nossa ? '#0D63DB' : '#cbd5e1'}`, marginBottom: 2, scrollMarginTop: 12 }}>
                   {/* CABEÇALHO (23/11, inspirado no Gmail): avatar + nome em destaque, endereço miúdo e
                       "para …" resumido; o endereçamento completo abre no ▾ (antes ia tudo por extenso). */}
@@ -1238,7 +1275,8 @@ export default function CaixaEmail({ soPessoal = false }) {
                     <Avatar nome={nossa ? 'BidPro' : m.de_nome} email={m.de_email} nossa={nossa} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'baseline' }}>
-                        <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 13 }}>
+                        <span onClick={conversa.length > 1 ? () => alternarAberta(m.id) : undefined} title={conversa.length > 1 ? 'Recolher esta mensagem' : undefined}
+                          style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 13, cursor: conversa.length > 1 ? 'pointer' : undefined }}>
                           <b style={{ color: '#111' }}>{nossa ? 'Nós' : (m.de_nome || m.de_email)}</b>
                           <span style={{ marginLeft: 6, fontSize: 11.5, color: '#64748b' }}>{nossa ? semToken(m.de_email) : (m.de_nome ? `<${m.de_email}>` : '')}</span>
                         </span>
