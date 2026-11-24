@@ -4,6 +4,8 @@ import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { apiCall } from '../utils/apiCall';
 import { ACEITA_DOCUMENTO } from '../utils/arquivo';
+import { semMarkdown } from '../utils/semMarkdown';
+import RespostasRapidas from '../components/RespostasRapidas';
 
 const STATUS = {
   aberto: { label: 'Aberto', cor: '#10b981', bg: '#d1fae5' },
@@ -62,8 +64,10 @@ export default function MeusChamados() {
     setMensagens(data || []);
   }
 
-  async function enviarMensagem() {
-    if ((!texto.trim() && !anexos.length) || !chamadoAtivo) return;
+  // `opcao` = clique num botão de resposta rápida (Sim/Não, 23/11): envia o texto do botão sem mexer no rascunho.
+  async function enviarMensagem(opcao) {
+    const rapida = typeof opcao === 'string' ? opcao : null;
+    if ((!rapida && !texto.trim() && !anexos.length) || !chamadoAtivo) return;
     // MODO SUPORTE (22/08): esta tela lista os chamados do CLIENTE visto (effectiveUserId), mas
     // a escrita gravava `autor_id: user.id` (admin), `autor_nome` = nome do cliente e
     // `autor_tipo:'cliente'` — ou seja, o admin postava uma mensagem FORJADA como se fosse o
@@ -73,7 +77,7 @@ export default function MeusChamados() {
     setEnviando(true);
     const { data: msg, error: errMsg } = await supabase.from('chamados_mensagens').insert({
       chamado_id: chamadoAtivo.id, autor_id: user.id, autor_nome: nomeUsuario,
-      autor_tipo: 'cliente', conteudo: texto || '[anexo]', anexos,
+      autor_tipo: 'cliente', conteudo: rapida || texto || '[anexo]', anexos: rapida ? [] : anexos,
     }).select().single();
     if (errMsg) {
       alert('Erro ao enviar mensagem. Tente novamente.');
@@ -82,7 +86,7 @@ export default function MeusChamados() {
     }
     const novaLista = msg ? [...mensagens, msg] : mensagens;
     setMensagens(novaLista);
-    setTexto(''); setAnexos([]);
+    if (!rapida) { setTexto(''); setAnexos([]); }
     await supabase.from('chamados').update({ atualizado_em: new Date().toISOString() }).eq('id', chamadoAtivo.id);
     // Com pessoa na conversa a IA não entra (o widget já fazia isso; esta tela respondia por cima).
     if (['em_atendimento', 'aguardando_atendente'].includes(chamadoAtivo.status)) {
@@ -114,7 +118,7 @@ export default function MeusChamados() {
       if (!resposta) throw new Error('IA sem resposta');
       const { error: eIa } = await supabase.from('chamados_mensagens').insert({
         chamado_id: chamadoAtivo.id, autor_tipo: 'ia',
-        autor_nome: 'BidPro Assistente', conteudo: resposta, anexos: [],
+        autor_nome: 'BidPro Assistente', conteudo: resposta, anexos: [], ...(j.opcoes ? { opcoes: j.opcoes } : {}),
       });
       if (eIa) console.error('[meus-chamados] resposta da IA não gravada', eIa.message);
       if (escalar) await passarParaEquipe(bug);
@@ -213,8 +217,9 @@ export default function MeusChamados() {
                   color: m.autor_tipo === 'cliente' ? 'white' : '#111111',
                   fontSize: 14, lineHeight: 1.6,
                   border: m.autor_tipo !== 'cliente' ? `1px solid ${m.autor_tipo === 'ia' ? '#bae6fd' : '#86efac'}` : 'none',
+                  whiteSpace: 'pre-wrap', overflowWrap: 'break-word',
                 }}>
-                  {m.conteudo}
+                  {m.autor_tipo === 'ia' ? semMarkdown(m.conteudo) : m.conteudo}
                   {(m.anexos || []).map((a, i) => a.tipo === 'imagem'
                     ? <img key={i} src={a.url} alt={a.nome} style={{ maxWidth: 220, display: 'block', marginTop: 8, borderRadius: 8 }} />
                     : <a key={i} href={a.url} download={a.nome} style={{ display: 'block', marginTop: 6, fontSize: 12, color: m.autor_tipo === 'cliente' ? 'rgba(255,255,255,0.9)' : '#0D63DB', textDecoration: 'underline' }}>{a.nome}</a>
@@ -222,6 +227,7 @@ export default function MeusChamados() {
                 </div>
               </div>
             ))}
+            {!impersonate && <RespostasRapidas mensagens={mensagens} bloqueado={chamadoAtivo.status === 'finalizado' || loadingIA || enviando} onEscolher={enviarMensagem} />}
             {loadingIA && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#64748b', fontSize: 12 }}>
                 <div style={{ width: 20, height: 20, borderRadius: '50%', background: '#0D63DB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

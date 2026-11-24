@@ -5,6 +5,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { apiCall } from '../utils/apiCall';
 import { chatDisponivelPara } from '../utils/chatDisponivel';
 import { ACEITA_DOCUMENTO } from '../utils/arquivo';
+import { semMarkdown } from '../utils/semMarkdown';
+import RespostasRapidas from './RespostasRapidas';
 
 // Inatividade: avisar após 2min, fechar após 30min (em ms)
 const AVISO_MS = 15 * 60 * 1000; // 07/11 (arena): 2 min era pressa — o cliente lendo um relatório levava "Ainda está por aqui?"
@@ -371,14 +373,16 @@ export default function ChatSuporte() {
     setEnviando(false);
   }
 
-  async function enviarMensagem() {
-    if ((!texto.trim() && !anexos.length) || !ticket) return;
+  // `opcao` = clique num botão de resposta rápida (Sim/Não, 23/11): envia o texto do botão sem mexer no rascunho.
+  async function enviarMensagem(opcao) {
+    const rapida = typeof opcao === 'string' ? opcao : null;
+    if ((!rapida && !texto.trim() && !anexos.length) || !ticket) return;
     if (ticket.status === 'finalizado') return;
     setEnviando(true); setErroCanal('');
     setPrecisaAtendente(false);
     const { data: msg, error: eMsg } = await supabase.from('chamados_mensagens').insert({
       chamado_id: ticket.id, autor_id: user.id, autor_nome: nomeUsuario,
-      autor_tipo: 'cliente', conteudo: texto || '[anexo]', anexos,
+      autor_tipo: 'cliente', conteudo: rapida || texto || '[anexo]', anexos: rapida ? [] : anexos,
     }).select().single();
     // 07/11: sem isto o texto era apagado e a IA chamada com a conversa velha, sem aviso nenhum.
     if (!msg) {
@@ -388,7 +392,7 @@ export default function ChatSuporte() {
     }
     const novaLista = [...mensagens, msg];
     setMensagens(novaLista);
-    setTexto(''); setAnexos([]);
+    if (!rapida) { setTexto(''); setAnexos([]); }
     resetTimers();
     // Conversa com o advogado: a mensagem nova segue por e-mail. Falha precisa aparecer ao cliente.
     if (ticket.tipo === 'juridico_cliente' && msg) {
@@ -431,7 +435,7 @@ export default function ChatSuporte() {
       if (!resposta) throw new Error('IA sem resposta');
       const { error: eIa } = await supabase.from('chamados_mensagens').insert({
         chamado_id: tk.id, autor_tipo: 'ia',
-        autor_nome: 'BidPro Assistente', conteudo: resposta, anexos: [],
+        autor_nome: 'BidPro Assistente', conteudo: resposta, anexos: [], ...(j.opcoes ? { opcoes: j.opcoes } : {}),
       });
       if (eIa) console.error('[chat] resposta da IA não gravada', eIa.message);
       if (escalar) {
@@ -711,8 +715,9 @@ export default function ChatSuporte() {
                       fontSize: 13, lineHeight: 1.55,
                       border: m.autor_tipo !== 'cliente' ? `1px solid ${m.autor_tipo === 'atendente' ? '#86efac' : m.autor_nome === 'Sistema' ? '#fde68a' : '#bae6fd'}` : 'none',
                       fontStyle: m.autor_nome === 'Sistema' ? 'italic' : 'normal',
+                      whiteSpace: 'pre-wrap', overflowWrap: 'break-word',
                     }}>
-                      {m.conteudo}
+                      {m.autor_tipo === 'ia' ? semMarkdown(m.conteudo) : m.conteudo}
                       {(m.anexos || []).length > 0 && (
                         <div style={{ marginTop: 6 }}>
                           {m.anexos.map((a, i) => a.tipo === 'imagem'
@@ -724,6 +729,7 @@ export default function ChatSuporte() {
                     </div>
                   </div>
                 ))}
+                <RespostasRapidas mensagens={mensagens} bloqueado={isFinalizado || loadingIA || enviando} onEscolher={enviarMensagem} />
                 {loadingIA && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#64748b', fontSize: 12 }}>
                     <AvatarIA />

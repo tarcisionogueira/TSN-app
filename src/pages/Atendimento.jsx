@@ -9,6 +9,7 @@ import CaixaEmail from '../components/CaixaEmail';
 import { useIsMobile } from '../utils/useIsMobile';
 import { useLocation } from 'react-router-dom';
 import { ACEITA_DOCUMENTO } from '../utils/arquivo';
+import { semMarkdown } from '../utils/semMarkdown';
 
 const STATUS_CFG = {
   // 18/08: NÓS começarmos a conversa não abre chamado. Dois criadores caem aqui — a saudação
@@ -585,7 +586,7 @@ export default function Atendimento() {
                   )}
                   {m.conteudo_html
                     ? <EmailHtml html={m.conteudo_html} />
-                    : <TextoComLinks texto={m.conteudo} />}
+                    : <TextoComLinks texto={m.autor_tipo === 'ia' ? semMarkdown(m.conteudo) : m.conteudo} />}
                   {(m.anexos || []).map((a, i) => a.tipo === 'imagem'
                     ? <img key={i} src={a.url} alt={a.nome} style={{ maxWidth: 200, display: 'block', marginTop: 8, borderRadius: 8 }} />
                     : <a key={i} href={a.url} download={a.nome} style={{ display: 'block', marginTop: 6, fontSize: 12, color: '#0D63DB' }}>{a.nome}</a>

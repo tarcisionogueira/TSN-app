@@ -4,6 +4,7 @@ import { getAuthUser, unauthorized } from './_auth.js';
 import { iaGeminiPrimary } from './_claude.js';
 import { checkRateLimit, rateLimitedResponse } from './_rate-limit.js';
 import { sb, lerLista, paraEquipe, catalogoAssessoria } from './_atendimento-canal.js';
+import { semMarkdown } from '../src/utils/semMarkdown.js';
 
 const SYSTEM = `Você é o assistente virtual de suporte da BidPro Brasil, plataforma especializada em análise de imóveis em leilão judicial e extrajudicial no Brasil.
 
@@ -53,7 +54,9 @@ SOMENTE quando necessário — ações na conta, FALHAS/BUGS, problemas técnico
 ## Formato de resposta:
 - Português brasileiro, objetivo, cordial e profissional
 - Parágrafos curtos; tópicos numerados quando for complexo
-- Termine direcionando a uma função da plataforma ou perguntando "Isso esclareceu sua dúvida?"`;
+- TEXTO PURO: o chat não interpreta markdown. Nunca use **, __, # ou * para formatar; para destacar o nome de uma tela ou botão, use aspas ("Busca de Imóveis")
+- Termine direcionando a uma função da plataforma ou perguntando "Isso esclareceu sua dúvida?"
+- Quando a resposta terminar com uma pergunta de SIM ou NÃO, acrescente no fim, sozinho, o marcador [[SIM_NAO]] — o sistema mostra ao cliente os botões Sim e Não. Pergunta aberta (qual cidade, qual valor) não leva o marcador`;
 
 // Ajuste por CANAL — o MESMO agente atende o chat do site E (futuramente) o
 // WhatsApp. 'site' não altera nada (comportamento atual); 'whatsapp' só encurta.
@@ -114,8 +117,12 @@ export async function responderSuporte({ mensagens, memoria, canal = 'site', api
   // Perfil do lead (canal WhatsApp): linha interna, nunca vai para a pessoa.
   const mPerfil = resposta.match(/\[\[PERFIL:([^\]]*)\]\]/);
   const perfilLead = mPerfil ? mPerfil[1].trim().slice(0, 400) : null;
-  resposta = resposta.replace(/\[\[PERFIL:[^\]]*\]\]/g, '').replace('[[ESCALAR]]', '').replace('[[BUG]]', '').trim();
-  return { resposta, escalar, bug, perfilLead, falhaIa: !textoIa };
+  // [[SIM_NAO]] = pergunta de sim/não no fim → botões no chat (23/11, dono). A pergunta-padrão do SYSTEM
+  // ("Isso esclareceu sua dúvida?") conta mesmo se a IA esquecer o marcador.
+  const simNao = resposta.includes('[[SIM_NAO]]');
+  resposta = semMarkdown(resposta.replace(/\[\[PERFIL:[^\]]*\]\]/g, '').replace(/\[\[SIM_NAO\]\]/g, '').replace('[[ESCALAR]]', '').replace('[[BUG]]', '')).trim();
+  const opcoes = !escalar && (simNao || /esclareceu sua d[úu]vida\?\s*$/i.test(resposta)) ? ['Sim', 'Não'] : null;
+  return { resposta, escalar, bug, perfilLead, falhaIa: !textoIa, opcoes };
 }
 
 export default async function handler(req) {
@@ -192,7 +199,7 @@ async function responderNoChamado({ authUser, chamadoId, memoria, apiKey }) {
   if (!out.resposta) return { resposta: null, gravado: false, chamado };
 
   const ri = await sb('chamados_mensagens', { method: 'POST', prefer: 'return=minimal',
-    body: { chamado_id: chamado.id, autor_tipo: 'ia', autor_nome: 'BidPro Assistente', conteudo: out.resposta, anexos: [] } });
+    body: { chamado_id: chamado.id, autor_tipo: 'ia', autor_nome: 'BidPro Assistente', conteudo: out.resposta, anexos: [], ...(out.opcoes ? { opcoes: out.opcoes } : {}) } });
   if (!ri.ok) console.error('[chat-suporte] resposta da IA não gravada', ri.status);
 
   let atual = chamado;
