@@ -6,6 +6,16 @@
 
 
 
+## 23/11 (noite, 3) — CAIXA DE E-MAIL: ANTIGAS RECOLHIDAS E LEITOR COM ROLAGEM PRÓPRIA (6029e1b6)
+
+- **Por que:** ao abrir uma conversa a tela "saía descendo" — todas as mensagens vinham abertas e um `scrollIntoView` na
+  última rolava a PÁGINA. O dono pediu recolher as antigas ou separar lista e corpo do e-mail.
+- **Feito os dois:** só a mais nova e as não lidas abrem; as outras viram uma linha (quem, trecho, clipe, data), abrem no
+  clique e recolhem clicando no nome; "Expandir todas" / "Recolher as antigas" ao lado da contagem. Estado `abertas` por
+  conversa (chave = 1ª mensagem), então reler a mesma conversa não fecha o que foi aberto. Em tela larga o leitor é
+  `sticky` com `maxHeight: calc(100vh - 24px)` e rola sozinho; abrir conversa leva o leitor ao topo. Celular sem mudança.
+- Não conferido na tela pela sessão (sem login de equipe); o dono confere junto com a #523.
+
 ## 23/11 (noite, 2) — CHAT DE SUPORTE: SEM `**` DO MARKDOWN E BOTÕES SIM/NÃO (3890f81d, #523 aberta)
 
 - **Por que:** no chamado da Claudia (explorador, "imóvel no bairro Cidade Baixa, Porto Alegre") a resposta automática
