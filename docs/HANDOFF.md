@@ -6,6 +6,21 @@
 
 
 
+## 23/11 (noite, 2) — CHAT DE SUPORTE: SEM `**` DO MARKDOWN E BOTÕES SIM/NÃO (3890f81d, #523 aberta)
+
+- **Por que:** no chamado da Claudia (explorador, "imóvel no bairro Cidade Baixa, Porto Alegre") a resposta automática
+  saiu com "**Busca de Imóveis**" e "**Investidor Pro**": a IA escreve markdown e o chat mostra texto puro. O dono pediu
+  também botões Sim e Não quando a IA faz pergunta, em vez de esperar o cliente digitar.
+- **Markdown:** `SYSTEM` de `api/chat-suporte.js` pede texto puro (destaque com aspas) e `responderSuporte` limpa a
+  resposta com `src/utils/semMarkdown.js` antes de gravar — vale para site e WhatsApp. As telas (ChatSuporte, Meus Chamados,
+  Atendimento) aplicam a mesma limpeza às mensagens antigas da IA. Bolhas do cliente agora respeitam quebra de linha.
+- **Sim/Não:** a IA marca pergunta de sim/não com `[[SIM_NAO]]`; o servidor tira o marcador e grava
+  `chamados_mensagens.opcoes` (migração `chamados_mensagens_opcoes.sql`, aplicada). "Isso esclareceu sua dúvida?" conta
+  mesmo sem o marcador; resposta que escala não leva botões. `src/components/RespostasRapidas.jsx` mostra os botões sob a
+  última mensagem quando ela é da IA; clicar envia a opção como mensagem do cliente (o rascunho digitado fica).
+- **NÃO verificado na tela** (a sessão não tem login de cliente) → #523.
+- ⚠️ `api/chat-suporte.js` é CRLF no índice do git: ao editar no Windows, devolva o CRLF antes do commit.
+
 ## 23/11 (noite) — VEÍCULO ARREMATADO: RASTREIO + ASSESSORIA DE VEÍCULO, SÓ LANÇAMENTO MANUAL (472cbf0b, #522 ✅ fechada)
 
 - **Por que:** o dono arrematou uma Chevrolet Tracker T A LTZ 2024/2025 (placa TKV2F62, lote 140757, evento 798628 - GM,
