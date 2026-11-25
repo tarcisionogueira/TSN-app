@@ -26,9 +26,17 @@
   edital em cache tem o pagamento relido do texto (regex, custo zero).
 - **Teste:** `scripts/testes/anexo-generico-lido-pelo-conteudo.mjs` (9 casos, sem rede). Conferido em seco com os
   documentos reais dos dois cadastros do apto (DLD e Peterlongo `681a6936`): ambos leem 25% + 30x, comissão 5%.
-- **Aberto:** (1) o dono mandou um 2º relatório com o mesmo defeito (lance ~R$ 100 mil, comissão 10%, IGPM, Guia de
-  Depósito Judicial) que não achei no banco — pedir o link; (2) relatórios antigos não mudam sozinhos: regenerar;
-  (3) se o lote não tiver edital/matrícula legível o relatório ainda é gerado — bloquear ou avisar é decisão do dono.
+- **2º caso do dono — BLM `2a82e635` (apto no Floresta, POA, judicial, R$ 95 mil):** mesma plataforma (4 docs em pares
+  Download/Visualizar, todos `tipo:'anexo'`) e um defeito a mais: o scraper gravou em `link_matricula` o EDITAL (1º
+  "Visualizar"), e a "área da matrícula" e o nº 11.510 saíam do edital. Agora o conteúdo decide para TODO candidato, antes
+  do cache: rotulado como matrícula com texto de edital é descartado (e vice-versa), com log `[matricula-conteudo]`.
+  Conferido em seco: edital 25% + 30x, comissão 10%, praças R$ 190 mil / R$ 95 mil; matrícula real nº 96.456 (corpo em
+  imagem → área sai pela visão em produção).
+- **Alcance medido (24/11):** 6.729 lotes ativos com anexo genérico; 2.582 sem nenhum edital rotulado.
+- **Aberto:** (1) relatórios antigos não mudam sozinhos: regenerar; (2) se o lote não tiver edital/matrícula legível o
+  relatório ainda é gerado — bloquear ou avisar é decisão do dono; (3) o scraper dessa plataforma (Download/Visualizar,
+  `/media/download/N`) chuta `link_matricula` = 1º "Visualizar" — o leitor agora se defende, mas a ficha do lote continua
+  mostrando o link errado como "Matrícula".
 
 ## 23/11 (noite, 3) — CAIXA DE E-MAIL: ANTIGAS RECOLHIDAS E LEITOR COM ROLAGEM PRÓPRIA (6029e1b6)
 

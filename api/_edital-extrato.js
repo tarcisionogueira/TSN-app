@@ -696,7 +696,8 @@ export async function extratoEdital(imovelId, { deadline } = {}) {
       processo = hit.campos.processo || null;
     } else {
       const txt = await lerTexto(url, fim);
-      if (genericos.has(url) && tipoDocPorTexto(txt) !== 'edital') continue;
+      // Genérico só vale se o texto for de edital; rotulado como edital mas com texto de MATRÍCULA também sai.
+      { const tipoTxt = tipoDocPorTexto(txt); if (genericos.has(url) ? tipoTxt !== 'edital' : tipoTxt === 'matricula') continue; }
       // PDF ESCANEADO NÃO É EDITAL AUSENTE (17/08). Sem texto embutido, `lerTexto` volta vazio
       // e este laço fazia `continue` — descartando o documento sem registrar nada. Era a razão
       // de `doc_extracoes` não ter UMA linha de edital em toda a história, enquanto a matrícula
@@ -1036,14 +1037,22 @@ export async function extratoMatricula(imovelId, { deadline } = {}) {
     }
     const url = cands[i];
     if (Date.now() > fim) break;
-    // Genérico: o conteúdo decide ANTES do cache (o cache por URL pode ter guardado um edital como matrícula).
-    if (genericos.has(url) && tipoDocPorTexto(await lerTexto(url, fim)) !== 'matricula') continue;
+    // O CONTEÚDO DECIDE, ANTES DO CACHE, PARA TODO CANDIDATO (24/11). Genérico só vale se o texto for de
+    // matrícula. Rotulado vale, a menos que o texto seja de EDITAL: no lote BLM 2a82e635 (Floresta, POA) o scraper
+    // gravou em `link_matricula` o edital — e a "área da matrícula" saía do edital. O cache por URL também pode ter
+    // guardado um edital como matrícula (DLD, André Puente), por isso a checagem vem antes dele. Download é grátis.
+    const txt = await lerTexto(url, fim);
+    const tipoTxt = tipoDocPorTexto(txt);
+    if (genericos.has(url) ? tipoTxt !== 'matricula' : tipoTxt === 'edital') {
+      if (urlParaVisao === url) urlParaVisao = null;
+      console.log('[matricula-conteudo]', JSON.stringify({ imovel: String(imovelId), url: url.slice(0, 110), conteudo: tipoTxt || 'indefinido', descartado: true }));
+      continue;
+    }
     const hit = await cacheLer(chaveUrl(url));
     if (hit?.campos?.matricula) {
       await publicarDocFatos(imovelId, { matricula: hit.campos.matricula, identidade: hit.campos.identidade || null, fonteMatricula: url });
       return { ...hit.campos.matricula, fonteUrl: url, deCache: true };
     }
-    const txt = await lerTexto(url, fim);
     // Texto ausente OU insuficiente = página em IMAGEM. São coisas diferentes de "a
     // matrícula não diz a área", e tratá-las igual foi o que fez 28.355 documentos
     // disponíveis renderem 5 áreas lidas: o PDF escaneado devolve um punhado de
