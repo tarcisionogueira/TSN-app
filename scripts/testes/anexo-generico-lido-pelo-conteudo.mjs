@@ -76,4 +76,35 @@ caso('"30 (trinta) metros de frente" não vira parcela', () => {
   assert.equal(p.parcelas, null);
 });
 
+console.log('\nO COLETOR LÊ O TÍTULO DO ITEM (BLM 2a82e635 — o edital virava a "matrícula" do lote)');
+{
+  const { vasculharDocumentos } = await import('../../api/_doc-scan.js');
+  const { parseDetalhe } = await import('../lib/leilaopro-parse.mjs');
+  const item = (titulo, dl, pdf) => `<div class="documento-item"><div class="documento-icon"><i class="fas fa-file-pdf"></i></div>
+<div class="documento-content"><h5 class="documento-titulo">${titulo}</h5><p class="documento-descricao">Arquivo PDF - 0.1 MB</p>
+<div class="documento-acoes"><a href="/media/download/${dl}" class="btn-documento download"><i class="fas fa-download"></i><span>Download</span></a>
+<a target="_blank" href="/uploads/media/documentos_bem/0001/01/${pdf}.pdf" class="btn-documento visualizar"><i class="fas fa-eye"></i><span>Visualizar</span></a></div></div></div>`;
+  const html = `<html><body><a class="collapsed" href="#collapseDocumentos">EDITAL E DOCUMENTOS</a><div class="documentos-container">
+${item('Edital', 522, 'aaa111')}${item('Matricula', 512, 'bbb222')}${item('Avaliação', 513, 'ccc333')}</div></body></html>`;
+  const url = 'https://www.blm.leilao.br/leilao/x/lote_id/91';
+  caso('varredura genérica: Download e Visualizar de cada item herdam o título', () => {
+    const v = vasculharDocumentos(html, url);
+    const porUrl = Object.fromEntries(v.anexos.map((a) => [a.url.split('/').pop(), a.tipo]));
+    assert.equal(porUrl['522'], 'edital'); assert.equal(porUrl['aaa111.pdf'], 'edital');
+    assert.equal(porUrl['512'], 'matricula'); assert.equal(porUrl['bbb222.pdf'], 'matricula');
+    assert.equal(porUrl['513'], 'laudo');
+    assert.match(v.matricula, /\/media\/download\/512$|bbb222\.pdf$/);
+  });
+  caso('parser da plataforma: link_matricula é a matrícula, não o 1º arquivo de /documentos_bem/', () => {
+    const d = parseDetalhe(html, url);
+    assert.match(d.link_matricula, /bbb222\.pdf$/);
+    assert.match(d.link_edital, /aaa111\.pdf$/);
+  });
+  caso('sem título legível, /documentos_bem/ fica genérico (não é chutado como matrícula)', () => {
+    const d = parseDetalhe('<html><body><div><a href="/uploads/media/documentos_bem/0001/01/zzz.pdf">Visualizar</a></div></body></html>', url);
+    assert.equal(d.link_matricula, null);
+    assert.equal(d.anexos[0].tipo, 'anexo');
+  });
+}
+
 console.log(`\n✓ anexo-generico-lido-pelo-conteudo: ${ok} casos`);

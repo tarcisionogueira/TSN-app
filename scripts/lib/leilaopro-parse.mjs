@@ -19,6 +19,7 @@
 import { fazendaEhNome } from '../../api/_tipo.js';
 import { extrairGenerico, checarQualidade } from './scraper-core.mjs';
 import { decodificarEntidades, extrairAreaM2 } from '../../api/_texto-imovel.js';
+import { rotuloDoBloco, classificar } from '../../api/_doc-scan.js';
 import MUNICIPIOS from '../../api/_municipios.js';
 import { normCidade, inferirUF } from './inferir-uf.mjs';
 
@@ -491,10 +492,18 @@ export function parseDetalhe(html, url) {
   for (const m of html.matchAll(/href=["']([^"']+\.pdf[^"']*)["']/gi)) {
     let abs; try { abs = new URL(decodificarEntidades(m[1]), url).href; } catch { continue; }
     const low = abs.toLowerCase();
-    const tipo = /documentos_leilao|edital/.test(low) ? 'edital'
-      : /documentos_bem|matr[íi]cula|laudo/.test(low) ? 'matricula' : 'outro';
+    // 24/11 (BLM 2a82e635): o TÍTULO do item na página ("Edital", "Matricula", "Avaliação") manda. Antes, tudo em
+    // /documentos_bem/ virava "matrícula" — inclusive o edital, que é publicado ali — e o 1º deles ia para
+    // link_matricula. Sem título legível: /documentos_leilao/ ainda é edital; /documentos_bem/ fica genérico e o
+    // leitor do relatório decide pelo conteúdo.
+    const rotulo = rotuloDoBloco(html, m[1]);
+    const peloRotulo = rotulo ? classificar(rotulo) : 'anexo';
+    const tipo = peloRotulo !== 'anexo' ? peloRotulo
+      : /documentos_leilao|edital/.test(low) ? 'edital'
+      : /matr[íi]cula/.test(low) ? 'matricula' : 'anexo';
     if (anexos.some(a => a.url === abs)) continue;
-    anexos.push({ tipo, nome: tipo === 'edital' ? 'Edital' : tipo === 'matricula' ? 'Matrícula / Laudo do bem' : 'Documento', url: abs });
+    const NOMES = { edital: 'Edital', matricula: 'Matrícula', laudo: 'Laudo de avaliação', regras: 'Regras', proposta: 'Proposta' };
+    anexos.push({ tipo, nome: (rotulo && rotulo.length > 2 ? rotulo : NOMES[tipo] || 'Documento').slice(0, 90), url: abs });
     if (tipo === 'edital' && !link_edital) link_edital = abs;
     if (tipo === 'matricula' && !link_matricula) link_matricula = abs;
   }

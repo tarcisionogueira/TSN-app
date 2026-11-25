@@ -33,10 +33,17 @@
   Conferido em seco: edital 25% + 30x, comissão 10%, praças R$ 190 mil / R$ 95 mil; matrícula real nº 96.456 (corpo em
   imagem → área sai pela visão em produção).
 - **Alcance medido (24/11):** 6.729 lotes ativos com anexo genérico; 2.582 sem nenhum edital rotulado.
+- **Coletor corrigido (pedido do dono):** a plataforma publica cada documento como `<h5 class="documento-titulo">Edital</h5>`
+  + botões Download/Visualizar. `rotuloDoBloco` (`api/_doc-scan.js`, agora exportado com `classificar`) só olhava o bloco
+  dos BOTÕES; ganhou `tituloDoItem`: último título/cabeçalho antes do link, desde que no meio haja no máximo 1 outro link
+  (o par do mesmo item). `scripts/lib/leilaopro-parse.mjs` deixou de marcar todo `/documentos_bem/` como matrícula: o
+  título manda; sem título, `/documentos_bem/` fica `anexo` (o leitor do relatório decide pelo conteúdo). Conferido na
+  página real da BLM (edital/matrícula/avaliação certos nos dois coletores) e da DLD (títulos são nº de processo → genérico,
+  com nome legível). 3 casos novos no teste. Os 6 lotes ativos com a matrícula chutada (REGIONALLEIL 2, BLM, GABRIELROSA,
+  GTLEILOES, LEFFA) se corrigem na próxima coleta semanal (`scraper-leilaopro.yml`, quinta 10:50 UTC).
 - **Aberto:** (1) relatórios antigos não mudam sozinhos: regenerar; (2) se o lote não tiver edital/matrícula legível o
-  relatório ainda é gerado — bloquear ou avisar é decisão do dono; (3) o scraper dessa plataforma (Download/Visualizar,
-  `/media/download/N`) chuta `link_matricula` = 1º "Visualizar" — o leitor agora se defende, mas a ficha do lote continua
-  mostrando o link errado como "Matrícula".
+  relatório ainda é gerado — bloquear ou avisar é decisão do dono; (3) conferir em 26/11, depois da coleta, que o
+  `link_matricula` dos 6 lotes mudou.
 
 ## 23/11 (noite, 3) — CAIXA DE E-MAIL: ANTIGAS RECOLHIDAS E LEITOR COM ROLAGEM PRÓPRIA (6029e1b6)
 

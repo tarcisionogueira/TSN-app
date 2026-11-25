@@ -122,7 +122,7 @@ const KW = {
 // isso (RE_PDF_DO_EVENTO em scraper-puppeteer.mjs); faltava este caminho, o da visita à página.
 const RE_PDF_EVENTO_SUPERBID = /superbid\.net\/event\/\d+\/attachment\//i;
 
-function classificar(texto) {
+export function classificar(texto) {
   if (KW.matricula.test(texto)) return 'matricula';
   if (RE_PDF_EVENTO_SUPERBID.test(texto)) return 'edital';
   if (KW.edital.test(texto)) return 'edital';
@@ -178,11 +178,41 @@ function absolutizar(href, baseUrl) {
 // bruto e lê pra trás até o início do bloco (<li>/<tr>/<div>) mais próximo; corta uma eventual
 // palavra de ação que tenha vazado do link IRMÃO (2º de um par Visualizar/Baixar do MESMO
 // item — o rótulo de verdade vem antes dela, não depois).
-function rotuloDoBloco(html, href, janela = 3000) {
+export function rotuloDoBloco(html, href, janela = 3000) {
   let i = html.indexOf(`href="${href}"`);
   if (i < 0) i = html.indexOf(`href='${href}'`);
   if (i < 0) i = html.indexOf(href);
   if (i < 0) return '';
+  const imediato = rotuloDoBlocoImediato(html, i, janela);
+  return imediato || tituloDoItem(html, i, janela);
+}
+
+// TÍTULO DO ITEM UM NÍVEL ACIMA (24/11, BLM/DLD/Regional/GT/Leffa/Gabriel Rosa — plataforma "documento-item"):
+//   <h5 class="documento-titulo">Edital</h5> <p>Arquivo PDF - 0.1 MB</p>
+//   <div class="documento-acoes"> <a href="/media/download/522">Download</a> <a href="…/x.pdf">Visualizar</a> </div>
+// O bloco mais próximo do link é a <div> dos BOTÕES, sem rótulo, e os quatro documentos (edital, matrícula, avaliação,
+// mandado) caíam como "anexo" genérico. O coletor da plataforma ainda chutava o 1º como matrícula: o edital virou a
+// "matrícula" do lote BLM 2a82e635. Pega o último cabeçalho/título antes do link — desde que entre ele e o link haja
+// no máximo UM outro link (o par Download/Visualizar do mesmo item), senão o título é de outro item.
+function tituloDoItem(html, i, janela) {
+  const trecho = html.slice(Math.max(0, i - janela), i);
+  const re = /<(h[1-6]|strong|b|span|p|div|label)\b[^>]*class=["'][^"']*(?:titulo|title|nome|name|label|descri)[^"']*["'][^>]*>([\s\S]{1,200}?)<\/\1>|<(h[1-6])\b[^>]*>([\s\S]{1,200}?)<\/\3>/gi;
+  let ultimo = null, m;
+  while ((m = re.exec(trecho))) {
+    const txt = decodificarEntidades(String(m[2] ?? m[4] ?? '').replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
+    // "Arquivo PDF - 0.1 MB" é descrição do arquivo, não rótulo.
+    if (txt && !/^arquivo\s|^\d+([.,]\d+)?\s*(kb|mb)$/i.test(txt)) ultimo = { txt, fim: m.index + m[0].length };
+  }
+  if (!ultimo) return '';
+  let entre = trecho.slice(ultimo.fim);
+  // A fatia termina dentro da própria tag <a …href= deste link: ela não conta como "outro link".
+  const abre = entre.lastIndexOf('<');
+  if (abre >= 0 && entre.indexOf('>', abre) < 0) entre = entre.slice(0, abre);
+  if ((entre.match(/<a\b/gi) || []).length > 1) return '';
+  return ultimo.txt.slice(0, 120);
+}
+
+function rotuloDoBlocoImediato(html, i, janela) {
   // ACHADO AO VIVO (09/09): uma janela FIXA curta (400 chars) não bastava — o ícone SVG entre
   // os dois links do mesmo par (Visualizar/Baixar) tem o "d" do <path> mais longo que isso, e
   // pra o 2º link a janela cortava NO MEIO do dado do ícone, sem alcançar nem o </a> anterior
