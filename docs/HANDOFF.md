@@ -41,9 +41,15 @@
   página real da BLM (edital/matrícula/avaliação certos nos dois coletores) e da DLD (títulos são nº de processo → genérico,
   com nome legível). 3 casos novos no teste. Os 6 lotes ativos com a matrícula chutada (REGIONALLEIL 2, BLM, GABRIELROSA,
   GTLEILOES, LEFFA) se corrigem na próxima coleta semanal (`scraper-leilaopro.yml`, quinta 10:50 UTC).
-- **Aberto:** (1) relatórios antigos não mudam sozinhos: regenerar; (2) se o lote não tiver edital/matrícula legível o
-  relatório ainda é gerado — bloquear ou avisar é decisão do dono; (3) conferir em 26/11, depois da coleta, que o
-  `link_matricula` dos 6 lotes mudou.
+- **Conferido em produção (25/11 ~01:30 UTC, relatórios regenerados pelo dono):** DLD `d836e7c4` — edital lido do
+  `/media/download/1524`, 25% + 30x, comissão 5%, 128,94 m² privativos (matrícula 104.938); BLM `2a82e635` — edital lido,
+  25% + 30x, comissão 10%, 76,88 m² privativos / 90,39 m² total (matrícula 96.456, a verdadeira).
+- **Commits do dia:** 32ce8f7d (todos os anexos + pagamento TRT4) · 1c06e271 (conteúdo decide também p/ rotulado) ·
+  c2b01048 (coletor lê o título do item). Pendência #524 (conferir os 6 lotes depois da coleta de 26/11).
+- **Aberto:** (1) se o lote não tiver edital/matrícula legível o relatório ainda é gerado — bloquear ou avisar é decisão
+  do dono; (2) #524; (3) `doc_fatos.fonteMatricula` do BLM ainda aponta para o PDF do edital (resto da leitura antiga:
+  a publicação por visão não regrava a chave) — os números estão certos, o link de origem não; (4) a tela ainda deve ser
+  conferida pelo dono quanto ao cartão "Custo mensal" (deve sair com a parcela, não "R$ 0,00 · à vista").
 
 ## 23/11 (noite, 3) — CAIXA DE E-MAIL: ANTIGAS RECOLHIDAS E LEITOR COM ROLAGEM PRÓPRIA (6029e1b6)
 
