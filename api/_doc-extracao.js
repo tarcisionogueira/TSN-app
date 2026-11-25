@@ -166,7 +166,11 @@ export function extrairPagamentoTexto(texto) {
              // "o restante parcelado em até 30 (trinta) meses" (art. 895, editais LJUD) — o número por extenso entre parênteses.
              || t.match(/parcelad[oa]\s+em\s+at[ée]\s+(\d{1,3})\s*(?:\([^)]{0,20}\)\s*)?(?:parcelas|meses|vezes|x)\b/i)
              // Faixa (15/11, SUPERBID/Banco Inter): "Saldo de 24 a 240 parcelas mensais" — vale o teto da faixa.
-             || t.match(/\bde\s+\d{1,3}\s+a\s+(\d{1,3})\s+parcelas\b/i);
+             || t.match(/\bde\s+\d{1,3}\s+a\s+(\d{1,3})\s+parcelas\b/i)
+             // 24/11 (TRT4, Provimento GP.GCR 05/2025 — apto 601 André Puente): "saldo em, no máximo, 30 (trinta) parcelas
+             // mensais". Nenhuma redação acima casava; o relatório saiu "à vista, sem parcela" com o edital oferecendo 30x.
+             || t.match(/(?:saldo|restante|remanescente)[^.;]{0,40}?(?:no\s+m[áa]ximo|at[ée])[,\s]+(\d{1,3})\s*(?:\([^)]{0,20}\)\s*)?(?:parcelas|presta[çc][õo]es|meses)\b/i)
+             || t.match(/\b(\d{1,3})\s*\([a-zà-ú\s-]{3,30}\)\s*(?:parcelas|presta[çc][õo]es)\s+mensais\b/i);
       let n = m ? Number(m[1]) : 0;
       // Número POR EXTENSO (15/10, lote judicial TJSP em Santana de Parnaíba): "sinal de 50% + duas parcelas
       // de 25%" — o relatório saía à vista com o parcelamento escrito no documental.
@@ -179,10 +183,14 @@ export function extrairPagamentoTexto(texto) {
     })(),
     // Duas ordens: "sinal de 50%" e "50% de sinal" (16/10, documental do lote TJSP em Santana de Parnaíba).
     // "a partir de" (15/11, SUPERBID/Banco Inter): "Sinal a partir de 30% e Saldo Financiado em até 240x".
+    // "entrada de, no mínimo, 25%" (24/11, TRT4): vírgulas e "no mínimo" entre a palavra e o número.
     sinalPct: pct(/(?:sinal|entrada)\s+(?:de\s+|m[íi]nim[oa]\s+de\s+|a\s+partir\s+de\s+)?(\d{1,2}(?:,\d{1,2})?)\s*%/i)
+      ?? pct(/(?:sinal|entrada)\s+de,?\s+no\s+m[íi]nimo,?\s+(\d{1,2}(?:,\d{1,2})?)\s*%/i)
       ?? pct(/(\d{1,2}(?:,\d{1,2})?)\s*%\s+(?:de|a\s+t[íi]tulo\s+de)\s+(?:sinal|entrada)\b/i)
       // "deverá pagar 25% do valor do lance à vista e o restante parcelado" (art. 895) — a entrada do parcelamento.
-      ?? pct(/(\d{1,2}(?:,\d{1,2})?)\s*%\s+do\s+(?:valor\s+do\s+)?lance\s+[àa]\s+vista\s+e\s+o\s+restante/i),
+      // 24/11 (JE Leilões, Maringá): "25% (vinte e cinco por cento) do valor do lance à vista" — o número por extenso
+      // entre parênteses deixava a entrada nula num edital que a declara.
+      ?? pct(/(\d{1,2}(?:,\d{1,2})?)\s*%\s*(?:\([^)]{0,40}\)\s*)?do\s+(?:valor\s+do\s+)?lance\s+[àa]\s+vista\s+e\s+o\s+restante/i),
     caucaoPct: pct(/cau[çc][ãa]o\s+(?:de\s+)?(\d{1,2}(?:,\d{1,2})?)\s*%/i),
     // "mínimo de R$ 5.000,00 por parcela" (03/11, Peruíbe): limita o número de parcelas da projeção.
     parcelaMinima: parcelaMinimaDoTexto(t),
@@ -219,7 +227,8 @@ export function extrairPagamentoTexto(texto) {
       // poderá ser parcelado (art. 895)", "propostas de arrematação parcelada", "admitidas propostas em prestações" ficavam
       // de fora — e a regra "à vista sem prova = vedado" (abaixo) transformava o silêncio em VETO, travando o cenário
       // parcelado de lote judicial que o oferece.
-      for (const m of t.matchAll(/parcelament\w*|parcelad[oa]s?\b|em\s+presta[çc][õo]es|art(?:igo|\.)?\s*895\b/gi)) {
+      // "As propostas poderão ser feitas à vista ou a prazo" (24/11, TRT4) também é oferta de parcelamento.
+      for (const m of t.matchAll(/parcelament\w*|parcelad[oa]s?\b|em\s+presta[çc][õo]es|art(?:igo|\.)?\s*895\b|(?:propostas?|pagamento|arremata[çc][ãa]o|lances?)[^.;]{0,40}?\ba\s+prazo\b/gi)) {
         const antes = t.slice(Math.max(0, m.index - 40), m.index);
         if (/n[ãa]o|vedad|proibid|sem\s+direito|indeferid/i.test(antes)) { negado = true; continue; }
         return true;

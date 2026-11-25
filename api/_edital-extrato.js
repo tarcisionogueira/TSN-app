@@ -19,8 +19,48 @@ import { classificarDocumento, blocoParaIA, temTextoUtil } from './_doc-leitura.
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
 // Deploy do conserto do extrator de pagamento (f6abb16 + dac5ae4, 15/11): `pagamento` em cache anterior é relido.
-export const CORTE_EXTRATOR_PAGAMENTO = '2026-11-15T22:45:00Z';   // 15/11 22h: + reconhecimento de "parcelado"/"art. 895"/"financiado com o vendedor" (o corte das 19h deixava em cache o veto errado da manhã)
+// 25/11 12h UTC: + "saldo em, no máximo, 30 (trinta) parcelas", "entrada de, no mínimo, 25%" e "à vista ou a prazo" (TRT4).
+// Fica um pouco à frente do deploy de propósito: cache regravado pelo código velho até lá também é relido (só regex, custo zero).
+export const CORTE_EXTRATOR_PAGAMENTO = '2026-11-25T12:00:00Z';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+
+/**
+ * ANEXO SEM NOME ÚTIL (24/11, achado do dono — apto 601 da Rua André Puente, DLD Leiloeiro, TRT4).
+ * O leiloeiro publica o edital como dois botões, "Download" (`/media/download/1524`, sem extensão,
+ * servido como `attachment`) e "Visualizar" (o mesmo PDF). O scraper classifica o anexo pelo NOME, e
+ * "Download"/"Visualizar" viram `tipo:'anexo'` — que nem o leitor do edital nem o da matrícula
+ * consideravam. Resultado: relatório sem a forma de pagamento do edital (25% + 30x SELIC) e sem a
+ * metragem, com o documento disponível e legível. E o leitor da matrícula chegou a guardar o EDITAL
+ * como "matrícula" (só porque o edital cita o nº da matrícula).
+ *
+ * Aqui o tipo vem do CONTEÚDO: pontua marcadores de cada documento e só responde quando um vence com
+ * folga. `null` = não dá para afirmar (texto curto, escaneado, outro documento).
+ */
+export function tipoDocPorTexto(texto) {
+  const t = String(texto || '').slice(0, 30000);
+  if (!temTextoUtil(t)) return null;
+  const n = (re) => (t.match(re) || []).length;
+  const matricula = n(/registro\s+(?:geral\s+)?de\s+im[óo]veis/gi) * 3
+    + n(/oficial\s+(?:registrador|do\s+registro)|livro\s*(?:n[ºo°.]?\s*)?2\b|ficha\s*(?:n[ºo°.]?\s*)?\d/gi) * 2
+    + n(/\b(?:R|AV)[.\-\s]?\d{1,3}\s*[/-]\s*(?:M[.\-\s]?)?\d{3,}/g) * 2;
+  const edital = n(/\bedital\b/gi) * 2
+    + n(/leil[ãa]o|leiloeir|hasta\s+p[úu]blica|arremata[çc]|lance\s+m[íi]nimo|venda\s+direta|aliena[çc][ãa]o\s+(?:por\s+iniciativa|judicial)|condi[çc][õo]es\s+(?:da\s+proposta|de\s+pagamento)/gi);
+  if (edital >= 4 && edital > matricula) return 'edital';
+  if (matricula >= 4 && matricula > edital) return 'matricula';
+  return null;
+}
+
+// TODOS OS ANEXOS, QUALQUER NOME (24/11, regra do dono: "o sistema deve ler todos os anexos independente do
+// nome, seja link ou arquivo para baixar"). O nome/tipo só decide a ORDEM — os rotulados como o documento
+// procurado vêm antes; todo o resto entra depois e o CONTEÚDO decide. Imagem/vídeo fica de fora (não é documento).
+export const NAO_DOCUMENTO = /\.(jpe?g|png|gif|webp|bmp|svg|mp4|mov|avi)(\?|#|$)/i;
+export function todosOsAnexos(anexos, { exceto = [] } = {}) {
+  const ja = new Set(exceto);
+  return [...new Set((Array.isArray(anexos) ? anexos : [])
+    .map((a) => (typeof a === 'string' ? a : a?.url))
+    .filter((u) => u && /^https?:\/\//i.test(u) && !NAO_DOCUMENTO.test(u) && !ja.has(u)))];
+}
+const LIMITE_CANDIDATOS = 10;
 
 /**
  * PUBLICA NA FICHA DO IMÓVEL o que a leitura do documento apurou (pedido do dono, 06/08:
@@ -286,7 +326,7 @@ export async function lerTexto(url, deadline) {
  * edital — href/texto com "edital" primeiro, depois "regras/condições", depois o resto.
  * Devolve no máximo 3, porque o chamador tem orçamento de tempo.
  */
-async function pdfsNaPagina(url, fim) {
+async function pdfsNaPagina(url, fim, alvo = 'edital', { todos = false } = {}) {
   if (!hostExternoSeguro(url) || fim - Date.now() < 4000) return [];
   let html = '';
   try {
@@ -313,12 +353,37 @@ async function pdfsNaPagina(url, fim) {
     // Peso pelo que o link diz ser. `matricula` entra NEGATIVO: é documento útil, mas
     // quem o procura é o `extratoMatricula` — aqui ele só tomaria a vaga do edital.
     let peso = 0;
-    if (/edital/.test(contexto)) peso += 10;
-    if (/regras|condi[çc]|venda\s*online|leil[ãa]o/.test(contexto)) peso += 5;
-    if (/matr[íi]cula|certid|laudo|foto/.test(contexto)) peso -= 8;
+    if (alvo === 'matricula') {
+      // 24/11: a mesma varredura serve à matrícula (Peterlongo/Suporte Leilões: link "MATRICULA" na página).
+      if (/matr[íi]cula/.test(contexto)) peso += 10;
+      if (/edital|regras|laudo|foto/.test(contexto)) peso -= 8;
+    } else {
+      if (/edital/.test(contexto)) peso += 10;
+      if (/regras|condi[çc]|venda\s*online|leil[ãa]o/.test(contexto)) peso += 5;
+      if (/matr[íi]cula|certid|laudo|foto/.test(contexto)) peso -= 8;
+    }
     achados.set(href, Math.max(achados.get(href) ?? -99, peso));
   }
-  return [...achados.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([u]) => u);
+  // LINK DE DOWNLOAD SEM EXTENSÃO (24/11, DLD Leiloeiro): `/media/download/1524` é o edital, servido
+  // como anexo. Entra com peso menor que um .pdf rotulado; `lerTexto` classifica pelo conteúdo.
+  const reDl = /<a\b[^>]*href\s*=\s*["']([^"'#]*\/(?:media\/)?(?:download|baixar|arquivo|documento)s?\/[^"'#]+)["'][^>]*>([\s\S]{0,200}?)<\/a>/gi;
+  while ((m = reDl.exec(html)) && achados.size < 30) {
+    let href = m[1];
+    try { href = new URL(href, url).href; } catch { continue; }
+    if (!/^https?:\/\//i.test(href) || !hostExternoSeguro(href) || achados.has(href)) continue;
+    const contexto = `${href} ${String(m[2] || '').replace(/<[^>]+>/g, ' ')}`.toLowerCase();
+    let peso = -1;
+    const alvoRe = alvo === 'matricula' ? /matr[íi]cula/ : /edital/;
+    const outroRe = alvo === 'matricula' ? /edital|laudo|foto/ : /matr[íi]cula|certid|laudo|foto/;
+    if (alvoRe.test(contexto)) peso += 10;
+    if (outroRe.test(contexto)) peso -= 8;
+    achados.set(href, peso);
+  }
+  // Para a matrícula só vale o link que DIZ ser matrícula — o resto da página é edital/foto.
+  // `todos` (24/11): a varredura completa devolve TODO documento da página, ordenado; quem chama
+  // classifica cada um pelo conteúdo.
+  return [...achados.entries()].filter(([, p]) => todos || alvo !== 'matricula' || p > 0)
+    .sort((a, b) => b[1] - a[1]).slice(0, todos ? LIMITE_CANDIDATOS : 3).map(([u]) => u);
 }
 
 /**
@@ -527,7 +592,7 @@ export async function extratoEdital(imovelId, { deadline } = {}) {
   let im = null;
   try {
     const r = await fetch(
-      `${SUPABASE_URL}/rest/v1/imoveis_leilao?id=eq.${encodeURIComponent(imovelId)}&select=link_edital,link_regras_venda,anexos,valor_minimo,valor_avaliacao&limit=1`,
+      `${SUPABASE_URL}/rest/v1/imoveis_leilao?id=eq.${encodeURIComponent(imovelId)}&select=link_edital,link_regras_venda,url_lote,anexos,valor_minimo,valor_avaliacao&limit=1`,
       { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } },
     );
     [im] = await r.json();
@@ -563,7 +628,31 @@ export async function extratoEdital(imovelId, { deadline } = {}) {
       }
     }
   }
-  for (const url of cands) {
+  // TODOS OS ANEXOS E TODOS OS DOCUMENTOS DA PÁGINA (24/11 — ver `todosOsAnexos`). Só quando os
+  // candidatos rotulados se esgotam sem edital: o caso comum continua custando o mesmo. Cada um destes é
+  // aceito só se o CONTEÚDO for de edital, e nunca vai para a visão (seria pagar para ler outro documento).
+  const genericos = new Set();
+  let expandido = false;
+  const expandir = async () => {
+    const add = (u) => { if (u && !cands.includes(u) && cands.length < LIMITE_CANDIDATOS) { cands.push(u); genericos.add(u); } };
+    todosOsAnexos(anexos, { exceto: cands }).forEach(add);
+    const paginas = [...new Set([im.link_edital, im.url_lote].filter(u => u && /^https?:\/\//i.test(u) && !ehPdfUrl(u)))];
+    for (const pag of paginas.slice(0, 2)) {
+      if (fim - Date.now() < 8000 || cands.length >= LIMITE_CANDIDATOS) break;
+      const achados = await pdfsNaPagina(pag, fim, 'edital', { todos: true });
+      achados.forEach(add);
+      if (achados.length) break;
+    }
+    console.log('[edital-todos-anexos]', JSON.stringify({ imovel: String(imovelId), candidatos: cands.length, conferindo: genericos.size }));
+  };
+  for (let i = 0; ; i++) {
+    if (i >= cands.length) {
+      if (expandido || Date.now() > fim) break;
+      expandido = true;
+      await expandir();
+      if (i >= cands.length) break;
+    }
+    const url = cands[i];
     if (Date.now() > fim) break;
     // CACHE-FIRST por URL canônica (querystring de signed URL fora): outro relatório
     // — ou a regeneração deste — já leu este edital → pula download+parse inteiros.
@@ -607,6 +696,7 @@ export async function extratoEdital(imovelId, { deadline } = {}) {
       processo = hit.campos.processo || null;
     } else {
       const txt = await lerTexto(url, fim);
+      if (genericos.has(url) && tipoDocPorTexto(txt) !== 'edital') continue;
       // PDF ESCANEADO NÃO É EDITAL AUSENTE (17/08). Sem texto embutido, `lerTexto` volta vazio
       // e este laço fazia `continue` — descartando o documento sem registrar nada. Era a razão
       // de `doc_extracoes` não ter UMA linha de edital em toda a história, enquanto a matrícula
@@ -884,7 +974,7 @@ export async function extratoMatricula(imovelId, { deadline } = {}) {
   let im = null, anexoAcervo = null;
   try {
     const hdr = { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } };
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/imoveis_leilao?id=eq.${encodeURIComponent(imovelId)}&select=link_matricula,anexos&limit=1`, hdr);
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/imoveis_leilao?id=eq.${encodeURIComponent(imovelId)}&select=link_matricula,link_edital,url_lote,anexos&limit=1`, hdr);
     [im] = await r.json();
     const ra = await fetch(`${SUPABASE_URL}/rest/v1/imovel_anexos?imovel_id=eq.${encodeURIComponent(imovelId)}&tipo=eq.matricula&select=url&limit=1`, hdr);
     [anexoAcervo] = await ra.json().catch(() => []);
@@ -903,12 +993,51 @@ export async function extratoMatricula(imovelId, { deadline } = {}) {
     im.link_matricula,
     anexoAcervo?.url,
   ].filter(u => u && /^https?:\/\//i.test(u) && !/matricula\.asp|detalhe-imovel\.asp/i.test(u)))].slice(0, 3);
+  const paginasLote = [...new Set([im.url_lote, im.link_edital].filter(u => u && /^https?:\/\//i.test(u) && !/\.(pdf|docx?)(\?|#|$)/i.test(u)))];
+  // MATRÍCULA SÓ NA PÁGINA DO LOTE (24/11): sem candidato direto, procura o link "Matrícula" na página.
+  // Rotulado como matrícula pela própria página → candidato normal (pode ir à visão se for escaneado).
+  if (!cands.length) {
+    for (const pag of paginasLote.slice(0, 2)) {
+      if (fim - Date.now() < 8000) break;
+      const achados = await pdfsNaPagina(pag, fim, 'matricula');
+      if (achados.length) {
+        console.log('[matricula-html]', JSON.stringify({ imovel: String(imovelId), pagina: pag.slice(0, 110), links: achados.length }));
+        cands.push(...achados);
+        break;
+      }
+    }
+  }
+  // TODOS OS ANEXOS E DOCUMENTOS DA PÁGINA (24/11 — ver `todosOsAnexos`), quando os rotulados se esgotam sem
+  // a área. Só valem se o CONTEÚDO for de matrícula — o edital cita o nº da matrícula e era guardado como se
+  // fosse ela (DLD, apto 601 André Puente). Sem visão para eles: o nome não garante que seja matrícula.
+  const genericos = new Set();
+  let expandido = false;
+  const expandir = async () => {
+    const add = (u) => { if (u && !cands.includes(u) && cands.length < LIMITE_CANDIDATOS) { cands.push(u); genericos.add(u); } };
+    todosOsAnexos(anexos, { exceto: cands }).forEach(add);
+    for (const pag of paginasLote.slice(0, 2)) {
+      if (fim - Date.now() < 8000 || cands.length >= LIMITE_CANDIDATOS) break;
+      const achados = await pdfsNaPagina(pag, fim, 'matricula', { todos: true });
+      achados.forEach(add);
+      if (achados.length) break;
+    }
+    console.log('[matricula-todos-anexos]', JSON.stringify({ imovel: String(imovelId), candidatos: cands.length, conferindo: genericos.size }));
+  };
   // Alvo da visão: começa no 1º candidato e é refinado pelo loop. Começar JÁ preenchido
   // cobre o caso em que o laço nem chega a rodar — o `break` por fim de orçamento logo
   // abaixo deixava `urlParaVisao` nulo e a visão simplesmente não era tentada, sem rastro.
   let urlParaVisao = cands[0] || null, regexParcial = null;
-  for (const url of cands) {
+  for (let i = 0; ; i++) {
+    if (i >= cands.length) {
+      if (expandido || Date.now() > fim) break;
+      expandido = true;
+      await expandir();
+      if (i >= cands.length) break;
+    }
+    const url = cands[i];
     if (Date.now() > fim) break;
+    // Genérico: o conteúdo decide ANTES do cache (o cache por URL pode ter guardado um edital como matrícula).
+    if (genericos.has(url) && tipoDocPorTexto(await lerTexto(url, fim)) !== 'matricula') continue;
     const hit = await cacheLer(chaveUrl(url));
     if (hit?.campos?.matricula) {
       await publicarDocFatos(imovelId, { matricula: hit.campos.matricula, identidade: hit.campos.identidade || null, fonteMatricula: url });

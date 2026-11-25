@@ -6,6 +6,30 @@
 
 
 
+## 24/11 (noite) — RELATÓRIO LÊ TODOS OS ANEXOS, QUALQUER NOME; PAGAMENTO DO TRT4 RECONHECIDO
+
+- **Por que:** relatório do apto 601 da Rua André Puente (Porto Alegre, DLD Leiloeiro `d836e7c4`, TRT4
+  0020805-91.2026.5.04.0012) saiu "à vista, sem parcela" e sem metragem. O edital estava publicado como botões
+  "Download" (`/media/download/1524`, sem extensão, `attachment`) e "Visualizar"; o scraper classifica anexo pelo NOME e
+  gravou `tipo:'anexo'`, que nem `extratoEdital` nem `extratoMatricula` consideravam. O leitor da matrícula ainda guardou o
+  EDITAL como matrícula em `doc_extracoes` (o edital cita o nº 104.938). Mesmo lido, o regex de pagamento não reconhecia
+  "saldo em, no máximo, 30 (trinta) parcelas", "entrada de, no mínimo, 25%" nem "à vista ou a prazo".
+- **Regra do dono (24/11):** "o sistema deve ler todos os anexos independente do nome, seja link ou arquivo para baixar".
+- **Feito (`api/_edital-extrato.js`):** depois dos candidatos rotulados, os dois leitores conferem TODOS os anexos (qualquer
+  tipo, menos imagem/vídeo) e TODOS os documentos linkados na página do lote (`.pdf` e links de download sem extensão), até
+  10 candidatos. O CONTEÚDO decide (`tipoDocPorTexto`: edital × matrícula por marcadores); esses não vão à visão. A matrícula
+  linkada só na página ("MATRICULA", Peterlongo/Suporte) entra como candidato normal. A expansão só roda quando os
+  rotulados não resolveram: o caso comum custa o mesmo.
+- **Pagamento (`api/_doc-extracao.js`):** + "saldo/restante … no máximo/até N (por extenso) parcelas|meses", "N (por extenso)
+  parcelas mensais", "entrada de, no mínimo, X%", "X% (por extenso) do valor do lance à vista e o restante" (JE Leilões,
+  Maringá, saía sem entrada) e "propostas … a prazo" como parcelamento. `CORTE_EXTRATOR_PAGAMENTO` → 25/11 12h UTC:
+  edital em cache tem o pagamento relido do texto (regex, custo zero).
+- **Teste:** `scripts/testes/anexo-generico-lido-pelo-conteudo.mjs` (9 casos, sem rede). Conferido em seco com os
+  documentos reais dos dois cadastros do apto (DLD e Peterlongo `681a6936`): ambos leem 25% + 30x, comissão 5%.
+- **Aberto:** (1) o dono mandou um 2º relatório com o mesmo defeito (lance ~R$ 100 mil, comissão 10%, IGPM, Guia de
+  Depósito Judicial) que não achei no banco — pedir o link; (2) relatórios antigos não mudam sozinhos: regenerar;
+  (3) se o lote não tiver edital/matrícula legível o relatório ainda é gerado — bloquear ou avisar é decisão do dono.
+
 ## 23/11 (noite, 3) — CAIXA DE E-MAIL: ANTIGAS RECOLHIDAS E LEITOR COM ROLAGEM PRÓPRIA (6029e1b6)
 
 - **Por que:** ao abrir uma conversa a tela "saía descendo" — todas as mensagens vinham abertas e um `scrollIntoView` na
