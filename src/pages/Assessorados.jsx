@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { apiCall } from '../utils/apiCall';
 import { useAuth } from '../contexts/AuthContext';
 import { Users, ChevronRight, Settings, Target } from 'lucide-react';
+import { PainelGlobal, CalendarioLeiloes } from '../components/AgendaLeiloesAssessorados';
 
 // Menu "Assessorados" (22/09, pedido do dono). Três versões:
 // v1: lista com nome + telefone + casos expandidos inline.
@@ -167,6 +168,11 @@ export default function Assessorados() {
           {dados.aviso}
         </div>
       )}
+
+      {/* Painel global + agenda (26/11, dono): valores de TODAS as operações realizadas e o
+          calendário dos leilões em andamento (aprovados pelo cliente ou casos contratados). */}
+      <PainelGlobal totais={dados.totais} />
+      <CalendarioLeiloes agenda={dados.agenda} onAbrirCliente={(ev) => abrirArrematados({ id: ev.cliente_id, nome: ev.cliente_nome })} />
 
       {dados.clientes.length > 0 && <ResumoFases clientes={dados.clientes} fase={fase} onFase={setFase} />}
 

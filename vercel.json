@@ -552,6 +552,10 @@
     {
       "path": "/api/homio-reenvio-cron",
       "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/leiloes-agenda-cron",
+      "schedule": "17 10,13 * * *"
     }
   ]
 }

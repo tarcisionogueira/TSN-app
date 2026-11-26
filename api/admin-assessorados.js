@@ -10,6 +10,7 @@
  */
 export const config = { runtime: 'edge' };
 import { getUser, getUserRoleById, unauthorized, forbidden } from './_auth.js';
+import { montarAgenda, totaisRealizadas } from './_agenda-leiloes.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -20,6 +21,13 @@ function sb(path, { method = 'GET', body, prefer } = {}) {
   const headers = { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' };
   if (prefer) headers.Prefer = prefer;
   return fetch(`${SUPABASE_URL}/rest/v1/${path}`, { method, headers, body: body ? JSON.stringify(body) : undefined });
+}
+// Leitor que LANÇA em não-2xx — para o painel global e a agenda, onde "não consegui ler" tem de
+// aparecer como erro na tela, não como zero/vazio.
+async function lerEstrito(path) {
+  const r = await sb(path);
+  if (!r.ok) throw new Error(`HTTP ${r.status} em ${path.split('?')[0]}`);
+  return r.json();
 }
 async function sbJson(path, opts) {
   const r = await sb(path, opts);
@@ -124,7 +132,16 @@ export default async function handler(req) {
       };
     });
 
-    return json({ pode_designar: role === 'admin', clientes, equipe, aviso });
+    // Painel global + calendário (26/11, dono). Admin vê o SISTEMA inteiro (inclusive casos de
+    // quem já saiu do plano assessorado — a operação aconteceu); equipe vê só os designados.
+    // Leitura que falha vira `null` + motivo, NUNCA zero: R$ 0 no painel é resposta, falha não é.
+    const escopo = role === 'admin' ? null : clienteIds;
+    const [totais, agenda] = await Promise.all([
+      totaisRealizadas(lerEstrito, { clienteIds: escopo }).catch((e) => { console.error('[admin-assessorados] totais', e.message); return null; }),
+      montarAgenda(lerEstrito, { clienteIds: escopo }).catch((e) => { console.error('[admin-assessorados] agenda', e.message); return null; }),
+    ]);
+
+    return json({ pode_designar: role === 'admin', clientes, equipe, aviso, totais, agenda });
   }
 
   if (req.method === 'POST') {
