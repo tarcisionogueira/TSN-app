@@ -1091,7 +1091,17 @@ export default async function handler(req, res) {
     };
     // 1º: anexos guardados no storage (capturados por navegador ou enviados pela equipe).
     try {
-      const manuais = await (await sb(`imovel_anexos?imovel_id=eq.${encodeURIComponent(String(imovelId))}&order=criado_em.desc&select=tipo,nome,url,storage_path&limit=10`)).json();
+      // 26/11: a janela era "os 10 MAIS RECENTES" — num caso pós-arremate as guias e comprovantes de
+      // parcela chegam toda semana e empurravam para fora a matrícula e o edital (os mais ANTIGOS, e os
+      // que mais importam). Lote do Marcos: 14 anexos, documental leu 7 guias/comprovantes e saiu com
+      // `precisaDocumentos`, e o laudo recusou. Agora lê até 30 e põe matrícula/edital/auto/laudo na frente.
+      const ORDEM_ANEXO = ['matricula', 'edital', 'auto_arrematacao', 'carta_arrematacao', 'laudo', 'decisao_judicial'];
+      const pesoAnexo = (t) => { const i = ORDEM_ANEXO.indexOf(String(t || '')); return i < 0 ? ORDEM_ANEXO.length : i; };
+      const todosAnexos = await (await sb(`imovel_anexos?imovel_id=eq.${encodeURIComponent(String(imovelId))}&order=criado_em.desc&select=tipo,nome,url,storage_path&limit=30`)).json();
+      const manuais = (Array.isArray(todosAnexos) ? todosAnexos : [])
+        .filter((a) => a.storage_path || String(a.url || '').trim()) // linha vazia (pendência #526) não ocupa vaga
+        .sort((a, b) => pesoAnexo(a.tipo) - pesoAnexo(b.tipo)) // sort estável: dentro do mesmo peso, segue o mais recente
+        .slice(0, 10);
       // Assina SOB DEMANDA pelo storage_path: o `url` gravado é signed de 1h e
       // EXPIRA — servi-lo direto fazia a IA falhar em ler a NOSSA cópia e cair no
       // re-download da fonte volátil (desperdício + menos confiável). urlDocumento
