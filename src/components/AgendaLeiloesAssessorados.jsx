@@ -10,29 +10,28 @@ const TZ = 'America/Sao_Paulo';
 const hojeISO = () => new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
 
-export function PainelGlobal({ totais }) {
-  // `null` = o servidor não conseguiu ler. Mostrar R$ 0 aqui seria inventar resultado.
-  if (totais === null) {
-    return <div style={{ background: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa', borderRadius: 12, padding: '10px 14px', fontSize: 12.5, marginBottom: 14 }}>
-      Não consegui ler os valores das operações realizadas agora. Recarregue em instantes.
-    </div>;
-  }
-  if (!totais) return null;
-  const desconto = totais.base_lucro_aquisicao > 0 && totais.lucro_bruto
-    ? Math.round((totais.lucro_bruto / (totais.lucro_bruto + totais.base_lucro_aquisicao)) * 100) : null;
+// Um bloco por classe de ativo (26/11: imóveis + veículos). Mesma régua nos dois — o rótulo da
+// avaliação muda (FIPE no veículo) e as notas dizem o que ficou de fora ou usou outra base.
+function BlocoTotais({ t, nome, nomePlural, rotuloAval, semAvalTxt }) {
+  const desconto = t.base_lucro_aquisicao > 0 && t.lucro_bruto
+    ? Math.round((t.lucro_bruto / (t.lucro_bruto + t.base_lucro_aquisicao)) * 100) : null;
+  const notasAval = [
+    t.sem_avaliacao ? `${t.sem_avaliacao} ${semAvalTxt}` : null,
+    t.avaliacao_por_venda ? `${t.avaliacao_por_venda} pelo valor de venda` : null,
+  ].filter(Boolean).join(' · ');
   const cards = [
-    { t: 'Imóveis realizados', v: totais.imoveis, sub: `${totais.em_andamento} em andamento · ${totais.concluidas} concluído${totais.concluidas === 1 ? '' : 's'}`, cor: '#0f172a', num: true },
-    { t: 'Valor de avaliação', v: brl(totais.valor_avaliacao), sub: totais.sem_avaliacao ? `${totais.sem_avaliacao} sem avaliação informada` : 'soma das avaliações', cor: '#334155' },
-    { t: 'Valor de aquisição', v: brl(totais.valor_aquisicao), sub: totais.sem_aquisicao ? `${totais.sem_aquisicao} sem valor de arremate` : 'soma dos arremates', cor: '#0D63DB' },
-    { t: 'Lucro bruto projetado', v: brl(totais.lucro_bruto), sub: desconto != null ? `${desconto}% abaixo da avaliação${totais.base_lucro_imoveis < totais.imoveis ? ` · ${totais.base_lucro_imoveis} de ${totais.imoveis} imóveis` : ''}` : 'avaliação − aquisição', cor: '#15803d' },
+    { t: `${nomePlural} realizados`, v: t.qtd, num: true, cor: '#0f172a',
+      sub: `${t.em_andamento} em andamento · ${t.concluidas} concluído${t.concluidas === 1 ? '' : 's'}${t.proprias ? ` · ${t.proprias} próprio${t.proprias === 1 ? '' : 's'}` : ''}` },
+    { t: rotuloAval, v: brl(t.valor_avaliacao), cor: '#334155', sub: notasAval || 'soma das avaliações' },
+    { t: 'Valor de aquisição', v: brl(t.valor_aquisicao), cor: '#0D63DB', sub: t.sem_aquisicao ? `${t.sem_aquisicao} sem valor de arremate` : 'soma dos arremates' },
+    { t: 'Lucro bruto projetado', v: brl(t.lucro_bruto), cor: '#15803d',
+      sub: desconto != null ? `${desconto}% abaixo da avaliação${t.base_lucro_qtd < t.qtd ? ` · ${t.base_lucro_qtd} de ${t.qtd}` : ''}` : 'avaliação − aquisição' },
   ];
   return (
-    <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 14, padding: '14px 16px', marginBottom: 16 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 800, color: '#15803d', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 }}>
-        <TrendingUp size={15} /> Operações realizadas pelo sistema
-      </div>
-      {totais.imoveis === 0
-        ? <div style={{ fontSize: 13, color: '#94a3b8' }}>Nenhuma arrematação registrada ainda.</div>
+    <div style={{ marginTop: 10 }}>
+      <div style={{ fontSize: 11.5, fontWeight: 800, color: '#475569', marginBottom: 6 }}>{nome}</div>
+      {t.qtd === 0
+        ? <div style={{ fontSize: 12.5, color: '#94a3b8' }}>Nenhuma operação registrada ainda.</div>
         : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(145px, 1fr))', gap: 10 }}>
             {cards.map((c) => (
@@ -44,6 +43,25 @@ export function PainelGlobal({ totais }) {
             ))}
           </div>
         )}
+    </div>
+  );
+}
+
+export function PainelGlobal({ totais }) {
+  // `null` = o servidor não conseguiu ler. Mostrar R$ 0 aqui seria inventar resultado.
+  if (totais === null) {
+    return <div style={{ background: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa', borderRadius: 12, padding: '10px 14px', fontSize: 12.5, marginBottom: 14 }}>
+      Não consegui ler os valores das operações realizadas agora. Recarregue em instantes.
+    </div>;
+  }
+  if (!totais?.imoveis) return null;
+  return (
+    <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 14, padding: '14px 16px', marginBottom: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 800, color: '#15803d', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+        <TrendingUp size={15} /> Operações realizadas pelo sistema
+      </div>
+      <BlocoTotais t={totais.imoveis} nome="Imóveis" nomePlural="Imóveis" rotuloAval="Valor de avaliação" semAvalTxt="sem avaliação informada" />
+      {totais.veiculos && <BlocoTotais t={totais.veiculos} nome="Veículos" nomePlural="Veículos" rotuloAval="Valor FIPE" semAvalTxt="sem FIPE informada (preencha em Veículos arrematados)" />}
     </div>
   );
 }

@@ -32,6 +32,7 @@ const CAMPOS = [
   ['leiloeiro', 'Leiloeiro', 'text'], ['plataforma', 'Plataforma', 'text'], ['evento', 'Leilão/evento', 'text'],
   ['lote', 'Lote', 'text'], ['comitente', 'Comitente (vendedor)', 'text'], ['link_lote', 'Link do lote', 'text'],
   ['valor_arremate', 'Valor do arremate (R$)', 'number'], ['valor_total_pago', 'Total pago ao leiloeiro (R$)', 'number'],
+  ['valor_fipe', 'FIPE de referência (R$)', 'number'], // 26/11: base do lucro projetado no painel de Assessorados
   ['data_arremate', 'Data do arremate', 'date'], ['pago_em', 'Pago em', 'date'],
   ['local_retirada', 'Local de retirada', 'text'], ['retirada_desde', 'Retirada a partir de', 'date'],
   ['estadia_a_partir', 'Estadia cobrada a partir de', 'date'], ['estadia_diaria', 'Estadia por dia (R$)', 'number'],

@@ -126,49 +126,114 @@ export async function montarAgenda(ler, { clienteIds = null, desdeDias = 31, ago
 }
 
 /**
- * Totais das operações REALIZADAS (arrematadas) — o painel global da tela de Assessorados.
- * Realizada = caso com `arrematado_em` (em andamento ou concluída).
- *   aquisição: valor declarado do arremate (arrematados.valor_arrematacao) → lance vencedor
- *              apurado → valor do caso.
- *   avaliação: imoveis_leilao.valor_avaliacao → avaliação guardada no portfólio do cliente.
- *   lucro bruto projetado = avaliação − aquisição, SÓ sobre os imóveis que têm as duas pontas.
- * Imóvel sem avaliação NÃO entra como avaliação zero (isso inventaria prejuízo): vai para
- * `sem_avaliacao` e a tela diz quantos ficaram de fora da conta do lucro.
+ * Totais das operações REALIZADAS — o painel global da tela de Assessorados.
+ * Devolve { imoveis, veiculos }, cada um com a mesma forma (ver `vazio`).
+ *
+ * IMÓVEIS
+ *   - caso de assessoria com `arrematado_em` (em andamento ou concluído);
+ *   - (só no escopo do admin) as operações PRÓPRIAS dos administradores em "Meus arrematados"
+ *     (26/11, dono: "inclua as minhas operações… estão em meus arrematados no meu usuário, pois
+ *     são minhas mesmo"). Portfólio que já é um caso não conta duas vezes.
+ *   aquisição: valor do arremate (arrematados.valor_arrematacao) → lance vencedor → valor do caso.
+ *   avaliação: imoveis_leilao.valor_avaliacao → avaliação do portfólio → VALOR DE VENDA
+ *              (revenda_valor). As operações antigas do dono não têm avaliação de edital, têm a
+ *              venda; usar a venda é mais fiel que deixar de fora, e a tela diz quantas usaram.
+ * VEÍCULOS
+ *   - veiculo_casos fora de 'cancelado' com valor de arremate.
+ *   aquisição: total pago ao leiloeiro → valor do arremate.
+ *   avaliação: FIPE do caso (veiculo_casos.valor_fipe) → FIPE do lote no acervo.
+ *   concluído = etapa 'concluido'.
+ * lucro bruto projetado = avaliação − aquisição, SÓ sobre quem tem as duas pontas. Sem avaliação
+ * NÃO vira zero (inventaria prejuízo): conta em `sem_avaliacao` e a tela diz quantos.
  */
 export async function totaisRealizadas(ler, { clienteIds = null } = {}) {
-  if (Array.isArray(clienteIds) && !clienteIds.length) return vazio();
-  const filtroCli = Array.isArray(clienteIds) ? `cliente_id=in.(${clienteIds.join(',')})&` : '';
-  const casos = await ler(`casos?${filtroCli}arrematado_em=not.is.null&select=id,cliente_id,imovel_id,imovel_valor,posse_em`);
-  if (!casos.length) return vazio();
-
-  const imovelIds = [...new Set(casos.map((c) => String(c.imovel_id || '')).filter((x) => UUID.test(x)))];
-  const cliIds = [...new Set(casos.map((c) => c.cliente_id))];
-  const [imoveis, portfolio] = await Promise.all([
-    imovelIds.length ? ler(`imoveis_leilao?id=in.(${imovelIds.join(',')})&select=id,valor_avaliacao,valor_lance_vencedor`) : [],
-    ler(`arrematados?user_id=in.(${cliIds.join(',')})&select=user_id,imovel_id,valor_arrematacao,aval:imovel->>valor_avaliacao`),
+  const [imoveis, veiculos] = await Promise.all([
+    totaisImoveis(ler, clienteIds),
+    totaisVeiculos(ler, clienteIds),
   ]);
-  const imv = new Map(imoveis.map((i) => [String(i.id), i]));
-  const port = new Map(portfolio.map((a) => [`${a.user_id}|${a.imovel_id}`, a]));
-  const num = (v) => (Number(v) > 0 ? Number(v) : null);
+  return { imoveis, veiculos };
+}
 
+const num = (v) => (Number(v) > 0 ? Number(v) : null);
+function somar(t, { aquisicao, avaliacao, concluida, viaVenda = false, propria = false }) {
+  t.qtd++;
+  if (propria) t.proprias++;
+  if (concluida) t.concluidas++; else t.em_andamento++;
+  if (aquisicao) t.valor_aquisicao += aquisicao; else t.sem_aquisicao++;
+  if (avaliacao) { t.valor_avaliacao += avaliacao; if (viaVenda) t.avaliacao_por_venda++; } else t.sem_avaliacao++;
+  if (aquisicao && avaliacao) {
+    t.lucro_bruto += avaliacao - aquisicao;
+    t.base_lucro_aquisicao += aquisicao;
+    t.base_lucro_qtd++;
+  }
+}
+
+async function totaisImoveis(ler, clienteIds) {
   const t = vazio();
+  if (Array.isArray(clienteIds) && !clienteIds.length) return t;
+  const escopoAdmin = !Array.isArray(clienteIds);
+  const filtroCli = escopoAdmin ? '' : `cliente_id=in.(${clienteIds.join(',')})&`;
+  const [casos, admins] = await Promise.all([
+    ler(`casos?${filtroCli}arrematado_em=not.is.null&select=id,cliente_id,imovel_id,imovel_valor,posse_em`),
+    escopoAdmin ? ler('perfis?role=eq.admin&select=id') : [],
+  ]);
+  const adminIds = admins.map((a) => a.id);
+  const donosPortfolio = [...new Set([...casos.map((c) => c.cliente_id), ...adminIds])];
+  const portfolio = donosPortfolio.length
+    ? await ler(`arrematados?user_id=in.(${donosPortfolio.join(',')})&select=user_id,imovel_id,valor_arrematacao,revenda_valor,revenda_data,aval:imovel->>valor_avaliacao`)
+    : [];
+  const imovelIds = [...new Set([...casos.map((c) => c.imovel_id), ...portfolio.map((p) => p.imovel_id)].map((x) => String(x || '')).filter((x) => UUID.test(x)))];
+  const imoveis = imovelIds.length ? await ler(`imoveis_leilao?id=in.(${imovelIds.join(',')})&select=id,valor_avaliacao,valor_lance_vencedor`) : [];
+  const imv = new Map(imoveis.map((i) => [String(i.id), i]));
+  const port = new Map(portfolio.filter((a) => a.imovel_id).map((a) => [`${a.user_id}|${a.imovel_id}`, a]));
+  const deCaso = new Set(casos.map((c) => `${c.cliente_id}|${c.imovel_id}`));
+
   for (const c of casos) {
     const im = imv.get(String(c.imovel_id));
     const pf = port.get(`${c.cliente_id}|${c.imovel_id}`);
-    const aquisicao = num(pf?.valor_arrematacao) ?? num(im?.valor_lance_vencedor) ?? num(c.imovel_valor);
-    const avaliacao = num(im?.valor_avaliacao) ?? num(pf?.aval);
-    t.imoveis++;
-    if (c.posse_em) t.concluidas++; else t.em_andamento++;
-    if (aquisicao) t.valor_aquisicao += aquisicao; else t.sem_aquisicao++;
-    if (avaliacao) t.valor_avaliacao += avaliacao; else t.sem_avaliacao++;
-    if (aquisicao && avaliacao) {
-      t.lucro_bruto += avaliacao - aquisicao;
-      t.base_lucro_aquisicao += aquisicao;
-      t.base_lucro_imoveis++;
-    }
+    const av = num(im?.valor_avaliacao) ?? num(pf?.aval);
+    somar(t, {
+      aquisicao: num(pf?.valor_arrematacao) ?? num(im?.valor_lance_vencedor) ?? num(c.imovel_valor),
+      avaliacao: av ?? num(pf?.revenda_valor),
+      viaVenda: !av && !!num(pf?.revenda_valor),
+      concluida: !!c.posse_em,
+    });
+  }
+  // Operações próprias dos administradores (só no escopo do admin), sem repetir o que já é caso.
+  const adminSet = new Set(adminIds);
+  for (const a of portfolio) {
+    if (!adminSet.has(a.user_id) || (a.imovel_id && deCaso.has(`${a.user_id}|${a.imovel_id}`))) continue;
+    const im = imv.get(String(a.imovel_id));
+    const av = num(im?.valor_avaliacao) ?? num(a.aval);
+    somar(t, {
+      aquisicao: num(a.valor_arrematacao) ?? num(im?.valor_lance_vencedor),
+      avaliacao: av ?? num(a.revenda_valor),
+      viaVenda: !av && !!num(a.revenda_valor),
+      // Operação própria registrada com venda (ou de antes do sistema) já foi concluída.
+      concluida: true,
+      propria: true,
+    });
   }
   return t;
 }
+
+async function totaisVeiculos(ler, clienteIds) {
+  const t = vazio();
+  if (Array.isArray(clienteIds) && !clienteIds.length) return t;
+  const filtroCli = Array.isArray(clienteIds) ? `cliente_id=in.(${clienteIds.join(',')})&` : '';
+  const casos = await ler(`veiculo_casos?${filtroCli}etapa=neq.cancelado&select=id,cliente_id,veiculo_id,valor_arremate,valor_total_pago,valor_fipe,etapa`);
+  const ids = [...new Set(casos.map((c) => String(c.veiculo_id || '')).filter((x) => UUID.test(x)))];
+  const lotes = ids.length ? await ler(`veiculos_leilao?id=in.(${ids.join(',')})&select=id,valor_fipe`) : [];
+  const fipe = new Map(lotes.map((l) => [String(l.id), num(l.valor_fipe)]));
+  for (const c of casos) {
+    const aquisicao = num(c.valor_total_pago) ?? num(c.valor_arremate);
+    if (!aquisicao) continue; // caso aberto sem arremate ainda não é operação realizada
+    somar(t, { aquisicao, avaliacao: num(c.valor_fipe) ?? fipe.get(String(c.veiculo_id)) ?? null, concluida: c.etapa === 'concluido' });
+  }
+  return t;
+}
+
 function vazio() {
-  return { imoveis: 0, em_andamento: 0, concluidas: 0, valor_avaliacao: 0, valor_aquisicao: 0, lucro_bruto: 0, base_lucro_aquisicao: 0, base_lucro_imoveis: 0, sem_avaliacao: 0, sem_aquisicao: 0 };
+  return { qtd: 0, proprias: 0, em_andamento: 0, concluidas: 0, valor_avaliacao: 0, valor_aquisicao: 0, lucro_bruto: 0,
+    base_lucro_aquisicao: 0, base_lucro_qtd: 0, sem_avaliacao: 0, sem_aquisicao: 0, avaliacao_por_venda: 0 };
 }
