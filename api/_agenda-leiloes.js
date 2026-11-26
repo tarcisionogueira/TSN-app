@@ -214,11 +214,18 @@ async function totaisImoveis(ler, clienteIds) {
     const id = String(imovelId || '');
     const im = imv.get(id);
     const avaliacao = num(im?.valor_avaliacao) ?? num(pf?.aval) ?? num(pf?.aval2);
+    // O relatório ATUAL (analises_mercado) vem antes do legado (relatorios): em 26/11 o legado do
+    // terreno do Marcos dizia R$ 7,28 mi — área de terreno × R$/m² de imóvel construído — e o atual,
+    // que detecta essa incoerência, recuou para a avaliação.
+    let vmRel = vmAnalise.get(id) ?? vmRelatorio.get(id);
+    // Mercado IGUAL à avaliação (±0,5%) = o relatório não mediu, ancorou na avaliação. Não é
+    // "valor de mercado": conta como avaliação, e a tela avisa.
+    if (vmRel && avaliacao && Math.abs(vmRel - avaliacao) / avaliacao < 0.005) vmRel = null;
     somar(t, {
       aquisicao: num(pf?.valor_arrematacao) ?? num(im?.valor_lance_vencedor) ?? num(extraAquisicao),
       avaliacao,
       ...escolherMercado([
-        ['relatorio', vmRelatorio.get(id) ?? vmAnalise.get(id)],
+        ['relatorio', vmRel],
         ['venda', pf?.revenda_valor],
         ['acervo', im?.valor_mercado],
         ['avaliacao', avaliacao],
