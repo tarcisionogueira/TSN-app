@@ -602,7 +602,22 @@ async function lerDoc(url, deadline, info = {}) {
   // nos PDFs. Aceita o 1º que render um documento válido; para .pdf, o direto que
   // trouxer HTML de negação é descartado e o Bright Data assume.
   let doc = null;
-  try { doc = await extrair(await fetchAntiSSRF(url, { headers: h, signal: AbortSignal.timeout(12000) })); } catch { doc = null; }
+  let respDireta = null;
+  try { respDireta = await fetchAntiSSRF(url, { headers: h, signal: AbortSignal.timeout(12000) }); } catch (e) { info.motivo = `falha de rede: ${e?.message || e}`; }
+  // ARQUIVO RETIRADO DO S3 DO LEILOEIRO (26/11, lote do Marcos/LJUD): objeto público apagado no S3 responde
+  // 403 com <Code>AccessDenied</Code> (o S3 só dá 404 a quem pode listar o bucket). Era registrado como
+  // "arquivo vazio" — o Bright Data, chamado em seguida, devolvia corpo vazio — e TRAVAVA a liberação de um
+  // relatório pós-arremate por um link que o leiloeiro tirou do ar depois do leilão. É link inexistente
+  // (não bloqueia), e o Bright Data PAGO não é chamado para ele.
+  if (respDireta && respDireta.status === 403 && /(^|\.)amazonaws\.com$/i.test((() => { try { return new URL(url).hostname; } catch { return ''; } })())) {
+    const corpo = await respDireta.clone().text().catch(() => '');
+    if (/<Code>(AccessDenied|NoSuchKey)<\/Code>/.test(corpo)) {
+      info.status = 404;
+      info.motivo = 'arquivo retirado do site do leiloeiro (S3: acesso negado ao objeto)';
+      return null;
+    }
+  }
+  try { doc = respDireta ? await extrair(respDireta) : null; } catch (e) { info.motivo = info.motivo || `falha ao ler: ${e?.message || e}`; doc = null; }
   if (doc) { console.log(`[lerDoc] direto OK (${doc.kind}) ${url}`); return doc; }
   if (Date.now() > deadline) return null;
   // Bright Data: manda cabeçalhos que a Caixa espera (senão devolve HTML de negação
