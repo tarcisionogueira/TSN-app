@@ -12,20 +12,24 @@ const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julh
 
 // Um bloco por classe de ativo (26/11: imóveis + veículos). Mesma régua nos dois — o rótulo da
 // avaliação muda (FIPE no veículo) e as notas dizem o que ficou de fora ou usou outra base.
-function BlocoTotais({ t, nome, nomePlural, rotuloAval, semAvalTxt }) {
-  const desconto = t.base_lucro_aquisicao > 0 && t.lucro_bruto
+function BlocoTotais({ t, nome, rotuloAval, semAvalTxt, rotuloMercadoFonte }) {
+  // Economia = quanto a aquisição ficou abaixo do VALOR DE MERCADO (26/11, dono): a avaliação
+  // do leiloeiro aparece só como referência, porque muitas vezes está errada.
+  const economia = t.base_lucro_aquisicao > 0 && t.lucro_bruto
     ? Math.round((t.lucro_bruto / (t.lucro_bruto + t.base_lucro_aquisicao)) * 100) : null;
-  const notasAval = [
-    t.sem_avaliacao ? `${t.sem_avaliacao} ${semAvalTxt}` : null,
-    t.avaliacao_por_venda ? `${t.avaliacao_por_venda} pelo valor de venda` : null,
+  const notasMercado = [
+    t.mercado_pela_venda ? `${t.mercado_pela_venda} pelo valor de venda` : null,
+    t.mercado_pela_avaliacao ? `${t.mercado_pela_avaliacao} sem ${rotuloMercadoFonte}: usou ${rotuloAval.toLowerCase()}` : null,
+    t.sem_mercado ? `${t.sem_mercado} sem referência` : null,
   ].filter(Boolean).join(' · ');
   const cards = [
-    { t: `${nomePlural} realizados`, v: t.qtd, num: true, cor: '#0f172a',
+    { t: `${nome} realizados`, v: t.qtd, num: true, cor: '#0f172a',
       sub: `${t.em_andamento} em andamento · ${t.concluidas} concluído${t.concluidas === 1 ? '' : 's'}${t.proprias ? ` · ${t.proprias} próprio${t.proprias === 1 ? '' : 's'}` : ''}` },
-    { t: rotuloAval, v: brl(t.valor_avaliacao), cor: '#334155', sub: notasAval || 'soma das avaliações' },
+    { t: 'Valor de mercado', v: brl(t.valor_mercado), cor: '#7c3aed', sub: notasMercado || `pelo ${rotuloMercadoFonte}` },
+    { t: rotuloAval, v: brl(t.valor_avaliacao), cor: '#64748b', sub: t.sem_avaliacao ? `${t.sem_avaliacao} ${semAvalTxt}` : 'referência do leilão' },
     { t: 'Valor de aquisição', v: brl(t.valor_aquisicao), cor: '#0D63DB', sub: t.sem_aquisicao ? `${t.sem_aquisicao} sem valor de arremate` : 'soma dos arremates' },
     { t: 'Lucro bruto projetado', v: brl(t.lucro_bruto), cor: '#15803d',
-      sub: desconto != null ? `${desconto}% abaixo da avaliação${t.base_lucro_qtd < t.qtd ? ` · ${t.base_lucro_qtd} de ${t.qtd}` : ''}` : 'avaliação − aquisição' },
+      sub: economia != null ? `economia de ${economia}% sobre o mercado${t.base_lucro_qtd < t.qtd ? ` · ${t.base_lucro_qtd} de ${t.qtd}` : ''}` : 'mercado − aquisição' },
   ];
   return (
     <div style={{ marginTop: 10 }}>
@@ -33,10 +37,10 @@ function BlocoTotais({ t, nome, nomePlural, rotuloAval, semAvalTxt }) {
       {t.qtd === 0
         ? <div style={{ fontSize: 12.5, color: '#94a3b8' }}>Nenhuma operação registrada ainda.</div>
         : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(145px, 1fr))', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(135px, 1fr))', gap: 10 }}>
             {cards.map((c) => (
               <div key={c.t} style={{ background: '#f8fafc', borderRadius: 10, padding: '10px 12px', minWidth: 0 }}>
-                <div style={{ fontSize: c.num ? 22 : 17, fontWeight: 900, color: c.cor, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.v}</div>
+                <div style={{ fontSize: c.num ? 22 : 16, fontWeight: 900, color: c.cor, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.v}</div>
                 <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4 }}>{c.t}</div>
                 <div style={{ fontSize: 10.5, color: '#94a3b8' }}>{c.sub}</div>
               </div>
@@ -60,8 +64,8 @@ export function PainelGlobal({ totais }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 800, color: '#15803d', textTransform: 'uppercase', letterSpacing: 0.5 }}>
         <TrendingUp size={15} /> Operações realizadas pelo sistema
       </div>
-      <BlocoTotais t={totais.imoveis} nome="Imóveis" nomePlural="Imóveis" rotuloAval="Valor de avaliação" semAvalTxt="sem avaliação informada" />
-      {totais.veiculos && <BlocoTotais t={totais.veiculos} nome="Veículos" nomePlural="Veículos" rotuloAval="Valor FIPE" semAvalTxt="sem FIPE informada (preencha em Veículos arrematados)" />}
+      <BlocoTotais t={totais.imoveis} nome="Imóveis" rotuloAval="Avaliação do leiloeiro" semAvalTxt="sem avaliação informada" rotuloMercadoFonte="relatório mercadológico" />
+      {totais.veiculos && <BlocoTotais t={totais.veiculos} nome="Veículos" rotuloAval="FIPE" semAvalTxt="sem FIPE informada (preencha em Veículos arrematados)" rotuloMercadoFonte="relatório (média de anúncios)" />}
     </div>
   );
 }
