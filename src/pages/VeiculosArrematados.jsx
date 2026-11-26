@@ -343,7 +343,11 @@ function DetalheCaso({ caso, nomeCliente, eventos, onErro, onAviso, onMudou }) {
           <div style={{ textAlign: 'right', fontSize: 13 }}>
             <div>Arremate: <b>{fmtBRL(caso.valor_arremate) || '—'}</b>{caso.data_arremate ? ` em ${dataBR(caso.data_arremate)}` : ''}</div>
             <div>Total pago: <b>{fmtBRL(caso.valor_total_pago) || '—'}</b>{caso.pago_em ? ` em ${dataBR(caso.pago_em)}` : ''}</div>
+            {caso.valor_fipe > 0 && <div>FIPE: <b>{fmtBRL(caso.valor_fipe)}</b></div>}
             {caso.link_lote && <a href={caso.link_lote} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: '#0D63DB', display: 'inline-flex', alignItems: 'center', gap: 4 }}>Ver lote <ExternalLink size={12} /></a>}
+            {/* 26/11 (dono): o relatório do veículo (FIPE, média de anúncios, viabilidade) fica junto do caso,
+                como o mercadológico fica na pasta do imóvel. Abre o relatório gravado do lote ligado ao caso. */}
+            {caso.veiculo_id && <div><a href={`#/analise-veiculo?veiculo=${encodeURIComponent(caso.veiculo_id)}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: '#7c3aed', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}>Relatório do veículo <ExternalLink size={12} /></a></div>}
           </div>
         </div>
 
