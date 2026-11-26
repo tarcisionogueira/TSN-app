@@ -54,24 +54,41 @@ async function completarLote(id, valores) {
 const PRIORIDADE = ['matricula', 'edital', 'auto_arrematacao', 'carta_arrematacao', 'decisao_judicial', 'exigencia_cartorio', 'nota_devolucao', 'parecer_juridico', 'contrato', 'laudo'];
 async function ligarDocumentos(imovelId, casoId) {
   const docs = await ler(`caso_documentos?caso_id=eq.${casoId}&grupo=eq.arrematacao&select=tipo,titulo,storage_path`);
-  const existentes = await ler(`imovel_anexos?imovel_id=eq.${imovelId}&select=tipo,storage_path`);
+  const existentes = await ler(`imovel_anexos?imovel_id=eq.${imovelId}&select=id,tipo,storage_path,url`);
   const ja = new Set(existentes.map((a) => a.storage_path).filter(Boolean));
-  // Matrícula e edital: um por imóvel (índice único imovel_id+tipo). O que já foi anexado na atribuição vale.
-  const tiposUnicos = new Set(existentes.map((a) => a.tipo).filter((t) => t === 'matricula' || t === 'edital'));
+  // Matrícula e edital: um por imóvel (índice único imovel_id+tipo). O que já foi anexado na atribuição vale —
+  // MAS só se tiver arquivo. 26/11: o lote do Marcos tinha linhas "Matricula"/"Edital" VAZIAS (sem url nem
+  // storage_path, de 16/08) que ocupavam o índice; o script pulava a matrícula real do caso e o documental
+  // saía lendo só guias e comprovantes, com `precisaDocumentos` — e o laudo recusava. Linha vazia agora é
+  // PREENCHIDA com o arquivo real do caso (PATCH), em vez de contar como "já anexado".
+  const temArquivo = (a) => !!(a.storage_path || String(a.url || '').trim());
+  const vazias = new Map(existentes.filter((a) => ['matricula', 'edital'].includes(a.tipo) && !temArquivo(a)).map((a) => [a.tipo, a.id]));
+  const tiposUnicos = new Set(existentes.filter(temArquivo).map((a) => a.tipo).filter((t) => t === 'matricula' || t === 'edital'));
+  let preenchidas = 0;
+  for (const [tipo, id] of vazias) {
+    const d = docs.find((x) => x.tipo === tipo && x.storage_path && !ja.has(x.storage_path));
+    if (!d) continue;
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/imovel_anexos?id=eq.${id}`, { method: 'PATCH', headers: { ...hdr, Prefer: 'return=representation' },
+      body: JSON.stringify({ storage_path: d.storage_path, nome: String(d.titulo || tipo).slice(0, 200), arrematado: true,
+        descricao: 'Arquivo real do caso (e-mails do escritório), preenchido por gerar-relatorios-caso na linha vazia' }) });
+    const linhas = r.ok ? await r.json() : [];
+    if (!linhas.length) throw new Error(`preencher ${tipo} vazia HTTP ${r.status}: ${r.ok ? 'nenhuma linha alterada' : (await r.text()).slice(0, 200)}`);
+    ja.add(d.storage_path); tiposUnicos.add(tipo); preenchidas++;
+  }
   const vistos = new Set();
   const novos = docs
     .filter((d) => PRIORIDADE.includes(d.tipo) && !ja.has(d.storage_path))
     .filter((d) => { if (d.tipo !== 'matricula' && d.tipo !== 'edital') return true; if (tiposUnicos.has(d.tipo)) return false; tiposUnicos.add(d.tipo); return true; })
     .sort((a, b) => PRIORIDADE.indexOf(a.tipo) - PRIORIDADE.indexOf(b.tipo))
     .filter((d) => { const k = `${d.tipo}|${d.titulo}`; if (vistos.has(k)) return false; vistos.add(k); return true; })
-    .slice(0, Math.max(0, 10 - existentes.length))
+    .slice(0, Math.max(0, 10 - existentes.filter(temArquivo).length - preenchidas))
     .map((d) => ({ imovel_id: imovelId, tipo: ['matricula', 'edital'].includes(d.tipo) ? d.tipo : 'outro', nome: String(d.titulo || d.tipo).slice(0, 200),
       storage_path: d.storage_path, arrematado: true, role_criador: 'sistema', descricao: 'Documento do caso (e-mails do escritório), ligado por gerar-relatorios-caso' }));
-  if (!novos.length) return 0;
+  if (!novos.length) return preenchidas;
   const r = await fetch(`${SUPABASE_URL}/rest/v1/imovel_anexos`, { method: 'POST', headers: { ...hdr, Prefer: 'return=representation' }, body: JSON.stringify(novos) });
   const gravados = r.ok ? await r.json() : [];
   if (gravados.length !== novos.length) throw new Error(`ligar documentos HTTP ${r.status}: ${r.ok ? 'gravou menos' : (await r.text()).slice(0, 200)}`);
-  return gravados.length;
+  return preenchidas + gravados.length;
 }
 
 async function chamar(rota, corpo) {
