@@ -197,7 +197,9 @@ async function capturarMatriculaDireta(imovelId, row, cache) {
 // Documentos já ARMAZENADOS deste imóvel (manual do analista ou cache anterior).
 async function mapaCache(imovelId) {
   try {
-    const rows = await (await sb(`imovel_anexos?imovel_id=eq.${encodeURIComponent(imovelId)}&storage_path=not.is.null&select=tipo,storage_path&limit=10`)).json();
+    // 28/11: era `limit=10` sem ordem — num arremate com dezenas de anexos o tipo procurado (até a
+    // matrícula) podia ficar fora dos 10 e o laço o dava como "não guardado". Mais recente primeiro.
+    const rows = await (await sb(`imovel_anexos?imovel_id=eq.${encodeURIComponent(imovelId)}&storage_path=not.is.null&select=tipo,storage_path&order=criado_em.desc&limit=200`)).json();
     const m = {};
     for (const x of (Array.isArray(rows) ? rows : [])) if (x?.tipo && !m[x.tipo]) m[x.tipo] = x;
     return m;
@@ -1098,11 +1100,13 @@ export default async function handler(req, res) {
     // NÃO pode ofuscar o que o rótulo revela: se o nome infere um tipo específico, ele
     // vence — senão a matrícula ficava com prioridade de anexo (fim da fila) e o GATE a
     // dava como faltando. Tipo específico já vindo do anexo (laudo/edital…) é preservado.
-    const add = (u, rotulo, tipo) => {
+    // `doBucket`: a URL é a assinatura de um arquivo que JÁ está no nosso storage (imovel_anexos). Esse
+    // arquivo nunca pode ser salvo de novo (28/11: ver o comentário no `salvarDocBucket` do laço).
+    const add = (u, rotulo, tipo, doBucket = false) => {
       if (!(u && /^https?:\/\//.test(u) && !ehPagina(u) && !urls.find(x => x.url === u))) return;
       const inferido = tipoDoRotulo(rotulo);
       const t = (tipo && tipo !== 'anexo') ? tipo : (inferido || tipo || null);
-      urls.push({ url: u, rotulo, tipo: t });
+      urls.push({ url: u, rotulo, tipo: t, doBucket });
     };
     // 1º: anexos guardados no storage (capturados por navegador ou enviados pela equipe).
     try {
@@ -1121,7 +1125,7 @@ export default async function handler(req, res) {
       // EXPIRA — servi-lo direto fazia a IA falhar em ler a NOSSA cópia e cair no
       // re-download da fonte volátil (desperdício + menos confiável). urlDocumento
       // re-assina a cópia que já temos (economia) e cai no url legado só sem path.
-      for (const a of (Array.isArray(manuais) ? manuais : [])) add(await urlDocumento(a), a.nome || (a.tipo ? a.tipo[0].toUpperCase() + a.tipo.slice(1) : 'Anexo'), a.tipo);
+      for (const a of (Array.isArray(manuais) ? manuais : [])) add(await urlDocumento(a), a.nome || (a.tipo ? a.tipo[0].toUpperCase() + a.tipo.slice(1) : 'Anexo'), a.tipo, !!a.storage_path);
     } catch { /* segue com os do lote */ }
     // 2º: anexos capturados no scrape (jsonb do lote). Leilão JUDICIAL costuma ter
     // MUITOS anexos (auto de penhora/avaliação, laudo, decisão, certidões, ata) —
@@ -1241,7 +1245,11 @@ export default async function handler(req, res) {
       const infoLeitura = { proposito: propositoBD };
       if (!doc) {
         doc = await lerDoc(u.url, deadline, infoLeitura);
-        if (doc?.kind === 'pdf' && doc.base64 && podeCache && tipoDoc && !cache[tipoDoc] && Date.now() < deadline) {
+        // 28/11: `!u.doBucket` — o arquivo lido de uma assinatura do NOSSO storage não é cópia nova. Sem
+        // isso, todo anexo cujo tipo não entrava no `mapaCache` (ex.: comprovante_parcela) era regravado
+        // a cada geração, e cada cópia entrava na janela da geração seguinte: 62 comprovantes repetidos
+        // no arremate do Marcos entre 26/11 13h e 27/11 09h, cada um disparando o leitor de parcelas.
+        if (doc?.kind === 'pdf' && doc.base64 && podeCache && tipoDoc && !u.doBucket && !cache[tipoDoc] && Date.now() < deadline) {
           cache[tipoDoc] = { tipo: tipoDoc }; // evita salvar 2× o mesmo tipo neste run
           await salvarDocBucket(String(imovelId), tipoDoc, u.rotulo, u.url, doc.base64, dataLeilao);
         }

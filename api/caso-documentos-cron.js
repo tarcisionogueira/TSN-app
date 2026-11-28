@@ -36,7 +36,7 @@ async function ler(path) {
 
 const SISTEMA = `Você organiza a pasta de um cliente que arrematou um imóvel em leilão. Recebe UM documento (anexo de e-mail) e o contexto do caso. Classifique e responda SOMENTE com JSON válido:
 {"grupo":"pessoal|arrematacao|outro","tipo":"rg|cnh|cpf|comprovante_residencia|certidao_casamento|certidao_nascimento|procuracao|edital|matricula|auto_arrematacao|carta_arrematacao|guia_deposito|itbi|iptu|decisao_judicial|exigencia_cartorio|notificacao|comprovante_pagamento|parecer_juridico|laudo|contrato|outro","titulo":"nome curto e claro do documento","resumo":"1-2 frases com o que o documento diz de relevante","data_documento":"AAAA-MM-DD ou null","pessoa":"nome da pessoa a quem o documento pessoal pertence, ou null"}
-Regras: "pessoal" = documento de identificação ou da vida civil/endereço/renda de uma pessoa (RG, CNH, CPF, certidões, comprovante de residência). "arrematacao" = tudo do imóvel, do leilão, do processo, do cartório, de impostos e pagamentos da operação (procuração para a operação também é arrematação). "outro" = assinatura de e-mail, logo, imagem sem conteúdo. Nunca invente dados; o que não estiver no documento fica null.`;
+Regras: "pessoal" = documento de identificação ou da vida civil/endereço/renda de uma pessoa (RG, CNH, CPF, certidões, comprovante de residência). "arrematacao" = tudo do imóvel, do leilão, do processo, do cartório, de impostos e pagamentos da operação (procuração para a operação também é arrematação). "outro" = SOMENTE assinatura de e-mail, logo, imagem sem conteúdo. Guia de depósito judicial, boleto ou guia de parcela do PROCESSO em que o imóvel foi arrematado é SEMPRE "arrematacao"/"guia_deposito", mesmo que o documento cite as partes originais da ação (reclamante × empresa executada, exequente × executado): é assim que a Justiça emite a guia do arrematante. Nunca classifique como "outro" por achar que o documento é de outro assunto — na dúvida, "arrematacao". Nunca invente dados; o que não estiver no documento fica null.`;
 
 function lerJSON(txt) {
   const ini = txt.indexOf('{'), fim = txt.lastIndexOf('}');
@@ -84,9 +84,13 @@ async function handler(req) {
     const contextos = new Map();
     for (const { m, a, idx } of fila.slice(0, MAX_POR_RODADA)) {
       if (!contextos.has(m.caso_id)) {
-        const [c] = await ler(`casos?id=eq.${m.caso_id}&select=imovel_endereco,cliente_id`);
+        const [c] = await ler(`casos?id=eq.${m.caso_id}&select=imovel_endereco,cliente_id,imovel_id`);
         const [cli] = c ? await ler(`perfis?id=eq.${c.cliente_id}&select=nome`) : [null];
-        contextos.set(m.caso_id, `cliente ${cli?.nome || '?'}; imóvel ${c?.imovel_endereco || '?'}; e-mail "${m.assunto || ''}"`);
+        // 28/11: o nº do processo entra no contexto. Sem ele, a guia da parcela 2/16 do Marcos (que cita
+        // "reclamante × J. J. Indústria Metalúrgica", as partes da execução trabalhista) saiu como "outro,
+        // não relacionada à arrematação" e nunca chegou ao leitor de parcelas.
+        const [lote] = c?.imovel_id ? await ler(`imoveis_leilao?id=eq.${c.imovel_id}&select=numero_processo`).catch((e) => { console.warn(`[caso-documentos] processo do lote: ${e?.message}`); return []; }) : [];
+        contextos.set(m.caso_id, `cliente ${cli?.nome || '?'}; imóvel ${c?.imovel_endereco || '?'}; processo do leilão ${lote?.numero_processo || 'não informado'}; e-mail "${m.assunto || ''}"`);
       }
       let blocos = [];
       let lido = true;
