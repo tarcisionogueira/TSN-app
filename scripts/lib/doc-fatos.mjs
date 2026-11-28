@@ -5,7 +5,7 @@
  * roda `main()` ao ser importado — por isso a extração.
  */
 import { carregarPDFParse } from '../../api/_pdf-safe.js';
-import { extrairMatriculaTexto, extrairPagamentoTexto, extrairCustosTexto, extrairIdentidadeTexto } from '../../api/_doc-extracao.js';
+import { extrairMatriculaTexto, extrairPagamentoTexto, extrairCustosTexto, custosSoGerais, extrairIdentidadeTexto } from '../../api/_doc-extracao.js';
 import { isolarBlocoDoLote, ehDocMultiLote } from '../../api/_edital-extrato.js';
 
 // Link que NUNCA é documento (22/11): consulta de processo (e-SAJ, eproc, PJe), anúncio da PGFN e
@@ -89,7 +89,8 @@ export async function publicarFatosDoPdf(supabase, imovelId, buffer, tipo, valor
     const confiavel = tipo === 'matricula' || !!blocoLote || !ehDocMultiLote(txt);
     const fatos = { identidade: confiavel ? extrairIdentidadeTexto(txtLote) : null };
     if (tipo === 'matricula') fatos.matricula = extrairMatriculaTexto(txtLote);
-    else { fatos.custos = extrairCustosTexto(txtLote); fatos.pagamento = extrairPagamentoTexto(txtLote); fatos.matricula = confiavel ? extrairMatriculaTexto(txtLote) : null; }
+    // 28/11: custos POR LOTE (IPTU/condomínio) só com texto confiável — mesmo critério da identidade (custosSoGerais).
+    else { fatos.custos = confiavel ? extrairCustosTexto(txtLote) : custosSoGerais(extrairCustosTexto(txtLote)); fatos.pagamento = extrairPagamentoTexto(txtLote); fatos.matricula = confiavel ? extrairMatriculaTexto(txtLote) : null; }
     if (!Object.values(fatos).some(Boolean)) return;
     await supabase.rpc('registrar_doc_fatos', { p_imovel_id: imovelId, p_fatos: { ...fatos, em: new Date().toISOString() } });
   } catch { /* enriquecer a ficha nunca bloqueia a captura */ }

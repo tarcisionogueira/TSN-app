@@ -4305,8 +4305,18 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
           if (Number(cst.iptuMensal) > 0) cl.push(`IPTU informado: R$ ${brlN(cst.iptuMensal)}/mês`);
           else if (Number(cst.iptuAnual) > 0) cl.push(`IPTU informado: R$ ${brlN(cst.iptuAnual)}/ano (equivale a R$ ${brlN(cst.iptuAnual / 12)}/mês de carrego)`);
           if (Number(cst.condominioMensal) > 0) cl.push(`Condomínio informado: R$ ${brlN(cst.condominioMensal)}/mês`);
-          if (Number(cst.iptuDebito) > 0) cl.push(`DÉBITO de IPTU em aberto: R$ ${brlN(cst.iptuDebito)} (verifique no edital de quem é a responsabilidade após a arrematação)`);
-          if (Number(cst.condominioDebito) > 0) cl.push(`DÉBITO de condomínio em aberto: R$ ${brlN(cst.condominioDebito)} (débito propter rem — confirme no edital quem assume)`);
+          // 28/11: débito MAIOR que o próprio imóvel quase sempre é número de outro lote do mesmo edital ou o valor da
+          // causa (GOLD: anúncio diz IPTU R$ 314, lido R$ 27 mil; cemitério com R$ 176 mil de "condomínio"). Não vira
+          // fato no parecer: vai como valor A CONFERIR, sem entrar na conta. Verdadeiro também existe — por isso confere.
+          const valorImovel = Math.max(Number(avalDb) || 0, Number(ce.avaliacao) || 0, Number(pInp.valorMercado) || 0);
+          const desproporcional = (v) => valorImovel > 0 && Number(v) > valorImovel;
+          for (const [rot, v, extra] of [['IPTU', cst.iptuDebito, 'verifique no edital de quem é a responsabilidade após a arrematação'],
+            ['condomínio', cst.condominioDebito, 'débito propter rem — confirme no edital quem assume']]) {
+            if (!(Number(v) > 0)) continue;
+            cl.push(desproporcional(v)
+              ? `VALOR A CONFERIR (não use nos cálculos): o documento cita R$ ${brlN(v)} perto de "${rot}", MAIS que o valor do próprio imóvel (R$ ${brlN(valorImovel)}). Pode ser de outro lote do mesmo edital ou o valor do processo — diga ao cliente para confirmar o débito de ${rot} no edital/certidão antes de lançar, sem afirmar que ele existe`
+              : `DÉBITO de ${rot} em aberto: R$ ${brlN(v)} (${extra})`);
+          }
           if (cl.length) {
             conteudoParecer += `\n\nCUSTOS E ENCARGOS DECLARADOS NO DOCUMENTO DO LOTE (lidos automaticamente do edital, use estes números em vez de qualquer premissa):\n${cl.map(x => '- ' + x).join('\n')}
 COMO USAR (obrigatório): dedique um parágrafo aos CUSTOS DA OPERAÇÃO segundo o documento. Se algum número do edital DIVERGIR do que sustentou as projeções acima, diga isso EXPLICITAMENTE ao cliente, estime o impacto no capital aportado e no retorno, e oriente a refazer a conta com o número do edital. Os DÉBITOS em aberto (IPTU/condomínio) NÃO são carrego mensal: são valores a assumir na aquisição, e a responsabilidade depende de cláusula do edital, portanto trate-os como tal e mande confirmar. Não invente valor que não esteja nesta lista.`;

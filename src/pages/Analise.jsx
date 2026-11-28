@@ -1857,7 +1857,12 @@ export default function Analise() {
       // DÉBITOS EM ABERTO (15/10, dono): o servidor lê no edital QUEM paga. Do arrematante → entra na projeção.
       // Sub-rogado no preço → só o SALDO que o lance não cobre entra. Ambíguo/sem cláusula → fica no cartão.
       const debTotal = (Number(cst?.iptuDebito) || 0) + (Number(cst?.condominioDebito) || 0);
-      if (debTotal > 0 && !(Number(d.debitosAssumidos) > 0)) {
+      // 28/11: débito maior que o próprio imóvel não entra sozinho na projeção — quase sempre é de outro lote do edital
+      // ou o valor da causa (GOLD: R$ 567 mil "do arrematante" num imóvel de R$ 476 mil; o anúncio diz IPTU R$ 314).
+      // Fica no cartão para o cliente conferir; quem confirmar lança à mão em "débitos assumidos".
+      const valorRefDeb = Math.max(Number(d.valorAvaliacao) || 0, Number(d.valorMercado) || 0);
+      if (debTotal > 0 && valorRefDeb > 0 && debTotal > valorRefDeb) aplicados.push(`débitos citados no edital (R$ ${fmt(debTotal)}) NÃO aplicados: maiores que o valor do imóvel — confira no edital`);
+      else if (debTotal > 0 && !(Number(d.debitosAssumidos) > 0)) {
         const lanceRef = Number(d.valorArrematacao) || Number(d.valorMinimo) || 0;
         if (cst.responsabilidadeDebitos === 'arrematante') {
           patch.debitosAssumidos = debTotal; aplicados.push(`débitos em aberto R$ ${fmt(debTotal)} (o edital os põe por conta do arrematante)`);
@@ -4317,6 +4322,9 @@ export default function Analise() {
                     const tot = (Number(cst.iptuDebito) || 0) + (Number(cst.condominioDebito) || 0);
                     const lance = Number(d.valorArrematacao) || Number(d.valorMinimo) || 0;
                     const cit = cst.responsabilidadeTrecho ? <> Edital: <em>"…{String(cst.responsabilidadeTrecho).slice(0, 220)}…"</em></> : null;
+                    // 28/11: o mesmo critério da projeção (acima) — maior que o imóvel não foi somado; diz isso.
+                    const refDeb = Math.max(Number(d.valorAvaliacao) || 0, Number(d.valorMercado) || 0);
+                    if (refDeb > 0 && tot > refDeb) return <><strong>Valor a conferir</strong> — maior que o valor do próprio imóvel; costuma ser de outro lote do mesmo edital ou o valor do processo. Não foi somado à projeção: confirme o débito no edital ou na certidão e, se for real, lance em "Débitos assumidos".{cit}</>;
                     if (cst.responsabilidadeDebitos === 'arrematante') return <><strong>Por conta do arrematante</strong> — já somados à projeção em "Débitos assumidos".{cit}</>;
                     if (cst.responsabilidadeDebitos === 'subrogacao') {
                       if (!(lance > 0)) return <><strong>Sub-rogados no preço</strong> (pagos com o valor da arrematação).{cit}</>;

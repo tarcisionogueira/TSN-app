@@ -2242,9 +2242,13 @@ export default function ImovelDetalhe() {
                 n(pag.sinalPct) && ['Sinal/entrada', `${pct(pag.sinalPct)}%`],
                 n(pag.prazoDias) && ['Prazo de pagamento', `${pag.prazoDias} dia${pag.prazoDias > 1 ? 's' : ''}`],
               ].filter(Boolean);
+              // 28/11: débito MAIOR que o próprio imóvel quase sempre é número de outro lote do edital ou valor da causa
+              // (ver custosSoGerais em api/_doc-extracao.js) — sai como "a conferir", não como fato.
+              const valorRef = Math.max(Number(imovel.valorAvaliacao) || 0, Number(imovel.valorMinimo) || 0);
+              const deb = (v) => (valorRef > 0 && n(v) > valorRef ? `${fmtBRL(v)} — a conferir no edital (maior que o valor do imóvel)` : fmtBRL(v));
               const debitos = [
-                n(cst.condominioDebito) && ['Condomínio em aberto', fmtBRL(cst.condominioDebito)],
-                n(cst.iptuDebito) && ['IPTU em aberto', fmtBRL(cst.iptuDebito)],
+                n(cst.condominioDebito) && ['Condomínio em aberto', deb(cst.condominioDebito)],
+                n(cst.iptuDebito) && ['IPTU em aberto', deb(cst.iptuDebito)],
               ].filter(Boolean);
               if (!identidade.length && !mensais.length && !arremate.length && !debitos.length) return null;
               const fonte = df.fonteEdital || df.fonteMatricula || null;

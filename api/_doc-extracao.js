@@ -281,6 +281,20 @@ export function resolverPagamentoDoc({ docFatos, fichaCef, titulo, regrasPagamen
  * ponto-e-vírgula, para nunca colar num "R$" de outra frase. Campo que o texto não
  * afirma volta null — a projeção segue com a premissa da tela, nunca com invenção.
  */
+/**
+ * 28/11: CUSTOS SÓ DO QUE VALE PARA O EDITAL INTEIRO. Em edital de VÁRIOS lotes sem o bloco deste lote isolado, IPTU e
+ * condomínio (débito ou carrego) são de algum lote — não necessariamente deste. Achado: 11 lotes com débito maior que o
+ * próprio imóvel (GOLD: anúncio diz IPTU R$ 314,22, gravado R$ 27.095 + "condomínio" R$ 539.672 que o anúncio nem cita;
+ * lote de CEMITÉRIO com R$ 175.838 de "condomínio"). Identidade e matrícula já eram recusadas nesse caso; os custos
+ * passavam. Taxa administrativa e despesas fixas são cláusula geral e ficam.
+ */
+export function custosSoGerais(c) {
+  if (!c) return null;
+  const out = { ...c, iptuMensal: null, iptuAnual: null, iptuDebito: null, condominioMensal: null, condominioDebito: null };
+  delete out.responsabilidadeDebitos; delete out.responsabilidadeTrecho;
+  return Object.values(out).some((v) => v !== null && v !== undefined) ? out : null;
+}
+
 export function extrairCustosTexto(texto) {
   const t = String(texto || '').replace(/\s+/g, ' ');
   if (t.length < 120) return null;

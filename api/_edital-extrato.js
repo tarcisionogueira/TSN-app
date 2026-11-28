@@ -12,7 +12,7 @@ import { carregarPDFParse } from './_pdf-safe.js';
 import { normalizarDocumento } from './_doc-normalizar.js';
 import { extrairDatasLeilao } from './enriquecer-lote.js';
 import { normalizarDatasPorExtenso } from './_data-br.js';
-import { cacheLer, cacheGravar, chaveUrl, chaveConteudo, extrairMatriculaTexto, extrairPagamentoTexto, extrairCustosTexto, extrairIdentidadeTexto, extrairNumeroProcessoTexto } from './_doc-extracao.js';
+import { cacheLer, cacheGravar, chaveUrl, chaveConteudo, extrairMatriculaTexto, extrairPagamentoTexto, extrairCustosTexto, custosSoGerais, extrairIdentidadeTexto, extrairNumeroProcessoTexto } from './_doc-extracao.js';
 import { anthropicFetch } from './_claude.js';
 import { classificarDocumento, blocoParaIA, temTextoUtil } from './_doc-leitura.js';
 
@@ -806,10 +806,11 @@ export async function extratoEdital(imovelId, { deadline } = {}) {
       // fica só em `txtLote` de propósito — é dado NUMÉRICO/descritivo por lote, o preâmbulo
       // nunca a contém, e ampliar aqui reabriria o risco que `isolarBlocoDoLote` existe para
       // fechar (identidade de outro lote vizinho).
-      custos = extrairCustosTexto(txtPagamento);
       // Sem o bloco deste lote isolado num edital de VÁRIOS lotes, identidade e matrícula seriam de
       // outro lote (ver ehDocMultiLote). Condições/pagamento seguem: valem para o edital todo.
       const blocoConfiavel = !!blocoLote || !ehDocMultiLote(txt);
+      // 28/11: IPTU/condomínio são POR LOTE — sem o bloco confiável, só os custos gerais (ver custosSoGerais).
+      custos = blocoConfiavel ? extrairCustosTexto(txtPagamento) : custosSoGerais(extrairCustosTexto(txtPagamento));
       identidade = blocoConfiavel ? extrairIdentidadeTexto(txtLote) : null;
       // ÁREA no caminho de TEXTO (04/10, varredura): só a leitura por visão trazia
       // `areaConstruidaM2`, então edital em PDF com texto (a maioria) nunca preenchia a área que o
