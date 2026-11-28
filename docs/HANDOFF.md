@@ -40761,3 +40761,17 @@ assunto) — o e-mail do Jorge Brasil (Don Alonso) foi reprocessado: matrícula 
   (host Nogueira) não roda desde 25/11 14:07 (`runner_residencial_completa`); as parciais seguem. offer-query pelo
   pg_net responde 200 vazio — não dá para apurar da nuvem. Ação do dono: religar o runner.
 - **Homio:** alerta de 27/11 resolvido sozinho (129/130 com e-mail de ativação; 12 ativados).
+- **Limpeza #529 (dono autorizou):** 61 cópias do comprovante apagadas (migração); 86 arquivos órfãos no storage → #530.
+- **Atendimento:** chamado proativo da Mirian encerrado (a conversa real dela o dono já respondera); Claudia (Cidade Baixa/POA)
+  respondida no chamado e por e-mail com reply-to de token (mesmo caminho de api/notificar-cliente).
+- **Captura (a6b218b):** 12 fontes servem "<title>Um momento, por favor…" com HTTP 200 desde 27/11 (NAKAKOGUE 466 ativos,
+  VZ, FLEX…); o motor agora reconhece como desafio (acesso), não "site vazio". Nenhum lote desligado. Conferir: #531.
+- **Cristiano Escola (842be8b):** site refeito em Laravel + Inertia (JSON em `<script data-page="app">`). Leitor novo:
+  catálogo `/leiloes?page=N` completo (NÃO `?type=imoveis`, que omitia 5 imóveis ativos), eventos `props.lots`, lote
+  `props.lot` com `category`. Mesmo id → sem duplicar. Teste 18 ok.
+- **Veículos (8b52a72):** (1) fome de fila — site misto (Ananda) recusava sempre os mesmos 80 imóveis e nunca lia os
+  veículos; agora memória de recusa (`coleta_lote_recusado`, prefixo `_veic_`). (2) 62 imóveis/peça ativos como "carro"
+  (Ananda 26+1, Saraiva 35, Suporte 1) desativados; `ehVeiculoInteiro` com termos de imóvel específicos.
+- **Sites fora (não é nosso):** ALLIANCELEIL 403, LUIZLOBATO 503, DEPAULALEILOES e FABIANOAYUPP timeout — a explicação
+  automática do monitor cobre após 3 medições. **Anotado:** "Lote 01 - Fiat Uno" e "Lote de 3 veículos" já eram
+  recusados antes (plural "veículos" e marca fora da 1ª palavra) — não mexido.
