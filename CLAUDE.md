@@ -135,6 +135,9 @@ curto (5–8 linhas) antes de seguir:
    >  where p.role in ('top2','assessorado','clube') and p.ativo
    >    and p.id::text not in (select e->>'id' from app_config, jsonb_array_elements(value::jsonb) e where key = 'contas_teste')
    >    and not exists (select 1 from analises_mercado a where a.user_id=p.id and a.created_at > now()-interval '14 days')
+   >    -- 28/11: atendido por CASO (assessoria) ou que entrou no app também está sendo servido (a Onx, ativa, saía como churn)
+   >    and not exists (select 1 from casos c where c.cliente_id=p.id and c.updated_at > now()-interval '14 days')
+   >    and not exists (select 1 from auth.users u where u.id=p.id and u.last_sign_in_at > now()-interval '14 days')
    >  order by 3;
    > ```
    >
