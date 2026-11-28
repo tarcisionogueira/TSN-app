@@ -40745,3 +40745,19 @@ assunto) — o e-mail do Jorge Brasil (Don Alonso) foi reprocessado: matrícula 
   use Edit/Read/Grep neles.
 - **Retomar:** conferências agendadas — 507 (18/11 20:30 UTC, tarefa já marcada), 502 e 510 (20/11), 371 (21/11),
   504 (24/11), 482 (25/11), 505 (01/12). Do dono: 511 (regerar Carpina), 498/495 (Homio), 506 (alerta de 2ª praça).
+
+## 28/11 — Abertura: laço de cópias do comprovante (Marcos) e cancelamento MP travado
+
+- **Laço do documental (7698e2e):** o 2351b0c (janela de 30 anexos) fez o comprovante de parcela já guardado virar
+  candidato de leitura; `mapaCache` lia 10 anexos sem ordem e não o via → baixava a NOSSA URL assinada e regravava
+  (nome + ".pdf"). A linha nova saía sem `parcela_processado_em` e o `parcelas-documentos-cron` mandava e-mail ao
+  dono: 62 cópias no imóvel dfc5ab9b (26/11 13:33 → 27/11 09:45). Agora: cache lê todos (mais antigo primeiro),
+  cópia nossa (`jaGuardado`) e guia/comprovante de parcela nunca são regravados. Limpeza das 61 cópias: **#529 (dono)**.
+- **mp-webhook (af770ec):** `/authorized_payments/search` recusa `limit` (400) — já consertado no reconciliar em 13/10,
+  faltava aqui. Travava o cancelamento (fila id 30, mandato 69f80b49…; cliente já explorador, sem dano).
+- **Lentidão (#480):** pg_stat_statements (35 dias) confirma — Realtime ~7 min/dia (não é ele); pesam as varreduras
+  horárias do `desativar-encerrados-cron` e os coletores. Causa segue sendo RAM do Micro → decisão do dono.
+- **resultado_leilao_atrasado (71):** 61 são veículos SUPERBID de 24/11. A rodada COMPLETA do runner residencial
+  (host Nogueira) não roda desde 25/11 14:07 (`runner_residencial_completa`); as parciais seguem. offer-query pelo
+  pg_net responde 200 vazio — não dá para apurar da nuvem. Ação do dono: religar o runner.
+- **Homio:** alerta de 27/11 resolvido sozinho (129/130 com e-mail de ativação; 12 ativados).
