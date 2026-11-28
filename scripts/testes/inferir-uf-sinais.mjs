@@ -1,5 +1,5 @@
 // inferirUF — sinais de 28/09 (invariante estado_fora_do_padrao: 20 lotes sem UF). Trechos REAIS.
-import { inferirUF } from '../lib/inferir-uf.mjs';
+import { inferirUF, estadoCidadeRotulados } from '../lib/inferir-uf.mjs';
 let falhas = 0;
 const t = (nome, lote, esperado) => {
   const r = inferirUF(lote);
@@ -20,5 +20,18 @@ t('CEP confirma a cidade ambígua', { cidade: 'Santo André', titulo: 'x', descr
 t('sem prova (Sitio Cercado)', { cidade: '', titulo: 'Sobrado no Sitio Cercado', descricao: 'Sobrado no Sitio Cercado' }, null);
 t('regressão: Campinas-SP no título', { titulo: 'Apto 72m² | Campinas-SP' }, { uf: 'SP' });
 t('Foro Regional de Santo Amaro NÃO vira Bahia', { titulo: 'apto', descricao: '4ª Vara Cível do Foro Regional de Santo Amaro' }, null);
+// 28/11 (NAKAKOGUE, 342 lotes): "ESTADO POR EXTENSO - CIDADE: NOME" — só com o par existente no IBGE.
+for (const [nome, txt, esp] of [
+  ['Alagoas/Arapiraca', 'Lote 001 - ALAGOAS - CIDADE: ARAPIRACA - Casa. Matrícula: 89038', { uf: 'AL', cidade: 'Arapiraca' }],
+  ['estado de 4 palavras', 'Lote 9 - RIO GRANDE DO SUL - CIDADE: SANTA CRUZ DO SUL - Casa', { uf: 'RS', cidade: 'Santa Cruz do Sul' }],
+  ['Campo Grande fica no estado do texto', 'Lote 141 - MATO GROSSO DO SUL - CIDADE: CAMPO GRANDE - Casa', { uf: 'MS', cidade: 'Campo Grande' }],
+  ['cidade que não existe na UF → nada', 'Lote 4 - PARANA - CIDADE: CIDADE INVENTADA - Casa', null],
+  ['sem rótulo → nada', 'Um Terreno rural no bairro água da onça.', null],
+]) {
+  const r = estadoCidadeRotulados(txt);
+  const ok = esp === null ? r === null : (r && r.uf === esp.uf && r.cidade === esp.cidade);
+  if (!ok) falhas++;
+  console.log(`${ok ? '✓' : '✗'} rotulado: ${nome} → ${JSON.stringify(r && { uf: r.uf, cidade: r.cidade })}`);
+}
 if (falhas) { console.error(`\n${falhas} falha(s)`); process.exit(1); }
 console.log('\nOK');

@@ -115,6 +115,28 @@ function doCEP(texto) {
   return f ? f[2] : null;
 }
 
+/**
+ * 28/11 — "Lote 001 - ALAGOAS - CIDADE: ARAPIRACA - Casa…" (NAKAKOGUE: 342 de 343 lotes ativos sem cidade e sem UF
+ * tinham isto no texto). Estado POR EXTENSO + rótulo "CIDADE:". Só aceita o par que EXISTE no IBGE (nunca chuta).
+ * Devolve { uf, cidade, coord } — `cidade` em caixa de título como veio (o IBGE daqui não guarda acento), `coord` o
+ * centróide do município — ou null.
+ */
+export function estadoCidadeRotulados(texto) {
+  const t = String(texto || '');
+  const m = t.match(/([A-Za-zÀ-ÿ]+(?:\s+[A-Za-zÀ-ÿ]+){0,3})\s*[-–]\s*CIDADE\s*:\s*([A-Za-zÀ-ÿ'.]+(?:\s+[A-Za-zÀ-ÿ'.]+){0,5}?)\s*(?:[-–,.;]|$)/i);
+  if (!m) return null;
+  // O estado são as ÚLTIMAS 1–4 palavras antes do "- CIDADE:" ("Lote 001 - ALAGOAS" → "alagoas").
+  const pals = normCidade(m[1]).split(' ');
+  let uf = null;
+  for (let n = Math.min(4, pals.length); n >= 1 && !uf; n--) uf = NOMES_UF[pals.slice(-n).join(' ')] || null;
+  if (!uf) return null;
+  const cn = normCidade(m[2]);
+  if (!existe(uf, cn)) return null;
+  const cidade = m[2].trim().toLowerCase().replace(/(^|\s)(\p{L})/gu, (_, s, l) => s + l.toUpperCase())
+    .replace(/\s(D[aeo]s?|E)\s/g, (x) => x.toLowerCase());
+  return { uf, cidade, coord: MUNICIPIOS[`${uf}|${cn}`] || null };
+}
+
 export function inferirUF({ cidade, titulo, endereco, descricao } = {}) {
   const cn = normCidade(cidade);
   for (const t of [titulo, endereco, descricao]) {
