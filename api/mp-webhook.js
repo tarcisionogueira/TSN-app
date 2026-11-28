@@ -352,7 +352,9 @@ export async function processarEventoMp(req, res) {
         // como antes. Cobrança recusada e pausa não passam por aqui. Assessoria é contrato
         // próprio (encerramento pela posse), também fora.
         if (preapproval.status === 'cancelled' && !cobrancaRecusada && !/^assessorado/.test(planoKey || '')) {
-          const hist = await mpGet(`/authorized_payments/search?preapproval_id=${encodeURIComponent(preapproval.id)}&limit=50`);
+          // 28/11: sem `limit` — o MP responde 400 "Invalid value for limit" nesta busca (mesmo defeito
+          // consertado em reconciliar-assinaturas-cron.js em 13/10). O 400 travava o cancelamento na fila.
+          const hist = await mpGet(`/authorized_payments/search?preapproval_id=${encodeURIComponent(preapproval.id)}`);
           const aprovadas = (hist?.results || [])
             .filter((p) => p?.payment?.status === 'approved' && Number(p?.transaction_amount) > 0)
             .map((p) => Date.parse(p.debit_date || p.date_created))
