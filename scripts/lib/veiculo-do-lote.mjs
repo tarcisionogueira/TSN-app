@@ -19,8 +19,12 @@ import { tipoVeiculo, marcaModeloAno, RE_MARCA } from './nordeste-veiculo.mjs';
 // É veículo? Palavra de tipo, documento de veículo, ou "MARCA modelo" de marca conhecida no começo.
 const RE_PALAVRA_VEICULO = /\b(ve[íi]culo|autom[óo]vel|carro|motocicleta|motoneta|ciclomotor|moto|caminh[ãa]o|caminhonete|camioneta|[ôo]nibus|micro-?[ôo]nibus|utilit[áa]rio|furg[ãa]o|reboque|semi-?reboque|carreta|placa\s*:?\s*[a-z]{3}-?\d|chassi|renavam)\b/i;
 // Não é veículo inteiro (fica fora mesmo com marca no título).
-const RE_NAO_VEICULO = /\b(sucata|carreta\s+(?:agr[íi]cola|graneleira)|carca[çc]a|pe[çc]as?\s+(avulsas|usadas|diversas)|lote\s+de\s+pe[çc]as|trator|colheitadeira|empilhadeira|retroescavadeira|escavadeira|motoniveladora|p[áa]\s+carregadeira|m[áa]quina|equipamento|implemento|embarca[çc][ãa]o|barco|lancha|jet-?ski|aeronave|avi[ãa]o|helic[óo]ptero|bicicleta|patinete|gerador|compressor|buffet|self[\s-]?service)\b/i; // buffet/self service: 05/11, Destak "Carro Buffet Self Service" (equipamento de comida, não veículo)
-const RE_IMOVEL_FORTE = /\b(im[óo]vel|terreno|apartamento|matr[íi]cula\s+n|casa\s+(t[ée]rrea|residencial)|sala\s+comercial|galp[ãa]o|fazenda|ch[áa]cara|s[íi]tio)\b/i;
+// "para veículo" (28/11, ANANDALEILOES "10 portas para veículo automóvel Volkswagen"): é peça, não o veículo.
+const RE_NAO_VEICULO = /\b(sucata|(?:portas?|rodas?|pneus?|bancos?|motor|pe[çc]as?)\s+(?:para|de)\s+ve[íi]culos?|carreta\s+(?:agr[íi]cola|graneleira)|carca[çc]a|pe[çc]as?\s+(avulsas|usadas|diversas)|lote\s+de\s+pe[çc]as|trator|colheitadeira|empilhadeira|retroescavadeira|escavadeira|motoniveladora|p[áa]\s+carregadeira|m[áa]quina|equipamento|implemento|embarca[çc][ãa]o|barco|lancha|jet-?ski|aeronave|avi[ãa]o|helic[óo]ptero|bicicleta|patinete|gerador|compressor|buffet|self[\s-]?service)\b/i; // buffet/self service: 05/11, Destak "Carro Buffet Self Service" (equipamento de comida, não veículo)
+// 28/11 (ANANDALEILOES: 27 imóveis gravados como "carro" — "Apto c/ 02 qtos", "Cobertura Duplex", "Casa de 2 pav c/
+// 268m²", "Lote c/ 420m²", "FRAÇÃO IDEAL DE 50% DE LOTE", "ÁREA DE 74,5 HECTARES"): o título não tinha nenhum termo daqui
+// e a palavra "veículo" do menu/ficha decidia. Termos ESPECÍFICOS — "lote" sozinho é comum em veículo ("Lote 01 - Uno").
+const RE_IMOVEL_FORTE = /\b(im[óo]vel|terreno|apartamento|apto|matr[íi]cula\s+n|casa\s+(?:t[ée]rrea|residencial|de|com|c\/)|sobrado|cobertura\s+(?:duplex|triplex|linear|de|com|c\/)|sala\s+comercial|galp[ãa]o|fazenda|ch[áa]cara|s[íi]tio|propriedade\s+rural|[áa]rea\s+rural|hectares?|fra[çc][ãa]o\s+ideal|lote\s+(?:urbano|rural|murado)|lote\s+(?:de|com|c\/)\s*\d[\d.,]*\s*m|qtos|quartos)(?![\wÀ-ÿ])/i;
 
 /**
  * Pré-filtro pelo SLUG da URL (21/10, Leilão Brasil/Luthero: a home lista ~290 anúncios de tudo e o

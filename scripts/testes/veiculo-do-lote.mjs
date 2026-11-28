@@ -23,6 +23,14 @@ ok(!ehVeiculoInteiro('SUCATA VEICULAR FIAT UNO'), 'sucata fica fora');
 ok(!ehVeiculoInteiro('Trator Massey Ferguson 275'), 'trator fica fora');
 ok(!ehVeiculoInteiro('Apartamento em Santos/SP com vaga de garagem'), 'imóvel fica fora');
 ok(ehVeiculoInteiro('Caminhão Mercedes-Benz 710'), 'caminhão entra');
+// 28/11, ANANDALEILOES: imóveis gravados como "carro" (a ficha cita "veículo" no menu) e peça como veículo.
+for (const t of ['Apto c/ 02 qtos | B. Granja de Freitas, Belo Horizonte/MG', 'Cobertura Duplex c/ 04 qtos (01 suíte) e 03 vagas |B. Sion, Belo Horizonte/MG',
+  'Casa de 2 pav c/ 268m², 04 qtos, 03 banheiros e garagem | B. Saúde, Pouso Alegre/MG', 'Lote c/ 420m² | Jaboticatubas/MG',
+  'FRAÇÃO IDEAL DE 50% DE LOTE MURADO COM 583,84 m² – ESTORIL |', 'OPORTUNIDADE RURAL EM CONCEIÇÃO DO MATO DENTRO/MG! ÁREA DE 74,5 HECTARES COM PASTAGENS',
+  'OPORTUNIDADE EM ESMERALDAS/MG! LOTE DE 416,5 m² NO RESIDENCIAL MACEIÓ', '10 portas para veículo automóvel Volkswagen'])
+  ok(!ehVeiculoInteiro(t, 'Veículos Imóveis Diversos — veículo'), `Ananda fica fora: ${t.slice(0, 40)}`);
+ok(ehVeiculoInteiro('Caminhão baú com 5 m² de carroceria'), 'm² em veículo não o torna imóvel');
+ok(ehVeiculoInteiro('AUTOMOVEL VW/GOL SPECIAL | PRETO | 1.0 | 2 PORTAS | 2002/2002'), '"2 PORTAS" do carro não é peça');
 ok(veiculoDoLote({ ...base, valor_minimo: 0, titulo: 'FIAT/UNO 2010/2011', descricao: '' }, { id: '4', fonte: 'X' }).motivo === 'sem valor', 'sem valor não grava');
 
 // Simon (21/10): ficha com "Depósito Em mãos do executado" → nunca gravado; sucata só no slug → fora.

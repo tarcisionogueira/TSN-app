@@ -127,14 +127,29 @@ async function coletarTenant(cfg, fetchFonte, tenant) {
     if (error) { console.warn(`  [${tenant.fonte}] sem a idade dos já gravados (${error.message}) — ordem da página`); break; }
     for (const r of data || []) ant.set(r.fonte_id, r);
   }
-  const alvo = [...urls].sort((a, b) => {
+  // MEMÓRIA DE RECUSA (28/11, ANANDALEILOES "223 enumerados e nenhum gravado (não é veículo inteiro: 80)" por 4 dias):
+  // em site que mistura imóvel e veículo no mesmo catálogo, o recusado nunca é gravado — então era "novo" PARA SEMPRE,
+  // ia para a frente da fila e as 80 vagas da rodada eram sempre os mesmos 80 imóveis. Os veículos de verdade nunca
+  // eram lidos. Mesma tabela do motor de imóveis (#238); os ids de veículo têm o prefixo `_veic_`, sem colisão.
+  // Falhar a leitura só custa releitura (o comportamento antigo), nunca dado errado.
+  const recusados = new Set();
+  const semAnt = ids.filter((id) => !ant.has(id));
+  for (let i = 0; i < semAnt.length; i += 200) {
+    const { data, error } = await supabase.from('coleta_lote_recusado').select('fonte_id')
+      .in('fonte_id', semAnt.slice(i, i + 200)).gt('rever_apos', new Date().toISOString());
+    if (error) { console.warn(`  [${tenant.fonte}] memória de recusa ilegível — segue relendo os recusados: ${error.message}`); break; }
+    for (const r of data || []) recusados.add(r.fonte_id);
+  }
+  const alvo = [...urls].filter((u) => !recusados.has(idDe(u))).sort((a, b) => {
     const ia = ant.get(idDe(a))?.atualizado_em ?? null, ib = ant.get(idDe(b))?.atualizado_em ?? null;
     if (ia === null || ib === null) return (ia === null ? 0 : 1) - (ib === null ? 0 : 1);
     return ia < ib ? -1 : ia > ib ? 1 : 0;
   }).slice(0, MAX_LOTES);
-  console.log(`[${tenant.fonte}] veículos: enumerados ${en.urls.length}${en.via ? ` (via ${en.via})` : ''} · no banco ${ant.size} · lendo ${alvo.length}`);
+  console.log(`[${tenant.fonte}] veículos: enumerados ${en.urls.length}${en.via ? ` (via ${en.via})` : ''} · no banco ${ant.size}${recusados.size ? ` · ${recusados.size} recusado(s) recentemente, pulados` : ''} · lendo ${alvo.length}`);
 
   const rows = []; const motivos = new Map(); let sem = 0, cota = 0;
+  const recusas = []; // { fonte_id, motivo, dias } — só lote que NUNCA foi gravado (o gravado segue sendo relido)
+  const lembrar = (url, motivo, dias) => { const fid = idDe(url); if (!ant.has(fid)) recusas.push({ fonte_id: fid, motivo, dias }); };
   for (const url of alvo) {
     // Fonte cujo CATÁLOGO já traz o detalhe (Nakakogue: `detalhesDoCatalogo`) não abre a página do lote.
     const detPronto = en.detCatalogo?.get(url);
@@ -143,7 +158,7 @@ async function coletarTenant(cfg, fetchFonte, tenant) {
     if (!r?.html && !detPronto) { sem++; continue; }
     const det = detPronto || await (v.parseDetalhe || cfg.parse.parseDetalhe)(r.html, url, { fetchFonte, tenant });
     if (!det) { sem++; continue; }
-    if (det.encerrado) { motivos.set('encerrado', (motivos.get('encerrado') || 0) + 1); continue; }
+    if (det.encerrado) { motivos.set('encerrado', (motivos.get('encerrado') || 0) + 1); lembrar(url, 'encerrado', 30); continue; }
     const imo = cfg.parse.montarRow(url, det, tenant);
     // Gancho por fonte: o que a página de VEÍCULO tem e o parser de imóvel não lê (título real,
     // comitente, local). Só preenche o que veio — nunca troca dado lido por vazio.
@@ -157,7 +172,14 @@ async function coletarTenant(cfg, fetchFonte, tenant) {
       if (c.comitente) imo.descricao = `${imo.descricao || ''} Comitente: ${c.comitente}`.trim();
     }
     const { row, motivo } = veiculoDoLote(imo, { id: cfg.parse.idDaUrl(url), fonte: tenant.fonte });
-    if (!row || motivo) { motivos.set(motivo, (motivos.get(motivo) || 0) + 1); continue; }
+    if (!row || motivo) {
+      motivos.set(motivo, (motivos.get(motivo) || 0) + 1);
+      // Memória: recusa por regra e "não é veículo inteiro" (é ESTE que enche a fila nos sites mistos). "sem valor" e
+      // "lote sem leitura" podem ser leitura que falhou — ficam fora e são relidos. Prazo curto (14 d): se a regra de
+      // veículo mudar, o lote volta a ser lido logo. A régua de SAÚDE (RECUSA_POR_REGRA) não muda.
+      if (RECUSA_POR_REGRA.test(String(motivo || '')) || motivo === 'não é veículo inteiro') lembrar(url, `veiculo: ${motivo}`.slice(0, 120), 14);
+      continue;
+    }
     const anterior = ant.get(row.fonte_id);
     if (patioPreservado(row, anterior)) { row.status_patio = anterior.status_patio; row.status_patio_motivo = anterior.status_patio_motivo; }
     rows.push(row);
@@ -170,6 +192,14 @@ async function coletarTenant(cfg, fetchFonte, tenant) {
   const porque = [sem ? `sem detalhe ${sem}` : '', ...[...motivos].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([m, n]) => `${m}: ${n}`)].filter(Boolean).join(' · ');
   const lidos = rows.length + sem + [...motivos.values()].reduce((a, n) => a + n, 0);
   const porRegra = [...motivos].filter(([m]) => RECUSA_POR_REGRA.test(m)).reduce((a, [, n]) => a + n, 0);
+  if (recusas.length && !DRYRUN) {
+    const agora = Date.now();
+    const linhas = [...new Map(recusas.map((r) => [r.fonte_id, { fonte_id: r.fonte_id, fonte: tenant.fonte, motivo: r.motivo,
+      visto_em: new Date(agora).toISOString(), rever_apos: new Date(agora + r.dias * 864e5).toISOString() }])).values()];
+    const { error: eRec } = await supabase.from('coleta_lote_recusado').upsert(linhas, { onConflict: 'fonte_id' });
+    if (eRec) console.warn(`  [${tenant.fonte}] não gravei a memória de ${linhas.length} recusa(s) — serão relidas: ${eRec.message}`);
+    else console.log(`  [${tenant.fonte}] ${linhas.length} recusa(s) lembradas — fora da fila até o prazo (14–30 d).`);
+  }
   return { rows, enumerados: en.urls.length, candidatos: urls.length, via: en.via, fetchOk: en.fetchOk !== false, sem, cota, porque: porque || (urls.length < en.urls.length ? `${en.urls.length - urls.length} fora pela URL (não é veículo)` : ''), lidos, porRegra, idsEnumerados: new Set(en.urls.map(idDe)) };
 }
 
