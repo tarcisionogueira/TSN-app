@@ -11,7 +11,10 @@
 import { buscarViaBrightData, ErroBrightData } from '../../../api/_brightdata.js';
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
-const ehChallenge = h => !h || /just a moment|challenge-platform|cf-chl|cf-mitigated|attention required/i.test(h.slice(0, 4000));
+// 28/11: + o desafio em PORTUGUÊS ("<title>Um momento, por favor…</title>" que recarrega em 5 s). A NAKAKOGUE
+// passou a servi-lo com HTTP 200 em 27/11 e o motor o leu como "site sem lote" (680 → 0, alarme de parser
+// num leitor intacto). Pelo <title>, para um texto qualquer da página não virar falso positivo.
+const ehChallenge = h => !h || /just a moment|challenge-platform|cf-chl|cf-mitigated|attention required|<title>[^<]{0,20}um momento, por favor/i.test(h.slice(0, 4000));
 
 // Cria um motor de fetch ligado a um `proposito` (a chave de cota do Bright Data). Devolve a
 // função de busca + um `estado` observável (semCota) que o runner lê para a saúde da fonte.

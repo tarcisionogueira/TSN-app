@@ -37,7 +37,8 @@ async function browser() {
 }
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
-const ehChallenge = (h) => /just a moment|challenge-platform|cf-chl|cf-mitigated|attention required/i.test(String(h || '').slice(0, 4000));
+// 28/11: + desafio em português ("<title>Um momento, por favor…") — ver scripts/lib/motor/fetch-fonte.mjs.
+const ehChallenge = (h) => /just a moment|challenge-platform|cf-chl|cf-mitigated|attention required|<title>[^<]{0,20}um momento, por favor/i.test(String(h || '').slice(0, 4000));
 
 /**
  * Busca o HTML FINAL (após o Cloudflare/JS resolver). Retorna string ou null.
