@@ -197,7 +197,11 @@ async function capturarMatriculaDireta(imovelId, row, cache) {
 // Documentos já ARMAZENADOS deste imóvel (manual do analista ou cache anterior).
 async function mapaCache(imovelId) {
   try {
-    const rows = await (await sb(`imovel_anexos?imovel_id=eq.${encodeURIComponent(imovelId)}&storage_path=not.is.null&select=tipo,storage_path&limit=10`)).json();
+    // 28/11: era `limit=10` sem ordem — com guias/comprovantes de parcela no meio, o tipo já guardado
+    // ficava fora do mapa, o laço abaixo achava que "não temos" e regravava a cópia (62 duplicatas do
+    // comprovante do Marcos em 26–27/11, cada uma disparando e-mail do cron de parcelas). Lê todos, o
+    // mais antigo de cada tipo primeiro (é o original; as cópias vêm depois).
+    const rows = await (await sb(`imovel_anexos?imovel_id=eq.${encodeURIComponent(imovelId)}&storage_path=not.is.null&select=tipo,storage_path&order=criado_em.asc&limit=500`)).json();
     const m = {};
     for (const x of (Array.isArray(rows) ? rows : [])) if (x?.tipo && !m[x.tipo]) m[x.tipo] = x;
     return m;
@@ -1098,11 +1102,13 @@ export default async function handler(req, res) {
     // NÃO pode ofuscar o que o rótulo revela: se o nome infere um tipo específico, ele
     // vence — senão a matrícula ficava com prioridade de anexo (fim da fila) e o GATE a
     // dava como faltando. Tipo específico já vindo do anexo (laudo/edital…) é preservado.
-    const add = (u, rotulo, tipo) => {
+    // `jaGuardado`: o documento JÁ É uma cópia nossa no storage (veio de imovel_anexos). Nunca é
+    // regravado — ver o laço de leitura (28/11: regravar a própria cópia gerou 62 duplicatas).
+    const add = (u, rotulo, tipo, jaGuardado = false) => {
       if (!(u && /^https?:\/\//.test(u) && !ehPagina(u) && !urls.find(x => x.url === u))) return;
       const inferido = tipoDoRotulo(rotulo);
       const t = (tipo && tipo !== 'anexo') ? tipo : (inferido || tipo || null);
-      urls.push({ url: u, rotulo, tipo: t });
+      urls.push({ url: u, rotulo, tipo: t, jaGuardado });
     };
     // 1º: anexos guardados no storage (capturados por navegador ou enviados pela equipe).
     try {
@@ -1121,7 +1127,7 @@ export default async function handler(req, res) {
       // EXPIRA — servi-lo direto fazia a IA falhar em ler a NOSSA cópia e cair no
       // re-download da fonte volátil (desperdício + menos confiável). urlDocumento
       // re-assina a cópia que já temos (economia) e cai no url legado só sem path.
-      for (const a of (Array.isArray(manuais) ? manuais : [])) add(await urlDocumento(a), a.nome || (a.tipo ? a.tipo[0].toUpperCase() + a.tipo.slice(1) : 'Anexo'), a.tipo);
+      for (const a of (Array.isArray(manuais) ? manuais : [])) add(await urlDocumento(a), a.nome || (a.tipo ? a.tipo[0].toUpperCase() + a.tipo.slice(1) : 'Anexo'), a.tipo, !!a.storage_path);
     } catch { /* segue com os do lote */ }
     // 2º: anexos capturados no scrape (jsonb do lote). Leilão JUDICIAL costuma ter
     // MUITOS anexos (auto de penhora/avaliação, laudo, decisão, certidões, ata) —
@@ -1241,7 +1247,10 @@ export default async function handler(req, res) {
       const infoLeitura = { proposito: propositoBD };
       if (!doc) {
         doc = await lerDoc(u.url, deadline, infoLeitura);
-        if (doc?.kind === 'pdf' && doc.base64 && podeCache && tipoDoc && !cache[tipoDoc] && Date.now() < deadline) {
+        // Só guarda o que veio de FORA. Cópia nossa (u.jaGuardado) e documento de parcela (guia/comprovante,
+        // que o cron de parcelas trata como "chegou um novo") nunca são regravados aqui.
+        const tipoParcela = /^(guia|comprovante)_parcela$/.test(String(tipoDoc || ''));
+        if (doc?.kind === 'pdf' && doc.base64 && podeCache && tipoDoc && !u.jaGuardado && !tipoParcela && !cache[tipoDoc] && Date.now() < deadline) {
           cache[tipoDoc] = { tipo: tipoDoc }; // evita salvar 2× o mesmo tipo neste run
           await salvarDocBucket(String(imovelId), tipoDoc, u.rotulo, u.url, doc.base64, dataLeilao);
         }
